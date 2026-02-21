@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personal Clone — Command Center</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #080810; color: #d1d5db; min-height: 100vh; }
+
+    /* Header */
+    header { background: #0f0f1a; border-bottom: 1px solid #1c1c30; padding: 0.9rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+    .brand { display: flex; align-items: center; gap: 0.75rem; }
+    .brand-pulse { width: 10px; height: 10px; background: #7c3aed; border-radius: 50%; box-shadow: 0 0 12px #7c3aed; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 6px #7c3aed}50%{box-shadow:0 0 18px #7c3aed,0 0 30px #7c3aed44} }
+    .brand-name { font-size: 1.05rem; font-weight: 700; color: #f3f4f6; }
+    .brand-sub  { font-size: 0.7rem; color: #4b5563; margin-top: 1px; }
+    .nav a { color: #4b5563; text-decoration: none; font-size: 0.78rem; margin-left: 1.5rem; transition: color .15s; }
+    .nav a:hover { color: #a78bfa; }
+
+    /* Stats bar */
+    .stats { background: #0f0f1a; border-bottom: 1px solid #1c1c30; padding: 0.6rem 2rem; display: flex; flex-wrap: wrap; gap: 0.5rem 2rem; }
+    .stat { font-size: 0.75rem; color: #6b7280; display: flex; align-items: baseline; gap: 0.3rem; }
+    .stat strong { color: #a78bfa; font-size: 1rem; }
+    .balance-pos { color: #34d399 !important; }
+    .balance-neg { color: #f87171 !important; }
+
+    /* Layout */
+    main { padding: 1.5rem 2rem; max-width: 1600px; margin: 0 auto; }
+    .section-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: #374151; margin: 1.4rem 0 0.7rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 1.25rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2,1fr); gap: 1.25rem; }
+
+    /* Card */
+    .card { background: #0f0f1a; border: 1px solid #1c1c30; border-radius: 12px; overflow: hidden; }
+    .card-head { padding: .7rem 1.1rem; border-bottom: 1px solid #1c1c30; display: flex; justify-content: space-between; align-items: center; }
+    .card-title { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #7c3aed; }
+    .card-count { background: #1a0f35; color: #7c3aed; font-size: .65rem; font-weight: 700; padding: .12rem .45rem; border-radius: 9999px; }
+
+    /* Items */
+    .item { padding: .7rem 1.1rem; border-bottom: 1px solid #141420; }
+    .item:last-child { border-bottom: none; }
+    .item-text { font-size: .85rem; color: #e5e7eb; line-height: 1.4; word-break: break-word; }
+    .item-sub  { font-size: .75rem; color: #7c3aed; font-style: italic; margin-top: .25rem; padding-left: .6rem; border-left: 2px solid #2d1b69; line-height: 1.35; }
+    .item-meta { font-size: .68rem; color: #374151; margin-top: .28rem; }
+
+    /* Tasks */
+    .task-row { display: flex; justify-content: space-between; align-items: flex-start; gap: .5rem; }
+    .p-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+    .p1{background:#374151} .p2{background:#3b82f6} .p3{background:#f97316} .p4{background:#ef4444;box-shadow:0 0 6px #ef444488}
+
+    /* Badges */
+    .badge { flex-shrink:0; font-size:.62rem; font-weight:700; padding:.12rem .45rem; border-radius:9999px; }
+    .b-done,.b-completed { background:#052e16; color:#34d399; }
+    .b-open,.b-active    { background:#1a0f35; color:#a78bfa; }
+    .b-paused  { background:#1c1205; color:#fbbf24; }
+    .b-archived{ background:#111827; color:#4b5563; }
+    .b-personal,.b-business,.b-family,.b-mentor,.b-other { background:#1a0f35; color:#a78bfa; }
+
+    /* Progress */
+    .prog-wrap { background:#1c1c30; border-radius:9999px; height:5px; margin-top:.4rem; }
+    .prog-fill { background:linear-gradient(90deg,#7c3aed,#a78bfa); height:100%; border-radius:9999px; }
+
+    /* Finance */
+    .fin-row { display:flex; justify-content:space-between; padding:.65rem 1.1rem; border-bottom:1px solid #141420; }
+    .fin-row:last-child { border-bottom:none; }
+    .fin-label { font-size:.75rem; color:#6b7280; }
+    .fin-val   { font-size:.88rem; font-weight:700; }
+    .fin-green { color:#34d399; }
+    .fin-red   { color:#f87171; }
+
+    /* Empty */
+    .empty { padding:2rem 1.1rem; text-align:center; color:#2d2d3a; font-size:.8rem; }
+    .empty code { display:block; margin-top:.35rem; color:#374151; font-size:.72rem; font-family:monospace; }
+
+    @media(max-width:1000px){.grid-3{grid-template-columns:1fr 1fr}}
+    @media(max-width:640px){.grid-3,.grid-2{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-pulse"></div>
+    <div>
+      <div class="brand-name">Personal Clone</div>
+      <div class="brand-sub">Command Center · Nidin Nover</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <a href="/docs">API Docs</a>
+    <a href="/api/v1/health">Health</a>
+  </nav>
+</header>
+
+<div class="stats">
+  <div class="stat"><strong>{{ commands|length }}</strong>commands</div>
+  <div class="stat"><strong>{{ tasks|length }}</strong>open tasks</div>
+  <div class="stat"><strong>{{ projects|length }}</strong>projects</div>
+  <div class="stat"><strong>{{ goals|length }}</strong>goals</div>
+  <div class="stat"><strong>{{ contacts|length }}</strong>contacts</div>
+  <div class="stat">
+    Balance:&nbsp;
+    <strong class="{% if finance.balance >= 0 %}balance-pos{% else %}balance-neg{% endif %}">
+      ${{ finance.balance | round(2) }}
+    </strong>
+  </div>
+</div>
+
+<main>
+
+  <div class="section-label">Core Operations</div>
+  <div class="grid-3">
+
+    <!-- AI Commands -->
+    <div class="card">
+      <div class="card-head"><span class="card-title">AI Commands</span><span class="card-count">{{ commands|length }}</span></div>
+      {% if commands %}
+        {% for cmd in commands %}
+        <div class="item">
+          <div class="item-text">{{ cmd.command_text }}</div>
+          {% if cmd.ai_response %}
+          <div class="item-sub">{{ cmd.ai_response[:120] }}{% if cmd.ai_response|length > 120 %}…{% endif %}</div>
+          {% endif %}
+          <div class="item-meta">{{ cmd.created_at.strftime('%b %d · %H:%M') }}{% if cmd.model_used %} · {{ cmd.model_used }}{% endif %}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">No commands yet.<code>POST /api/v1/commands</code></div>
+      {% endif %}
+    </div>
+
+    <!-- Open Tasks -->
+    <div class="card">
+      <div class="card-head"><span class="card-title">Open Tasks</span><span class="card-count">{{ tasks|length }}</span></div>
+      {% if tasks %}
+        {% for t in tasks %}
+        <div class="item">
+          <div class="task-row">
+            <div class="p-dot p{{ t.priority }}"></div>
+            <div class="item-text" style="flex:1">{{ t.title }}</div>
+          </div>
+          <div class="item-meta">{{ t.category }}{% if t.due_date %} · due {{ t.due_date }}{% endif %}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">No open tasks.<code>POST /api/v1/tasks</code></div>
+      {% endif %}
+    </div>
+
+    <!-- Notes -->
+    <div class="card">
+      <div class="card-head"><span class="card-title">Notes</span><span class="card-count">{{ notes|length }}</span></div>
+      {% if notes %}
+        {% for n in notes %}
+        <div class="item">
+          {% if n.title %}<div class="item-text" style="font-weight:600;margin-bottom:.2rem">{{ n.title }}</div>{% endif %}
+          <div class="item-text" style="{% if n.title %}color:#9ca3af;font-size:.8rem{% endif %}">{{ n.content }}</div>
+          {% if n.tags %}<div class="item-meta">{{ n.tags }}</div>{% endif %}
+          <div class="item-meta">{{ n.created_at.strftime('%b %d · %H:%M') }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">No notes yet.<code>POST /api/v1/notes</code></div>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <div class="section-label">Projects & Goals</div>
+  <div class="grid-2">
+
+    <!-- Projects -->
+    <div class="card">
+      <div class="card-head"><span class="card-title">Projects</span><span class="card-count">{{ projects|length }}</span></div>
+      {% if projects %}
+        {% for p in projects %}
+        <div class="item">
+          <div class="task-row">
+            <div class="item-text">{{ p.title }}</div>
+            <span class="badge b-{{ p.status }}">{{ p.status }}</span>
+          </div>
+          <div class="item-meta">{{ p.category }}{% if p.due_date %} · due {{ p.due_date }}{% endif %}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">No projects yet.<code>POST /api/v1/projects</code></div>
+      {% endif %}
+    </div>
+
+    <!-- Goals -->
+    <div class="card">
+      <div class="card-head"><span class="card-title">Goals</span><span class="card-count">{{ goals|length }}</span></div>
+      {% if goals %}
+        {% for g in goals %}
+        <div class="item">
+          <div class="task-row">
+            <div class="item-text">{{ g.title }}</div>
+            <span class="badge b-{{ g.status }}">{{ g.status }}</span>
+          </div>
+          <div class="prog-wrap"><div class="prog-fill" style="width:{{ g.progress }}%"></div></div>
+          <div class="item-meta">{{ g.progress }}% · {{ g.category }}{% if g.target_date %} · {{ g.target_date }}{% endif %}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">No goals yet.<code>POST /api/v1/goals</code></div>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <div class="section-label">Network & Finance</div>
+  <div class="grid-2">
+
+    <!-- Contacts -->
+    <div class="card">
+      <div class="card-head"><span class="card-title">Contacts</span><span class="card-count">{{ contacts|length }}</span></div>
+      {% if contacts %}
+        {% for c in contacts %}
+        <div class="item">
+          <div class="task-row">
+            <div>
+              <div class="item-text">{{ c.name }}</div>
+              {% if c.company %}<div class="item-meta">{{ c.company }}{% if c.role %} · {{ c.role }}{% endif %}</div>{% endif %}
+            </div>
+            <span class="badge b-{{ c.relationship }}">{{ c.relationship }}</span>
+          </div>
+          {% if c.email %}<div class="item-meta">{{ c.email }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">No contacts yet.<code>POST /api/v1/contacts</code></div>
+      {% endif %}
+    </div>
+
+    <!-- Finance -->
+    <div class="card">
+      <div class="card-head"><span class="card-title">Finance</span></div>
+      <div class="fin-row">
+        <span class="fin-label">Total Income</span>
+        <span class="fin-val fin-green">${{ finance.total_income | round(2) }}</span>
+      </div>
+      <div class="fin-row">
+        <span class="fin-label">Total Expenses</span>
+        <span class="fin-val fin-red">${{ finance.total_expense | round(2) }}</span>
+      </div>
+      <div class="fin-row" style="border-top:1px solid #1c1c30">
+        <span class="fin-label" style="font-weight:700">Balance</span>
+        <span class="fin-val {% if finance.balance >= 0 %}fin-green{% else %}fin-red{% endif %}">
+          ${{ finance.balance | round(2) }}
+        </span>
+      </div>
+      <div style="padding:.6rem 1.1rem">
+        <a href="/api/v1/finance" style="color:#374151;text-decoration:none;font-size:.72rem">View all entries →</a>
+      </div>
+    </div>
+
+  </div>
+</main>
+</body>
+</html>
