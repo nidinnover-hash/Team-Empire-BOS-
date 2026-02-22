@@ -273,6 +273,7 @@ async def summarize_email(
             f"Subject: {email.subject or '(no subject)'}\n\n"
             f"{email.body_text}"
         ),
+        provider="openai",
     )
 
     email.ai_summary = summary
@@ -326,6 +327,8 @@ async def draft_reply(
             "sign off as Nidin. Keep it short and direct."
         ),
         user_message=user_prompt,
+        provider="openai",
+        max_tokens=600,
     )
 
     # Reject AI error strings - don't store them as drafts
@@ -387,7 +390,214 @@ async def draft_reply(
     return draft
 
 
+# -- AI Strategize ------------------------------------------------------------
+
+async def strategize_email(
+    db: AsyncSession,
+    email_id: int,
+    org_id: int,
+    actor_user_id: int,
+) -> str | None:
+    """
+    ChatGPT provides a strategic analysis of the email:
+    business impact, what the sender really wants, recommended action, and tone.
+    """
+    email = await get_email(db, email_id, org_id)
+    if not email or not email.body_text:
+        return None
+
+    analysis = await call_ai(
+        system_prompt=(
+            "You are Nidin's strategic advisor. Analyze this email and provide:\n"
+            "1. SITUATION: What is actually happening here (1-2 sentences)\n"
+            "2. WHAT THEY WANT: The real ask behind the email\n"
+            "3. BUSINESS IMPACT: Risk or opportunity this represents\n"
+            "4. RECOMMENDED ACTION: Exactly what Nidin should do and when\n"
+            "5. TONE GUIDE: How to respond (firm/warm/neutral/urgent)\n\n"
+            "Be direct. No fluff."
+        ),
+        user_message=(
+            f"From: {email.from_address or 'Unknown'}\n"
+            f"Subject: {email.subject or '(no subject)'}\n\n"
+            f"{email.body_text}"
+        ),
+        provider="openai",
+        max_tokens=700,
+    )
+
+    if _is_ai_error(analysis):
+        return None
+
+    await record_action(
+        db=db,
+        event_type="email_strategized",
+        actor_user_id=actor_user_id,
+        entity_type="email",
+        entity_id=email_id,
+        payload_json={"subject": email.subject},
+        organization_id=org_id,
+    )
+    return analysis
+
+
+# -- AI Compose New Email -----------------------------------------------------
+
+async def compose_email(
+    db: AsyncSession,
+    org_id: int,
+    actor_user_id: int,
+    to: str,
+    subject: str,
+    instruction: str,
+) -> str | None:
+    """
+    ChatGPT drafts a brand-new email (not a reply) from Nidin.
+    Creates a Gmail draft + approval request. Nothing sends without approval.
+    Returns the draft text, or None on failure.
+    """
+    draft = await call_ai(
+        system_prompt=(
+            "You are Nidin's email assistant. Write a complete, professional email from Nidin. "
+            "Do not use placeholder text. Sign off as Nidin. "
+            "Write a proper subject line if not provided. Be clear and direct."
+        ),
+        user_message=(
+            f"To: {to}\n"
+            f"Subject: {subject}\n\n"
+            f"Instructions: {instruction}"
+        ),
+        provider="openai",
+        max_tokens=600,
+    )
+
+    if _is_ai_error(draft):
+        return None
+
+    # Create Gmail draft
+    integration = await get_integration_by_type(db, org_id, "gmail")
+    gmail_draft_id: str | None = None
+    if integration:
+        access_token, refresh_token, expires_at = _get_tokens(integration)
+        gmail_draft_id = await asyncio.to_thread(
+            gmail_tool.create_draft,
+            access_token=access_token,
+            to=to,
+            subject=subject,
+            body=draft,
+            refresh_token=refresh_token,
+            expires_at=expires_at,
+        )
+
+    # Require approval before anything can be sent
+    approval = await request_approval(
+        db=db,
+        requested_by=actor_user_id,
+        data=ApprovalRequestCreate(
+            organization_id=org_id,
+            approval_type="send_message",
+            payload_json={
+                "compose": True,
+                "to": to,
+                "subject": subject,
+                "draft_body": draft,
+                "draft_preview": (draft or "")[:300],
+                "gmail_draft_id": gmail_draft_id,
+            },
+        ),
+    )
+
+    await record_action(
+        db=db,
+        event_type="email_composed",
+        actor_user_id=actor_user_id,
+        entity_type="email",
+        entity_id=None,
+        payload_json={"to": to, "subject": subject, "approval_id": approval.id},
+        organization_id=org_id,
+    )
+    return draft
+
+
 # -- Send Approved Reply ------------------------------------------------------
+
+async def send_approved_compose(
+    db: AsyncSession,
+    approval: Approval,
+    org_id: int,
+    actor_user_id: int,
+) -> bool:
+    """
+    Send a composed email from a send_message approval payload (no email_id row).
+    Uses approval.executed_at as the idempotency guard.
+    """
+    payload = approval.payload_json or {}
+    to = payload.get("to")
+    subject = payload.get("subject") or ""
+    draft_body = payload.get("draft_body")
+
+    async def _record_send_blocked(reason: str) -> None:
+        await record_action(
+            db=db,
+            event_type="email_send_blocked",
+            actor_user_id=actor_user_id,
+            entity_type="email",
+            entity_id=None,
+            payload_json={"reason": reason, "approval_id": approval.id},
+            organization_id=org_id,
+        )
+
+    if approval.organization_id != org_id or approval.status != "approved":
+        await _record_send_blocked("approval_not_approved_or_wrong_org")
+        return False
+    if approval.executed_at is not None:
+        await _record_send_blocked("approval_already_executed")
+        return False
+    if not to or not draft_body:
+        await _record_send_blocked("missing_compose_payload")
+        return False
+
+    approval.executed_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    integration = await get_integration_by_type(db, org_id, "gmail")
+    if not integration:
+        approval.executed_at = None
+        await db.commit()
+        await _record_send_blocked("gmail_not_connected")
+        return False
+
+    access_token, refresh_token, expires_at = _get_tokens(integration)
+    sent = cast(bool, await asyncio.to_thread(
+        gmail_tool.send_email,
+        access_token=access_token,
+        to=str(to),
+        subject=str(subject),
+        body=str(draft_body),
+        refresh_token=refresh_token,
+        expires_at=expires_at,
+    ))
+    if not sent:
+        approval.executed_at = None
+        await db.commit()
+        await _record_send_blocked("gmail_send_failed")
+        return False
+
+    await record_action(
+        db=db,
+        event_type="email_sent",
+        actor_user_id=actor_user_id,
+        entity_type="email",
+        entity_id=None,
+        payload_json={
+            "to": str(to),
+            "subject": str(subject),
+            "compose": True,
+            "approval_id": approval.id,
+        },
+        organization_id=org_id,
+    )
+    return True
+
 
 async def send_approved_reply(
     db: AsyncSession,

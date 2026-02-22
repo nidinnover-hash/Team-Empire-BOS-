@@ -106,6 +106,42 @@
     @media(max-width:800px){.chat-panel{grid-template-columns:1fr}}
     @media(max-width:1000px){.grid-3{grid-template-columns:1fr 1fr}}
     @media(max-width:640px){.grid-3,.grid-2{grid-template-columns:1fr}}
+
+    /* Inbox */
+    .inbox-item { padding:.7rem 1.1rem; border-bottom:1px solid #141420; cursor:pointer; transition:background .1s; }
+    .inbox-item:last-child { border-bottom:none; }
+    .inbox-item:hover { background:#0d0d1c; }
+    .inbox-item.unread .inbox-subject { font-weight:700; color:#f3f4f6; }
+    .inbox-from { font-size:.72rem; color:#6b7280; margin-bottom:.2rem; }
+    .inbox-subject { font-size:.85rem; color:#d1d5db; }
+    .inbox-meta { font-size:.68rem; color:#374151; margin-top:.2rem; }
+    .inbox-summary { font-size:.78rem; color:#a78bfa; margin-top:.35rem; padding-left:.6rem; border-left:2px solid #2d1b69; line-height:1.4; }
+    .inbox-strategy { font-size:.78rem; color:#34d399; margin-top:.35rem; padding:.4rem .6rem; background:#021a0e; border:1px solid #052e16; border-radius:6px; line-height:1.45; white-space:pre-wrap; }
+    .inbox-draft { font-size:.78rem; color:#fbbf24; margin-top:.35rem; padding:.4rem .6rem; background:#1c1205; border:1px solid #3d2800; border-radius:6px; line-height:1.4; white-space:pre-wrap; }
+    .inbox-actions { display:flex; gap:.4rem; margin-top:.5rem; flex-wrap:wrap; }
+    .ia-btn { font-size:.65rem; font-weight:700; padding:.18rem .5rem; border-radius:5px; border:1px solid; cursor:pointer; text-transform:uppercase; letter-spacing:.04em; transition:opacity .15s; }
+    .ia-btn:disabled { opacity:.4; cursor:default; }
+    .ia-summarize { background:#1a0f35; color:#c4b5fd; border-color:#3b2a77; }
+    .ia-strategy  { background:#021a0e; color:#86efac; border-color:#14532d; }
+    .ia-draft     { background:#1c1205; color:#fcd34d; border-color:#3d2800; }
+
+    /* Approvals panel */
+    .ap-item { padding:.7rem 1.1rem; border-bottom:1px solid #141420; }
+    .ap-item:last-child { border-bottom:none; }
+    .ap-type { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
+    .ap-type.risky { color:#f97316; }
+    .ap-type.safe  { color:#a78bfa; }
+    .ap-payload { font-size:.75rem; color:#6b7280; margin:.3rem 0; line-height:1.5; }
+    .ap-payload strong { color:#9ca3af; }
+    .ap-meta { font-size:.68rem; color:#374151; }
+    .ap-actions { display:flex; gap:.5rem; margin-top:.55rem; flex-wrap:wrap; align-items:center; }
+    .btn-approve  { background:#021a0e; color:#86efac; border:1px solid #14532d; border-radius:5px; padding:.22rem .6rem; font-size:.68rem; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:.04em; }
+    .btn-approve:hover  { border-color:#34d399; }
+    .btn-execute  { background:#1c1205; color:#fcd34d; border:1px solid #3d2800; border-radius:5px; padding:.22rem .6rem; font-size:.68rem; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:.04em; }
+    .btn-execute:hover  { border-color:#f59e0b; }
+    .btn-reject   { background:#1a0505; color:#fca5a5; border:1px solid #7f1d1d; border-radius:5px; padding:.22rem .6rem; font-size:.68rem; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:.04em; }
+    .btn-reject:hover   { border-color:#ef4444; }
+    .btn-approve:disabled,.btn-execute:disabled,.btn-reject:disabled { opacity:.4; cursor:default; }
   </style>
 </head>
 <body>
@@ -171,6 +207,49 @@
           <div class="chat-empty" id="chat-placeholder">Your conversation will appear here.</div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="section-label">Gmail Inbox</div>
+  <div class="card" id="inbox-card">
+    <div class="card-head">
+      <span class="card-title">Inbox</span>
+      <div style="display:flex;gap:.6rem;align-items:center">
+        <span id="inbox-unread-badge" class="card-count">{{ executive.inbox.unread_count }} unread</span>
+        <button id="inbox-sync-btn" class="btn-run" type="button">Sync Gmail</button>
+        <button id="inbox-compose-btn" class="btn-run" type="button" style="background:#0f1f0f;border-color:#1a4a1a;color:#86efac">+ Compose</button>
+      </div>
+    </div>
+    <div id="inbox-compose-form" style="display:none;padding:.8rem 1.1rem;border-bottom:1px solid #1c1c30">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.6rem">
+        <input id="compose-to" type="email" placeholder="To: email@example.com" style="background:#080810;border:1px solid #1c1c30;border-radius:6px;color:#e5e7eb;padding:.45rem .7rem;font-size:.82rem;outline:none">
+        <input id="compose-subject" type="text" placeholder="Subject" style="background:#080810;border:1px solid #1c1c30;border-radius:6px;color:#e5e7eb;padding:.45rem .7rem;font-size:.82rem;outline:none">
+      </div>
+      <textarea id="compose-instruction" placeholder="Instructions for ChatGPT: e.g. 'Follow up on the overseas education proposal, be professional but warm'" style="width:100%;background:#080810;border:1px solid #1c1c30;border-radius:6px;color:#e5e7eb;padding:.45rem .7rem;font-size:.82rem;min-height:70px;resize:vertical;outline:none;font-family:inherit"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.6rem">
+        <span id="compose-status" class="run-status"></span>
+        <div style="display:flex;gap:.5rem">
+          <button id="compose-cancel-btn" class="btn-run" type="button" style="background:#1a0f0f;border-color:#4a1a1a;color:#f87171">Cancel</button>
+          <button id="compose-send-btn" class="btn-run" type="button" style="background:#0f1f0f;border-color:#1a4a1a;color:#86efac">Draft with ChatGPT</button>
+        </div>
+      </div>
+    </div>
+    <div id="inbox-list">
+      <div class="empty" id="inbox-loading">Loading emails…</div>
+    </div>
+  </div>
+
+  <div class="section-label">Pending Approvals</div>
+  <div class="card" id="approvals-card">
+    <div class="card-head">
+      <span class="card-title">Action Required</span>
+      <div style="display:flex;gap:.6rem;align-items:center">
+        <span id="approvals-pending-count" class="card-count">...</span>
+        <button id="approvals-refresh-btn" class="btn-run" type="button">Refresh</button>
+      </div>
+    </div>
+    <div id="approvals-list">
+      <div class="empty">Loading approvals…</div>
     </div>
   </div>
 
@@ -379,6 +458,18 @@
   </div>
 </main>
 <script>
+  // ── Shared auth bootstrap ───────────────────────────────────────────────────
+  // pc_session cookie is HttpOnly — JS can't read it. Fetch the token from the
+  // server via /web/api-token which reads the cookie server-side and returns JWT.
+  window.__bootPromise = (async function () {
+    try {
+      var r = await fetch("/web/api-token");
+      if (!r.ok) return null;
+      var d = await r.json();
+      return d.token || null;
+    } catch(e) { return null; }
+  })();
+
   (function () {
     const btn = document.getElementById("daily-run-btn");
     const status = document.getElementById("daily-run-status");
@@ -591,6 +682,276 @@
     input.addEventListener("keydown", function (e) {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send();
     });
+  })();
+
+  // ── Gmail Inbox Panel ──────────────────────────────────────────────────────
+  (function () {
+    const list    = document.getElementById("inbox-list");
+    const syncBtn = document.getElementById("inbox-sync-btn");
+    const composeBtn   = document.getElementById("inbox-compose-btn");
+    const composeForm  = document.getElementById("inbox-compose-form");
+    const cancelBtn    = document.getElementById("compose-cancel-btn");
+    const draftBtn     = document.getElementById("compose-send-btn");
+    const composeStatus = document.getElementById("compose-status");
+
+    function getCsrf() {
+      const pair = document.cookie.split("; ").find(function(c){ return c.startsWith("pc_csrf="); });
+      return pair ? decodeURIComponent(pair.split("=")[1]) : "";
+    }
+
+    function apiHeaders() {
+      return { "Content-Type": "application/json", "X-CSRF-Token": getCsrf() };
+    }
+
+    function fmt(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      return d.toLocaleDateString("en-US", { month:"short", day:"numeric" }) + " " +
+             d.toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" });
+    }
+
+    function esc(s) {
+      return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    async function loadInbox() {
+      list.innerHTML = '<div class="empty">Loading…</div>';
+      try {
+        const r = await fetch("/api/v1/email/inbox?limit=15&unread_only=false", {
+          headers: { "Authorization": "Bearer " + window.__apiToken }
+        });
+        if (!r.ok) { list.innerHTML = '<div class="empty">Could not load inbox.</div>'; return; }
+        const emails = await r.json();
+        if (!emails.length) { list.innerHTML = '<div class="empty">No emails synced yet. Click Sync Gmail.</div>'; return; }
+        list.innerHTML = emails.map(function(e) {
+          return '<div class="inbox-item' + (e.is_read ? "" : " unread") + '" id="email-' + e.id + '">' +
+            '<div class="inbox-from">' + esc(e.from_address || "Unknown") + '</div>' +
+            '<div class="inbox-subject">' + esc(e.subject || "(no subject)") + '</div>' +
+            '<div class="inbox-meta">' + esc(fmt(e.received_at)) + (e.reply_sent ? ' · <span style="color:#34d399">replied</span>' : '') + '</div>' +
+            (e.ai_summary ? '<div class="inbox-summary">' + esc(e.ai_summary) + '</div>' : '') +
+            '<div class="inbox-actions">' +
+              (!e.ai_summary ? '<button class="ia-btn ia-summarize" onclick="inboxAction(' + e.id + ',\'summarize\')">Summarize</button>' : '') +
+              '<button class="ia-btn ia-strategy" onclick="inboxAction(' + e.id + ',\'strategize\')">Strategy</button>' +
+              (!e.draft_reply ? '<button class="ia-btn ia-draft" onclick="inboxAction(' + e.id + ',\'draft\')">Draft Reply</button>' : '<button class="ia-btn ia-draft" onclick="inboxAction(' + e.id + ',\'draft\')">Re-draft</button>') +
+            '</div>' +
+            (e.draft_reply ? '<div class="inbox-draft" id="draft-' + e.id + '">' + esc(e.draft_reply) + '</div>' : '') +
+          '</div>';
+        }).join("");
+      } catch(err) {
+        list.innerHTML = '<div class="empty">Error loading inbox.</div>';
+      }
+    }
+
+    // Expose globally so inline onclick works
+    window.inboxAction = async function(emailId, action) {
+      const item = document.getElementById("email-" + emailId);
+      const btn = item ? item.querySelector(".ia-" + (action === "draft" ? "draft" : action === "strategize" ? "strategy" : "summarize")) : null;
+      if (btn) { btn.disabled = true; btn.textContent = "…"; }
+
+      const token = window.__apiToken;
+      try {
+        if (action === "summarize") {
+          const r = await fetch("/api/v1/email/" + emailId + "/summarize", { method:"POST", headers:{"Authorization":"Bearer "+token} });
+          const d = await r.json();
+          if (r.ok) {
+            let el = item.querySelector(".inbox-summary");
+            if (!el) { el = document.createElement("div"); el.className = "inbox-summary"; item.querySelector(".inbox-actions").before(el); }
+            el.textContent = d.summary;
+            if (btn) btn.remove();
+          }
+        } else if (action === "strategize") {
+          const r = await fetch("/api/v1/email/" + emailId + "/strategize", { method:"POST", headers:{"Authorization":"Bearer "+token} });
+          const d = await r.json();
+          if (r.ok) {
+            let el = item.querySelector(".inbox-strategy");
+            if (!el) { el = document.createElement("div"); el.className = "inbox-strategy"; item.appendChild(el); }
+            el.textContent = d.strategy;
+          }
+        } else if (action === "draft") {
+          const r = await fetch("/api/v1/email/" + emailId + "/draft-reply", { method:"POST", headers:{"Authorization":"Bearer "+token, "Content-Type":"application/json"}, body:"{}" });
+          const d = await r.json();
+          if (r.ok) {
+            let el = item.querySelector(".inbox-draft");
+            if (!el) { el = document.createElement("div"); el.className = "inbox-draft"; item.appendChild(el); }
+            el.textContent = d.draft;
+          }
+        }
+      } catch(e) {}
+      if (btn) { btn.disabled = false; btn.textContent = action === "summarize" ? "Summarize" : action === "strategize" ? "Strategy" : "Re-draft"; }
+    };
+
+    // Sync Gmail
+    syncBtn && syncBtn.addEventListener("click", async function() {
+      syncBtn.disabled = true; syncBtn.textContent = "Syncing…";
+      try {
+        await fetch("/api/v1/email/sync", { method:"POST", headers:{"Authorization":"Bearer "+window.__apiToken} });
+        await loadInbox();
+      } finally { syncBtn.disabled = false; syncBtn.textContent = "Sync Gmail"; }
+    });
+
+    // Compose
+    composeBtn && composeBtn.addEventListener("click", function() { composeForm.style.display = "block"; });
+    cancelBtn  && cancelBtn.addEventListener("click",  function() { composeForm.style.display = "none"; composeStatus.textContent = ""; });
+    draftBtn   && draftBtn.addEventListener("click", async function() {
+      const to      = document.getElementById("compose-to").value.trim();
+      const subject = document.getElementById("compose-subject").value.trim();
+      const instr   = document.getElementById("compose-instruction").value.trim();
+      if (!to || !subject || !instr) { composeStatus.textContent = "Fill in all fields."; composeStatus.className = "run-status err"; return; }
+      draftBtn.disabled = true; composeStatus.textContent = "ChatGPT is drafting…"; composeStatus.className = "run-status";
+      try {
+        const r = await fetch("/api/v1/email/compose", {
+          method:"POST",
+          headers:{"Authorization":"Bearer "+window.__apiToken,"Content-Type":"application/json"},
+          body:JSON.stringify({ to, subject, instruction: instr })
+        });
+        const d = await r.json();
+        if (r.ok) {
+          composeStatus.textContent = "Draft ready — check Approvals to review before sending.";
+          composeStatus.className = "run-status ok";
+          document.getElementById("compose-to").value = "";
+          document.getElementById("compose-subject").value = "";
+          document.getElementById("compose-instruction").value = "";
+        } else {
+          composeStatus.textContent = d.detail || "Failed."; composeStatus.className = "run-status err";
+        }
+      } catch(e) { composeStatus.textContent = "Error."; composeStatus.className = "run-status err"; }
+      draftBtn.disabled = false;
+    });
+
+    // Bootstrap: get Bearer token via server endpoint (pc_session is HttpOnly)
+    (async function bootstrap() {
+      var token = await window.__bootPromise;
+      if (!token) return;
+      window.__apiToken = token;
+      await loadInbox();
+    })();
+  })();
+
+  // ── Pending Approvals Panel ─────────────────────────────────────────────────
+  (function () {
+    const RISKY = new Set(["send_message","assign_task","assign_leads","change_crm_status","spend_money","spend"]);
+    const list       = document.getElementById("approvals-list");
+    const countBadge = document.getElementById("approvals-pending-count");
+    const refreshBtn = document.getElementById("approvals-refresh-btn");
+    if (!list) return;
+
+    function esc(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+    function fmtPayload(p) {
+      var parts = [];
+      if (p.to)      parts.push("<strong>To:</strong> " + esc(p.to));
+      if (p.subject) parts.push("<strong>Subject:</strong> " + esc(p.subject));
+      if (p.body && typeof p.body === "string")
+        parts.push("<strong>Preview:</strong> " + esc(p.body.slice(0,140)) + (p.body.length > 140 ? "…" : ""));
+      if (!parts.length) {
+        Object.keys(p).slice(0,4).forEach(function(k) {
+          if (k !== "approval_type")
+            parts.push("<strong>" + esc(k) + ":</strong> " + esc(String(p[k]).slice(0,80)));
+        });
+      }
+      return parts.join("<br>");
+    }
+
+    async function loadApprovals() {
+      var token = window.__apiToken;
+      if (!token) { list.innerHTML = '<div class="empty">Sign in to see approvals.</div>'; return; }
+      list.innerHTML = '<div class="empty">Loading…</div>';
+      try {
+        var r = await fetch("/api/v1/approvals?status=pending", { headers:{"Authorization":"Bearer "+token} });
+        if (!r.ok) { list.innerHTML = '<div class="empty">Could not load approvals.</div>'; return; }
+        var items = await r.json();
+        if (countBadge) countBadge.textContent = items.length + " pending";
+        if (!items.length) {
+          list.innerHTML = '<div class="empty" style="color:#34d399">No pending approvals — all clear!</div>';
+          return;
+        }
+        list.innerHTML = items.map(function(a) {
+          var risky   = RISKY.has(a.approval_type);
+          var payload = a.payload_json || {};
+          var ts = new Date(a.created_at).toLocaleString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+          return '<div class="ap-item" id="ap-' + a.id + '">' +
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">' +
+              '<span class="ap-type ' + (risky ? "risky" : "safe") + '">' +
+                esc(a.approval_type) + (risky ? " ⚠" : "") +
+              '</span>' +
+              '<span class="ap-meta">#' + a.id + ' · ' + ts + '</span>' +
+            '</div>' +
+            (Object.keys(payload).length ? '<div class="ap-payload">' + fmtPayload(payload) + '</div>' : '') +
+            '<div class="ap-actions">' +
+              (risky
+                ? '<button class="btn-execute" onclick="approvalAction(' + a.id + ',true)">Approve &amp; Send ⚡</button>'
+                : '<button class="btn-approve" onclick="approvalAction(' + a.id + ',false)">Approve</button>'
+              ) +
+              '<button class="btn-reject" onclick="approvalReject(' + a.id + ')">Reject</button>' +
+            '</div>' +
+          '</div>';
+        }).join("");
+      } catch(e) {
+        list.innerHTML = '<div class="empty">Error loading approvals.</div>';
+      }
+    }
+
+    window.approvalAction = async function(id, isRisky) {
+      if (isRisky) {
+        var ok = window.confirm("This will SEND the email / execute the action.\nAre you absolutely sure?");
+        if (!ok) return;
+      }
+      var item = document.getElementById("ap-" + id);
+      var btns = item ? item.querySelectorAll("button") : [];
+      btns.forEach(function(b) { b.disabled = true; });
+      var note = isRisky ? "YES EXECUTE" : null;
+      try {
+        var r = await fetch("/api/v1/approvals/" + id + "/approve", {
+          method:"POST",
+          headers:{"Authorization":"Bearer "+window.__apiToken,"Content-Type":"application/json"},
+          body:JSON.stringify({ note: note })
+        });
+        if (r.ok) {
+          if (item) { item.style.opacity="0.35"; item.style.pointerEvents="none"; }
+          setTimeout(loadApprovals, 700);
+        } else {
+          var d = await r.json().catch(function(){return {};});
+          alert("Error: " + (d.detail || "Approval failed"));
+          btns.forEach(function(b) { b.disabled = false; });
+        }
+      } catch(e) { alert("Network error."); btns.forEach(function(b) { b.disabled = false; }); }
+    };
+
+    window.approvalReject = async function(id) {
+      var ok = window.confirm("Reject this approval? This cannot be undone.");
+      if (!ok) return;
+      var item = document.getElementById("ap-" + id);
+      var btns = item ? item.querySelectorAll("button") : [];
+      btns.forEach(function(b) { b.disabled = true; });
+      try {
+        var r = await fetch("/api/v1/approvals/" + id + "/reject", {
+          method:"POST",
+          headers:{"Authorization":"Bearer "+window.__apiToken,"Content-Type":"application/json"},
+          body:JSON.stringify({ note: null })
+        });
+        if (r.ok) {
+          if (item) { item.style.opacity="0.35"; item.style.pointerEvents="none"; }
+          setTimeout(loadApprovals, 700);
+        } else {
+          var d = await r.json().catch(function(){return {};});
+          alert("Error: " + (d.detail || "Reject failed"));
+          btns.forEach(function(b) { b.disabled = false; });
+        }
+      } catch(e) { alert("Network error."); btns.forEach(function(b) { b.disabled = false; }); }
+    };
+
+    refreshBtn && refreshBtn.addEventListener("click", loadApprovals);
+
+    // Bootstrap: wait for shared auth token then load approvals
+    (async function init() {
+      var token = await window.__bootPromise;
+      if (!token) { list.innerHTML = '<div class="empty">Sign in to see approvals.</div>'; return; }
+      if (!window.__apiToken) window.__apiToken = token;
+      await loadApprovals();
+    })();
+
+    // Auto-refresh every 60 seconds
+    setInterval(function() { if (window.__apiToken) loadApprovals(); }, 60000);
   })();
 </script>
 </body>

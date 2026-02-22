@@ -30,3 +30,9 @@ class DraftReplyRequest(BaseModel):
 class SyncResult(BaseModel):
     new_emails: int
     message: str
+
+
+class ComposeRequest(BaseModel):
+    to: str
+    subject: str
+    instruction: str

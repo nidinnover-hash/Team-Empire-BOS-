@@ -12,6 +12,7 @@ SECRET_KEY, you must re-run the encrypt_integration_tokens migration.
 
 import base64
 import hashlib
+import logging
 from typing import cast
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -19,6 +20,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from app.core.config import settings
 
 _TOKEN_FIELDS = ("access_token", "refresh_token")
+logger = logging.getLogger(__name__)
 
 
 def _fernet() -> Fernet:
@@ -61,7 +63,9 @@ def decrypt_config(config_json: dict) -> dict:
         if result.get(field):
             try:
                 result[field] = decrypt_token(result[field])
-            except (InvalidToken, Exception):
+            except InvalidToken:
                 # Pre-migration plaintext value — leave as-is.
-                pass
+                value = result.get(field)
+                if isinstance(value, str) and value.startswith("gAAAA"):
+                    logger.warning("Invalid encrypted integration token for field '%s'; leaving value unchanged", field)
     return result

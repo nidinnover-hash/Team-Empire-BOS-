@@ -3,6 +3,7 @@ from typing import cast
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.security import hash_password
 from app.models.user import User
 from app.schemas.user import UserCreate
@@ -40,15 +41,15 @@ async def list_users(
 
 
 async def ensure_default_user(db: AsyncSession, organization_id: int = 1) -> None:
-    demo = await get_user_by_email(db, "demo@ai.com")
+    demo = await get_user_by_email(db, settings.ADMIN_EMAIL)
     if demo is not None:
         return
     db.add(
         User(
             organization_id=organization_id,
-            name="Demo Admin",
-            email="demo@ai.com",
-            password_hash=hash_password("demo"),
+            name=settings.ADMIN_NAME,
+            email=settings.ADMIN_EMAIL,
+            password_hash=hash_password(settings.ADMIN_PASSWORD),
             role="CEO",
             is_active=True,
         )

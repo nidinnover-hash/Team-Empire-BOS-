@@ -3,6 +3,7 @@ import hmac
 import secrets
 from hashlib import sha256
 from time import time
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.deps import get_db
 from app.core.rbac import require_roles
-from app.schemas.email import DraftReplyRequest, EmailRead, SyncResult
+from app.schemas.email import ComposeRequest, DraftReplyRequest, EmailRead, SyncResult
 from app.services import email_service
 from app.services.email_service import EmailSyncError
 from app.tools.gmail import exchange_code_for_tokens, get_gmail_auth_url
@@ -83,12 +84,12 @@ async def gmail_callback(
     Handle Gmail OAuth callback. Exchange code for tokens and save to DB.
     Google redirects here after the user grants permission.
     """
+    org_id = _verify_email_state(state)
     tokens = await asyncio.to_thread(exchange_code_for_tokens, code)
     if "error" in tokens:
         error_code = str(tokens.get("error") or "unknown")
         raise HTTPException(status_code=400, detail=_oauth_error_detail(error_code))
 
-    org_id = _verify_email_state(state)
     existing = await get_integration_by_type(db, org_id, "gmail")
     existing_cfg = existing.config_json if existing else {}
     refresh_token = tokens.get("refresh_token") or existing_cfg.get("refresh_token")
@@ -139,7 +140,7 @@ async def gmail_health(
 ) -> dict:
     """Return Gmail integration health for the current org."""
     org_id = int(current_user.get("org_id", 1))
-    return await email_service.check_gmail_health(db=db, org_id=org_id)
+    return cast(dict[str, Any], await email_service.check_gmail_health(db=db, org_id=org_id))
 
 
 @router.get("/inbox", response_model=list[EmailRead])
@@ -152,8 +153,11 @@ async def list_inbox(
 ) -> list[EmailRead]:
     """List emails from the inbox. Filter by unread if needed."""
     org_id = int(_user.get("org_id", 1))
-    return await email_service.list_emails(
-        db, org_id=org_id, limit=limit, offset=offset, unread_only=unread_only
+    return cast(
+        list[EmailRead],
+        await email_service.list_emails(
+            db, org_id=org_id, limit=limit, offset=offset, unread_only=unread_only
+        ),
     )
 
 
@@ -238,3 +242,55 @@ async def send_email(
             detail="Cannot send. Either no approved approval exists, email already sent, or Gmail not connected.",
         )
     return {"email_id": email_id, "status": "sent", "message": "Email sent successfully."}
+
+
+@router.post("/{email_id}/strategize")
+async def strategize_email(
+    email_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> dict:
+    """
+    ChatGPT strategic analysis: situation, what they want, business impact,
+    recommended action, and tone guide. No approval needed — read-only analysis.
+    """
+    org_id = int(current_user.get("org_id", 1))
+    analysis = await email_service.strategize_email(
+        db=db,
+        email_id=email_id,
+        org_id=org_id,
+        actor_user_id=int(current_user["id"]),
+    )
+    if analysis is None:
+        raise HTTPException(status_code=404, detail="Email not found or has no body")
+    return {"email_id": email_id, "strategy": analysis}
+
+
+@router.post("/compose")
+async def compose_email(
+    body: ComposeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> dict:
+    """
+    ChatGPT drafts a brand-new email from Nidin.
+    Creates an approval request — nothing sends until you approve it.
+    """
+    org_id = int(current_user.get("org_id", 1))
+    draft = await email_service.compose_email(
+        db=db,
+        org_id=org_id,
+        actor_user_id=int(current_user["id"]),
+        to=body.to,
+        subject=body.subject,
+        instruction=body.instruction,
+    )
+    if draft is None:
+        raise HTTPException(status_code=502, detail="AI failed to generate draft. Check OpenAI key.")
+    return {
+        "to": body.to,
+        "subject": body.subject,
+        "draft": draft,
+        "status": "pending_approval",
+        "message": "Draft composed. Go to /api/v1/approvals to review and approve before sending.",
+    }

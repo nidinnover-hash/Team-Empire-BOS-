@@ -168,6 +168,16 @@ async def web_logout(response: Response) -> dict:
     return {"status": "logged_out"}
 
 
+@app.get("/web/api-token", include_in_schema=False)
+async def web_api_token(user: dict = Depends(get_current_web_user)) -> dict:
+    """Return a fresh Bearer token for the current web session. Used by dashboard JS."""
+    token = create_access_token(
+        {"id": user["id"], "email": user["email"], "role": user["role"], "org_id": user["org_id"]},
+        expires_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+    )
+    return {"token": token}
+
+
 @app.get("/web/session")
 async def web_session(request: Request) -> dict:
     token = request.cookies.get("pc_session")

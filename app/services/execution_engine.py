@@ -55,19 +55,27 @@ async def execute_approval(
     # send_message is handled async via email_service to actually dispatch Gmail
     if approval.approval_type == "send_message":
         try:
-            from app.services.email_service import send_approved_reply
+            from app.services.email_service import send_approved_compose, send_approved_reply
 
             payload = approval.payload_json or {}
             email_id = payload.get("email_id")
-            if not email_id:
-                raise ValueError("send_message approval missing email_id in payload")
-            sent = await send_approved_reply(
-                db=db,
-                email_id=int(email_id),
-                org_id=approval.organization_id,
-                actor_user_id=actor_user_id,
-            )
-            output = {"action": "send_message", "sent": sent}
+            if email_id:
+                sent = await send_approved_reply(
+                    db=db,
+                    email_id=int(email_id),
+                    org_id=approval.organization_id,
+                    actor_user_id=actor_user_id,
+                )
+                mode = "reply"
+            else:
+                sent = await send_approved_compose(
+                    db=db,
+                    approval=approval,
+                    org_id=approval.organization_id,
+                    actor_user_id=actor_user_id,
+                )
+                mode = "compose"
+            output = {"action": "send_message", "mode": mode, "sent": sent}
             status = "succeeded" if sent else "failed"
             error_text = None if sent else "Gmail send returned False"
             await execution_service.complete_execution(

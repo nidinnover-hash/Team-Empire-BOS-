@@ -15,21 +15,16 @@ Fallback behaviour:
 import logging
 from typing import cast
 
-from app.core.config import settings
+from app.core.config import PLACEHOLDER_AI_KEYS, settings
 
 logger = logging.getLogger(__name__)
-
-_PLACEHOLDER_KEYS = {
-    "sk-your-key-here", "sk-xxxxxxxxxxxxxxxxxxxxxxxx", "",
-    "your-anthropic-key-here", "gsk_your-key-here",
-}
 
 # Error types that should NOT trigger a fallback (permanent / config issues)
 _NO_FALLBACK_ERRORS = ("AuthenticationError", "PermissionDeniedError", "NotFoundError")
 
 
 def _key_ok(key: str | None) -> bool:
-    return bool(key) and key not in _PLACEHOLDER_KEYS
+    return bool(key) and key not in PLACEHOLDER_AI_KEYS
 
 
 def _fallback_order(primary: str) -> list[str]:
