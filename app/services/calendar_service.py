@@ -91,8 +91,9 @@ async def sync_calendar_events(
                 new_token = refreshed.get("access_token")
                 if not new_token:
                     return {"synced": 0, "date": str(target), "error": "Token refresh returned no access_token"}
-                # Persist refreshed token
+                # Persist refreshed token — db.add() ensures the reassigned dict is tracked
                 integration.config_json = {**integration.config_json, "access_token": new_token}
+                db.add(integration)
                 await mark_sync_time(db, integration)
                 events = await list_events_for_day(new_token, target, calendar_id)
             except Exception as refresh_exc:

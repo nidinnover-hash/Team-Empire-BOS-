@@ -5,7 +5,10 @@ from app.agents.orchestrator import AgentChatRequest, AgentChatResponse, run_age
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
+from app.schemas.task import TaskCreate
+from app.services import email_service
 from app.services import memory as memory_service
+from app.services import task as task_service
 from app.services.memory import build_memory_context
 
 router = APIRouter(prefix="/agents", tags=["Agents"])
@@ -78,6 +81,59 @@ async def agent_chat(
             organization_id=org_id,
         )
 
+    # TASK_CREATE — executes when user explicitly asks to create a task
+    should_create_task = any(kw in lowered for kw in ("create task", "add task", "make task"))
+    tasks_created = 0
+    if should_create_task and current_user.get("role") in {"CEO", "ADMIN", "MANAGER"}:
+        for action in result.proposed_actions:
+            if action.action_type != "TASK_CREATE":
+                continue
+            title = (action.params or {}).get("title")
+            if isinstance(title, str) and title.strip():
+                new_task = await task_service.create_task(
+                    db,
+                    TaskCreate(title=title.strip()),
+                    organization_id=org_id,
+                )
+                await record_action(
+                    db=db,
+                    event_type="agent_task_created",
+                    actor_user_id=int(current_user["id"]),
+                    entity_type="task",
+                    entity_id=new_task.id,
+                    payload_json={"title": title.strip(), "source": "agent_chat"},
+                    organization_id=org_id,
+                )
+                tasks_created += 1
+
+    # EMAIL_DRAFT — executes when user explicitly asks to draft an email reply.
+    # draft_reply() always creates an approval request — nothing is sent without human approval.
+    should_draft_email = any(kw in lowered for kw in ("draft reply", "draft email", "draft a reply", "write a reply"))
+    email_drafts_created = 0
+    if should_draft_email and current_user.get("role") in {"CEO", "ADMIN"}:
+        for action in result.proposed_actions:
+            if action.action_type != "EMAIL_DRAFT":
+                continue
+            email_id = (action.params or {}).get("email_id")
+            if isinstance(email_id, int):
+                draft = await email_service.draft_reply(
+                    db=db,
+                    email_id=email_id,
+                    org_id=org_id,
+                    actor_user_id=int(current_user["id"]),
+                )
+                if draft:
+                    await record_action(
+                        db=db,
+                        event_type="agent_email_draft_created",
+                        actor_user_id=int(current_user["id"]),
+                        entity_type="email",
+                        entity_id=email_id,
+                        payload_json={"email_id": email_id, "source": "agent_chat"},
+                        organization_id=org_id,
+                    )
+                    email_drafts_created += 1
+
     # Log the interaction
     await record_action(
         db=db,
@@ -92,6 +148,8 @@ async def agent_chat(
             "proposed_actions_count": len(result.proposed_actions),
             "memory_write_requested": should_persist_memory,
             "memory_write_count": memory_written_count,
+            "tasks_created": tasks_created,
+            "email_drafts_created": email_drafts_created,
         },
         organization_id=org_id,
     )

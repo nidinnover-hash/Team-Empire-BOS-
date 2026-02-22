@@ -119,9 +119,13 @@ async def google_calendar_oauth_callback(
         client_secret=settings.GOOGLE_CLIENT_SECRET,
         redirect_uri=settings.GOOGLE_REDIRECT_URI,
     )
+    # Preserve existing refresh_token — Google only returns it on first consent
+    existing = await integration_service.get_integration_by_type(db, actor["org_id"], "google_calendar")
+    existing_cfg = existing.config_json if existing else {}
+    refresh_token = tokens.get("refresh_token") or existing_cfg.get("refresh_token")
     config_json = {
         "access_token": tokens.get("access_token"),
-        "refresh_token": tokens.get("refresh_token"),
+        "refresh_token": refresh_token,
         "token_type": tokens.get("token_type"),
         "scope": tokens.get("scope"),
         "expires_in": tokens.get("expires_in"),
@@ -376,6 +380,7 @@ async def test_integration(
                         if not new_access_token:
                             raise ValueError("Missing access_token in refresh response")
                         item.config_json = {**item.config_json, "access_token": new_access_token}
+                        db.add(item)
                         await integration_service.mark_sync_time(db, item)
                         status = "ok"
                         message = "Connection test passed after token refresh"

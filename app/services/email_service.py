@@ -9,8 +9,11 @@ Flow:
 """
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from typing import cast
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -69,12 +72,15 @@ async def _persist_refreshed_tokens(
     # Keep the existing refresh_token (Google only returns it on first consent)
     if old_refresh_token and not cfg.get("refresh_token"):
         cfg["refresh_token"] = old_refresh_token
-    await connect_integration(
-        db=db,
-        organization_id=org_id,
-        integration_type="gmail",
-        config_json=cfg,
-    )
+    try:
+        await connect_integration(
+            db=db,
+            organization_id=org_id,
+            integration_type="gmail",
+            config_json=cfg,
+        )
+    except Exception as exc:
+        logger.error("Failed to persist refreshed Gmail tokens for org %s: %s", org_id, exc)
 
 
 # -- Sync --------------------------------------------------------------------
@@ -262,7 +268,11 @@ async def summarize_email(
             "You are an email assistant. Summarize the following email in 2-3 bullet points. "
             "Be concise. Focus on: what is being asked, who sent it, and what action is needed."
         ),
-        user_message=f"From: {email.from_address}\nSubject: {email.subject}\n\n{email.body_text}",
+        user_message=(
+            f"From: {email.from_address or 'Unknown'}\n"
+            f"Subject: {email.subject or '(no subject)'}\n\n"
+            f"{email.body_text}"
+        ),
     )
 
     email.ai_summary = summary

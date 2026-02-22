@@ -13,6 +13,7 @@ from typing import cast
 from datetime import date, datetime, timezone
 
 from sqlalchemy import select
+from sqlalchemy.orm import outerjoin
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.logs.audit import record_action
@@ -34,7 +35,7 @@ async def draft_plan_for_member(
 ) -> DailyTaskPlan:
     """Draft an AI task plan for one team member."""
 
-    ai_level_label = ["", "no AI skills", "basic AI", "intermediate AI", "advanced AI", "AI expert"][member.ai_level]
+    ai_level_label = ["", "no AI skills", "basic AI", "intermediate AI", "advanced AI", "AI expert"][max(0, min(member.ai_level or 0, 5))]
 
     user_message = (
         f"Create a focused daily task plan for this team member:\n"
@@ -186,18 +187,12 @@ async def get_team_plans(
         query = query.where(DailyTaskPlan.status == status)
     query = query.order_by(DailyTaskPlan.created_at)
 
-    result = await db.execute(query)
-    plans = result.scalars().all()
+    query = query.outerjoin(TeamMember, TeamMember.id == DailyTaskPlan.team_member_id)
+    query = query.add_columns(TeamMember)
+    rows = (await db.execute(query)).all()
 
     enriched = []
-    for plan in plans:
-        member_result = await db.execute(
-            select(TeamMember).where(
-                TeamMember.id == plan.team_member_id,
-                TeamMember.organization_id == org_id,
-            )
-        )
-        member = member_result.scalar_one_or_none()
+    for plan, member in rows:
         enriched.append({
             "plan_id": plan.id,
             "member_name": member.name if member else "Unknown",

@@ -114,7 +114,7 @@ def build_focused_context(
             for m in members:
                 ai_label = (
                     ["", "no AI", "basic AI", "intermediate AI", "advanced AI", "AI expert"]
-                    [min(m.ai_level, 5)]
+                    [max(0, min(m.ai_level or 0, 5))]
                 )
                 project = f" | Project: {m.current_project}" if m.current_project else ""
                 lines.append(

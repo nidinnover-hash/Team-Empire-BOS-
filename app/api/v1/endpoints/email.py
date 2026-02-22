@@ -1,5 +1,6 @@
 import asyncio
 import hmac
+import secrets
 from hashlib import sha256
 from time import time
 
@@ -26,7 +27,8 @@ def _oauth_error_detail(error_code: str) -> str:
 
 def _sign_email_state(org_id: int) -> str:
     ts = int(time())
-    payload = f"{org_id}:{ts}"
+    nonce = secrets.token_urlsafe(16)
+    payload = f"{org_id}:{ts}:{nonce}"
     sig = hmac.new(
         settings.SECRET_KEY.encode("utf-8"),
         payload.encode("utf-8"),
@@ -37,8 +39,11 @@ def _sign_email_state(org_id: int) -> str:
 
 def _verify_email_state(state: str, max_age_seconds: int = 600) -> int:
     try:
-        org_id_str, ts_str, sig = state.split(":", 2)
-        payload = f"{org_id_str}:{ts_str}"
+        parts = state.split(":", 3)
+        if len(parts) != 4:
+            raise ValueError("Invalid state format")
+        org_id_str, ts_str, nonce, sig = parts
+        payload = f"{org_id_str}:{ts_str}:{nonce}"
         expected = hmac.new(
             settings.SECRET_KEY.encode("utf-8"),
             payload.encode("utf-8"),
@@ -220,7 +225,7 @@ async def send_email(
     )
     if not sent:
         raise HTTPException(
-            status_code=403,
+            status_code=409,
             detail="Cannot send. Either no approved approval exists, email already sent, or Gmail not connected.",
         )
     return {"email_id": email_id, "status": "sent", "message": "Email sent successfully."}
