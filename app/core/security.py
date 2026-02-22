@@ -4,6 +4,7 @@ import hmac
 import json
 import os
 from datetime import datetime, timedelta, timezone
+from typing import cast
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -51,7 +52,7 @@ def decode_access_token(token: str) -> dict:
     provided_sig = _b64url_decode(sig_b64)
     if not hmac.compare_digest(expected_sig, provided_sig):
         raise ValueError("Invalid signature")
-    payload = json.loads(_b64url_decode(payload_b64).decode("utf-8"))
+    payload = cast(dict, json.loads(_b64url_decode(payload_b64).decode("utf-8")))
     exp = payload.get("exp")
     if exp is None or int(exp) < int(datetime.now(timezone.utc).timestamp()):
         raise ValueError("Token expired")

@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Any, cast
 from urllib.parse import urlencode
 
 import httpx
@@ -47,7 +48,7 @@ async def exchange_code_for_tokens(
             },
         )
         response.raise_for_status()
-        return response.json()
+        return cast(dict[str, Any], response.json())
 
 
 async def refresh_access_token(
@@ -66,7 +67,7 @@ async def refresh_access_token(
             },
         )
         response.raise_for_status()
-        return response.json()
+        return cast(dict[str, Any], response.json())
 
 
 async def list_events_for_day(
@@ -89,5 +90,5 @@ async def list_events_for_day(
             headers={"Authorization": f"Bearer {access_token}"},
         )
         response.raise_for_status()
-        data = response.json()
-        return data.get("items", [])
+        data = cast(dict[str, Any], response.json())
+        return cast(list[dict[str, Any]], data.get("items", []))

@@ -12,6 +12,7 @@ SECRET_KEY, you must re-run the encrypt_integration_tokens migration.
 
 import base64
 import hashlib
+from typing import cast
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -27,7 +28,7 @@ def _fernet() -> Fernet:
 
 def encrypt_token(plaintext: str) -> str:
     """Encrypt a token string. Returns a Fernet ciphertext string."""
-    return _fernet().encrypt(plaintext.encode("utf-8")).decode("utf-8")
+    return cast(str, _fernet().encrypt(plaintext.encode("utf-8")).decode("utf-8"))
 
 
 def decrypt_token(ciphertext: str) -> str:
@@ -35,7 +36,7 @@ def decrypt_token(ciphertext: str) -> str:
     Decrypt a Fernet ciphertext string.
     Raises InvalidToken if the value is corrupted or encrypted with a different key.
     """
-    return _fernet().decrypt(ciphertext.encode("utf-8")).decode("utf-8")
+    return cast(str, _fernet().decrypt(ciphertext.encode("utf-8")).decode("utf-8"))
 
 
 def encrypt_config(config_json: dict) -> dict:

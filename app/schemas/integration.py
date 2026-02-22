@@ -36,3 +36,29 @@ class GoogleOAuthCallbackRequest(BaseModel):
     code: str
     state: str
     calendar_id: str = "primary"
+
+
+class CalendarSyncResult(BaseModel):
+    date: str
+    synced: int
+
+
+class CalendarEventRead(BaseModel):
+    id: int
+    date: str
+    content: str
+    location: str | None = None
+
+
+class AIProviderStatus(BaseModel):
+    provider: str          # "openai" or "anthropic"
+    configured: bool       # key is present and not a placeholder
+    active: bool           # this is the DEFAULT_AI_PROVIDER
+    model: str             # model that will be used
+
+
+class AITestResult(BaseModel):
+    provider: str
+    status: str            # "ok" | "failed" | "not_configured"
+    message: str
+    sample_response: str | None = None

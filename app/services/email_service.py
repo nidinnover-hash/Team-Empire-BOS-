@@ -1,14 +1,16 @@
 """
-Email service — business logic for Gmail sync, AI summarization, and reply drafting.
+Email service - business logic for Gmail sync, AI summarization, and reply drafting.
 
 Flow:
-  1. sync_emails()      → pull from Gmail, store in DB
-  2. summarize_email()  → AI summarizes the email body
-  3. draft_reply()      → AI drafts a reply, creates Gmail draft + approval request
-  4. send_approved_reply() → ONLY after approval is granted, sends via Gmail
+  1. sync_emails()      -> pull from Gmail, store in DB
+  2. summarize_email()  -> AI summarizes the email body
+  3. draft_reply()      -> AI drafts a reply, creates Gmail draft + approval request
+  4. send_approved_reply() -> ONLY after approval is granted, sends via Gmail
 """
 
+import asyncio
 from datetime import datetime, timezone
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,17 +21,30 @@ from app.models.email import Email
 from app.services.ai_router import call_ai
 from app.schemas.approval import ApprovalRequestCreate
 from app.services.approval import request_approval
-from app.services.integration import get_integration_by_type, mark_sync_time
+from app.services.integration import connect_integration, get_integration_by_type, mark_sync_time
 from app.tools import gmail as gmail_tool
 
 # Prefixes that indicate call_ai() returned an error string instead of content
 _AI_ERROR_PREFIXES = ("Error:", "error:", "I'm sorry", "I cannot", "I'm unable")
 
 
-def _get_tokens(integration) -> tuple[str, str | None]:
-    """Extract access and refresh tokens from integration config."""
+class EmailSyncError(Exception):
+    """Raised when Gmail sync fails for an external/integration reason."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+def _get_tokens(integration) -> tuple[str, str | None, str | None]:
+    """Extract access_token, refresh_token, expires_at from integration config."""
     cfg = integration.config_json or {}
-    return cfg.get("access_token", ""), cfg.get("refresh_token")
+    return (
+        cfg.get("access_token", ""),
+        cfg.get("refresh_token"),
+        cfg.get("expires_at"),
+    )
 
 
 def _is_ai_error(text: str | None) -> bool:
@@ -39,7 +54,30 @@ def _is_ai_error(text: str | None) -> bool:
     return any(text.startswith(prefix) for prefix in _AI_ERROR_PREFIXES)
 
 
-# ── Sync ──────────────────────────────────────────────────────────────────────
+async def _persist_refreshed_tokens(
+    db: AsyncSession,
+    org_id: int,
+    integration,
+    refreshed_tokens: dict,
+    old_refresh_token: str | None,
+) -> None:
+    """Persist a refreshed access_token back to the integrations table."""
+    cfg = dict(integration.config_json or {})
+    cfg["access_token"] = refreshed_tokens["access_token"]
+    if refreshed_tokens.get("expires_at"):
+        cfg["expires_at"] = refreshed_tokens["expires_at"]
+    # Keep the existing refresh_token (Google only returns it on first consent)
+    if old_refresh_token and not cfg.get("refresh_token"):
+        cfg["refresh_token"] = old_refresh_token
+    await connect_integration(
+        db=db,
+        organization_id=org_id,
+        integration_type="gmail",
+        config_json=cfg,
+    )
+
+
+# -- Sync --------------------------------------------------------------------
 
 async def sync_emails(
     db: AsyncSession,
@@ -48,7 +86,7 @@ async def sync_emails(
 ) -> int:
     """
     Fetch recent emails from Gmail and store new ones in DB.
-    Deduplicates by (gmail_id, organization_id) — org-scoped to prevent
+    Deduplicates by (gmail_id, organization_id) - org-scoped to prevent
     cross-tenant collision on shared gmail_id values.
     Returns count of new emails stored.
     """
@@ -56,16 +94,39 @@ async def sync_emails(
     if not integration:
         return 0
 
-    access_token, refresh_token = _get_tokens(integration)
-    raw_emails = gmail_tool.fetch_recent_emails(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        max_results=20,
-    )
+    access_token, refresh_token, expires_at = _get_tokens(integration)
+    try:
+        raw_emails, refreshed_tokens = await asyncio.to_thread(
+            gmail_tool.fetch_recent_emails,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_at=expires_at,
+            max_results=20,
+        )
+    except Exception as exc:
+        error_text = str(exc).lower()
+        if "accessnotconfigured" in error_text or "has not been used in project" in error_text:
+            raise EmailSyncError(
+                code="gmail_api_disabled",
+                message="Gmail API is disabled for this Google Cloud project. Enable gmail.googleapis.com and retry.",
+            ) from exc
+        if "invalid_grant" in error_text or "invalid credentials" in error_text:
+            raise EmailSyncError(
+                code="gmail_reconnect_required",
+                message="Gmail authentication expired or was revoked. Reconnect Gmail and try again.",
+            ) from exc
+        raise EmailSyncError(
+            code="gmail_upstream_error",
+            message="Gmail sync failed due to an upstream API error. Try again, then reconnect Gmail if needed.",
+        ) from exc
+
+    # Persist refreshed tokens if auto-refresh occurred
+    if refreshed_tokens:
+        await _persist_refreshed_tokens(db, org_id, integration, refreshed_tokens, refresh_token)
 
     new_count = 0
     for raw in raw_emails:
-        # Deduplicate by (gmail_id, organization_id) — not just gmail_id
+        # Deduplicate by (gmail_id, organization_id) - not just gmail_id
         exists = await db.execute(
             select(Email).where(
                 Email.gmail_id == raw["gmail_id"],
@@ -112,18 +173,62 @@ async def sync_emails(
     return new_count
 
 
-# ── List ──────────────────────────────────────────────────────────────────────
+async def check_gmail_health(
+    db: AsyncSession,
+    org_id: int,
+) -> dict:
+    """
+    Validate Gmail integration credentials by reading Gmail profile.
+    Returns a health payload with status and optional diagnostics.
+    """
+    integration = await get_integration_by_type(db, org_id, "gmail")
+    if not integration:
+        return {"status": "not_connected"}
+
+    access_token, refresh_token, expires_at = _get_tokens(integration)
+    if not access_token:
+        return {"status": "misconfigured", "code": "missing_access_token"}
+
+    try:
+        profile, refreshed_tokens = await asyncio.to_thread(
+            gmail_tool.get_profile,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_at=expires_at,
+        )
+    except Exception as exc:
+        text = str(exc).lower()
+        if "accessnotconfigured" in text or "has not been used in project" in text:
+            return {"status": "error", "code": "gmail_api_disabled"}
+        if "invalid_grant" in text or "invalid credentials" in text:
+            return {"status": "error", "code": "gmail_reconnect_required"}
+        return {"status": "error", "code": "gmail_upstream_error"}
+
+    if refreshed_tokens:
+        await _persist_refreshed_tokens(db, org_id, integration, refreshed_tokens, refresh_token)
+
+    return {
+        "status": "ok",
+        "email_address": profile.get("emailAddress"),
+        "messages_total": profile.get("messagesTotal"),
+        "threads_total": profile.get("threadsTotal"),
+    }
+
+
+# -- List --------------------------------------------------------------------
 
 async def list_emails(
     db: AsyncSession,
     org_id: int,
     limit: int = 50,
+    offset: int = 0,
     unread_only: bool = False,
 ) -> list[Email]:
     query = (
         select(Email)
         .where(Email.organization_id == org_id)
         .order_by(Email.received_at.desc())
+        .offset(offset)
         .limit(limit)
     )
     if unread_only:
@@ -136,10 +241,10 @@ async def get_email(db: AsyncSession, email_id: int, org_id: int) -> Email | Non
     result = await db.execute(
         select(Email).where(Email.id == email_id, Email.organization_id == org_id)
     )
-    return result.scalar_one_or_none()
+    return cast(Email | None, result.scalar_one_or_none())
 
 
-# ── AI Summarize ──────────────────────────────────────────────────────────────
+# -- AI Summarize -------------------------------------------------------------
 
 async def summarize_email(
     db: AsyncSession,
@@ -177,7 +282,7 @@ async def summarize_email(
     return summary
 
 
-# ── AI Draft Reply ────────────────────────────────────────────────────────────
+# -- AI Draft Reply -----------------------------------------------------------
 
 async def draft_reply(
     db: AsyncSession,
@@ -207,13 +312,13 @@ async def draft_reply(
     draft = await call_ai(
         system_prompt=(
             "You are Nidin's email assistant. Draft a professional, concise reply to this email. "
-            "Write as if you are Nidin. Do not add placeholder text like [Your Name] — "
+            "Write as if you are Nidin. Do not add placeholder text like [Your Name] - "
             "sign off as Nidin. Keep it short and direct."
         ),
         user_message=user_prompt,
     )
 
-    # Reject AI error strings — don't store them as drafts
+    # Reject AI error strings - don't store them as drafts
     if _is_ai_error(draft):
         return None
 
@@ -221,13 +326,15 @@ async def draft_reply(
     integration = await get_integration_by_type(db, org_id, "gmail")
     gmail_draft_id: str | None = None
     if integration:
-        access_token, refresh_token = _get_tokens(integration)
-        gmail_draft_id = gmail_tool.create_draft(
+        access_token, refresh_token, expires_at = _get_tokens(integration)
+        gmail_draft_id = await asyncio.to_thread(
+            gmail_tool.create_draft,
             access_token=access_token,
             to=email.from_address or "",
             subject=f"Re: {email.subject or ''}",
             body=draft,
             refresh_token=refresh_token,
+            expires_at=expires_at,
         )
 
     # Create approval request first so we have its ID
@@ -270,7 +377,7 @@ async def draft_reply(
     return draft
 
 
-# ── Send Approved Reply ───────────────────────────────────────────────────────
+# -- Send Approved Reply ------------------------------------------------------
 
 async def send_approved_reply(
     db: AsyncSession,
@@ -279,14 +386,15 @@ async def send_approved_reply(
     actor_user_id: int,
 ) -> bool:
     """
-    Send the drafted reply — ONLY if the linked approval is approved and unused.
+    Send the drafted reply - ONLY if the linked approval is approved and unused.
 
     Guard order:
     1. Email exists, has a draft, and has not been sent yet
     2. email.approval_id FK resolves to an approved Approval in the same org
-    3. approval.executed_at IS NULL (idempotency guard — prevents double-send)
+    3. approval.executed_at IS NULL (idempotency guard - prevents double-send)
     4. Mark executed_at = now() BEFORE sending (claim the send slot)
     5. Send via Gmail; rollback executed_at on failure
+    6. Clear gmail_draft_id after send (draft consumed, reference now stale)
 
     Returns True on success.
     """
@@ -312,9 +420,9 @@ async def send_approved_reply(
 
     if not email.approval_id:
         await _record_send_blocked("missing_approval_link")
-        return False  # No approval linked — draft_reply() was not called
+        return False  # No approval linked - draft_reply() was not called
 
-    # Resolve approval via FK — single query, org-scoped
+    # Resolve approval via FK - single query, org-scoped
     approval_result = await db.execute(
         select(Approval).where(
             Approval.id == email.approval_id,
@@ -333,7 +441,7 @@ async def send_approved_reply(
         await _record_send_blocked("approval_email_id_mismatch", approval_id=approval.id)
         return False
 
-    # Idempotency guard — reject if already executed
+    # Idempotency guard - reject if already executed
     if approval.executed_at is not None:
         await _record_send_blocked("approval_already_executed", approval_id=approval.id)
         return False
@@ -345,24 +453,28 @@ async def send_approved_reply(
     # Get Gmail tokens
     integration = await get_integration_by_type(db, org_id, "gmail")
     if not integration:
-        # No integration — roll back the executed_at claim
+        # No integration - roll back the executed_at claim
         approval.executed_at = None
         await db.commit()
         await _record_send_blocked("gmail_not_connected", approval_id=approval.id)
         return False
 
-    access_token, refresh_token = _get_tokens(integration)
-    sent = gmail_tool.send_email(
+    access_token, refresh_token, expires_at = _get_tokens(integration)
+    sent = await asyncio.to_thread(
+        gmail_tool.send_email,
         access_token=access_token,
         to=email.from_address or "",
         subject=f"Re: {email.subject or ''}",
         body=email.draft_reply,
         refresh_token=refresh_token,
+        expires_at=expires_at,
     )
 
     if sent:
         email.reply_sent = True
         email.reply_approved = True
+        # Clear gmail_draft_id - draft was consumed and is now stale
+        email.gmail_draft_id = None
         await db.commit()
         await record_action(
             db=db,
@@ -374,9 +486,10 @@ async def send_approved_reply(
             organization_id=org_id,
         )
     else:
-        # Gmail send failed — release the executed_at slot so a retry is possible
+        # Gmail send failed - release the executed_at slot so a retry is possible
         approval.executed_at = None
         await db.commit()
         await _record_send_blocked("gmail_send_failed", approval_id=approval.id)
 
     return sent
+

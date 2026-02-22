@@ -1,8 +1,9 @@
+import asyncio
 import hmac
 from hashlib import sha256
 from time import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -10,10 +11,17 @@ from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.schemas.email import DraftReplyRequest, EmailRead, SyncResult
 from app.services import email_service
+from app.services.email_service import EmailSyncError
 from app.tools.gmail import exchange_code_for_tokens, get_gmail_auth_url
-from app.services.integration import connect_integration
+from app.services.integration import connect_integration, get_integration_by_type
 
 router = APIRouter(prefix="/email", tags=["Email"])
+
+
+def _oauth_error_detail(error_code: str) -> str:
+    if error_code == "token_exchange_failed":
+        return "OAuth failed: token exchange failed. Reconnect and try again."
+    return "OAuth failed: provider rejected the authorization code. Reconnect and try again."
 
 
 def _sign_email_state(org_id: int) -> str:
@@ -70,11 +78,15 @@ async def gmail_callback(
     Handle Gmail OAuth callback. Exchange code for tokens and save to DB.
     Google redirects here after the user grants permission.
     """
-    tokens = exchange_code_for_tokens(code)
+    tokens = await asyncio.to_thread(exchange_code_for_tokens, code)
     if "error" in tokens:
-        raise HTTPException(status_code=400, detail=f"OAuth failed: {tokens['error']}")
+        error_code = str(tokens.get("error") or "unknown")
+        raise HTTPException(status_code=400, detail=_oauth_error_detail(error_code))
 
     org_id = _verify_email_state(state)
+    existing = await get_integration_by_type(db, org_id, "gmail")
+    existing_cfg = existing.config_json if existing else {}
+    refresh_token = tokens.get("refresh_token") or existing_cfg.get("refresh_token")
 
     # Store tokens in integrations table — never in logs or responses
     await connect_integration(
@@ -83,7 +95,7 @@ async def gmail_callback(
         integration_type="gmail",
         config_json={
             "access_token": tokens["access_token"],
-            "refresh_token": tokens.get("refresh_token"),
+            "refresh_token": refresh_token,
             "expires_at": tokens.get("expires_at"),
         },
     )
@@ -98,27 +110,46 @@ async def sync_emails(
 ) -> SyncResult:
     """Sync recent emails from Gmail into the database."""
     org_id = int(current_user.get("org_id", 1))
-    new_count = await email_service.sync_emails(
-        db=db,
-        org_id=org_id,
-        actor_user_id=int(current_user["id"]),
-    )
+    try:
+        new_count = await email_service.sync_emails(
+            db=db,
+            org_id=org_id,
+            actor_user_id=int(current_user["id"]),
+        )
+    except EmailSyncError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
     return SyncResult(
         new_emails=new_count,
         message=f"Synced {new_count} new email(s) from Gmail.",
     )
 
 
+@router.get("/health")
+async def gmail_health(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Return Gmail integration health for the current org."""
+    org_id = int(current_user.get("org_id", 1))
+    return await email_service.check_gmail_health(db=db, org_id=org_id)
+
+
 @router.get("/inbox", response_model=list[EmailRead])
 async def list_inbox(
     unread_only: bool = False,
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     _user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> list[EmailRead]:
     """List emails from the inbox. Filter by unread if needed."""
     org_id = int(_user.get("org_id", 1))
-    return await email_service.list_emails(db, org_id=org_id, limit=limit, unread_only=unread_only)
+    return await email_service.list_emails(
+        db, org_id=org_id, limit=limit, offset=offset, unread_only=unread_only
+    )
 
 
 @router.post("/{email_id}/summarize")

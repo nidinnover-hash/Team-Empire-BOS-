@@ -1,13 +1,40 @@
 """
-AI Router — single entry point for all LLM calls.
+AI Router - single entry point for all LLM calls.
 
-All agent, memory, and email AI calls go through call_ai().
-Never call OpenAI or Anthropic directly from other files.
+Supported providers:
+  - openai    -> OpenAI (paid, set OPENAI_API_KEY)
+  - anthropic -> Anthropic Claude (paid, set ANTHROPIC_API_KEY)
+  - groq      -> Groq LLaMA (FREE tier, set GROQ_API_KEY at console.groq.com)
+
+Fallback behaviour:
+  If the primary provider fails with a transient error (rate limit, timeout,
+  server error), call_ai() automatically tries the other configured providers.
+  Authentication errors do NOT trigger a fallback.
 """
+
+import logging
 
 from app.core.config import settings
 
-_PLACEHOLDER_KEYS = {"sk-your-key-here", "sk-xxxxxxxxxxxxxxxxxxxxxxxx", "", "your-anthropic-key-here"}
+logger = logging.getLogger(__name__)
+
+_PLACEHOLDER_KEYS = {
+    "sk-your-key-here", "sk-xxxxxxxxxxxxxxxxxxxxxxxx", "",
+    "your-anthropic-key-here", "gsk_your-key-here",
+}
+
+# Error types that should NOT trigger a fallback (permanent / config issues)
+_NO_FALLBACK_ERRORS = ("AuthenticationError", "PermissionDeniedError", "NotFoundError")
+
+
+def _key_ok(key: str | None) -> bool:
+    return bool(key) and key not in _PLACEHOLDER_KEYS
+
+
+def _fallback_order(primary: str) -> list[str]:
+    """Return providers to try after primary fails, in preference order."""
+    all_providers = ["groq", "openai", "anthropic"]
+    return [p for p in all_providers if p != primary]
 
 
 async def call_ai(
@@ -18,18 +45,14 @@ async def call_ai(
     max_tokens: int = 800,
 ) -> str:
     """
-    Route to OpenAI or Anthropic based on config.
+    Route to OpenAI, Anthropic, or Groq based on config.
 
-    Args:
-        system_prompt:  Role-specific instructions for the AI.
-        user_message:   What the user typed.
-        memory_context: Injected team/profile memory (optional).
-        provider:       "openai" or "anthropic". None = use DEFAULT_AI_PROVIDER.
-        max_tokens:     Max response length.
+    Tries the primary provider first. On transient failure, automatically
+    falls back to any other configured provider.
 
     Returns:
         AI response as a string.
-        Returns a safe fallback message on any error — never raises.
+        Returns a safe, human-readable error message on failure - never raises.
     """
     chosen = provider or settings.DEFAULT_AI_PROVIDER
 
@@ -38,16 +61,48 @@ async def call_ai(
     if memory_context:
         full_system = f"[MEMORY CONTEXT]\n{memory_context}\n[END MEMORY]\n\n{system_prompt}"
 
-    if chosen == "anthropic":
-        return await _call_anthropic(full_system, user_message, max_tokens)
+    # Try primary provider
+    result, is_transient = await _call_provider(chosen, full_system, user_message, max_tokens)
+    if not result.startswith("Error:"):
+        return result
 
-    return await _call_openai(full_system, user_message, max_tokens)
+    # On transient failure, try other configured providers
+    if is_transient:
+        for fallback in _fallback_order(chosen):
+            fb_key = _get_key(fallback)
+            if not _key_ok(fb_key):
+                continue
+            logger.info("Primary '%s' failed transiently, trying fallback '%s'", chosen, fallback)
+            fb_result, _ = await _call_provider(fallback, full_system, user_message, max_tokens)
+            if not fb_result.startswith("Error:"):
+                return fb_result
+
+    return result  # Return the original error if all fail
 
 
-async def _call_openai(system_prompt: str, user_message: str, max_tokens: int) -> str:
+def _get_key(provider: str) -> str | None:
+    if provider == "openai":
+        return settings.OPENAI_API_KEY
+    if provider == "anthropic":
+        return settings.ANTHROPIC_API_KEY
+    if provider == "groq":
+        return settings.GROQ_API_KEY
+    return None
+
+
+async def _call_provider(provider: str, system_prompt: str, user_message: str, max_tokens: int) -> tuple[str, bool]:
+    """Call a specific provider. Returns (response_text, is_transient_error)."""
+    if provider == "anthropic":
+        return await _call_anthropic(system_prompt, user_message, max_tokens)
+    if provider == "groq":
+        return await _call_groq(system_prompt, user_message, max_tokens)
+    return await _call_openai(system_prompt, user_message, max_tokens)
+
+
+async def _call_openai(system_prompt: str, user_message: str, max_tokens: int) -> tuple[str, bool]:
     key = settings.OPENAI_API_KEY
-    if not key or key in _PLACEHOLDER_KEYS:
-        return "OpenAI not configured. Add OPENAI_API_KEY to your .env file."
+    if not _key_ok(key):
+        return "Error: OpenAI not configured. Add OPENAI_API_KEY to your .env file.", False
     try:
         from openai import AsyncOpenAI
         client = AsyncOpenAI(api_key=key)
@@ -60,15 +115,18 @@ async def _call_openai(system_prompt: str, user_message: str, max_tokens: int) -
             max_tokens=max_tokens,
             timeout=20.0,
         )
-        return result.choices[0].message.content or "No response from OpenAI."
+        return result.choices[0].message.content or "No response from OpenAI.", False
     except Exception as e:
-        return f"OpenAI error: {type(e).__name__}. Check your API key and network."
+        error_type = type(e).__name__
+        is_transient = error_type not in _NO_FALLBACK_ERRORS
+        logger.warning("OpenAI call failed (%s): %s", error_type, e)
+        return f"Error: {_openai_error_message(error_type)}", is_transient
 
 
-async def _call_anthropic(system_prompt: str, user_message: str, max_tokens: int) -> str:
+async def _call_anthropic(system_prompt: str, user_message: str, max_tokens: int) -> tuple[str, bool]:
     key = settings.ANTHROPIC_API_KEY
-    if not key or key in _PLACEHOLDER_KEYS:
-        return "Anthropic not configured. Add ANTHROPIC_API_KEY to your .env file."
+    if not _key_ok(key):
+        return "Error: Anthropic not configured. Add ANTHROPIC_API_KEY to your .env file.", False
     try:
         import anthropic
         client = anthropic.AsyncAnthropic(api_key=key)
@@ -78,6 +136,73 @@ async def _call_anthropic(system_prompt: str, user_message: str, max_tokens: int
             system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )
-        return result.content[0].text or "No response from Anthropic."
+        text_parts = [
+            block.text for block in result.content if getattr(block, "type", None) == "text"
+        ]
+        return ("\n".join(text_parts) if text_parts else "No response from Anthropic."), False
     except Exception as e:
-        return f"Anthropic error: {type(e).__name__}. Check your API key and network."
+        error_type = type(e).__name__
+        is_transient = error_type not in _NO_FALLBACK_ERRORS
+        logger.warning("Anthropic call failed (%s): %s", error_type, e)
+        return f"Error: {_anthropic_error_message(error_type)}", is_transient
+
+
+async def _call_groq(system_prompt: str, user_message: str, max_tokens: int) -> tuple[str, bool]:
+    key = settings.GROQ_API_KEY
+    if not _key_ok(key):
+        return "Error: Groq not configured. Add GROQ_API_KEY to your .env (free at console.groq.com).", False
+    try:
+        from groq import AsyncGroq
+        client = AsyncGroq(api_key=key)
+        result = await client.chat.completions.create(
+            model=settings.AGENT_MODEL_GROQ,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            max_tokens=max_tokens,
+            timeout=20.0,
+        )
+        return result.choices[0].message.content or "No response from Groq.", False
+    except Exception as e:
+        error_type = type(e).__name__
+        is_transient = error_type not in _NO_FALLBACK_ERRORS
+        logger.warning("Groq call failed (%s): %s", error_type, e)
+        return f"Error: {_groq_error_message(error_type)}", is_transient
+
+
+def _openai_error_message(error_type: str) -> str:
+    if error_type == "RateLimitError":
+        return "OpenAI quota exceeded. Add billing at platform.openai.com/settings/billing"
+    if error_type == "AuthenticationError":
+        return "OpenAI API key is invalid. Check OPENAI_API_KEY in your .env file."
+    if error_type == "APITimeoutError":
+        return "OpenAI request timed out. Check your network and retry."
+    if error_type == "APIConnectionError":
+        return "Cannot reach OpenAI API. Check your internet connection."
+    return f"OpenAI error ({error_type}). Check your API key and network."
+
+
+def _anthropic_error_message(error_type: str) -> str:
+    if error_type == "RateLimitError":
+        return "Anthropic rate limit exceeded. Check usage at console.anthropic.com."
+    if error_type == "AuthenticationError":
+        return "Anthropic API key is invalid. Check ANTHROPIC_API_KEY in your .env file."
+    if error_type == "APITimeoutError":
+        return "Anthropic request timed out. Check your network and retry."
+    if error_type == "APIConnectionError":
+        return "Cannot reach Anthropic API. Check your internet connection."
+    return f"Anthropic error ({error_type}). Check your API key and network."
+
+
+def _groq_error_message(error_type: str) -> str:
+    if error_type == "RateLimitError":
+        return "Groq rate limit hit. Wait a moment and retry (free tier has per-minute limits)."
+    if error_type == "AuthenticationError":
+        return "Groq API key is invalid. Check GROQ_API_KEY in your .env file."
+    if error_type == "APITimeoutError":
+        return "Groq request timed out. Check your network and retry."
+    if error_type == "APIConnectionError":
+        return "Cannot reach Groq API. Check your internet connection."
+    return f"Groq error ({error_type}). Check your API key and network."
+

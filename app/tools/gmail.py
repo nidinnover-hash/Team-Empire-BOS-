@@ -1,5 +1,5 @@
 """
-Gmail OAuth tool — all Gmail API calls live here.
+Gmail OAuth tool - all Gmail API calls live here.
 
 Rules:
 - This file only talks to Gmail. No DB logic here.
@@ -11,12 +11,24 @@ Rules:
 
 import base64
 import email as email_lib
+import logging
 from datetime import datetime, timezone
 
 from app.core.config import settings
 
-# Gmail scope — modify allows read + send + label
+logger = logging.getLogger(__name__)
+
+# Gmail scope - modify allows read + send + label
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
+
+
+class GmailAPIError(Exception):
+    """Raised when a Gmail API call fails and should be surfaced to callers."""
+
+
+def _safe_exc_summary(exc: Exception) -> str:
+    """Short, non-sensitive exception summary for logs."""
+    return type(exc).__name__
 
 
 def get_gmail_auth_url(state: str | None = None) -> str:
@@ -45,7 +57,7 @@ def get_gmail_auth_url(state: str | None = None) -> str:
         prompt="consent",  # forces refresh_token to be returned
         state=state,
     )
-    return auth_url
+    return str(auth_url)
 
 
 def exchange_code_for_tokens(code: str) -> dict:
@@ -58,7 +70,7 @@ def exchange_code_for_tokens(code: str) -> dict:
           "refresh_token": "...",
           "expires_at": "2026-02-21T12:00:00+00:00"
         }
-    Never raises — returns {"error": "..."} on failure.
+    Never raises - returns {"error": "..."} on failure.
     """
     try:
         from google_auth_oauthlib.flow import Flow
@@ -83,14 +95,70 @@ def exchange_code_for_tokens(code: str) -> dict:
             "refresh_token": creds.refresh_token,
             "expires_at": creds.expiry.isoformat() if creds.expiry else None,
         }
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception as exc:
+        logger.warning("Gmail OAuth token exchange failed (%s)", _safe_exc_summary(exc))
+        return {"error": "token_exchange_failed"}
 
 
-def _build_gmail_service(access_token: str, refresh_token: str | None = None):
-    """Build an authenticated Gmail API service object."""
+def refresh_access_token(refresh_token: str) -> dict:
+    """
+    Use a stored refresh_token to obtain a new access_token from Google.
+
+    Returns:
+        {
+          "access_token": "...",
+          "expires_at": "ISO timestamp"
+        }
+    Returns {"error": "..."} on failure - never raises.
+    """
+    try:
+        from google.oauth2.credentials import Credentials
+        from google.auth.transport.requests import Request
+
+        creds = Credentials(
+            token=None,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=settings.GOOGLE_CLIENT_ID,
+            client_secret=settings.GOOGLE_CLIENT_SECRET,
+            scopes=GMAIL_SCOPES,
+        )
+        creds.refresh(Request())
+        return {
+            "access_token": creds.token,
+            "expires_at": creds.expiry.isoformat() if creds.expiry else None,
+        }
+    except Exception as exc:
+        logger.warning("Gmail token refresh failed (%s)", _safe_exc_summary(exc))
+        return {"error": "refresh_failed"}
+
+
+def _build_gmail_service(
+    access_token: str,
+    refresh_token: str | None = None,
+    expires_at: str | None = None,
+) -> tuple:
+    """
+    Build an authenticated Gmail API service object.
+
+    Auto-refreshes the access token if it appears expired and a refresh_token
+    is available. Returns (service, refreshed_tokens | None) where
+    refreshed_tokens is a dict with new access_token/expires_at if a refresh
+    occurred, or None if the existing token was still valid.
+    """
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
+
+    # Parse expiry so the Credentials object knows if token is stale
+    expiry: datetime | None = None
+    if expires_at:
+        try:
+            expiry = datetime.fromisoformat(expires_at)
+            # Make timezone-aware if naive
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+        except ValueError:
+            expiry = None
 
     creds = Credentials(
         token=access_token,
@@ -99,8 +167,27 @@ def _build_gmail_service(access_token: str, refresh_token: str | None = None):
         client_id=settings.GOOGLE_CLIENT_ID,
         client_secret=settings.GOOGLE_CLIENT_SECRET,
         scopes=GMAIL_SCOPES,
+        expiry=expiry,
     )
-    return build("gmail", "v1", credentials=creds, cache_discovery=False)
+
+    refreshed_tokens: dict | None = None
+    if creds.expired and refresh_token:
+        try:
+            from google.auth.transport.requests import Request
+            creds.refresh(Request())
+            refreshed_tokens = {
+                "access_token": creds.token,
+                "expires_at": creds.expiry.isoformat() if creds.expiry else None,
+            }
+            logger.info("Gmail access token auto-refreshed successfully")
+        except Exception as exc:
+            logger.warning(
+                "Gmail auto-refresh failed, proceeding with stored token (%s)",
+                _safe_exc_summary(exc),
+            )
+
+    service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+    return service, refreshed_tokens
 
 
 def _extract_body(payload: dict) -> str:
@@ -131,20 +218,20 @@ def _get_header(headers: list[dict], name: str) -> str | None:
 def fetch_recent_emails(
     access_token: str,
     refresh_token: str | None = None,
+    expires_at: str | None = None,
     max_results: int = 20,
-) -> list[dict]:
+) -> tuple[list[dict], dict | None]:
     """
     Fetch recent emails from Gmail inbox.
 
-    Returns list of dicts:
-    {
-        gmail_id, thread_id, from_address, to_address,
-        subject, body_text, received_at
-    }
-    Returns empty list on any error.
+    Returns (emails, refreshed_tokens) where:
+    - emails: list of dicts with gmail_id, thread_id, from/to/subject/body, received_at
+    - refreshed_tokens: new access_token/expires_at dict if auto-refresh occurred, else None
+
+    Raises GmailAPIError on API failures so callers can surface a useful sync error.
     """
     try:
-        service = _build_gmail_service(access_token, refresh_token)
+        service, refreshed_tokens = _build_gmail_service(access_token, refresh_token, expires_at)
         result = service.users().messages().list(
             userId="me",
             maxResults=max_results,
@@ -178,9 +265,28 @@ def fetch_recent_emails(
                 "received_at": received_at,
             })
 
-        return emails
-    except Exception:
-        return []
+        return emails, refreshed_tokens
+    except GmailAPIError:
+        raise
+    except Exception as exc:
+        raise GmailAPIError(f"Gmail fetch failed: {exc}") from exc
+
+
+def get_profile(
+    access_token: str,
+    refresh_token: str | None = None,
+    expires_at: str | None = None,
+) -> tuple[dict, dict | None]:
+    """
+    Read authenticated Gmail profile details.
+    Returns (profile, refreshed_tokens).
+    """
+    try:
+        service, refreshed_tokens = _build_gmail_service(access_token, refresh_token, expires_at)
+        profile = service.users().getProfile(userId="me").execute()
+        return profile, refreshed_tokens
+    except Exception as exc:
+        raise GmailAPIError(f"Gmail profile fetch failed: {exc}") from exc
 
 
 def create_draft(
@@ -189,6 +295,7 @@ def create_draft(
     subject: str,
     body: str,
     refresh_token: str | None = None,
+    expires_at: str | None = None,
 ) -> str | None:
     """
     Create a Gmail draft via the API.
@@ -199,7 +306,7 @@ def create_draft(
     The draft ID is stored in Email.gmail_draft_id for idempotency.
     """
     try:
-        service = _build_gmail_service(access_token, refresh_token)
+        service, _ = _build_gmail_service(access_token, refresh_token, expires_at)
         raw_message = email_lib.message.EmailMessage()
         raw_message["To"] = to
         raw_message["Subject"] = subject
@@ -209,8 +316,15 @@ def create_draft(
             userId="me",
             body={"message": {"raw": encoded}},
         ).execute()
-        return result.get("id")
-    except Exception:
+        draft_id = result.get("id")
+        return draft_id if isinstance(draft_id, str) else None
+    except Exception as exc:
+        logger.error(
+            "Gmail create_draft failed (to=%s, subject=%s, error=%s)",
+            to,
+            subject,
+            _safe_exc_summary(exc),
+        )
         return None
 
 
@@ -220,6 +334,7 @@ def send_email(
     subject: str,
     body: str,
     refresh_token: str | None = None,
+    expires_at: str | None = None,
 ) -> bool:
     """
     Send an email via Gmail API.
@@ -231,7 +346,7 @@ def send_email(
     Returns True on success, False on failure.
     """
     try:
-        service = _build_gmail_service(access_token, refresh_token)
+        service, _ = _build_gmail_service(access_token, refresh_token, expires_at)
 
         raw_message = email_lib.message.EmailMessage()
         raw_message["To"] = to
@@ -244,5 +359,12 @@ def send_email(
             body={"raw": encoded},
         ).execute()
         return True
-    except Exception:
+    except Exception as exc:
+        logger.error(
+            "Gmail send_email failed (to=%s, subject=%s, error=%s)",
+            to,
+            subject,
+            _safe_exc_summary(exc),
+        )
         return False
+

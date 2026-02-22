@@ -101,3 +101,39 @@ async def test_google_integration_test_refresh_flow(client, monkeypatch):
     tested = await client.post(f"/api/v1/integrations/{integration_id}/test", headers=headers)
     assert tested.status_code == 200
     assert tested.json()["status"] == "ok"
+
+
+async def test_google_integration_test_refresh_failure_is_sanitized(client, monkeypatch):
+    async def failing_list_events_for_day(access_token: str, day, calendar_id: str = "primary"):
+        raise RuntimeError("expired token")
+
+    async def failing_refresh_access_token(refresh_token: str, client_id: str, client_secret: str):
+        raise RuntimeError("invalid_grant: client_secret=super-secret")
+
+    monkeypatch.setattr(integrations_endpoint, "list_events_for_day", failing_list_events_for_day)
+    monkeypatch.setattr(integrations_endpoint, "refresh_access_token", failing_refresh_access_token)
+    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_ID", "cid")
+    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_SECRET", "csecret")
+
+    headers = _auth_headers(1, "ceo@org.com", "CEO", 1)
+    connected = await client.post(
+        "/api/v1/integrations/connect",
+        json={
+            "type": "google_calendar",
+            "config_json": {
+                "access_token": "expired",
+                "refresh_token": "refresh",
+                "calendar_id": "primary",
+            },
+        },
+        headers=headers,
+    )
+    assert connected.status_code == 201
+    integration_id = connected.json()["id"]
+
+    tested = await client.post(f"/api/v1/integrations/{integration_id}/test", headers=headers)
+    assert tested.status_code == 200
+    body = tested.json()
+    assert body["status"] == "failed"
+    assert "Google Calendar test failed after token refresh" in body["message"]
+    assert "super-secret" not in body["message"]
