@@ -13,6 +13,7 @@ Fallback behaviour:
 """
 
 import logging
+from typing import cast
 
 from app.core.config import settings
 
@@ -37,6 +38,12 @@ def _fallback_order(primary: str) -> list[str]:
     return [p for p in all_providers if p != primary]
 
 
+def _configured_providers() -> list[str]:
+    """Return configured providers in preferred order."""
+    ordered = ["groq", "openai", "anthropic"]
+    return [p for p in ordered if _key_ok(_get_key(p))]
+
+
 async def call_ai(
     system_prompt: str,
     user_message: str,
@@ -54,7 +61,19 @@ async def call_ai(
         AI response as a string.
         Returns a safe, human-readable error message on failure - never raises.
     """
-    chosen = provider or settings.DEFAULT_AI_PROVIDER
+    requested = (provider or settings.DEFAULT_AI_PROVIDER or "").strip().lower()
+    if requested not in {"openai", "anthropic", "groq"}:
+        requested = "groq"
+
+    configured = _configured_providers()
+    if not configured:
+        return (
+            "Error: No AI providers are configured. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, "
+            "or GROQ_API_KEY in .env."
+        )
+
+    # If requested/default provider isn't configured, use first available.
+    chosen = requested if requested in configured else configured[0]
 
     # Inject memory into system prompt if provided
     full_system = system_prompt
@@ -69,8 +88,7 @@ async def call_ai(
     # On transient failure, try other configured providers
     if is_transient:
         for fallback in _fallback_order(chosen):
-            fb_key = _get_key(fallback)
-            if not _key_ok(fb_key):
+            if fallback not in configured:
                 continue
             logger.info("Primary '%s' failed transiently, trying fallback '%s'", chosen, fallback)
             fb_result, _ = await _call_provider(fallback, full_system, user_message, max_tokens)
@@ -82,11 +100,11 @@ async def call_ai(
 
 def _get_key(provider: str) -> str | None:
     if provider == "openai":
-        return settings.OPENAI_API_KEY
+        return cast(str | None, settings.OPENAI_API_KEY)
     if provider == "anthropic":
-        return settings.ANTHROPIC_API_KEY
+        return cast(str | None, settings.ANTHROPIC_API_KEY)
     if provider == "groq":
-        return settings.GROQ_API_KEY
+        return cast(str | None, settings.GROQ_API_KEY)
     return None
 
 

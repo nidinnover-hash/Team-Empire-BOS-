@@ -249,14 +249,20 @@ async def test_ai_provider(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> AITestResult:
     """
-    Make a live test call to OpenAI or Anthropic.
+    Make a live test call to OpenAI, Anthropic, or Groq.
 
-    - provider: "openai" or "anthropic". Defaults to DEFAULT_AI_PROVIDER.
+    - provider: "openai", "anthropic", or "groq". Defaults to DEFAULT_AI_PROVIDER.
     - Returns the provider's response to a simple ping prompt.
     """
     from app.services.ai_router import call_ai
 
-    chosen = provider or settings.DEFAULT_AI_PROVIDER
+    chosen = (provider or settings.DEFAULT_AI_PROVIDER or "").strip().lower()
+    if chosen not in {"openai", "anthropic", "groq"}:
+        return AITestResult(
+            provider=chosen or "unknown",
+            status="failed",
+            message="Unsupported provider. Use one of: openai, anthropic, groq.",
+        )
 
     if chosen == "openai" and not _key_is_configured(settings.OPENAI_API_KEY):
         return AITestResult(
@@ -269,6 +275,12 @@ async def test_ai_provider(
             provider="anthropic",
             status="not_configured",
             message="ANTHROPIC_API_KEY is missing or is still a placeholder in .env",
+        )
+    if chosen == "groq" and not _key_is_configured(settings.GROQ_API_KEY):
+        return AITestResult(
+            provider="groq",
+            status="not_configured",
+            message="GROQ_API_KEY is missing or is still a placeholder in .env",
         )
 
     response = await call_ai(
