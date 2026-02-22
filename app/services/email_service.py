@@ -13,7 +13,7 @@ import logging
 from datetime import datetime, timezone
 from typing import cast
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.logs.audit import record_action
@@ -558,15 +558,21 @@ async def send_approved_compose(
     if approval.organization_id != org_id or approval.status != "approved":
         await _record_send_blocked("approval_not_approved_or_wrong_org")
         return False
-    if approval.executed_at is not None:
-        await _record_send_blocked("approval_already_executed")
-        return False
     if not to or not draft_body:
         await _record_send_blocked("missing_compose_payload")
         return False
 
-    approval.executed_at = datetime.now(timezone.utc)
+    # Atomic claim — only proceeds if executed_at is still NULL
+    _claim_ts = datetime.now(timezone.utc)
+    _claim_result = await db.execute(
+        update(Approval)
+        .where(Approval.id == approval.id, Approval.executed_at.is_(None))
+        .values(executed_at=_claim_ts)
+    )
     await db.commit()
+    if _claim_result.rowcount == 0:
+        await _record_send_blocked("approval_already_executed")
+        return False
 
     integration = await get_integration_by_type(db, org_id, "gmail")
     if not integration:
@@ -670,14 +676,19 @@ async def send_approved_reply(
         await _record_send_blocked("approval_email_id_mismatch", approval_id=approval.id)
         return False
 
-    # Idempotency guard - reject if already executed
-    if approval.executed_at is not None:
+    # Claim the send slot with an atomic UPDATE WHERE executed_at IS NULL.
+    # Two concurrent requests could both pass a read-then-check; this ensures
+    # only the first one proceeds (rowcount == 0 means someone else got there first).
+    _claim_ts = datetime.now(timezone.utc)
+    _claim_result = await db.execute(
+        update(Approval)
+        .where(Approval.id == approval.id, Approval.executed_at.is_(None))
+        .values(executed_at=_claim_ts)
+    )
+    await db.commit()
+    if _claim_result.rowcount == 0:
         await _record_send_blocked("approval_already_executed", approval_id=approval.id)
         return False
-
-    # Claim the send slot atomically before touching Gmail
-    approval.executed_at = datetime.now(timezone.utc)
-    await db.commit()
 
     # Get Gmail tokens
     integration = await get_integration_by_type(db, org_id, "gmail")

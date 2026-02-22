@@ -378,6 +378,11 @@
     .btn-agent-action:hover { border-color:#38c588; }
     .btn-agent-action:disabled { opacity:.4; cursor:default; }
 
+    /* Task Manager */
+    .task-check { appearance:none; -webkit-appearance:none; width:14px; height:14px; border:1.5px solid #4a6783; border-radius:3px; cursor:pointer; flex-shrink:0; margin-top:4px; transition:all .15s; }
+    .task-check:checked { background:var(--brand-strong); border-color:var(--brand); }
+    .tab-active { background:#0e3550 !important; color:#caf8ff !important; border-color:#4dcde0 !important; }
+
     @media(max-width:1180px){ .stats{grid-template-columns:repeat(3, minmax(120px, 1fr));} }
     @media(max-width:1000px){ .grid-3{grid-template-columns:1fr 1fr} .chat-panel{grid-template-columns:1fr} .hero{grid-template-columns:1fr} .hero-chips{justify-content:flex-start;} }
     @media(max-width:680px){
@@ -405,6 +410,9 @@
     {% else %}
     <a href="#" id="web-login-link">Web Sign In</a>
     {% endif %}
+    <a href="/web/talk">Talk Mode</a>
+    <a href="/web/data-hub">Data Hub</a>
+    <a href="/web/integrations">Integrations</a>
     <a href="/docs">API Docs</a>
     <a href="/api/v1/health">Health</a>
   </nav>
@@ -587,22 +595,44 @@
       {% endif %}
     </div>
 
-    <!-- Open Tasks -->
-    <div class="card">
-      <div class="card-head"><span class="card-title">Open Tasks</span><span class="card-count">{{ tasks|length }}</span></div>
-      {% if tasks %}
-        {% for t in tasks %}
-        <div class="item">
-          <div class="task-row">
-            <div class="p-dot p{{ t.priority }}"></div>
-            <div class="item-text" style="flex:1">{{ t.title }}</div>
-          </div>
-          <div class="item-meta">{{ t.category }}{% if t.due_date %} - due {{ t.due_date }}{% endif %}</div>
+    <!-- Task Manager (dynamic) -->
+    <div class="card" id="tasks-card">
+      <div class="card-head">
+        <span class="card-title">Task Manager</span>
+        <div style="display:flex;gap:.4rem;align-items:center">
+          <span id="tasks-count" class="card-count">...</span>
+          <button id="tasks-tab-open" class="btn-run tab-active" style="padding:.2rem .45rem;font-size:.63rem" type="button">Open</button>
+          <button id="tasks-tab-done" class="btn-run" style="padding:.2rem .45rem;font-size:.63rem" type="button">Done</button>
         </div>
-        {% endfor %}
-      {% else %}
-        <div class="empty">No tasks yet.<code>POST /api/v1/tasks</code></div>
-      {% endif %}
+      </div>
+      <div id="tasks-list" style="max-height:280px;overflow-y:auto">
+        {% if tasks %}
+          {% for t in tasks %}
+          <div class="item" id="task-item-{{ t.id }}">
+            <div style="display:flex;align-items:flex-start;gap:.55rem">
+              <input type="checkbox" class="task-check" {% if t.is_done %}checked{% endif %} onchange="taskToggle({{ t.id }},this.checked)" />
+              <div style="flex:1;min-width:0">
+                <div class="item-text" style="{% if t.is_done %}text-decoration:line-through;color:var(--text-faint){% endif %}">
+                  {{ t.title }}
+                </div>
+                <div class="item-meta">
+                  {{ t.category or "personal" }}{% if t.due_date %} · due {{ t.due_date }}{% endif %}
+                  · <span style="color:{% if t.priority == 4 %}var(--danger){% elif t.priority == 3 %}var(--warn){% elif t.priority == 2 %}var(--brand){% else %}var(--text-faint){% endif %};font-size:.65rem">
+                    {% if t.priority == 4 %}Urgent{% elif t.priority == 3 %}High{% elif t.priority == 2 %}Med{% else %}Low{% endif %}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="empty">No tasks yet.<code>POST /api/v1/tasks</code></div>
+        {% endif %}
+      </div>
+      <div style="padding:.55rem 1.08rem;border-top:1px solid var(--line-soft);display:flex;gap:.5rem">
+        <input id="tasks-new-title" class="mem-input" style="flex:1" placeholder="Quick add task…" />
+        <button id="tasks-add-btn" class="btn-run" type="button">+ Add</button>
+      </div>
     </div>
 
     <!-- Notes -->
@@ -707,8 +737,36 @@
           ${{ finance.balance | round(2) }}
         </span>
       </div>
+      <div class="fin-row">
+        <span class="fin-label">Efficiency Score (30d)</span>
+        <span class="fin-val {% if finance_efficiency.efficiency_score >= 75 %}fin-green{% elif finance_efficiency.efficiency_score >= 50 %}{% else %}fin-red{% endif %}">
+          {{ finance_efficiency.efficiency_score }}/100
+        </span>
+      </div>
+      <div class="fin-row">
+        <span class="fin-label">Digital Spend Ratio</span>
+        <span class="fin-val">{{ (finance_efficiency.digital_expense_ratio * 100) | round(1) }}%</span>
+      </div>
+      {% if finance_efficiency.findings %}
+      <div class="fin-row">
+        <span class="fin-label">Top Risk</span>
+        <span class="fin-val" style="font-size:.78rem;color:#f2bf7c;max-width:56%;text-align:right;line-height:1.35">
+          {{ finance_efficiency.findings[0].message }}
+        </span>
+      </div>
+      {% endif %}
+      {% if finance_efficiency.recommendations %}
+      <div class="fin-row">
+        <span class="fin-label">Potential Savings</span>
+        <span class="fin-val fin-green">
+          ${{ finance_efficiency.recommendations[0].estimated_monthly_savings | round(2) }}/mo
+        </span>
+      </div>
+      {% endif %}
       <div style="padding:.6rem 1.1rem">
         <a href="/api/v1/finance" style="color:#374151;text-decoration:none;font-size:.72rem">View all entries -></a>
+        <span style="margin:0 .35rem;color:#4b5563">|</span>
+        <a href="/api/v1/finance/efficiency" style="color:#374151;text-decoration:none;font-size:.72rem">Efficiency API -></a>
       </div>
     </div>
 
@@ -725,6 +783,100 @@
     </div>
     <div id="audit-list">
       <div class="empty">Loading activity log…</div>
+    </div>
+  </div>
+
+  <div class="section-label">Market Like A Pro · Study Like A Pro · Train Like A Pro</div>
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-head"><span class="card-title">Market Like A Pro</span></div>
+      <div class="fin-row">
+        <span class="fin-label">Readiness Score (30d)</span>
+        <span class="fin-val {% if marketing_layer.readiness_score >= 75 %}fin-green{% elif marketing_layer.readiness_score >= 50 %}{% else %}fin-red{% endif %}">
+          {{ marketing_layer.readiness_score }}/100
+        </span>
+      </div>
+      <div class="fin-row">
+        <span class="fin-label">New Business Contacts</span>
+        <span class="fin-val">{{ marketing_layer.new_business_contacts }}</span>
+      </div>
+      <div class="fin-row">
+        <span class="fin-label">Open Follow-up Tasks</span>
+        <span class="fin-val">{{ marketing_layer.open_follow_up_tasks }}</span>
+      </div>
+      {% if marketing_layer.bottlenecks %}
+      <div class="fin-row">
+        <span class="fin-label">Top Bottleneck</span>
+        <span class="fin-val" style="font-size:.78rem;color:#f2bf7c;max-width:56%;text-align:right;line-height:1.35">
+          {{ marketing_layer.bottlenecks[0] }}
+        </span>
+      </div>
+      {% endif %}
+      <div style="padding:.6rem 1.1rem">
+        <a href="/api/v1/layers/marketing" style="color:#374151;text-decoration:none;font-size:.72rem">Marketing API -></a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">Study Like A Pro</span></div>
+      <div class="fin-row">
+        <span class="fin-label">Operational Score (30d)</span>
+        <span class="fin-val {% if study_layer.operational_score >= 75 %}fin-green{% elif study_layer.operational_score >= 50 %}{% else %}fin-red{% endif %}">
+          {{ study_layer.operational_score }}/100
+        </span>
+      </div>
+      <div class="fin-row">
+        <span class="fin-label">Study Pipeline Contacts</span>
+        <span class="fin-val">{{ study_layer.study_pipeline_contacts }}</span>
+      </div>
+      <div class="fin-row">
+        <span class="fin-label">Due Soon Study Tasks</span>
+        <span class="fin-val">{{ study_layer.due_soon_study_tasks }}</span>
+      </div>
+      {% if study_layer.blockers %}
+      <div class="fin-row">
+        <span class="fin-label">Top Blocker</span>
+        <span class="fin-val" style="font-size:.78rem;color:#f2bf7c;max-width:56%;text-align:right;line-height:1.35">
+          {{ study_layer.blockers[0] }}
+        </span>
+      </div>
+      {% endif %}
+      <div style="padding:.6rem 1.1rem">
+        <a href="/api/v1/layers/study" style="color:#374151;text-decoration:none;font-size:.72rem">Study API -></a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">Train Like A Pro</span></div>
+      <div class="fin-row">
+        <span class="fin-label">Training Score (30d)</span>
+        <span class="fin-val {% if training_layer.training_score >= 75 %}fin-green{% elif training_layer.training_score >= 50 %}{% else %}fin-red{% endif %}">
+          {{ training_layer.training_score }}/100
+        </span>
+      </div>
+      <div class="fin-row">
+        <span class="fin-label">Active Team Members</span>
+        <span class="fin-val">{{ training_layer.active_team_members }}</span>
+      </div>
+      <div class="fin-row">
+        <span class="fin-label">Avg AI Level</span>
+        <span class="fin-val">{{ training_layer.avg_ai_level }}</span>
+      </div>
+      <div class="fin-row">
+        <span class="fin-label">Open Training Tasks</span>
+        <span class="fin-val">{{ training_layer.open_training_tasks }}</span>
+      </div>
+      {% if training_layer.blockers %}
+      <div class="fin-row">
+        <span class="fin-label">Top Blocker</span>
+        <span class="fin-val" style="font-size:.78rem;color:#f2bf7c;max-width:56%;text-align:right;line-height:1.35">
+          {{ training_layer.blockers[0] }}
+        </span>
+      </div>
+      {% endif %}
+      <div style="padding:.6rem 1.1rem">
+        <a href="/api/v1/layers/training" style="color:#374151;text-decoration:none;font-size:.72rem">Training API -></a>
+      </div>
     </div>
   </div>
 
@@ -1054,6 +1206,25 @@
     input.addEventListener("keydown", function (e) {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send();
     });
+
+    // Load persistent chat history on boot
+    (async function bootHistory() {
+      try {
+        var r = await fetch("/web/chat/history");
+        if (!r.ok) return;
+        var msgs = await r.json();
+        if (!msgs || !msgs.length) return;
+        msgs.forEach(function(m) {
+          appendNode('<div class="chat-msg-user">' + esc(m.user_message) + '</div>');
+          appendNode(
+            '<div class="chat-msg-agent">' +
+              '<div class="chat-role-tag">' + esc(m.role) + '</div>' +
+              esc(m.ai_response).replace(/\n/g, "<br>") +
+            '</div>'
+          );
+        });
+      } catch(e) {}
+    })();
   })();
 
   // ── Gmail Inbox Panel ──────────────────────────────────────────────────────
@@ -1505,6 +1676,123 @@
     if (!token) { list.innerHTML = '<div class="empty">Sign in to view memory.</div>'; return; }
     if (!window.__apiToken) window.__apiToken = token;
     await loadMemory();
+  })();
+
+  // ── Task Manager Panel ──────────────────────────────────────────────────────
+  (async function () {
+    var list       = document.getElementById("tasks-list");
+    var countBadge = document.getElementById("tasks-count");
+    var tabOpen    = document.getElementById("tasks-tab-open");
+    var tabDone    = document.getElementById("tasks-tab-done");
+    var newTitle   = document.getElementById("tasks-new-title");
+    var addBtn     = document.getElementById("tasks-add-btn");
+    if (!list) return;
+
+    var showDone = false;
+    var P_LABELS  = ["", "Low", "Med", "High", "Urgent"];
+    var P_CLASSES = ["", "p1",  "p2",  "p3",  "p4"];
+
+    function esc(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+    async function loadTasks() {
+      var token = window.__apiToken;
+      if (!token) { list.innerHTML = '<div class="empty">Sign in to view tasks.</div>'; return; }
+      list.innerHTML = '<div class="empty">Loading…</div>';
+      try {
+        var r = await fetch("/api/v1/tasks?limit=30&is_done=" + showDone, {
+          headers: { "Authorization": "Bearer " + token }
+        });
+        if (!r.ok) { list.innerHTML = '<div class="empty">Could not load tasks.</div>'; return; }
+        var tasks = await r.json();
+        if (countBadge) countBadge.textContent = tasks.length + " " + (showDone ? "done" : "open");
+        if (!tasks.length) {
+          list.innerHTML = '<div class="empty">No ' + (showDone ? "completed" : "open") + ' tasks.</div>';
+          return;
+        }
+        list.innerHTML = tasks.map(function(t) {
+          var p = Math.max(1, Math.min(4, t.priority || 2));
+          return '<div class="item" id="task-item-' + t.id + '">' +
+            '<div style="display:flex;align-items:flex-start;gap:.55rem">' +
+              '<input type="checkbox" class="task-check" ' + (t.is_done ? "checked" : "") + ' ' +
+                'onchange="taskToggle(' + t.id + ',this.checked)" />' +
+              '<div style="flex:1;min-width:0">' +
+                '<div class="item-text" style="' + (t.is_done ? "text-decoration:line-through;color:var(--text-faint)" : "") + '">' +
+                  esc(t.title) +
+                '</div>' +
+                '<div class="item-meta">' +
+                  esc(t.category || "personal") +
+                  (t.due_date ? " · due " + esc(t.due_date) : "") +
+                  ' · <span style="color:' + (p===4?"var(--danger)":p===3?"var(--warn)":p===2?"var(--brand)":"var(--text-faint)") + ';font-size:.65rem">' + P_LABELS[p] + '</span>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        }).join("");
+      } catch(e) {
+        list.innerHTML = '<div class="empty">Error loading tasks.</div>';
+      }
+    }
+
+    window.taskToggle = async function(id, isDone) {
+      var token = window.__apiToken;
+      try {
+        var r = await fetch("/api/v1/tasks/" + id, {
+          method: "PATCH",
+          headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ is_done: isDone })
+        });
+        if (r.ok) {
+          setTimeout(loadTasks, 250);
+        } else {
+          var d = await r.json().catch(function(){return {};});
+          alert("Update failed: " + (d.detail || r.status));
+          await loadTasks();
+        }
+      } catch(e) { alert("Network error."); }
+    };
+
+    tabOpen && tabOpen.addEventListener("click", function() {
+      showDone = false;
+      tabOpen.classList.add("tab-active"); tabDone.classList.remove("tab-active");
+      loadTasks();
+    });
+    tabDone && tabDone.addEventListener("click", function() {
+      showDone = true;
+      tabDone.classList.add("tab-active"); tabOpen.classList.remove("tab-active");
+      loadTasks();
+    });
+
+    addBtn && addBtn.addEventListener("click", async function() {
+      var title = newTitle ? newTitle.value.trim() : "";
+      if (!title) return;
+      var token = window.__apiToken;
+      addBtn.disabled = true;
+      try {
+        var r = await fetch("/api/v1/tasks", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ title: title, priority: 2, category: "personal" })
+        });
+        if (r.ok) {
+          newTitle.value = "";
+          await loadTasks();
+        } else {
+          var d = await r.json().catch(function(){return {};});
+          alert("Create failed: " + (d.detail || r.status));
+        }
+      } catch(e) { alert("Network error."); }
+      addBtn.disabled = false;
+    });
+
+    newTitle && newTitle.addEventListener("keydown", function(e) {
+      if (e.key === "Enter") addBtn && addBtn.click();
+    });
+
+    // Bootstrap
+    var token = await window.__bootPromise;
+    if (!token) { list.innerHTML = '<div class="empty">Sign in to view tasks.</div>'; return; }
+    if (!window.__apiToken) window.__apiToken = token;
+    await loadTasks();
   })();
 </script>
 </body>

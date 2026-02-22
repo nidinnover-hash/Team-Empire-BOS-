@@ -26,6 +26,12 @@ async def test_dashboard_contains_brand_name(client):
     assert "Personal Clone" in response.text
     assert "Executive Briefing" in response.text
     assert "Generate Daily Run (Draft Only)" in response.text
+    assert "/web/integrations" in response.text
+    assert "Efficiency Score (30d)" in response.text
+    assert "Efficiency API ->" in response.text
+    assert "Market Like A Pro" in response.text
+    assert "Study Like A Pro" in response.text
+    assert "Train Like A Pro" in response.text
 
 
 async def test_dashboard_shows_empty_states(client):

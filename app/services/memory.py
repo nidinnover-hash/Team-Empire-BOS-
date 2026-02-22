@@ -224,6 +224,9 @@ async def build_memory_context(
     This is what makes the clone feel like Nidin — it knows who he is,
     who his team is, and what's happening today.
     """
+    from sqlalchemy import select as _select
+    from app.models.task import Task as _Task
+
     profile = await get_profile_memory(db, organization_id=organization_id)
     members = await get_team_members(db, organization_id=organization_id, active_only=True)
     today_context = await get_daily_context(
@@ -232,10 +235,68 @@ async def build_memory_context(
         for_date=date.today(),
     )
 
-    return build_focused_context(
+    base_context = build_focused_context(
         profile_entries=profile,
         team_members=members,
         daily_contexts=today_context,
         categories=categories,
         char_limit=char_limit,
     )
+
+    # Append open ClickUp tasks so the AI knows what's in the work queue
+    cu_result = await db.execute(
+        _select(_Task).where(
+            _Task.organization_id == organization_id,
+            _Task.external_source == "clickup",
+            _Task.is_done.is_(False),
+        ).limit(20)
+    )
+    cu_tasks = list(cu_result.scalars().all())
+    if cu_tasks:
+        lines = ["[CLICKUP OPEN TASKS]"]
+        for t in cu_tasks:
+            due = f" (due {t.due_date})" if t.due_date else ""
+            lines.append(f"- {t.title}{due}")
+        lines.append("[END CLICKUP TASKS]")
+        clickup_block = "\n".join(lines)
+        remaining = char_limit - len(base_context)
+        if remaining > 100:
+            base_context = base_context + "\n\n" + clickup_block[:remaining]
+
+    # Append open GitHub PRs — what your dev team is shipping right now
+    pr_result = await db.execute(
+        _select(_Task).where(
+            _Task.organization_id == organization_id,
+            _Task.external_source == "github_pr",
+            _Task.is_done.is_(False),
+        ).order_by(_Task.priority.desc()).limit(15)
+    )
+    gh_prs = list(pr_result.scalars().all())
+
+    # Append open GitHub bug issues — what's broken in production
+    issue_result = await db.execute(
+        _select(_Task).where(
+            _Task.organization_id == organization_id,
+            _Task.external_source == "github_issue",
+            _Task.is_done.is_(False),
+        ).order_by(_Task.priority.desc()).limit(10)
+    )
+    gh_issues = list(issue_result.scalars().all())
+
+    if gh_prs or gh_issues:
+        lines = ["[GITHUB DEV ACTIVITY]"]
+        if gh_prs:
+            lines.append(f"Open PRs ({len(gh_prs)}):")
+            for t in gh_prs:
+                lines.append(f"  • {t.title}")
+        if gh_issues:
+            lines.append(f"Open bug issues ({len(gh_issues)}):")
+            for t in gh_issues:
+                lines.append(f"  • {t.title}")
+        lines.append("[END GITHUB]")
+        github_block = "\n".join(lines)
+        remaining = char_limit - len(base_context)
+        if remaining > 100:
+            base_context = base_context + "\n\n" + github_block[:remaining]
+
+    return base_context

@@ -40,21 +40,24 @@ async def get_team_dashboard(db: AsyncSession, org_id: int) -> dict:
     )
     members = list(members_result.scalars().all())
 
+    # Batch-fetch all plans for today in one query (avoids N+1)
+    plans_result = await db.execute(
+        select(DailyTaskPlan).where(
+            DailyTaskPlan.organization_id == org_id,
+            DailyTaskPlan.date == today,
+        )
+    )
+    plans_by_member: dict[int, DailyTaskPlan] = {
+        p.team_member_id: p for p in plans_result.scalars().all()
+    }
+
     team_data = []
     total_tasks_today = 0
     total_done = 0
     members_without_plan = []
 
     for member in members:
-        # Get today's plan for this member
-        plan_result = await db.execute(
-            select(DailyTaskPlan).where(
-                DailyTaskPlan.organization_id == org_id,
-                DailyTaskPlan.team_member_id == member.id,
-                DailyTaskPlan.date == today,
-            )
-        )
-        plan = plan_result.scalar_one_or_none()
+        plan = plans_by_member.get(member.id)
 
         tasks = plan.tasks_json if plan else []
         done_count = sum(1 for t in tasks if t.get("done"))
@@ -64,7 +67,7 @@ async def get_team_dashboard(db: AsyncSession, org_id: int) -> dict:
         if not plan:
             members_without_plan.append(member.name)
 
-        ai_label = ["", "No AI", "Basic AI", "Intermediate AI", "Advanced AI", "AI Expert"][member.ai_level]
+        ai_label = ["", "No AI", "Basic AI", "Intermediate AI", "Advanced AI", "AI Expert"][max(0, min(member.ai_level or 0, 5))]
 
         team_data.append({
             "id": member.id,

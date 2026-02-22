@@ -55,6 +55,15 @@ class Settings(BaseSettings):
     ADMIN_NAME: str = "Nidin Nover"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
+    # Separate key for Fernet token encryption (Integration.config_json).
+    # If not set, falls back to a SHA-256 derivative of SECRET_KEY (legacy behaviour).
+    # Set this to a different random 32-byte hex value to achieve key separation.
+    TOKEN_ENCRYPTION_KEY: str | None = None
+    PRIVACY_REDACTION_ENABLED: bool = True
+    PRIVACY_MASK_PII: bool = True
+    PRIVACY_RESPONSE_SANITIZATION_ENABLED: bool = True
+    PRIVACY_AUDIT_MAX_VALUE_CHARS: int = 200
+    CLONE_AUTO_LEARN_FROM_CHAT: bool = True
 
 
 @lru_cache
@@ -100,5 +109,7 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("GOOGLE_CLIENT_ID looks like a placeholder")
     if google_secret in _PLACEHOLDER_GOOGLE_VALUES:
         issues.append("GOOGLE_CLIENT_SECRET looks like a placeholder")
+    if s.PRIVACY_AUDIT_MAX_VALUE_CHARS < 32:
+        issues.append("PRIVACY_AUDIT_MAX_VALUE_CHARS must be >= 32")
 
     return issues

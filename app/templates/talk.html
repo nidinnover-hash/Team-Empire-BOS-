@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personal Clone - Talk Mode</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;500;600&display=swap');
+    :root {
+      --bg0: #06131f;
+      --bg1: #0c2135;
+      --bg2: #10324a;
+      --card: rgba(9, 24, 40, 0.84);
+      --line: #245274;
+      --text: #e9f2fb;
+      --muted: #9ab2c8;
+      --brand: #4dd0e1;
+      --ok: #2cc382;
+      --danger: #ef6461;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Source Sans 3", "Segoe UI", sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      background:
+        radial-gradient(1200px 500px at -5% -10%, #17507b 0%, transparent 60%),
+        radial-gradient(900px 420px at 110% -8%, #1b676e 0%, transparent 62%),
+        linear-gradient(165deg, var(--bg0) 0%, var(--bg1) 48%, var(--bg2) 100%);
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid var(--line);
+      background: rgba(8, 19, 31, 0.9);
+      backdrop-filter: blur(8px);
+      padding: 0.9rem 1.2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.8rem;
+    }
+    .title {
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 0.95rem;
+      letter-spacing: 0.03em;
+    }
+    .sub { font-size: 0.72rem; color: var(--muted); }
+    .actions { display: flex; gap: 0.5rem; align-items: center; }
+    .btn {
+      border: 1px solid #2d6f94;
+      background: #114059;
+      color: #c8f8ff;
+      border-radius: 8px;
+      padding: 0.35rem 0.65rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .btn:hover { border-color: #59deef; }
+    .btn.mic { min-width: 90px; }
+    .btn.stop { background: #37191b; border-color: #864145; color: #ffb9b7; }
+    main {
+      width: min(1120px, 100%);
+      margin: 0 auto;
+      padding: 1rem;
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 0.9rem;
+      flex: 1;
+      min-height: 0;
+    }
+    .panel {
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(12, 31, 49, 0.88) 0%, var(--card) 100%);
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .panel-head {
+      border-bottom: 1px solid #20435f;
+      padding: 0.7rem 0.9rem;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-family: "Space Grotesk", sans-serif;
+      color: var(--brand);
+    }
+    #chat-log {
+      padding: 0.9rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      flex: 1;
+      min-height: 320px;
+    }
+    .msg {
+      border-radius: 10px;
+      padding: 0.62rem 0.75rem;
+      line-height: 1.45;
+      font-size: 0.84rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.user { align-self: flex-end; background: #0d2b42; border: 1px solid #2b5a7a; max-width: 78%; }
+    .msg.clone { align-self: flex-start; background: #0e314a; border: 1px solid #2f7095; max-width: 92%; }
+    .tag {
+      display: block;
+      margin-bottom: 0.24rem;
+      font-size: 0.64rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #8be7f3;
+      font-weight: 700;
+      font-family: "Space Grotesk", sans-serif;
+    }
+    .composer {
+      border-top: 1px solid #20435f;
+      padding: 0.75rem;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.55rem;
+    }
+    #message-input {
+      border: 1px solid #2d5e7e;
+      background: #0a2438;
+      border-radius: 8px;
+      color: #e8f5ff;
+      padding: 0.55rem 0.68rem;
+      font-size: 0.84rem;
+      outline: none;
+      min-height: 44px;
+      max-height: 140px;
+      resize: vertical;
+    }
+    #send-btn {
+      border: 1px solid #2f7598;
+      background: #14506d;
+      color: #d8faff;
+      border-radius: 8px;
+      padding: 0.55rem 1rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    #send-btn:disabled { opacity: 0.45; cursor: default; }
+    .meta {
+      padding: 0.8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.45rem;
+    }
+    .kpi {
+      border: 1px solid #254f6c;
+      border-radius: 9px;
+      padding: 0.45rem 0.5rem;
+      background: rgba(12, 38, 57, 0.6);
+    }
+    .kpi .label { font-size: 0.64rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .kpi .value { font-size: 0.96rem; color: var(--brand); font-family: "Space Grotesk", sans-serif; }
+    .section-title {
+      font-size: 0.7rem;
+      color: #9dc1d8;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-family: "Space Grotesk", sans-serif;
+    }
+    .list { display: flex; flex-direction: column; gap: 0.34rem; }
+    .item {
+      border: 1px solid #244a66;
+      border-radius: 8px;
+      background: rgba(10, 35, 53, 0.56);
+      padding: 0.44rem 0.52rem;
+      font-size: 0.78rem;
+      color: #d3e8f8;
+    }
+    .item small { display: block; color: #89a8bf; font-size: 0.66rem; margin-top: 0.16rem; }
+    #status { font-size: 0.72rem; color: var(--muted); min-height: 1rem; }
+    #status.ok { color: var(--ok); }
+    #status.err { color: var(--danger); }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="title">Talk to Clone</div>
+    <div class="sub">Continuous work conversation mode</div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/">Dashboard</a>
+    <a class="btn" href="/web/data-hub">Data Hub</a>
+    <a class="btn" href="/web/integrations">Integrations</a>
+    <button class="btn mic" type="button" id="mic-btn">Start Mic</button>
+    <button class="btn" type="button" id="logout-btn">Sign out</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="panel-head">Live Conversation</div>
+    <div id="chat-log"></div>
+    <div class="composer">
+      <textarea id="message-input" placeholder="Tell your clone what to do next..."></textarea>
+      <button id="send-btn" type="button">Send</button>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <div class="panel-head">Today Snapshot</div>
+    <div class="meta">
+      <div class="kpi-grid">
+        <div class="kpi"><div class="label">Open Tasks</div><div class="value" id="kpi-tasks">0</div></div>
+        <div class="kpi"><div class="label">Approvals</div><div class="value" id="kpi-approvals">0</div></div>
+        <div class="kpi"><div class="label">Unread Email</div><div class="value" id="kpi-emails">0</div></div>
+      </div>
+      <div>
+        <div class="section-title">Learned About You</div>
+        <div class="list" id="learned-list"><div class="item">No learned preferences yet.</div></div>
+      </div>
+      <div>
+        <div class="section-title">Top Tasks</div>
+        <div class="list" id="top-tasks"><div class="item">No open tasks yet.</div></div>
+      </div>
+      <div>
+        <div class="section-title">Suggested Prompts</div>
+        <div class="list" id="prompt-list"><div class="item">Loading prompts...</div></div>
+      </div>
+      <div id="status"></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+  (async function () {
+    var chatLog = document.getElementById("chat-log");
+    var input = document.getElementById("message-input");
+    var sendBtn = document.getElementById("send-btn");
+    var micBtn = document.getElementById("mic-btn");
+    var logoutBtn = document.getElementById("logout-btn");
+    var statusEl = document.getElementById("status");
+    var apiToken = null;
+    var csrfToken = null;
+    var isMicOn = false;
+    var recognition = null;
+
+    function esc(s) {
+      return String(s || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+    function setStatus(text, cls) {
+      statusEl.textContent = text || "";
+      statusEl.className = cls ? cls : "";
+    }
+    function appendMessage(role, text) {
+      var div = document.createElement("div");
+      div.className = "msg " + (role === "user" ? "user" : "clone");
+      div.innerHTML = '<span class="tag">' + (role === "user" ? "You" : "Clone") + "</span>" + esc(text);
+      chatLog.appendChild(div);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+    function getCsrfToken() {
+      var pair = document.cookie.split("; ").find(function (c) { return c.startsWith("pc_csrf="); });
+      return pair ? decodeURIComponent(pair.split("=")[1] || "") : null;
+    }
+    function renderTasks(tasks) {
+      var root = document.getElementById("top-tasks");
+      if (!tasks || !tasks.length) {
+        root.innerHTML = '<div class="item">No open tasks yet.</div>';
+        return;
+      }
+      root.innerHTML = tasks.map(function (t) {
+        return (
+          '<div class="item">' +
+            esc(t.title || "Untitled task") +
+            '<small>Priority ' + esc(t.priority || 2) + '</small>' +
+          "</div>"
+        );
+      }).join("");
+    }
+    function renderPrompts(prompts) {
+      var root = document.getElementById("prompt-list");
+      if (!prompts || !prompts.length) {
+        root.innerHTML = '<div class="item">No suggestions available.</div>';
+        return;
+      }
+      root.innerHTML = prompts.map(function (p) {
+        return '<button class="btn" type="button" style="text-align:left" data-prompt="' + esc(p) + '">' + esc(p) + "</button>";
+      }).join("");
+      Array.from(root.querySelectorAll("button[data-prompt]")).forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          input.value = btn.getAttribute("data-prompt") || "";
+          input.focus();
+        });
+      });
+    }
+
+    function renderLearned(items) {
+      var root = document.getElementById("learned-list");
+      if (!items || !items.length) {
+        root.innerHTML = '<div class="item">No learned preferences yet.</div>';
+        return;
+      }
+      root.innerHTML = items.map(function (m) {
+        return (
+          '<div class="item" id="learned-' + esc(m.id) + '">' +
+            '<strong>' + esc(m.key || "preference") + "</strong>" +
+            '<small>' + esc(m.value || "") + "</small>" +
+            '<button class="btn" type="button" data-forget="' + esc(m.id) + '" style="margin-top:.35rem">Forget</button>' +
+          "</div>"
+        );
+      }).join("");
+      Array.from(root.querySelectorAll("button[data-forget]")).forEach(function (btn) {
+        btn.addEventListener("click", async function () {
+          var id = btn.getAttribute("data-forget");
+          if (!id) return;
+          if (!apiToken) {
+            setStatus("Missing API token for forget action.", "err");
+            return;
+          }
+          btn.disabled = true;
+          try {
+            var r = await fetch("/api/v1/memory/profile/" + encodeURIComponent(id), {
+              method: "DELETE",
+              headers: { "Authorization": "Bearer " + apiToken }
+            });
+            if (!r.ok && r.status !== 204) throw new Error("Could not remove learned memory");
+            var row = document.getElementById("learned-" + id);
+            if (row) row.remove();
+            if (!root.children.length) {
+              root.innerHTML = '<div class="item">No learned preferences yet.</div>';
+            }
+            setStatus("Learned item removed.", "ok");
+          } catch (err) {
+            setStatus(String(err.message || err), "err");
+            btn.disabled = false;
+          }
+        });
+      });
+    }
+
+    async function loadApiToken() {
+      try {
+        var r = await fetch("/web/api-token");
+        if (!r.ok) return;
+        var data = await r.json();
+        apiToken = data.token || null;
+      } catch (_e) {
+        apiToken = null;
+      }
+    }
+
+    async function loadHistoryOrWelcome() {
+      var history = await fetch("/web/chat/history").then(function (r) {
+        if (!r.ok) throw new Error("Failed to load chat history");
+        return r.json();
+      });
+      if (Array.isArray(history) && history.length) {
+        history.forEach(function (m) {
+          if (m.user_message) appendMessage("user", m.user_message);
+          if (m.ai_response) appendMessage("clone", m.ai_response);
+        });
+      }
+    }
+
+    async function loadBootstrap() {
+      var bootstrap = await fetch("/web/talk/bootstrap").then(function (r) {
+        if (!r.ok) throw new Error("Failed to load talk bootstrap data");
+        return r.json();
+      });
+      var s = bootstrap.snapshot || {};
+      document.getElementById("kpi-tasks").textContent = String(s.open_tasks || 0);
+      document.getElementById("kpi-approvals").textContent = String(s.pending_approvals || 0);
+      document.getElementById("kpi-emails").textContent = String(s.unread_emails || 0);
+      renderTasks(s.tasks || []);
+      renderLearned(bootstrap.learned_memory || []);
+      renderPrompts(bootstrap.suggested_prompts || []);
+      if (!chatLog.children.length && bootstrap.welcome) {
+        appendMessage("clone", bootstrap.welcome);
+      }
+      setStatus("Clone is online and synced with your work.", "ok");
+    }
+
+    async function sendMessage() {
+      var message = (input.value || "").trim();
+      if (!message) return;
+      if (!csrfToken) {
+        setStatus("Missing CSRF token. Refresh and sign in again.", "err");
+        return;
+      }
+      appendMessage("user", message);
+      input.value = "";
+      sendBtn.disabled = true;
+      setStatus("Clone is thinking...");
+
+      try {
+        var form = new FormData();
+        form.set("message", message);
+        var r = await fetch("/web/agents/chat", {
+          method: "POST",
+          headers: { "X-CSRF-Token": csrfToken },
+          body: form
+        });
+        var body = await r.json().catch(function () { return {}; });
+        if (!r.ok) throw new Error(body.detail || "Chat request failed");
+        appendMessage("clone", body.response || "Done.");
+        setStatus(body.requires_approval ? "Reply generated. Some actions require approval." : "Reply ready.", "ok");
+      } catch (err) {
+        appendMessage("clone", "I hit an error while processing that. Please try again.");
+        setStatus(String(err.message || err), "err");
+      } finally {
+        sendBtn.disabled = false;
+      }
+    }
+
+    function setupSpeech() {
+      var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) {
+        micBtn.disabled = true;
+        micBtn.textContent = "Mic N/A";
+        return;
+      }
+      recognition = new SR();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+
+      recognition.onresult = function (event) {
+        var transcript = "";
+        for (var i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        input.value = transcript.trim();
+      };
+      recognition.onend = function () {
+        if (isMicOn) recognition.start();
+      };
+      micBtn.addEventListener("click", function () {
+        isMicOn = !isMicOn;
+        if (isMicOn) {
+          micBtn.textContent = "Stop Mic";
+          micBtn.classList.add("stop");
+          recognition.start();
+          setStatus("Voice input is active.");
+        } else {
+          micBtn.textContent = "Start Mic";
+          micBtn.classList.remove("stop");
+          recognition.stop();
+          setStatus("Voice input stopped.");
+        }
+      });
+    }
+
+    sendBtn.addEventListener("click", sendMessage);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+    logoutBtn.addEventListener("click", async function () {
+      await fetch("/web/logout", { method: "POST" });
+      window.location.href = "/web/login";
+    });
+
+    csrfToken = getCsrfToken();
+    setupSpeech();
+    await loadApiToken();
+    await loadHistoryOrWelcome();
+    await loadBootstrap();
+  })();
+</script>
+</body>
+</html>

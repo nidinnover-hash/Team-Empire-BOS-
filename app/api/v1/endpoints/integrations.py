@@ -9,6 +9,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import PLACEHOLDER_AI_KEYS, settings
+from app.core.privacy import sanitize_response_payload
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
@@ -17,16 +18,29 @@ from app.schemas.integration import (
     AITestResult,
     CalendarEventRead,
     CalendarSyncResult,
+    ClickUpConnectRequest,
+    ClickUpStatusRead,
+    ClickUpSyncResult,
+    GitHubConnectRequest,
+    GitHubStatusRead,
+    GitHubSyncResult,
     GoogleAuthUrlRead,
     GoogleOAuthCallbackRequest,
     IntegrationConnectRequest,
     IntegrationRead,
     IntegrationTestResult,
+    SlackConnectRequest,
+    SlackSendRequest,
+    SlackStatusRead,
+    SlackSyncResult,
     WhatsAppSendRequest,
     WhatsAppSendResult,
 )
 from app.services import integration as integration_service
 from app.services import whatsapp_service
+from app.services import clickup_service
+from app.services import github_service
+from app.services import slack_service
 from app.services.calendar_service import (
     get_calendar_events_from_context,
     sync_calendar_events,
@@ -83,11 +97,7 @@ def _verify_google_calendar_state(state: str, expected_org_id: int, max_age_seco
 
 def _redact_integration(item: IntegrationRead | object) -> IntegrationRead:
     data = IntegrationRead.model_validate(item).model_dump()
-    config = dict(data["config_json"])
-    for key in ("access_token", "refresh_token", "client_secret", "webhook_verify_token"):
-        if key in config:
-            config[key] = "***"
-    data["config_json"] = config
+    data["config_json"] = sanitize_response_payload(dict(data["config_json"]))
     return IntegrationRead(**data)
 
 
@@ -467,6 +477,263 @@ async def whatsapp_webhook_receive(
     count = len(entries) if isinstance(entries, list) else 0
     stored = await whatsapp_service.ingest_webhook_payload(db, payload)
     return {"status": "received", "entries": count, "stored": stored}
+
+
+# ── ClickUp (literal prefix — must be before /{integration_id}/…) ──────────────
+
+@router.post("/clickup/connect", response_model=ClickUpStatusRead, status_code=201)
+async def clickup_connect(
+    data: ClickUpConnectRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> ClickUpStatusRead:
+    """
+    Verify a ClickUp personal API token and store it encrypted in the Integration table.
+    Get your token at: https://app.clickup.com/settings/apps (Personal API Token section).
+    """
+    try:
+        info = await clickup_service.connect_clickup(
+            db, org_id=int(actor["org_id"]), api_token=data.api_token
+        )
+    except Exception as exc:
+        # Use only the exception type — never str(exc) to avoid leaking the API token
+        raise HTTPException(
+            status_code=400,
+            detail=f"ClickUp connection failed ({type(exc).__name__}). Check your API token.",
+        ) from exc
+
+    await record_action(
+        db,
+        event_type="integration_connected",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="integration",
+        entity_id=info["id"],
+        payload_json={"type": "clickup", "username": info.get("username")},
+    )
+    return ClickUpStatusRead(
+        connected=True,
+        last_sync_at=None,
+        username=info.get("username"),
+        team_id=info.get("team_id"),
+    )
+
+
+@router.get("/clickup/status", response_model=ClickUpStatusRead)
+async def clickup_status(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> ClickUpStatusRead:
+    """Return the current ClickUp integration status."""
+    status = await clickup_service.get_clickup_status(db, org_id=int(actor["org_id"]))
+    return ClickUpStatusRead(**status)
+
+
+@router.post("/clickup/sync", response_model=ClickUpSyncResult)
+async def clickup_sync(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> ClickUpSyncResult:
+    """Fetch all open ClickUp tasks and upsert them into the local Task table."""
+    result = await clickup_service.sync_clickup_tasks(db, org_id=int(actor["org_id"]))
+    if result["error"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    await record_action(
+        db,
+        event_type="clickup_synced",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="integration",
+        entity_id=None,
+        payload_json={"synced": result["synced"]},
+    )
+
+    status = await clickup_service.get_clickup_status(db, org_id=int(actor["org_id"]))
+    return ClickUpSyncResult(synced=result["synced"], last_sync_at=status.get("last_sync_at"))
+
+
+# ── GitHub ──────────────────────────────────────────────────────────────────────
+
+@router.post("/github/connect", response_model=GitHubStatusRead, status_code=201)
+async def github_connect(
+    data: GitHubConnectRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> GitHubStatusRead:
+    """
+    Store a GitHub Personal Access Token (PAT) and verify it.
+    Token scopes needed: repo (read), read:user.
+    """
+    try:
+        info = await github_service.connect_github(
+            db, org_id=int(actor["org_id"]), api_token=data.api_token
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"GitHub connection failed ({type(exc).__name__}). Check your token and scopes.",
+        ) from exc
+
+    await record_action(
+        db,
+        event_type="integration_connected",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="integration",
+        entity_id=info["id"],
+        payload_json={"type": "github", "login": info.get("login")},
+    )
+    return GitHubStatusRead(connected=True, login=info.get("login"), repos_tracked=0)
+
+
+@router.get("/github/status", response_model=GitHubStatusRead)
+async def github_status(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> GitHubStatusRead:
+    """Return the current GitHub integration status."""
+    status = await github_service.get_github_status(db, org_id=int(actor["org_id"]))
+    return GitHubStatusRead(**status)
+
+
+@router.post("/github/sync", response_model=GitHubSyncResult)
+async def github_sync(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> GitHubSyncResult:
+    """Fetch open PRs and bug issues from GitHub and upsert into the local Task table."""
+    org_id = int(actor["org_id"])
+    result = await github_service.sync_github(db, org_id=org_id)
+    if result["error"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    await record_action(
+        db,
+        event_type="github_synced",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="integration",
+        entity_id=None,
+        payload_json={
+            "prs_synced": result["prs_synced"],
+            "issues_synced": result["issues_synced"],
+        },
+    )
+    status = await github_service.get_github_status(db, org_id=org_id)
+    return GitHubSyncResult(
+        prs_synced=result["prs_synced"],
+        issues_synced=result["issues_synced"],
+        last_sync_at=status.get("last_sync_at"),
+    )
+
+
+# ── Slack ────────────────────────────────────────────────────────────────────────
+
+@router.post("/slack/connect", response_model=SlackStatusRead, status_code=201)
+async def slack_connect(
+    data: SlackConnectRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> SlackStatusRead:
+    """
+    Store a Slack Bot Token and verify it via auth.test.
+    Get a bot token by creating a Slack App at api.slack.com/apps.
+    Required scopes: channels:read, channels:history, groups:read, groups:history, chat:write, users:read.
+    """
+    try:
+        info = await slack_service.connect_slack(
+            db, org_id=int(actor["org_id"]), bot_token=data.bot_token
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Slack connection failed ({type(exc).__name__}). Check your bot token and scopes.",
+        ) from exc
+
+    await record_action(
+        db,
+        event_type="integration_connected",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="integration",
+        entity_id=info["id"],
+        payload_json={"type": "slack", "team": info.get("team")},
+    )
+    return SlackStatusRead(connected=True, team=info.get("team"), channels_tracked=0)
+
+
+@router.get("/slack/status", response_model=SlackStatusRead)
+async def slack_status(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> SlackStatusRead:
+    """Return the current Slack integration status."""
+    status = await slack_service.get_slack_status(db, org_id=int(actor["org_id"]))
+    return SlackStatusRead(**status)
+
+
+@router.post("/slack/sync", response_model=SlackSyncResult)
+async def slack_sync(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> SlackSyncResult:
+    """Read recent messages from all joined Slack channels and store digests in daily context."""
+    org_id = int(actor["org_id"])
+    result = await slack_service.sync_slack_messages(db, org_id=org_id)
+    if result["error"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    await record_action(
+        db,
+        event_type="slack_synced",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="integration",
+        entity_id=None,
+        payload_json={
+            "channels_synced": result["channels_synced"],
+            "messages_read": result["messages_read"],
+        },
+    )
+    status = await slack_service.get_slack_status(db, org_id=org_id)
+    return SlackSyncResult(
+        channels_synced=result["channels_synced"],
+        messages_read=result["messages_read"],
+        last_sync_at=status.get("last_sync_at"),
+    )
+
+
+@router.post("/slack/send")
+async def slack_send(
+    data: SlackSendRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """
+    Send a message to a Slack channel directly.
+    For bulk or automated sends, use the approval flow instead.
+    """
+    try:
+        result = await slack_service.send_to_slack(
+            db, org_id=int(actor["org_id"]), channel_id=data.channel_id, text=data.text
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Slack send failed ({type(exc).__name__}).",
+        ) from exc
+
+    await record_action(
+        db,
+        event_type="slack_message_sent",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="integration",
+        entity_id=None,
+        payload_json={"channel_id": data.channel_id, "text_preview": data.text[:100]},
+    )
+    return {"ok": True, "ts": result.get("ts")}
 
 
 # ── Parametric endpoints (/{integration_id}/…) — MUST be last ─────────────────

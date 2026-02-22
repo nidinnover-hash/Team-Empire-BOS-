@@ -16,6 +16,22 @@ from starlette.responses import JSONResponse, Response
 from app.core.config import settings
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add standard HTTP security headers to every response."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = cast(Response, await call_next(request))
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        # Strict-Transport-Security only when served over HTTPS
+        if settings.COOKIE_SECURE:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+
 class CorrelationIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         correlation_id = request.headers.get("X-Correlation-ID") or str(uuid.uuid4())

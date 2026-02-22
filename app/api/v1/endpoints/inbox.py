@@ -73,16 +73,12 @@ async def assign_conversation(
     if updated is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    conversations = await inbox_service.get_unified_conversations(
-        db=db,
-        org_id=actor["org_id"],
-        limit=500,
-        offset=0,
+    convo = await inbox_service.get_conversation_by_id(
+        db=db, org_id=actor["org_id"], channel=channel, participant_key=participant_key
     )
-    for convo in conversations:
-        if convo.conversation_id == conversation_id:
-            return convo
-    raise HTTPException(status_code=404, detail="Conversation not found")
+    if convo is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return convo
 
 
 @router.patch("/conversations/{conversation_id}/state", response_model=UnifiedConversation)
@@ -101,17 +97,14 @@ async def update_conversation_state(
         status=data.status,
         priority=data.priority,
         sla_due_at=data.sla_due_at,
+        update_sla_due_at=("sla_due_at" in data.model_fields_set),
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    conversations = await inbox_service.get_unified_conversations(
-        db=db,
-        org_id=actor["org_id"],
-        limit=500,
-        offset=0,
+    convo = await inbox_service.get_conversation_by_id(
+        db=db, org_id=actor["org_id"], channel=channel, participant_key=participant_key
     )
-    for convo in conversations:
-        if convo.conversation_id == conversation_id:
-            return convo
-    raise HTTPException(status_code=404, detail="Conversation not found")
+    if convo is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return convo

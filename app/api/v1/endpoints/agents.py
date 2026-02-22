@@ -31,7 +31,6 @@ async def agent_chat(
     memory_context = await build_memory_context(db, organization_id=org_id)
 
     result = await run_agent(request=data, memory_context=memory_context)
-
     # Explicit-memory rule: only write memory when user intentionally says "remember".
     lowered = data.message.lower()
     should_persist_memory = ("remember" in lowered) or ("remember this" in lowered)

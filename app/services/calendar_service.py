@@ -97,9 +97,9 @@ async def sync_calendar_events(
                 await mark_sync_time(db, integration)
                 events = await list_events_for_day(new_token, target, calendar_id)
             except Exception as refresh_exc:
-                return {"synced": 0, "date": str(target), "error": f"Token refresh failed: {refresh_exc}"}
+                return {"synced": 0, "date": str(target), "error": f"Token refresh failed: {type(refresh_exc).__name__}"}
         else:
-            return {"synced": 0, "date": str(target), "error": f"Calendar fetch failed: {exc}"}
+            return {"synced": 0, "date": str(target), "error": f"Calendar fetch failed: {type(exc).__name__}"}
 
     if events is None:
         return {"synced": 0, "date": str(target), "error": "No events returned"}

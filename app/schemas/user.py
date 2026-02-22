@@ -1,14 +1,15 @@
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class UserCreate(BaseModel):
     organization_id: int = 1
     name: str
     email: str
-    password: str
-    role: str = "STAFF"
+    password: str = Field(min_length=8)
+    role: Literal["CEO", "ADMIN", "MANAGER", "STAFF"] = "STAFF"
 
 
 class UserRead(BaseModel):

@@ -99,8 +99,9 @@ async def execute_approval(
                 payload_json={"approval_id": approval.id, "output": output},
             )
         except Exception as exc:
+            _err = f"{type(exc).__name__}: {str(exc)[:200]}"
             await execution_service.complete_execution(
-                db, execution.id, status="failed", error_text=str(exc),
+                db, execution.id, status="failed", error_text=_err,
             )
             await record_action(
                 db,
@@ -109,7 +110,7 @@ async def execute_approval(
                 organization_id=approval.organization_id,
                 entity_type="execution",
                 entity_id=execution.id,
-                payload_json={"approval_id": approval.id, "error": str(exc)},
+                payload_json={"approval_id": approval.id, "error": type(exc).__name__},
             )
         return
 
@@ -150,11 +151,12 @@ async def execute_approval(
             payload_json={"approval_id": approval.id, "output": output},
         )
     except Exception as exc:
+        _err = f"{type(exc).__name__}: {str(exc)[:200]}"
         await execution_service.complete_execution(
             db,
             execution.id,
             status="failed",
-            error_text=str(exc),
+            error_text=_err,
         )
         await record_action(
             db,
@@ -163,5 +165,5 @@ async def execute_approval(
             organization_id=approval.organization_id,
             entity_type="execution",
             entity_id=execution.id,
-            payload_json={"approval_id": approval.id, "error": str(exc)},
+            payload_json={"approval_id": approval.id, "error": type(exc).__name__},
         )

@@ -1,5 +1,9 @@
 from datetime import datetime, date
+from typing import Literal
+
 from pydantic import BaseModel
+
+ProjectStatus = Literal["active", "completed", "paused", "archived"]
 
 
 class ProjectCreate(BaseModel):
@@ -10,7 +14,7 @@ class ProjectCreate(BaseModel):
 
 
 class ProjectStatusUpdate(BaseModel):
-    status: str  # active | completed | paused | archived
+    status: ProjectStatus
 
 
 class ProjectRead(BaseModel):

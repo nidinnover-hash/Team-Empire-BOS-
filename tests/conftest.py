@@ -13,6 +13,7 @@ import pytest_asyncio
 # Must be set before app is imported so the SECRET_KEY guard doesn't fire.
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-that-is-long-enough-for-tests-32c")
+os.environ.setdefault("ADMIN_PASSWORD", "TestPassword2026!")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -43,6 +44,7 @@ from app.models import project as _model_project  # noqa: F401
 from app.models import task as _model_task  # noqa: F401
 from app.models import user as _model_user  # noqa: F401
 from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
+from app.models import chat_message as _model_chat_message  # noqa: F401
 
 # StaticPool + check_same_thread=False makes all connections share one
 # in-memory SQLite database — required for :memory: to work across requests.

@@ -73,3 +73,58 @@ class WhatsAppSendResult(BaseModel):
     status: str
     to: str
     message_id: str | None = None
+
+
+class ClickUpConnectRequest(BaseModel):
+    api_token: str
+
+
+class ClickUpSyncResult(BaseModel):
+    synced: int
+    last_sync_at: str | None = None
+
+
+class ClickUpStatusRead(BaseModel):
+    connected: bool
+    last_sync_at: str | None = None
+    username: str | None = None
+    team_id: str | None = None
+
+
+class GitHubConnectRequest(BaseModel):
+    api_token: str  # Personal Access Token (classic or fine-grained)
+
+
+class GitHubSyncResult(BaseModel):
+    prs_synced: int
+    issues_synced: int
+    last_sync_at: str | None = None
+
+
+class GitHubStatusRead(BaseModel):
+    connected: bool
+    last_sync_at: str | None = None
+    login: str | None = None        # GitHub username
+    repos_tracked: int | None = None
+
+
+class SlackConnectRequest(BaseModel):
+    bot_token: str  # Bot token starting with xoxb-
+
+
+class SlackSyncResult(BaseModel):
+    channels_synced: int
+    messages_read: int
+    last_sync_at: str | None = None
+
+
+class SlackStatusRead(BaseModel):
+    connected: bool
+    last_sync_at: str | None = None
+    team: str | None = None
+    channels_tracked: int | None = None
+
+
+class SlackSendRequest(BaseModel):
+    channel_id: str
+    text: str

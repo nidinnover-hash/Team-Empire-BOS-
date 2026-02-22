@@ -96,6 +96,46 @@ async def get_unified_inbox(
     return items[offset: offset + limit]
 
 
+async def get_conversation_by_id(
+    db: AsyncSession,
+    org_id: int,
+    channel: str,
+    participant_key: str,
+) -> UnifiedConversation | None:
+    """Return a single conversation by channel + participant_key. O(messages) not O(all_conversations)."""
+    all_items = await get_unified_inbox(db=db, org_id=org_id, limit=200, offset=0)
+    # Match using the same key logic as _conversation_key
+    target_key = (channel, participant_key.lower() if channel == "email" else participant_key)
+    items = [i for i in all_items if _conversation_key(i) == target_key]
+    if not items:
+        return None
+    items.sort(key=_sort_key, reverse=True)
+    last_item = items[0]
+    participant = last_item.from_address or last_item.to_address
+    record = await conversation_service.create_if_missing(
+        db=db,
+        org_id=org_id,
+        channel=channel,
+        participant_key=participant_key,
+        participant_display=participant,
+        last_message_at=last_item.timestamp,
+    )
+    unread_count = sum(1 for i in items if i.channel == "email" and i.is_read is False)
+    return UnifiedConversation(
+        record_id=record.id,
+        conversation_id=f"{channel}:{participant_key}",
+        channel=channel,
+        participant=participant,
+        owner_user_id=record.owner_user_id,
+        priority=record.priority,
+        status=record.status,
+        sla_due_at=record.sla_due_at,
+        message_count=len(items),
+        unread_count=unread_count,
+        last_message=cast(UnifiedInboxItem, last_item),
+    )
+
+
 async def get_unified_conversations(
     db: AsyncSession,
     org_id: int,

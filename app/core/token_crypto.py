@@ -4,10 +4,15 @@ Field-level encryption for OAuth tokens stored in the DB.
 All OAuth access_token / refresh_token values in Integration.config_json
 are encrypted with Fernet before write and decrypted on read.
 
-Key derivation: SHA-256 of SECRET_KEY → 32 bytes → base64url → Fernet key.
+Key derivation:
+  If TOKEN_ENCRYPTION_KEY is set in .env (recommended), it is used as the
+  master secret (SHA-256 → 32 bytes → base64url → Fernet key).
+  Otherwise falls back to SECRET_KEY for backward compatibility.
 
-WARNING: Rotating SECRET_KEY invalidates all stored tokens. If you rotate
-SECRET_KEY, you must re-run the encrypt_integration_tokens migration.
+  IMPORTANT: Use a *different* value for TOKEN_ENCRYPTION_KEY than SECRET_KEY
+  so that rotating the JWT signing key does not invalidate stored OAuth tokens.
+
+WARNING: Rotating the active key invalidates all stored tokens.
 """
 
 import base64
@@ -24,7 +29,10 @@ logger = logging.getLogger(__name__)
 
 
 def _fernet() -> Fernet:
-    key_bytes = hashlib.sha256(settings.SECRET_KEY.encode("utf-8")).digest()
+    # Use a dedicated TOKEN_ENCRYPTION_KEY when available (key separation).
+    # Falls back to SECRET_KEY so existing encrypted tokens remain readable.
+    raw_key = settings.TOKEN_ENCRYPTION_KEY or settings.SECRET_KEY
+    key_bytes = hashlib.sha256(raw_key.encode("utf-8")).digest()
     return Fernet(base64.urlsafe_b64encode(key_bytes))
 
 

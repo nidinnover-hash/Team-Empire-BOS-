@@ -1,5 +1,9 @@
 from datetime import datetime, date
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+GoalStatus = Literal["active", "completed", "paused", "abandoned"]
 
 
 class GoalCreate(BaseModel):
@@ -14,7 +18,7 @@ class GoalProgressUpdate(BaseModel):
 
 
 class GoalStatusUpdate(BaseModel):
-    status: str  # active | completed | paused | abandoned
+    status: GoalStatus
 
 
 class GoalRead(BaseModel):

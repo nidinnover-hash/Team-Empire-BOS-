@@ -14,6 +14,7 @@ from app.core.deps import get_current_web_user, get_db, verify_csrf
 from app.core.middleware import (
     CorrelationIDMiddleware,
     RateLimitMiddleware,
+    SecurityHeadersMiddleware,
     check_login_allowed,
     record_login_failure,
 )
@@ -25,6 +26,8 @@ from app.services import contact as contact_service
 from app.services import finance as finance_service
 from app.services import briefing as briefing_service
 from app.services import goal as goal_service
+from app.services import layers as layers_service
+from app.services import memory as memory_service
 from app.services import note as note_service
 from app.services import organization as organization_service
 from app.services import project as project_service
@@ -50,6 +53,7 @@ from app.models import project as _model_project  # noqa: F401
 from app.models import task as _model_task  # noqa: F401
 from app.models import user as _model_user  # noqa: F401
 from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
+from app.models import chat_message as _model_chat_message  # noqa: F401
 
 # Startup safety guard
 _UNSAFE_SECRET_KEYS = {"change_me_in_env", "changeme", "secret", "change-me", ""}
@@ -57,6 +61,11 @@ if settings.SECRET_KEY in _UNSAFE_SECRET_KEYS or len(settings.SECRET_KEY) < 32:
     raise RuntimeError(
         "SECRET_KEY is insecure. Set a 32+ character random value in .env. "
         "Generate one: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
+_UNSAFE_PASSWORDS = {"demo", "password", "admin", "changeme", "change_me", ""}
+if settings.ADMIN_PASSWORD in _UNSAFE_PASSWORDS or len(settings.ADMIN_PASSWORD) < 8:
+    raise RuntimeError(
+        "ADMIN_PASSWORD is insecure. Set a strong password (8+ chars) in .env."
     )
 if settings.ENFORCE_STARTUP_VALIDATION:
     startup_issues = validate_startup_settings(settings)
@@ -85,12 +94,14 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
 )
-# Middleware is applied in reverse order - CorrelationID wraps RateLimit
+# Middleware is applied in reverse order (last added = outermost)
+# SecurityHeaders → CorrelationID → RateLimit → handler
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(CorrelationIDMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 @app.post("/token")
@@ -211,7 +222,10 @@ async def web_login(
 
 
 @app.post("/web/logout")
-async def web_logout(response: Response) -> dict:
+async def web_logout(
+    response: Response,
+    _csrf_ok: None = Depends(verify_csrf),
+) -> dict:
     response.delete_cookie("pc_session", path="/")
     response.delete_cookie("pc_csrf", path="/")
     return {"status": "logged_out"}
@@ -257,22 +271,73 @@ async def web_agent_chat(
 ) -> JSONResponse:
     from app.agents.orchestrator import AgentChatRequest, run_agent
     from app.services.memory import build_memory_context
+    from app.services import chat_history as chat_history_service
+    from app.services import conversation_learning as conversation_learning_service
+
+    # Only CEO/ADMIN may force a specific role; other roles get keyword routing
+    if force_role and user["role"] not in {"CEO", "ADMIN"}:
+        force_role = None
 
     org_id = int(user["org_id"])
     memory_context = await build_memory_context(db, organization_id=org_id)
+
+    # Load the last 10 turns for multi-turn context
+    recent = await chat_history_service.get_recent(db, org_id=org_id, limit=10)
+    history = chat_history_service.as_openai_history(recent) or None
+
     result = await run_agent(
         request=AgentChatRequest(
             message=message,
             force_role=force_role if force_role else None,
         ),
         memory_context=memory_context,
+        conversation_history=history,
     )
+
+    # Persist this exchange for future context
+    await chat_history_service.save_message(
+        db,
+        org_id=org_id,
+        user_id=int(user["id"]),
+        role=result.role,
+        user_message=message,
+        ai_response=result.response,
+    )
+    await conversation_learning_service.learn_from_message(
+        db=db,
+        org_id=org_id,
+        actor_user_id=int(user["id"]),
+        message=message,
+    )
+
     return JSONResponse(content={
         "role": result.role,
         "response": result.response,
         "requires_approval": result.requires_approval,
         "proposed_actions": [a.model_dump() for a in result.proposed_actions],
     })
+
+
+@app.get("/web/chat/history", include_in_schema=False)
+async def web_chat_history(
+    user: dict = Depends(get_current_web_user),
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    """Return the last 20 chat turns for the session user's org."""
+    from app.services import chat_history as chat_history_service
+
+    org_id = int(user["org_id"])
+    recent = await chat_history_service.get_recent(db, org_id=org_id, limit=20)
+    return JSONResponse(content=[
+        {
+            "id": m.id,
+            "role": m.role,
+            "user_message": m.user_message,
+            "ai_response": m.ai_response,
+            "created_at": m.created_at.isoformat(),
+        }
+        for m in recent
+    ])
 
 
 @app.post("/web/ops/daily-run")
@@ -313,6 +378,126 @@ def health_check():
 app.include_router(api_router, prefix="/api/v1")
 
 
+@app.get("/web/integrations", response_class=HTMLResponse, include_in_schema=False)
+async def web_integrations(request: Request) -> HTMLResponse:
+    token = request.cookies.get("pc_session")
+    user = None
+    if token:
+        try:
+            user = decode_access_token(token)
+        except Exception:
+            user = None
+    if user is None:
+        return RedirectResponse(url="/web/login", status_code=302)
+    return templates.TemplateResponse(
+        request,
+        "integrations.html",
+        {
+            "request": request,
+            "session_user": user,
+        },
+    )
+
+
+@app.get("/web/talk", response_class=HTMLResponse, include_in_schema=False)
+async def web_talk(request: Request) -> HTMLResponse:
+    token = request.cookies.get("pc_session")
+    user = None
+    if token:
+        try:
+            user = decode_access_token(token)
+        except Exception:
+            user = None
+    if user is None:
+        return RedirectResponse(url="/web/login", status_code=302)
+    return templates.TemplateResponse(
+        request,
+        "talk.html",
+        {
+            "request": request,
+            "session_user": user,
+        },
+    )
+
+
+@app.get("/web/data-hub", response_class=HTMLResponse, include_in_schema=False)
+async def web_data_hub(request: Request) -> HTMLResponse:
+    token = request.cookies.get("pc_session")
+    user = None
+    if token:
+        try:
+            user = decode_access_token(token)
+        except Exception:
+            user = None
+    if user is None:
+        return RedirectResponse(url="/web/login", status_code=302)
+    return templates.TemplateResponse(
+        request,
+        "data_hub.html",
+        {
+            "request": request,
+            "session_user": user,
+        },
+    )
+
+
+@app.get("/web/talk/bootstrap", include_in_schema=False)
+async def web_talk_bootstrap(
+    user: dict = Depends(get_current_web_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    org_id = int(user["org_id"])
+    tasks = await task_service.list_tasks(
+        db,
+        limit=5,
+        is_done=False,
+        organization_id=org_id,
+    )
+    projects = await project_service.list_projects(db, limit=5, organization_id=org_id)
+    notes = await note_service.list_notes(db, limit=3, organization_id=org_id)
+    profile_memory = await memory_service.get_profile_memory(db, organization_id=org_id)
+    executive = await briefing_service.get_executive_briefing(db, org_id=org_id)
+    summary = executive.get("team_summary", {})
+    open_tasks = len(tasks)
+    pending_approvals = int(summary.get("pending_approvals", 0) or 0)
+    unread_emails = int(summary.get("unread_emails", 0) or 0)
+
+    welcome = (
+        f"Good to see you, {user['email']}. "
+        f"Right now: {open_tasks} open tasks, {pending_approvals} pending approvals, "
+        f"and {unread_emails} unread emails. Tell me what you want to execute first."
+    )
+    learned_memory = [
+        {
+            "id": item.id,
+            "key": item.key,
+            "value": item.value,
+            "category": item.category,
+            "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+        }
+        for item in profile_memory
+        if (item.category or "").strip().lower() == "learned"
+    ][:12]
+    return {
+        "welcome": welcome,
+        "snapshot": {
+            "open_tasks": open_tasks,
+            "pending_approvals": pending_approvals,
+            "unread_emails": unread_emails,
+            "tasks": [{"id": t.id, "title": t.title, "priority": t.priority} for t in tasks],
+            "projects": [{"id": p.id, "title": p.title, "status": p.status} for p in projects],
+            "notes": [{"id": n.id, "content": n.content} for n in notes],
+        },
+        "learned_memory": learned_memory,
+        "suggested_prompts": [
+            "Prioritize my top 3 tasks for today.",
+            "Draft responses for my urgent emails.",
+            "What approvals need my decision first?",
+            "Build a 2-hour execution plan for my current priorities.",
+        ],
+    }
+
+
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard(
     request: Request,
@@ -336,6 +521,26 @@ async def dashboard(
     goals = await goal_service.list_goals(db, limit=10, organization_id=org_id)
     contacts = await contact_service.list_contacts(db, limit=8, organization_id=org_id)
     finance = await finance_service.get_summary(db, organization_id=org_id)
+    finance_efficiency = await finance_service.get_expenditure_efficiency(
+        db,
+        organization_id=org_id,
+        window_days=30,
+    )
+    marketing_layer = await layers_service.get_marketing_layer(
+        db,
+        organization_id=org_id,
+        window_days=30,
+    )
+    study_layer = await layers_service.get_study_layer(
+        db,
+        organization_id=org_id,
+        window_days=30,
+    )
+    training_layer = await layers_service.get_training_layer(
+        db,
+        organization_id=org_id,
+        window_days=30,
+    )
     executive = await briefing_service.get_executive_briefing(db, org_id=org_id)
 
     return templates.TemplateResponse(
@@ -350,6 +555,10 @@ async def dashboard(
             "goals": goals,
             "contacts": contacts,
             "finance": finance,
+            "finance_efficiency": finance_efficiency,
+            "marketing_layer": marketing_layer,
+            "study_layer": study_layer,
+            "training_layer": training_layer,
             "executive": executive,
             "session_user": user,
         },

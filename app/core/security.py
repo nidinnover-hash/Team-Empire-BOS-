@@ -42,7 +42,16 @@ def create_access_token(data: dict, expires_minutes: int = 30) -> str:
 
 
 def decode_access_token(token: str) -> dict:
-    header_b64, payload_b64, sig_b64 = token.split(".")
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise ValueError("Malformed token")
+    header_b64, payload_b64, sig_b64 = parts
+    try:
+        header = cast(dict, json.loads(_b64url_decode(header_b64).decode("utf-8")))
+    except Exception as exc:
+        raise ValueError("Malformed token header") from exc
+    if header.get("alg") != settings.ALGORITHM:
+        raise ValueError("Unexpected token algorithm")
     signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
     expected_sig = hmac.new(
         settings.SECRET_KEY.encode("utf-8"),

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class EmailRead(BaseModel):
@@ -24,7 +24,7 @@ class EmailRead(BaseModel):
 
 
 class DraftReplyRequest(BaseModel):
-    instruction: str = ""
+    instruction: str = Field(default="", max_length=2000)
 
 
 class SyncResult(BaseModel):
@@ -33,6 +33,6 @@ class SyncResult(BaseModel):
 
 
 class ComposeRequest(BaseModel):
-    to: str
-    subject: str
-    instruction: str
+    to: str = Field(max_length=500)
+    subject: str = Field(max_length=500)
+    instruction: str = Field(max_length=2000)

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personal Clone - Data Hub</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
+    :root {
+      --bg0: #071422;
+      --bg1: #0c2338;
+      --bg2: #10324a;
+      --card: rgba(10, 28, 45, 0.82);
+      --line: #245274;
+      --text: #e9f2fb;
+      --muted: #95b1c9;
+      --brand: #4fd5e0;
+      --ok: #2fc384;
+      --warn: #f5a524;
+      --danger: #ef6461;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      font-family: "Source Sans 3", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 500px at -4% -8%, #194a73 0%, transparent 60%),
+        radial-gradient(900px 430px at 110% -8%, #1a5f69 0%, transparent 62%),
+        linear-gradient(164deg, var(--bg0) 0%, var(--bg1) 47%, var(--bg2) 100%);
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      border-bottom: 1px solid var(--line);
+      background: rgba(8, 19, 32, 0.9);
+      backdrop-filter: blur(8px);
+      padding: 0.92rem 1.2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.8rem;
+    }
+    .brand {
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 0.98rem;
+      letter-spacing: 0.02em;
+    }
+    .sub { color: var(--muted); font-size: 0.72rem; }
+    .nav { display: flex; gap: 0.45rem; align-items: center; }
+    .btn {
+      border: 1px solid #2d6f94;
+      background: #114059;
+      color: #cbf8ff;
+      border-radius: 8px;
+      padding: 0.34rem 0.63rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .btn:hover { border-color: #62e5f2; }
+    .btn.ghost { background: #0c2e46; color: #9ed8e5; border-color: #2a546f; }
+    .btn.warn { background: #37270e; color: #ffd69b; border-color: #7f5a1f; }
+    main {
+      width: min(1200px, 100%);
+      margin: 0 auto;
+      padding: 1rem;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 0.92rem;
+    }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(12, 31, 50, 0.87), var(--card));
+      overflow: hidden;
+      box-shadow: 0 12px 26px rgba(2, 8, 16, 0.34);
+    }
+    .head {
+      padding: 0.75rem 0.9rem;
+      border-bottom: 1px solid #21445f;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-family: "Space Grotesk", sans-serif;
+      color: var(--brand);
+    }
+    .body { padding: 0.9rem; }
+    .label {
+      display: block;
+      margin: 0.45rem 0 0.22rem;
+      font-size: 0.72rem;
+      color: #9ec3db;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .input, .select, .textarea {
+      width: 100%;
+      border: 1px solid #2e607f;
+      border-radius: 8px;
+      background: #0a2438;
+      color: #e9f3fe;
+      font-size: 0.82rem;
+      padding: 0.44rem 0.62rem;
+      outline: none;
+      font-family: inherit;
+    }
+    .textarea { min-height: 180px; resize: vertical; }
+    .input:focus, .select:focus, .textarea:focus { border-color: #60dce8; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    .actions { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.7rem; }
+    .hint { color: var(--muted); font-size: 0.73rem; line-height: 1.42; margin-top: 0.4rem; }
+    .status { margin-top: 0.6rem; min-height: 1rem; font-size: 0.73rem; color: var(--muted); }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--danger); }
+    .status.warn { color: var(--warn); }
+    .timeline { display: flex; flex-direction: column; gap: 0.58rem; }
+    .step {
+      border: 1px solid #224863;
+      background: rgba(11, 38, 58, 0.62);
+      border-radius: 10px;
+      padding: 0.6rem;
+    }
+    .step strong {
+      font-family: "Space Grotesk", sans-serif;
+      color: #d7f7fb;
+      display: block;
+      margin-bottom: 0.2rem;
+      font-size: 0.8rem;
+    }
+    .step p { color: #b8cfe2; font-size: 0.79rem; line-height: 1.45; }
+    .mini {
+      margin-top: 0.35rem;
+      color: #8fb0c9;
+      font-size: 0.69rem;
+      font-family: "Space Grotesk", sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      .row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="brand">Data Hub + Clone Playbook</div>
+    <div class="sub">Feed the clone with the right data and run it with structure</div>
+  </div>
+  <div class="nav">
+    <a class="btn ghost" href="/">Dashboard</a>
+    <a class="btn ghost" href="/web/talk">Talk Mode</a>
+    <a class="btn ghost" href="/web/integrations">Integrations</a>
+    <button class="btn" type="button" id="logout-btn">Sign out ({{ session_user.email }})</button>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <div class="head">Data Collection Layer</div>
+    <div class="body">
+      <div class="row">
+        <div>
+          <label class="label" for="source">Source</label>
+          <input id="source" class="input" value="manual" placeholder="manual | meeting | whatsapp | docs" />
+        </div>
+        <div>
+          <label class="label" for="target">Target</label>
+          <select id="target" class="select">
+            <option value="notes">notes</option>
+            <option value="daily_context">daily_context</option>
+            <option value="profile_memory">profile_memory</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label class="label" for="key">Memory Key (for profile_memory)</label>
+          <input id="key" class="input" placeholder="preference.communication_style" />
+        </div>
+        <div>
+          <label class="label" for="category">Category / Context Type</label>
+          <input id="category" class="input" placeholder="learned | priority | meeting | blocker" />
+        </div>
+      </div>
+
+      <label class="label" for="content">Content to ingest</label>
+      <textarea id="content" class="textarea" placeholder="- Candidate follow-up at 4 PM
+- App bug in onboarding flow
+- CEO wants daily concise briefing"></textarea>
+
+      <div class="actions">
+        <button class="btn" type="button" id="collect-btn">Ingest Data</button>
+        <button class="btn warn" type="button" id="sample-priority-btn">Load Priority Sample</button>
+        <button class="btn warn" type="button" id="sample-memory-btn">Load Preference Sample</button>
+      </div>
+      <div class="hint">
+        Use one bullet per line. The layer splits lines and stores them as structured items.
+        `notes` for raw capture, `daily_context` for today’s operating context, `profile_memory` for long-term clone behavior.
+      </div>
+      <div id="collect-status" class="status"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="head">How to Use Clone Layer</div>
+    <div class="body">
+      <div class="timeline">
+        <div class="step">
+          <strong>1. Feed clean operating data</strong>
+          <p>Use this hub daily to push priorities, meeting outcomes, blockers, and style preferences. Better input quality creates better clone output quality.</p>
+          <div class="mini">Rule: facts first, opinions second</div>
+        </div>
+        <div class="step">
+          <strong>2. Run Talk Mode as command center</strong>
+          <p>Open Talk Mode and issue direct instructions: “Prioritize my day”, “Draft high-value replies”, “Show what needs approval first”.</p>
+          <div class="mini">Use short direct commands</div>
+        </div>
+        <div class="step">
+          <strong>3. Let clone learn your style</strong>
+          <p>Say explicit lines like “I prefer concise updates” or “My top priority is admissions growth.” Clone stores these and adapts over time.</p>
+          <div class="mini">Review in learned-memory panel</div>
+        </div>
+        <div class="step">
+          <strong>4. Keep execution gated</strong>
+          <p>Use clone for drafting and planning. Risky actions should stay approval-gated. This keeps speed high without losing control.</p>
+          <div class="mini">Fast + safe operations</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+  (async function () {
+    var collectBtn = document.getElementById("collect-btn");
+    var sourceEl = document.getElementById("source");
+    var targetEl = document.getElementById("target");
+    var keyEl = document.getElementById("key");
+    var categoryEl = document.getElementById("category");
+    var contentEl = document.getElementById("content");
+    var statusEl = document.getElementById("collect-status");
+    var logoutBtn = document.getElementById("logout-btn");
+    var samplePriorityBtn = document.getElementById("sample-priority-btn");
+    var sampleMemoryBtn = document.getElementById("sample-memory-btn");
+    var apiToken = null;
+
+    function setStatus(text, cls) {
+      statusEl.textContent = text || "";
+      statusEl.className = "status" + (cls ? " " + cls : "");
+    }
+
+    async function loadApiToken() {
+      var r = await fetch("/web/api-token");
+      if (!r.ok) throw new Error("Session expired");
+      var d = await r.json();
+      apiToken = d.token;
+    }
+
+    collectBtn.addEventListener("click", async function () {
+      if (!apiToken) {
+        setStatus("No API token available. Refresh the page.", "err");
+        return;
+      }
+      var source = (sourceEl.value || "manual").trim();
+      var target = targetEl.value;
+      var key = (keyEl.value || "").trim();
+      var category = (categoryEl.value || "").trim();
+      var content = (contentEl.value || "").trim();
+      if (!content) {
+        setStatus("Add content before ingesting.", "warn");
+        return;
+      }
+      var payload = {
+        source: source || "manual",
+        target: target,
+        content: content,
+        split_lines: true
+      };
+      if (target === "profile_memory") {
+        payload.key = key;
+        payload.category = category || "ingested";
+      } else if (target === "daily_context") {
+        payload.context_type = category || "priority";
+      }
+
+      collectBtn.disabled = true;
+      setStatus("Ingesting data...");
+      try {
+        var r = await fetch("/api/v1/data/collect", {
+          method: "POST",
+          headers: {
+            "Authorization": "Bearer " + apiToken,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+        var body = await r.json().catch(function () { return {}; });
+        if (!r.ok) throw new Error(body.detail || "Data ingestion failed");
+        setStatus(body.message || "Data ingested successfully.", "ok");
+      } catch (err) {
+        setStatus(String(err.message || err), "err");
+      } finally {
+        collectBtn.disabled = false;
+      }
+    });
+
+    samplePriorityBtn.addEventListener("click", function () {
+      targetEl.value = "daily_context";
+      sourceEl.value = "meeting";
+      keyEl.value = "";
+      categoryEl.value = "priority";
+      contentEl.value = "- Admissions follow-up backlog is rising\n- Prioritize visa compliance tickets\n- Review counselor performance by 5 PM";
+      setStatus("Priority sample loaded.");
+    });
+
+    sampleMemoryBtn.addEventListener("click", function () {
+      targetEl.value = "profile_memory";
+      sourceEl.value = "manual";
+      keyEl.value = "preference.communication_style";
+      categoryEl.value = "learned";
+      contentEl.value = "Use concise, action-first responses with numeric priority order.";
+      setStatus("Preference sample loaded.");
+    });
+
+    logoutBtn.addEventListener("click", async function () {
+      await fetch("/web/logout", { method: "POST" });
+      window.location.href = "/web/login";
+    });
+
+    try {
+      await loadApiToken();
+      setStatus("Data Hub ready.");
+    } catch (err) {
+      setStatus("Session expired. Sign in again.", "err");
+    }
+  })();
+</script>
+</body>
+</html>

@@ -185,3 +185,34 @@ async def test_conversation_assign_and_state_update(client):
     state_body = state_resp.json()
     assert state_body["status"] == "in_review"
     assert state_body["priority"] == "high"
+
+
+async def test_conversation_state_update_preserves_sla_when_not_provided(client):
+    await _seed_email_for_org1(
+        gmail_id="unified-email-sla",
+        from_address="sla-owner@example.com",
+        is_read=False,
+    )
+
+    conversations_resp = await client.get("/api/v1/inbox/conversations?limit=20")
+    assert conversations_resp.status_code == 200
+    conversations = conversations_resp.json()
+    convo = next(c for c in conversations if c["channel"] == "email" and c["participant"] == "sla-owner@example.com")
+    convo_id = convo["conversation_id"]
+
+    first_state = await client.patch(
+        f"/api/v1/inbox/conversations/{convo_id}/state",
+        json={"status": "in_review", "priority": "high", "sla_due_at": "2026-02-28T12:00:00Z"},
+    )
+    assert first_state.status_code == 200
+    first_body = first_state.json()
+    assert first_body["sla_due_at"] is not None
+
+    second_state = await client.patch(
+        f"/api/v1/inbox/conversations/{convo_id}/state",
+        json={"status": "waiting"},
+    )
+    assert second_state.status_code == 200
+    second_body = second_state.json()
+    assert second_body["status"] == "waiting"
+    assert second_body["sla_due_at"] == first_body["sla_due_at"]

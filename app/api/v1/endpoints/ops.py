@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.privacy import sanitize_response_payload
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
@@ -148,16 +149,19 @@ async def run_daily_run_workflow(
             **result_payload,
         }
     except Exception:
-        await daily_run_service.complete_daily_run(
-            db=db,
-            run_id=run.id,
-            organization_id=org_id,
-            status="failed",
-            drafted_plan_count=0,
-            drafted_email_count=0,
-            pending_approvals=0,
-            result_json={},
-        )
+        try:
+            await daily_run_service.complete_daily_run(
+                db=db,
+                run_id=run.id,
+                organization_id=org_id,
+                status="failed",
+                drafted_plan_count=0,
+                drafted_email_count=0,
+                pending_approvals=0,
+                result_json={},
+            )
+        except Exception:
+            pass  # Don't shadow the original exception
         raise
 
 
@@ -257,13 +261,19 @@ async def list_events_ops(
     event_date: date | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
 ) -> list[EventRead]:
-    return await event_service.list_events(
+    events = await event_service.list_events(
         db,
         organization_id=user["org_id"],
         actor_user_id=actor_user_id,
         event_date=event_date,
         limit=limit,
     )
+    safe_events: list[EventRead] = []
+    for event in events:
+        data = EventRead.model_validate(event).model_dump()
+        data["payload_json"] = sanitize_response_payload(data.get("payload_json", {}))
+        safe_events.append(EventRead(**data))
+    return safe_events
 
 
 @router.post("/daily-run")

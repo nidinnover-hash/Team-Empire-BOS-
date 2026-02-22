@@ -137,13 +137,15 @@ async def extract_proposed_actions(message: str) -> list[ProposedAction]:
 async def run_agent(
     request: AgentChatRequest,
     memory_context: str = "",
+    conversation_history: list[dict] | None = None,
 ) -> AgentChatResponse:
     """
     Route the message to the right role and get a real AI response.
 
     Args:
-        request:        The user's message + optional forced role.
-        memory_context: Injected memory string (profile + team + daily context).
+        request:              The user's message + optional forced role.
+        memory_context:       Injected memory string (profile + team + daily context).
+        conversation_history: Recent turns in OpenAI message format for multi-turn context.
 
     Returns:
         AgentChatResponse with role, AI response, approval flag, and proposed_actions.
@@ -155,6 +157,7 @@ async def run_agent(
         system_prompt=system_prompt,
         user_message=request.message,
         memory_context=memory_context,
+        conversation_history=conversation_history,
     )
 
     requires_approval = any(t in request.message.lower() for t in _RISKY_TOKENS)

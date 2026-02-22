@@ -91,6 +91,7 @@ async def update_state(
     status: str | None = None,
     priority: str | None = None,
     sla_due_at: datetime | None = None,
+    update_sla_due_at: bool = False,
 ) -> Conversation | None:
     convo = await get_by_key(db, org_id, channel, participant_key)
     if convo is None:
@@ -99,7 +100,8 @@ async def update_state(
         convo.status = status
     if priority is not None:
         convo.priority = priority
-    convo.sla_due_at = sla_due_at
+    if update_sla_due_at:
+        convo.sla_due_at = sla_due_at
     convo.updated_at = _now()
     await db.commit()
     await db.refresh(convo)

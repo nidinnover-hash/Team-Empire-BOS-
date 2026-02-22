@@ -1,7 +1,11 @@
+import logging
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Health"])
 
@@ -12,6 +16,7 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> dict:
     try:
         await db.execute(text("SELECT 1"))
         db_status = "ok"
-    except Exception:
+    except Exception as exc:
+        logger.warning("DB health check failed: %s", exc)
         db_status = "unreachable"
     return {"status": "ok", "database": db_status}

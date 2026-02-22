@@ -1,5 +1,9 @@
 from datetime import datetime
+from typing import Literal
+
 from pydantic import BaseModel
+
+ContactRelationship = Literal["personal", "business", "family", "mentor", "other"]
 
 
 class ContactCreate(BaseModel):
@@ -8,7 +12,7 @@ class ContactCreate(BaseModel):
     phone: str | None = None
     company: str | None = None
     role: str | None = None
-    relationship: str = "personal"  # personal | business | family | mentor | other
+    relationship: ContactRelationship = "personal"
     notes: str | None = None
 
 

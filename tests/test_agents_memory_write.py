@@ -63,9 +63,10 @@ async def test_agent_chat_writes_memory_when_message_says_remember(client, monke
     profile = await client.get("/api/v1/memory/profile", headers=headers)
     assert profile.status_code == 200
     items = profile.json()
-    assert len(items) == 1
-    assert items[0]["key"] == "communication_style"
-    assert items[0]["value"] == "Be concise"
+    # Check the explicitly written memory key (auto-learning may add extra entries)
+    comm_entry = next((i for i in items if i["key"] == "communication_style"), None)
+    assert comm_entry is not None, f"communication_style not found in {[i['key'] for i in items]}"
+    assert comm_entry["value"] == "Be concise"
 
     events = await client.get("/api/v1/ops/events", headers=headers)
     assert events.status_code == 200
