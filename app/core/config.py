@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     ADMIN_PASSWORD: str = "demo"  # Override in .env — never leave 'demo' in production
     ADMIN_NAME: str = "Nidin Nover"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
 
 
 @lru_cache

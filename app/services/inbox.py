@@ -1,7 +1,33 @@
+from datetime import datetime, timezone
+from typing import cast
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.inbox import UnifiedInboxItem
+from app.schemas.inbox import UnifiedConversation, UnifiedInboxItem
 from app.services import email_service, whatsapp_service
+
+
+def _sort_key(item: UnifiedInboxItem) -> datetime:
+    ts = item.timestamp
+    if ts is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    return ts
+
+
+def _conversation_key(item: UnifiedInboxItem) -> tuple[str, str]:
+    if item.channel == "email":
+        if item.from_address:
+            return ("email", item.from_address.lower())
+        if item.to_address:
+            return ("email", item.to_address.lower())
+        return ("email", f"item:{item.item_id}")
+    if item.channel == "whatsapp":
+        if item.from_address:
+            return ("whatsapp", item.from_address)
+        if item.to_address:
+            return ("whatsapp", item.to_address)
+        return ("whatsapp", f"item:{item.item_id}")
+    return (item.channel, f"item:{item.item_id}")
 
 
 async def get_unified_inbox(
@@ -65,5 +91,49 @@ async def get_unified_inbox(
             )
         )
 
-    items.sort(key=lambda x: x.timestamp or 0, reverse=True)
+    items.sort(key=_sort_key, reverse=True)
     return items[offset: offset + limit]
+
+
+async def get_unified_conversations(
+    db: AsyncSession,
+    org_id: int,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[UnifiedConversation]:
+    """
+    Return grouped conversation summaries across email and WhatsApp channels.
+    """
+    all_items = await get_unified_inbox(
+        db=db,
+        org_id=org_id,
+        limit=500,
+        offset=0,
+    )
+    grouped: dict[tuple[str, str], list[UnifiedInboxItem]] = {}
+    for item in all_items:
+        key = _conversation_key(item)
+        grouped.setdefault(key, []).append(item)
+
+    conversations: list[UnifiedConversation] = []
+    for (channel, participant_key), items in grouped.items():
+        items.sort(key=_sort_key, reverse=True)
+        last_item = items[0]
+        unread_count = 0
+        for i in items:
+            if i.channel == "email" and i.is_read is False:
+                unread_count += 1
+        participant = last_item.from_address or last_item.to_address
+        conversations.append(
+            UnifiedConversation(
+                conversation_id=f"{channel}:{participant_key}",
+                channel=channel,
+                participant=participant,
+                message_count=len(items),
+                unread_count=unread_count,
+                last_message=cast(UnifiedInboxItem, last_item),
+            )
+        )
+
+    conversations.sort(key=lambda c: _sort_key(c.last_message), reverse=True)
+    return conversations[offset: offset + limit]

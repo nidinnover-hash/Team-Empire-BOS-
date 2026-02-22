@@ -61,6 +61,30 @@ async def set_profile_memory(
     return entry
 
 
+@router.delete("/profile/{entry_id}", status_code=204)
+async def delete_profile_memory(
+    entry_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_roles("CEO")),
+) -> None:
+    """Delete a profile memory entry by ID. CEO only."""
+    org_id = int(current_user.get("org_id", 1))
+    deleted = await memory_service.delete_profile_memory(
+        db, entry_id=entry_id, organization_id=org_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Memory entry not found")
+    await record_action(
+        db=db,
+        event_type="profile_memory_deleted",
+        actor_user_id=int(current_user["id"]),
+        entity_type="profile_memory",
+        entity_id=entry_id,
+        payload_json={"entry_id": entry_id},
+        organization_id=org_id,
+    )
+
+
 # ── Team Members ──────────────────────────────────────────────────────────────
 
 @router.get("/team", response_model=list[TeamMemberRead])

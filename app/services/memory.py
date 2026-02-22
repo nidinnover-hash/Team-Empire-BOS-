@@ -80,6 +80,28 @@ async def upsert_profile_memory(
     return new_entry
 
 
+async def delete_profile_memory(
+    db: AsyncSession, entry_id: int, organization_id: int
+) -> bool:
+    """Delete a profile memory entry by ID. Returns True if it existed and was deleted."""
+    result = await db.execute(
+        select(ProfileMemory).where(
+            ProfileMemory.id == entry_id,
+            ProfileMemory.organization_id == organization_id,
+        )
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        return False
+    await db.delete(entry)
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+    return True
+
+
 # ── Team Members ──────────────────────────────────────────────────────────────
 
 async def get_team_members(

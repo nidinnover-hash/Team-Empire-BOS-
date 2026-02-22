@@ -34,6 +34,27 @@ _rate_buckets: dict[str, deque] = defaultdict(deque)
 # Paths exempt from rate limiting (health checks, docs)
 _EXEMPT_PREFIXES = ("/health", "/docs", "/redoc", "/openapi.json")
 
+# ── Login Failure Tracker ──────────────────────────────────────────────────────
+# Sliding window per IP — resets on server restart (acceptable for a personal tool).
+
+_login_failures: dict[str, deque] = defaultdict(deque)
+LOGIN_FAIL_WINDOW = 900   # 15-minute window
+LOGIN_FAIL_MAX = 10       # max failures before lockout
+
+
+def check_login_allowed(ip: str) -> bool:
+    """Return True if the IP is below the failed-login threshold."""
+    now = time.monotonic()
+    bucket = _login_failures[ip]
+    while bucket and now - bucket[0] > LOGIN_FAIL_WINDOW:
+        bucket.popleft()
+    return len(bucket) < LOGIN_FAIL_MAX
+
+
+def record_login_failure(ip: str) -> None:
+    """Record one failed login attempt for this IP."""
+    _login_failures[ip].append(time.monotonic())
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:

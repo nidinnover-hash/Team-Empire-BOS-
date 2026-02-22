@@ -6,7 +6,11 @@ from app.main import app as fastapi_app
 from app.models.email import Email
 
 
-async def _seed_email_for_org1(gmail_id: str = "unified-email-1") -> int:
+async def _seed_email_for_org1(
+    gmail_id: str = "unified-email-1",
+    from_address: str = "lead@example.com",
+    is_read: bool = False,
+) -> int:
     override = fastapi_app.dependency_overrides[get_db]
     agen = override()
     session = await agen.__anext__()
@@ -15,12 +19,12 @@ async def _seed_email_for_org1(gmail_id: str = "unified-email-1") -> int:
             organization_id=1,
             gmail_id=gmail_id,
             thread_id="thread-unified-1",
-            from_address="lead@example.com",
+            from_address=from_address,
             to_address="owner@example.com",
             subject="Need update",
             body_text="Please share the latest status.",
             received_at=datetime.now(timezone.utc),
-            is_read=False,
+            is_read=is_read,
             reply_sent=False,
             created_at=datetime.now(timezone.utc),
         )
@@ -84,3 +88,62 @@ async def test_unified_inbox_merges_email_and_whatsapp(client):
     items = response.json()
     assert any(i["channel"] == "email" for i in items)
     assert any(i["channel"] == "whatsapp" for i in items)
+
+
+async def test_unified_conversations_groups_items(client):
+    connected = await client.post(
+        "/api/v1/integrations/connect",
+        json={
+            "type": "whatsapp_business",
+            "config_json": {
+                "access_token": "wa-token",
+                "phone_number_id": "1234567890",
+            },
+        },
+    )
+    assert connected.status_code == 201
+
+    await _seed_email_for_org1(gmail_id="unified-email-2", from_address="lead@example.com", is_read=False)
+    await _seed_email_for_org1(gmail_id="unified-email-3", from_address="lead@example.com", is_read=False)
+
+    for wa_id in ("wamid.TEST201", "wamid.TEST202"):
+        webhook = await client.post(
+            "/api/v1/integrations/whatsapp/webhook",
+            json={
+                "entry": [
+                    {
+                        "changes": [
+                            {
+                                "value": {
+                                    "metadata": {
+                                        "display_phone_number": "+15550001111",
+                                        "phone_number_id": "1234567890",
+                                    },
+                                    "messages": [
+                                        {
+                                            "from": "15551234567",
+                                            "id": wa_id,
+                                            "timestamp": str(int(datetime.now(timezone.utc).timestamp())),
+                                            "type": "text",
+                                            "text": {"body": f"Hi {wa_id}"},
+                                        }
+                                    ],
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+        )
+        assert webhook.status_code == 200
+
+    response = await client.get("/api/v1/inbox/conversations?limit=20")
+    assert response.status_code == 200
+    conversations = response.json()
+
+    email_conv = next(c for c in conversations if c["channel"] == "email")
+    assert email_conv["message_count"] >= 2
+    assert email_conv["unread_count"] >= 2
+
+    wa_conv = next(c for c in conversations if c["channel"] == "whatsapp")
+    assert wa_conv["message_count"] >= 2

@@ -155,6 +155,24 @@
     .audit-type   { font-size:.78rem; font-weight:700; color:#d1d5db; }
     .audit-detail { font-size:.72rem; color:#6b7280; margin-top:.18rem; line-height:1.4; }
     .audit-time   { font-size:.65rem; color:#374151; white-space:nowrap; flex-shrink:0; }
+
+    /* Memory Editor */
+    .mem-row { display:flex; align-items:flex-start; gap:.75rem; padding:.55rem 1.1rem; border-bottom:1px solid #141420; }
+    .mem-row:last-child { border-bottom:none; }
+    .mem-key { font-size:.78rem; font-weight:700; color:#a78bfa; min-width:110px; flex-shrink:0; word-break:break-all; }
+    .mem-val { font-size:.78rem; color:#d1d5db; flex:1; line-height:1.45; word-break:break-word; }
+    .mem-cat { font-size:.65rem; color:#374151; margin-left:.3rem; }
+    .btn-mem-del { background:#1a0505; color:#fca5a5; border:1px solid #7f1d1d; border-radius:4px; padding:.15rem .42rem; font-size:.65rem; font-weight:700; cursor:pointer; flex-shrink:0; margin-top:2px; }
+    .btn-mem-del:hover { border-color:#ef4444; }
+    .mem-add-form { padding:.75rem 1.1rem; border-top:1px solid #1c1c30; }
+    .mem-input { background:#080810; border:1px solid #1c1c30; border-radius:6px; color:#e5e7eb; padding:.4rem .65rem; font-size:.8rem; outline:none; font-family:inherit; width:100%; }
+    .mem-input:focus { border-color:#3b2a77; }
+
+    /* Agent proposed-action confirm buttons inside chat */
+    .chat-actions { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.5rem; }
+    .btn-agent-action { background:#0a1a0a; color:#86efac; border:1px solid #14532d; border-radius:5px; padding:.22rem .55rem; font-size:.68rem; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:.03em; }
+    .btn-agent-action:hover { border-color:#34d399; }
+    .btn-agent-action:disabled { opacity:.4; cursor:default; }
   </style>
 </head>
 <body>
@@ -484,6 +502,30 @@
     </div>
   </div>
 
+  <div class="section-label">Memory Editor</div>
+  <div class="card" id="memory-card">
+    <div class="card-head">
+      <span class="card-title">Profile Memory</span>
+      <div style="display:flex;gap:.6rem;align-items:center">
+        <span id="mem-count" class="card-count">...</span>
+        <button id="mem-add-toggle" class="btn-run" type="button">+ Add</button>
+        <button id="mem-refresh-btn" class="btn-run" type="button">Refresh</button>
+      </div>
+    </div>
+    <div id="mem-add-form" class="mem-add-form" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:.5rem;align-items:end">
+        <input id="mem-input-key" class="mem-input" placeholder="Key (e.g. name)" />
+        <input id="mem-input-cat" class="mem-input" placeholder="Category (optional)" />
+        <input id="mem-input-val" class="mem-input" placeholder="Value" />
+        <button id="mem-save-btn" class="btn-run" type="button" style="white-space:nowrap">Save</button>
+      </div>
+      <div id="mem-form-status" class="run-status" style="margin-top:.4rem"></div>
+    </div>
+    <div id="mem-list">
+      <div class="empty">Loading memory…</div>
+    </div>
+  </div>
+
 </main>
 <script>
   // ── Shared auth bootstrap ───────────────────────────────────────────────────
@@ -689,11 +731,35 @@
           const approvalHtml = data.requires_approval
             ? '<div class="chat-approval-warn">Heads up: this response involves a risky action — review before proceeding.</div>'
             : "";
+          const msgId = Date.now();
+          const actions = (data.proposed_actions || []).filter(function(a) { return a.action_type !== "NONE"; });
+          if (actions.length) {
+            window.__agentActions = window.__agentActions || {};
+            window.__agentActions[msgId] = actions;
+          }
+          const actionsHtml = actions.length ? (function() {
+            return '<div class="chat-actions">' +
+              actions.map(function(a, i) {
+                var label = a.action_type === "TASK_CREATE"   ? "Create Task"
+                          : a.action_type === "MEMORY_WRITE"  ? "Save to Memory"
+                          : a.action_type;
+                var desc  = "";
+                if (a.action_type === "TASK_CREATE"  && a.params && a.params.title)
+                  desc = " — " + esc(String(a.params.title).slice(0, 50));
+                if (a.action_type === "MEMORY_WRITE" && a.params)
+                  desc = " — " + esc((a.params.key || "") + (a.params.value ? ": " + String(a.params.value).slice(0,40) : ""));
+                return '<button class="btn-agent-action" id="aa-' + msgId + '-' + i + '" ' +
+                  'onclick="executeAgentAction(' + msgId + ',' + i + ')">' +
+                  label + desc + '</button>';
+              }).join("") +
+            '</div>';
+          })() : "";
           appendNode(
             '<div class="chat-msg-agent">' +
               '<div class="chat-role-tag">' + esc(data.role) + '</div>' +
               esc(data.response).replace(/\n/g, "<br>") +
               approvalHtml +
+              actionsHtml +
             '</div>'
           );
           roleDisplay.textContent = data.role;
@@ -705,6 +771,58 @@
         input.focus();
       }
     }
+
+    // Execute a proposed agent action (TASK_CREATE or MEMORY_WRITE)
+    window.executeAgentAction = async function(msgId, idx) {
+      var btn = document.getElementById("aa-" + msgId + "-" + idx);
+      if (btn) { btn.disabled = true; btn.textContent = "…"; }
+      var actions = (window.__agentActions || {})[msgId] || [];
+      var action = actions[idx];
+      if (!action) { if (btn) { btn.textContent = "Error"; } return; }
+      var token = window.__apiToken;
+      if (!token) { alert("Not authenticated."); if (btn) btn.disabled = false; return; }
+      try {
+        var r;
+        if (action.action_type === "TASK_CREATE") {
+          var p = action.params || {};
+          r = await fetch("/api/v1/tasks", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title:    p.title    || "Agent-created task",
+              category: p.category || "work",
+              priority: p.priority || 2,
+              notes:    p.notes    || null,
+            })
+          });
+        } else if (action.action_type === "MEMORY_WRITE") {
+          var p = action.params || {};
+          r = await fetch("/api/v1/memory/profile", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              key:      p.key      || "agent_note",
+              value:    p.value    || "",
+              category: p.category || null,
+            })
+          });
+        } else {
+          alert("Unsupported action: " + action.action_type);
+          if (btn) btn.disabled = false;
+          return;
+        }
+        if (r && r.ok) {
+          if (btn) { btn.textContent = "Done ✓"; btn.style.background = "#021a0e"; btn.style.color = "#34d399"; }
+        } else {
+          var d = await r.json().catch(function(){return {};});
+          alert("Action failed: " + (d.detail || r.status));
+          if (btn) { btn.disabled = false; btn.textContent = action.action_type; }
+        }
+      } catch(e) {
+        alert("Network error executing action.");
+        if (btn) { btn.disabled = false; }
+      }
+    };
 
     sendBtn.addEventListener("click", send);
     input.addEventListener("keydown", function (e) {
@@ -1065,6 +1183,102 @@
 
     // Auto-refresh every 30 seconds
     setInterval(function() { if (window.__apiToken) loadAudit(); }, 30000);
+  })();
+
+  // ── Memory Editor Panel ──────────────────────────────────────────────────────
+  (async function () {
+    var list       = document.getElementById("mem-list");
+    var countBadge = document.getElementById("mem-count");
+    var refreshBtn = document.getElementById("mem-refresh-btn");
+    var addToggle  = document.getElementById("mem-add-toggle");
+    var addForm    = document.getElementById("mem-add-form");
+    var saveBtn    = document.getElementById("mem-save-btn");
+    var formStatus = document.getElementById("mem-form-status");
+    if (!list) return;
+
+    function esc(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+    async function loadMemory() {
+      var token = window.__apiToken;
+      if (!token) { list.innerHTML = '<div class="empty">Sign in to view memory.</div>'; return; }
+      try {
+        var r = await fetch("/api/v1/memory/profile", { headers:{"Authorization":"Bearer "+token} });
+        if (!r.ok) { list.innerHTML = '<div class="empty">Could not load memory (CEO role required).</div>'; return; }
+        var entries = await r.json();
+        if (countBadge) countBadge.textContent = entries.length + " entries";
+        if (!entries.length) { list.innerHTML = '<div class="empty">No memory entries yet. Click + Add to create one.</div>'; return; }
+        list.innerHTML = entries.map(function(m) {
+          return '<div class="mem-row" id="mem-entry-' + m.id + '">' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="display:flex;align-items:baseline;gap:.4rem">' +
+                '<span class="mem-key">' + esc(m.key) + '</span>' +
+                (m.category ? '<span class="mem-cat">[' + esc(m.category) + ']</span>' : '') +
+              '</div>' +
+              '<div class="mem-val">' + esc(m.value) + '</div>' +
+            '</div>' +
+            '<button class="btn-mem-del" title="Delete entry" onclick="memoryDelete(' + m.id + ')">✕</button>' +
+          '</div>';
+        }).join("");
+      } catch(err) {
+        list.innerHTML = '<div class="empty">Error loading memory.</div>';
+      }
+    }
+
+    window.memoryDelete = async function(id) {
+      var ok = window.confirm("Delete this memory entry?");
+      if (!ok) return;
+      var token = window.__apiToken;
+      try {
+        var r = await fetch("/api/v1/memory/profile/" + id, {
+          method: "DELETE",
+          headers: {"Authorization":"Bearer "+token}
+        });
+        if (r.ok || r.status === 204) {
+          await loadMemory();
+        } else {
+          alert("Delete failed.");
+        }
+      } catch(e) { alert("Network error."); }
+    };
+
+    addToggle && addToggle.addEventListener("click", function() {
+      addForm.style.display = addForm.style.display === "block" ? "none" : "block";
+    });
+
+    saveBtn && saveBtn.addEventListener("click", async function() {
+      var key = document.getElementById("mem-input-key").value.trim();
+      var val = document.getElementById("mem-input-val").value.trim();
+      var cat = document.getElementById("mem-input-cat").value.trim();
+      if (!key || !val) { formStatus.textContent = "Key and Value are required."; formStatus.className = "run-status err"; return; }
+      saveBtn.disabled = true;
+      formStatus.textContent = "Saving…"; formStatus.className = "run-status";
+      var token = window.__apiToken;
+      try {
+        var r = await fetch("/api/v1/memory/profile", {
+          method: "POST",
+          headers: {"Authorization":"Bearer "+token,"Content-Type":"application/json"},
+          body: JSON.stringify({ key: key, value: val, category: cat || null })
+        });
+        if (r.ok) {
+          formStatus.textContent = "Saved!"; formStatus.className = "run-status ok";
+          document.getElementById("mem-input-key").value = "";
+          document.getElementById("mem-input-val").value = "";
+          document.getElementById("mem-input-cat").value = "";
+          await loadMemory();
+        } else {
+          var d = await r.json().catch(function(){return {};});
+          formStatus.textContent = d.detail || "Save failed."; formStatus.className = "run-status err";
+        }
+      } catch(e) { formStatus.textContent = "Error saving."; formStatus.className = "run-status err"; }
+      saveBtn.disabled = false;
+    });
+
+    refreshBtn && refreshBtn.addEventListener("click", loadMemory);
+
+    var token = await window.__bootPromise;
+    if (!token) { list.innerHTML = '<div class="empty">Sign in to view memory.</div>'; return; }
+    if (!window.__apiToken) window.__apiToken = token;
+    await loadMemory();
   })();
 </script>
 </body>

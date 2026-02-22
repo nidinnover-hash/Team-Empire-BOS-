@@ -11,7 +11,12 @@ from app.api.v1.router import api_router
 from app.api.v1.endpoints.ops import run_daily_run_workflow
 from app.core.config import settings, validate_startup_settings
 from app.core.deps import get_current_web_user, get_db, verify_csrf
-from app.core.middleware import CorrelationIDMiddleware, RateLimitMiddleware
+from app.core.middleware import (
+    CorrelationIDMiddleware,
+    RateLimitMiddleware,
+    check_login_allowed,
+    record_login_failure,
+)
 from app.core.security import create_access_token, decode_access_token, get_current_user, verify_password
 from app.db.base import Base
 from app.db.session import engine
@@ -97,9 +102,15 @@ async def login(
     from app.logs.audit import record_action
     import logging
     _log = logging.getLogger(__name__)
+    client_ip = request.client.host if request.client else "unknown"
+    if not check_login_allowed(client_ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts. Try again later.",
+        )
     user = await user_service.get_user_by_email(db, username)
     if user is None or not user.is_active or not verify_password(password, user.password_hash):
-        client_ip = request.client.host if request.client else "unknown"
+        record_login_failure(client_ip)
         _log.warning("Failed API login for '%s' from %s", username, client_ip)
         await record_action(
             db,
@@ -143,9 +154,15 @@ async def web_login(
     from app.logs.audit import record_action
     import logging
     _log = logging.getLogger(__name__)
+    client_ip = request.client.host if request.client else "unknown"
+    if not check_login_allowed(client_ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts. Try again later.",
+        )
     user = await user_service.get_user_by_email(db, username)
     if user is None or not user.is_active or not verify_password(password, user.password_hash):
-        client_ip = request.client.host if request.client else "unknown"
+        record_login_failure(client_ip)
         _log.warning("Failed web login for '%s' from %s", username, client_ip)
         await record_action(
             db,
@@ -253,7 +270,7 @@ async def web_agent_chat(
         "role": result.role,
         "response": result.response,
         "requires_approval": result.requires_approval,
-        "proposed_actions_count": len(result.proposed_actions),
+        "proposed_actions": [a.model_dump() for a in result.proposed_actions],
     })
 
 

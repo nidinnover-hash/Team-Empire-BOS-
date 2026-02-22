@@ -15,3 +15,12 @@ class UnifiedInboxItem(BaseModel):
     status: str | None = None
     is_read: bool | None = None
     timestamp: datetime | None = None
+
+
+class UnifiedConversation(BaseModel):
+    conversation_id: str
+    channel: str
+    participant: str | None = None
+    message_count: int
+    unread_count: int
+    last_message: UnifiedInboxItem
