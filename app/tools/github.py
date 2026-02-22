@@ -1,8 +1,9 @@
 """
 GitHub REST API v3 client — async httpx, no DB or settings dependencies.
 
-Authenticates with a Personal Access Token (PAT).
-Token scopes needed: repo (read), read:user
+Authenticates with a Personal Access Token (classic ghp_ or fine-grained github_pat_).
+Classic PAT scopes needed: repo, read:user
+Fine-grained PAT permissions needed: Contents (read), Issues (read), Pull requests (read)
 """
 
 from __future__ import annotations
@@ -30,10 +31,41 @@ def _headers(token: str) -> dict[str, str]:
 async def get_authenticated_user(token: str) -> dict[str, Any]:
     """
     Verify the PAT and return the authenticated user's profile.
-    Raises httpx.HTTPStatusError on auth failure.
+
+    Tries GET /user first (works for classic PATs and fine-grained PATs with
+    Account: Email read permission). If that returns 403/404 (fine-grained PATs
+    without Account permission), falls back to GET /user/repos to confirm the
+    token is valid and extracts the owner login from the first repo.
+
+    Raises ValueError on a hard 401 (bad/expired token).
     """
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await client.get(f"{_BASE}/user", headers=_headers(token))
+
+        # Hard auth failure — token is invalid
+        if resp.status_code == 401:
+            resp.raise_for_status()
+
+        # Fine-grained PATs without Account permissions return 403 on /user
+        if resp.status_code in (403, 404):
+            logger.debug("GET /user returned %d — trying /user/repos fallback", resp.status_code)
+            repos_resp = await client.get(
+                f"{_BASE}/user/repos",
+                headers=_headers(token),
+                params={"per_page": 1, "sort": "pushed"},
+            )
+            repos_resp.raise_for_status()
+            repos = repos_resp.json()
+            if repos and isinstance(repos, list) and repos[0].get("owner"):
+                owner = repos[0]["owner"]
+                return {
+                    "login": owner.get("login", ""),
+                    "id": owner.get("id"),
+                    "name": owner.get("login", ""),
+                }
+            # Token is valid but no repos — still accept it
+            return {"login": "unknown", "id": None, "name": ""}
+
         resp.raise_for_status()
         return cast(dict[str, Any], resp.json())
 

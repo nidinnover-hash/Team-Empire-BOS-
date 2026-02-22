@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     PRIVACY_AUDIT_MAX_VALUE_CHARS: int = 200
     CLONE_AUTO_LEARN_FROM_CHAT: bool = True
 
+    # Background sync scheduler
+    SYNC_ENABLED: bool = True
+    SYNC_INTERVAL_MINUTES: int = 30   # how often the scheduler fires
+    SYNC_THROTTLE_MINUTES: int = 15   # min gap for on-demand (login/dashboard) syncs
+
 
 @lru_cache
 def get_settings() -> Settings:

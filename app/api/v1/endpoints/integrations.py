@@ -570,9 +570,19 @@ async def github_connect(
             db, org_id=int(actor["org_id"]), api_token=data.api_token
         )
     except Exception as exc:
+        import httpx as _httpx
+        status_hint = ""
+        if isinstance(exc, _httpx.HTTPStatusError):
+            code = exc.response.status_code
+            if code == 401:
+                status_hint = " Token invalid or expired."
+            elif code == 403:
+                status_hint = " Token missing 'repo' or 'read:user' scope."
+            else:
+                status_hint = f" GitHub returned HTTP {code}."
         raise HTTPException(
             status_code=400,
-            detail=f"GitHub connection failed ({type(exc).__name__}). Check your token and scopes.",
+            detail=f"GitHub connection failed.{status_hint} ({type(exc).__name__}: {exc})",
         ) from exc
 
     await record_action(

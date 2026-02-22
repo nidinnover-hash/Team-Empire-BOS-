@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 import secrets
 from typing import AsyncGenerator
 
@@ -87,7 +88,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         async with AsyncSession(engine) as db:
             org = await organization_service.ensure_default_organization(db)
             await user_service.ensure_default_user(db, organization_id=org.id)
+    # Start background sync scheduler
+    from app.services.sync_scheduler import start_scheduler, stop_scheduler
+    if settings.SYNC_ENABLED:
+        start_scheduler(interval_minutes=settings.SYNC_INTERVAL_MINUTES)
     yield
+    if settings.SYNC_ENABLED:
+        stop_scheduler()
     await engine.dispose()
 
 app = FastAPI(
@@ -218,6 +225,10 @@ async def web_login(
         secure=settings.COOKIE_SECURE,
         path="/",
     )
+    # Kick off a background integration sync (throttled, fire-and-forget)
+    if settings.SYNC_ENABLED:
+        from app.services.sync_scheduler import trigger_sync_for_org
+        asyncio.create_task(trigger_sync_for_org(user.organization_id))
     return {"status": "ok", "email": user.email, "role": user.role}
 
 
@@ -513,6 +524,11 @@ async def dashboard(
     if user is None:
         return RedirectResponse(url="/web/login", status_code=302)
     org_id = int(user["org_id"])
+
+    # Kick off a background integration sync (throttled, fire-and-forget)
+    if settings.SYNC_ENABLED:
+        from app.services.sync_scheduler import trigger_sync_for_org
+        asyncio.create_task(trigger_sync_for_org(org_id))
 
     commands = await command_service.list_commands(db, limit=10, organization_id=org_id)
     tasks = await task_service.list_tasks(db, limit=20, is_done=False, organization_id=org_id)
