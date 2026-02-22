@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.core.deps import get_db
+from app.core.security import create_access_token
 from app.db.base import Base
 from app.main import app as fastapi_app
 
@@ -69,10 +70,14 @@ async def client():
             yield session
 
     fastapi_app.dependency_overrides[get_db] = override_get_db
+    token = create_access_token(
+        {"id": 1, "email": "ceo@org1.com", "role": "CEO", "org_id": 1}
+    )
 
     async with AsyncClient(
         transport=ASGITransport(app=fastapi_app),
         base_url="http://test",
+        headers={"Authorization": f"Bearer {token}"},
     ) as ac:
         yield ac
 
