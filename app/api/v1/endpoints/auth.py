@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.deps import get_db
-from app.core.middleware import check_login_allowed, record_login_failure
+from app.core.middleware import check_login_allowed, clear_login_failures, record_login_failure
 from app.core.security import create_access_token, get_current_user, verify_password
 from app.logs.audit import record_action
 from app.services import user as user_service
@@ -54,6 +54,7 @@ async def login(
         },
         expires_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
     )
+    clear_login_failures(client_ip)
     return {"access_token": access_token, "token_type": "bearer"}
 
 

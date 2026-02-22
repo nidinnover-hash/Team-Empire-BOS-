@@ -1,4 +1,10 @@
 from app.core.security import create_access_token
+from app.core.deps import get_db
+from app.main import app as fastapi_app
+from app.models.integration import Integration
+from app.services import integration as integration_service
+from datetime import datetime, timezone
+from sqlalchemy import select
 
 
 def _auth_headers(user_id: int, email: str, role: str, org_id: int) -> dict:
@@ -63,3 +69,43 @@ async def test_cross_org_disconnect_is_denied_by_not_found(client):
         headers=org2_headers,
     )
     assert response.status_code == 404
+
+
+async def test_decrypted_read_does_not_persist_plaintext_tokens_on_commit(client):
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    connected = await client.post(
+        "/api/v1/integrations/connect",
+        json={
+            "type": "github",
+            "config_json": {"access_token": "ghp_sensitive_token_123"},
+        },
+        headers=headers,
+    )
+    assert connected.status_code == 201
+    integration_id = connected.json()["id"]
+
+    override = fastapi_app.dependency_overrides[get_db]
+
+    # Read via service (decrypted), then commit unrelated field update.
+    agen = override()
+    session = await agen.__anext__()
+    try:
+        item = await integration_service.get_integration_by_type(session, 1, "github")
+        assert item is not None
+        assert item.config_json.get("access_token") == "ghp_sensitive_token_123"
+        item.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+    finally:
+        await agen.aclose()
+
+    # Raw DB row must still hold encrypted token ciphertext.
+    agen2 = override()
+    session2 = await agen2.__anext__()
+    try:
+        result = await session2.execute(select(Integration).where(Integration.id == integration_id))
+        raw = result.scalar_one()
+        token = raw.config_json.get("access_token", "")
+        assert isinstance(token, str)
+        assert token.startswith("gAAAA")
+    finally:
+        await agen2.aclose()

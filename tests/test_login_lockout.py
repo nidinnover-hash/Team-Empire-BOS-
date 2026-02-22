@@ -109,3 +109,41 @@ async def test_cross_endpoint_failures_share_bucket(client):
     # All LOGIN_FAIL_MAX failures have been recorded — next call is locked out
     r = await client.post("/token", data={"username": "bad@ai.com", "password": "x"})
     assert r.status_code == 429
+
+async def test_successful_login_resets_failure_bucket(client):
+    created = await client.post(
+        "/api/v1/users",
+        json={
+            "organization_id": 1,
+            "name": "Login Test User",
+            "email": "login-reset@example.com",
+            "password": "StrongPass123!",
+            "role": "STAFF",
+        },
+    )
+    assert created.status_code == 201
+
+    for _ in range(LOGIN_FAIL_MAX - 1):
+        bad = await client.post(
+            "/token",
+            data={"username": "login-reset@example.com", "password": "wrong-pass"},
+        )
+        assert bad.status_code == 401
+
+    good = await client.post(
+        "/token",
+        data={"username": "login-reset@example.com", "password": "StrongPass123!"},
+    )
+    assert good.status_code == 200
+
+    # If success reset did not happen, second bad attempt here would be 429.
+    bad_after_success_1 = await client.post(
+        "/token",
+        data={"username": "login-reset@example.com", "password": "wrong-pass"},
+    )
+    bad_after_success_2 = await client.post(
+        "/token",
+        data={"username": "login-reset@example.com", "password": "wrong-pass"},
+    )
+    assert bad_after_success_1.status_code == 401
+    assert bad_after_success_2.status_code == 401

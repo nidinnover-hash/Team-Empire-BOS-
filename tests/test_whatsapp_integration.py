@@ -1,5 +1,8 @@
 from app.api.v1.endpoints import integrations as integrations_endpoint
 from app.core.security import create_access_token
+import hmac
+import json
+from hashlib import sha256
 
 
 def _auth_headers(user_id: int, email: str, role: str, org_id: int) -> dict:
@@ -82,3 +85,37 @@ async def test_whatsapp_webhook_verify_success(client, monkeypatch):
     )
     assert response.status_code == 200
     assert response.text == "abc123"
+
+
+async def test_whatsapp_webhook_replay_detected_when_signature_reused(client, monkeypatch):
+    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
+    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS", 300)
+    integrations_endpoint._whatsapp_webhook_seen_signatures.clear()
+
+    payload = {
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "metadata": {"phone_number_id": "1234567890"},
+                            "messages": [{"id": "wamid.REPLAY1"}],
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+    raw = json.dumps(payload, separators=(",", ":"))
+    signature = "sha256=" + hmac.new(
+        b"wa-app-secret",
+        raw.encode("utf-8"),
+        sha256,
+    ).hexdigest()
+    headers = {"X-Hub-Signature-256": signature, "Content-Type": "application/json"}
+
+    first = await client.post("/api/v1/integrations/whatsapp/webhook", content=raw, headers=headers)
+    assert first.status_code == 200
+
+    second = await client.post("/api/v1/integrations/whatsapp/webhook", content=raw, headers=headers)
+    assert second.status_code == 409

@@ -57,6 +57,32 @@ def _is_ai_error(text: str | None) -> bool:
     return any(text.startswith(prefix) for prefix in _AI_ERROR_PREFIXES)
 
 
+def _build_fallback_reply(subject: str | None, instruction: str) -> str:
+    """
+    Generate a safe deterministic fallback reply when AI providers are unavailable.
+    Keeps operations draft-only workflows resilient during quota/outage windows.
+    """
+    topic = (subject or "your message").strip()
+    extra = instruction.strip()
+    lines = [
+        "Hi,",
+        "",
+        f"Thanks for your email about {topic}.",
+        "We received it and will review the details shortly.",
+    ]
+    if extra:
+        lines.append(f"Current note: {extra}")
+    lines.extend(
+        [
+            "I'll share a clear next-step update as soon as possible.",
+            "",
+            "Best,",
+            "Nidin",
+        ]
+    )
+    return "\n".join(lines)
+
+
 async def _persist_refreshed_tokens(
     db: AsyncSession,
     org_id: int,
@@ -340,9 +366,10 @@ async def draft_reply(
         max_tokens=600,
     )
 
-    # Reject AI error strings - don't store them as drafts
+    # Degrade gracefully during provider outage/rate-limit by creating a
+    # deterministic fallback draft instead of dropping the workflow.
     if _is_ai_error(draft):
-        return None
+        draft = _build_fallback_reply(email.subject, instruction)
 
     # Create Gmail API draft for preview in Gmail UI
     integration = await get_integration_by_type(db, org_id, "gmail")

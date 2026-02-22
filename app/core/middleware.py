@@ -72,6 +72,11 @@ def record_login_failure(ip: str) -> None:
     _login_failures[ip].append(time.monotonic())
 
 
+def clear_login_failures(ip: str) -> None:
+    """Clear failed-login history for this IP after successful authentication."""
+    _login_failures.pop(ip, None)
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         if not settings.RATE_LIMIT_ENABLED:

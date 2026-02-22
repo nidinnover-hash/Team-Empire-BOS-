@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 from typing import cast
 
 from app.core.token_crypto import decrypt_config, encrypt_config
@@ -14,7 +15,9 @@ def _decrypted(integration: Integration) -> Integration:
     loaded object). Does NOT write to DB. Used so callers always get plaintext
     tokens for API calls.
     """
-    integration.config_json = decrypt_config(integration.config_json or {})
+    # Keep decrypted tokens available to callers without marking config_json dirty.
+    # This prevents accidental plaintext persistence on unrelated commits.
+    set_committed_value(integration, "config_json", decrypt_config(integration.config_json or {}))
     return integration
 
 
@@ -130,6 +133,6 @@ async def find_whatsapp_integration_by_phone_number_id(
     for item in result.scalars().all():
         cfg = decrypt_config(item.config_json or {})
         if cfg.get("phone_number_id") == phone_number_id:
-            item.config_json = cfg
+            set_committed_value(item, "config_json", cfg)
             return cast(Integration, item)
     return None

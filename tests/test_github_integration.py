@@ -49,6 +49,24 @@ async def test_github_connect_bad_token_returns_400(client, monkeypatch):
     assert response.status_code == 400
 
 
+async def test_github_connect_error_does_not_echo_token(client, monkeypatch):
+    sensitive_token = "ghp_SUPER_SECRET_TOKEN_1234567890"
+
+    async def _fake_connect_fail(db, org_id, api_token):
+        raise RuntimeError(f"auth failed for token={api_token}")
+
+    monkeypatch.setattr(github_service, "connect_github", _fake_connect_fail)
+
+    response = await client.post(
+        "/api/v1/integrations/github/connect",
+        json={"api_token": sensitive_token},
+        headers=_ceo_headers(),
+    )
+    assert response.status_code == 400
+    detail = response.json().get("detail", "")
+    assert sensitive_token not in detail
+
+
 async def test_github_connect_denied_for_staff(client):
     staff = create_access_token({"id": 2, "email": "staff@org.com", "role": "STAFF", "org_id": 1})
     response = await client.post(

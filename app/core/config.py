@@ -36,6 +36,7 @@ class Settings(BaseSettings):
 
     # Internal API and rate limiting
     WHATSAPP_APP_SECRET: str | None = None   # Used to verify X-Hub-Signature-256 on webhook POSTs
+    WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS: int = 300
     CLONE_API_KEY: str | None = None
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_WINDOW_SECONDS: int = 60
@@ -116,5 +117,19 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("GOOGLE_CLIENT_SECRET looks like a placeholder")
     if s.PRIVACY_AUDIT_MAX_VALUE_CHARS < 32:
         issues.append("PRIVACY_AUDIT_MAX_VALUE_CHARS must be >= 32")
+    if s.WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS < 30:
+        issues.append("WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS must be >= 30")
+    if not s.DEBUG and not s.COOKIE_SECURE:
+        issues.append("COOKIE_SECURE must be true when DEBUG=false (production mode)")
+    token_key = (s.TOKEN_ENCRYPTION_KEY or "").strip()
+    if not token_key:
+        issues.append("TOKEN_ENCRYPTION_KEY should be set for key separation from SECRET_KEY")
+    else:
+        if token_key == s.SECRET_KEY:
+            issues.append("TOKEN_ENCRYPTION_KEY must not equal SECRET_KEY")
+        if len(token_key) < 32:
+            issues.append("TOKEN_ENCRYPTION_KEY should be at least 32 characters")
+    if s.WHATSAPP_WEBHOOK_VERIFY_TOKEN and not s.WHATSAPP_APP_SECRET:
+        issues.append("WHATSAPP_APP_SECRET should be set when WhatsApp webhook verify token is configured")
 
     return issues

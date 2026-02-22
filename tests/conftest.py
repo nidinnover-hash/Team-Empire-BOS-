@@ -31,6 +31,7 @@ from app.models import conversation as _model_conversation  # noqa: F401
 from app.models import contact as _model_contact  # noqa: F401
 from app.models import daily_plan as _model_daily_plan  # noqa: F401
 from app.models import daily_run as _model_daily_run  # noqa: F401
+from app.models import decision_trace as _model_decision_trace  # noqa: F401
 from app.models import email as _model_email  # noqa: F401
 from app.models import event as _model_event  # noqa: F401
 from app.models import execution as _model_execution  # noqa: F401

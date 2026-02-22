@@ -5,6 +5,7 @@ from typing import AsyncGenerator
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +17,7 @@ from app.core.middleware import (
     CorrelationIDMiddleware,
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
+    clear_login_failures,
     check_login_allowed,
     record_login_failure,
 )
@@ -27,6 +29,7 @@ from app.services import contact as contact_service
 from app.services import finance as finance_service
 from app.services import briefing as briefing_service
 from app.services import goal as goal_service
+from app.services import intelligence as intelligence_service
 from app.services import layers as layers_service
 from app.services import memory as memory_service
 from app.services import note as note_service
@@ -41,6 +44,7 @@ from app.models import command as _model_command  # noqa: F401
 from app.models import conversation as _model_conversation  # noqa: F401
 from app.models import contact as _model_contact  # noqa: F401
 from app.models import daily_run as _model_daily_run  # noqa: F401
+from app.models import decision_trace as _model_decision_trace  # noqa: F401
 from app.models import email as _model_email  # noqa: F401
 from app.models import event as _model_event  # noqa: F401
 from app.models import execution as _model_execution  # noqa: F401
@@ -104,6 +108,7 @@ app = FastAPI(
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
 )
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # Middleware is applied in reverse order (last added = outermost)
 # SecurityHeaders → CorrelationID → RateLimit → handler
 app.add_middleware(RateLimitMiddleware)
@@ -154,6 +159,7 @@ async def login(
         },
         expires_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
     )
+    clear_login_failures(client_ip)
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -205,6 +211,7 @@ async def web_login(
         },
         expires_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
     )
+    clear_login_failures(client_ip)
     csrf_token = secrets.token_urlsafe(32)
     max_age = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     response.set_cookie(
@@ -558,6 +565,15 @@ async def dashboard(
         window_days=30,
     )
     executive = await briefing_service.get_executive_briefing(db, org_id=org_id)
+    intelligence_summary = await intelligence_service.build_executive_summary(
+        db=db,
+        organization_id=org_id,
+        window_days=7,
+    )
+    intelligence_diff = await intelligence_service.build_change_since_yesterday(
+        db=db,
+        organization_id=org_id,
+    )
 
     return templates.TemplateResponse(
         request,
@@ -576,6 +592,8 @@ async def dashboard(
             "study_layer": study_layer,
             "training_layer": training_layer,
             "executive": executive,
+            "intelligence_summary": intelligence_summary,
+            "intelligence_diff": intelligence_diff,
             "session_user": user,
         },
     )

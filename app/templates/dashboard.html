@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Personal Clone - Command Center</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
     :root {
@@ -383,40 +384,263 @@
     .task-check:checked { background:var(--brand-strong); border-color:var(--brand); }
     .tab-active { background:#0e3550 !important; color:#caf8ff !important; border-color:#4dcde0 !important; }
 
+    /* ── Unified professional dark theme ─────────────────────────────────── */
+    :root {
+      --bg-0: #070707;
+      --bg-1: #0d0d0d;
+      --bg-2: #111111;
+      --card: rgba(14, 14, 14, 0.96);
+      --card-strong: #131313;
+      --line: #252525;
+      --line-soft: #1d1d1d;
+      --text: #f0f0f0;
+      --text-muted: #9a9a9a;
+      --text-faint: #5c5c5c;
+      --brand: #38bdf8;
+      --brand-strong: #0ea5e9;
+      --ok: #4ade80;
+      --warn: #fbbf24;
+      --danger: #f87171;
+      --accent-dim: rgba(56,189,248,0.1);
+    }
+    body {
+      background:
+        radial-gradient(ellipse 900px 400px at -8% -8%, rgba(28,28,38,0.7) 0%, transparent 55%),
+        radial-gradient(ellipse 700px 350px at 108% -5%, rgba(18,22,32,0.55) 0%, transparent 55%),
+        linear-gradient(160deg, #050505 0%, #090909 50%, #0d0d0d 100%) !important;
+    }
+    /* Stats bar — sticky, glassy */
+    .stats {
+      background: rgba(6,6,6,0.95) !important; border-color: var(--line) !important;
+      backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 40;
+    }
+    .stat  { border-color: var(--line) !important; background: #111 !important; transition: border-color .2s; }
+    .stat:hover { border-color: #353535 !important; }
+    .stat strong { color: var(--text) !important; font-size: 1.22rem !important; font-weight: 600 !important; line-height: 1 !important; }
+    .stat span   { color: var(--text-faint) !important; font-size: 0.57rem !important; letter-spacing: 0.1em !important; }
+    /* Hero */
+    .hero {
+      border-color: var(--line) !important;
+      background: linear-gradient(135deg, #121212 0%, #0d0d0d 100%) !important;
+      position: relative; overflow: hidden;
+    }
+    .hero::after {
+      content:""; position:absolute; top:0; left:0; right:0; height:1px;
+      background: linear-gradient(90deg, transparent 0%, rgba(56,189,248,0.4) 45%, transparent 100%);
+    }
+    .hero h1 { color: var(--text) !important; }
+    .hero p   { color: var(--text-muted) !important; }
+    .hero-chip { border-color: var(--line) !important; background: #181818 !important; color: var(--text-faint) !important; }
+    /* Cards */
+    .card      { border-color: var(--line) !important; background: #111 !important; }
+    .card-head { border-color: var(--line-soft) !important; }
+    .card-title { color: var(--text-faint) !important; letter-spacing: 0.12em !important; }
+    .card-count { color: var(--text-muted) !important; border-color: var(--line) !important; background: #1a1a1a !important; }
+    /* Section labels with decorative line */
+    .section-label {
+      color: var(--text-faint) !important; display: flex !important; align-items: center !important; gap: 0.6rem !important;
+    }
+    .section-label::after { content:""; flex:1; height:1px; background:var(--line); display:block; }
+    /* Row/item borders */
+    .item, .fin-row, .inbox-item, .ap-item, .audit-row, .mem-row { border-color: var(--line-soft) !important; }
+    .item-text, .audit-type { color: var(--text) !important; }
+    .item-meta, .fin-label, .audit-detail, .audit-time, .mem-cat, .chat-hint { color: var(--text-faint) !important; }
+    .inbox-item:hover { background: #161616 !important; }
+    /* Inputs */
+    .chat-textarea, .mem-input, .input, .select, .textarea {
+      border-color: var(--line) !important; background: #090909 !important; color: var(--text) !important;
+    }
+    .chat-textarea:focus, .mem-input:focus { border-color: rgba(56,189,248,0.35) !important; box-shadow: 0 0 0 3px rgba(56,189,248,0.08) !important; }
+    .task-check { border-color: var(--line) !important; background: #090909 !important; }
+    .task-check:checked { background: var(--brand) !important; border-color: var(--brand) !important; }
+    /* Chat */
+    .chat-msg-user  { background: #131313 !important; border-color: var(--line) !important; color: var(--text-muted) !important; }
+    .chat-msg-agent { background: #181818 !important; border-color: #2a2a2a !important; color: var(--text) !important; }
+    .chat-role-tag  { color: var(--brand) !important; }
+    .chat-approval-warn { background: rgba(248,113,113,0.06) !important; border-color: rgba(248,113,113,0.2) !important; color: var(--danger) !important; }
+    /* Semantic action buttons */
+    .btn-run { border-color: var(--line) !important; background: #181818 !important; color: var(--text-muted) !important; }
+    .btn-run:hover { border-color: var(--brand) !important; color: var(--brand) !important; background: var(--accent-dim) !important; }
+    .chat-send { border-color: rgba(56,189,248,0.22) !important; background: rgba(56,189,248,0.08) !important; color: var(--brand) !important; }
+    .chat-send:hover { background: rgba(56,189,248,0.14) !important; border-color: rgba(56,189,248,0.4) !important; }
+    .role-btn { border-color: var(--line) !important; background: #161616 !important; color: var(--text-faint) !important; }
+    .role-btn.active, .role-btn:hover { background: var(--accent-dim) !important; color: var(--brand) !important; border-color: rgba(56,189,248,0.25) !important; }
+    .btn-approve  { background: rgba(74,222,128,0.07) !important; color: var(--ok) !important; border-color: rgba(74,222,128,0.22) !important; }
+    .btn-approve:hover  { border-color: var(--ok) !important; }
+    .btn-execute  { background: rgba(251,191,36,0.07) !important; color: var(--warn) !important; border-color: rgba(251,191,36,0.22) !important; }
+    .btn-execute:hover  { border-color: var(--warn) !important; }
+    .btn-reject   { background: rgba(248,113,113,0.07) !important; color: var(--danger) !important; border-color: rgba(248,113,113,0.22) !important; }
+    .btn-reject:hover   { border-color: var(--danger) !important; }
+    .btn-mem-del  { background: rgba(248,113,113,0.07) !important; color: var(--danger) !important; border-color: rgba(248,113,113,0.22) !important; }
+    .btn-agent-action  { background: rgba(74,222,128,0.07) !important; color: var(--ok) !important; border-color: rgba(74,222,128,0.22) !important; }
+    .ia-summarize { background: rgba(56,189,248,0.07) !important; color: var(--brand) !important; border-color: rgba(56,189,248,0.22) !important; }
+    .ia-strategy  { background: rgba(74,222,128,0.07) !important; color: var(--ok) !important; border-color: rgba(74,222,128,0.22) !important; }
+    .ia-draft     { background: rgba(251,191,36,0.07) !important; color: var(--warn) !important; border-color: rgba(251,191,36,0.22) !important; }
+    /* Semantic badges — colored by status */
+    .badge { border-color: var(--line) !important; background: #161616 !important; }
+    .b-done,.b-completed { background: rgba(74,222,128,0.08) !important; color: var(--ok) !important; border-color: rgba(74,222,128,0.25) !important; }
+    .b-open,.b-active    { background: rgba(56,189,248,0.08) !important; color: var(--brand) !important; border-color: rgba(56,189,248,0.25) !important; }
+    .b-paused            { background: rgba(251,191,36,0.08) !important; color: var(--warn) !important; border-color: rgba(251,191,36,0.25) !important; }
+    .b-archived          { background: #161616 !important; color: var(--text-faint) !important; border-color: var(--line) !important; }
+    /* Priority dots */
+    .p2 { background: var(--brand) !important; }
+    .p3 { background: var(--warn) !important; }
+    .p4 { background: var(--danger) !important; box-shadow: 0 0 6px rgba(248,113,113,0.45) !important; }
+    /* Finance */
+    .fin-val   { color: var(--text) !important; font-weight: 600 !important; }
+    .fin-green { color: var(--ok) !important; }
+    .fin-red   { color: var(--danger) !important; }
+    /* Progress bar */
+    .prog-wrap { background: #1e1e1e !important; }
+    .prog-fill { background: linear-gradient(90deg, rgba(56,189,248,0.5), var(--brand)) !important; }
+    /* Audit dots */
+    .a-green { background: var(--ok) !important; }
+    .a-red   { background: var(--danger) !important; box-shadow: 0 0 5px rgba(248,113,113,0.4) !important; }
+    .a-orange{ background: var(--warn) !important; }
+    .a-purple{ background: var(--brand) !important; }
+    /* Memory */
+    .mem-key { color: var(--brand) !important; }
+    .mem-val { color: var(--text) !important; }
+    /* Inbox */
+    .inbox-summary  { color: rgba(56,189,248,0.85) !important; border-left-color: rgba(56,189,248,0.25) !important; }
+    .inbox-strategy { background: rgba(74,222,128,0.05) !important; border-color: rgba(74,222,128,0.15) !important; color: rgba(74,222,128,0.9) !important; }
+    .inbox-draft    { background: rgba(251,191,36,0.05) !important; border-color: rgba(251,191,36,0.15) !important; color: rgba(251,191,36,0.9) !important; }
+    /* Approval types */
+    .ap-type.risky { color: var(--warn) !important; }
+    .ap-type.safe  { color: var(--brand) !important; }
+    /* Tab active */
+    .tab-active { background: var(--accent-dim) !important; color: var(--brand) !important; border-color: rgba(56,189,248,0.3) !important; }
+
     @media(max-width:1180px){ .stats{grid-template-columns:repeat(3, minmax(120px, 1fr));} }
     @media(max-width:1000px){ .grid-3{grid-template-columns:1fr 1fr} .chat-panel{grid-template-columns:1fr} .hero{grid-template-columns:1fr} .hero-chips{justify-content:flex-start;} }
     @media(max-width:680px){
-      header, .stats, main { padding-left: 1rem; padding-right: 1rem; }
+      .stats, main { padding-left: 1rem; padding-right: 1rem; }
       .grid-3,.grid-2{grid-template-columns:1fr}
-      .nav a { margin-left: .8rem; font-size: .74rem; }
-      .brand-sub { display: none; }
       .stats{grid-template-columns:repeat(2, minmax(120px, 1fr));}
     }
+
+    /* ── Sidebar ──────────────────────────────────────────────────────────── */
+    .sidebar {
+      position: fixed; left: 0; top: 0; bottom: 0; width: 220px; z-index: 60;
+      background: rgba(4, 4, 4, 0.98);
+      border-right: 1px solid var(--line);
+      display: flex; flex-direction: column;
+      backdrop-filter: blur(16px);
+      overflow-y: auto;
+    }
+    .sb-brand {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 1.15rem 1rem 1.1rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .sb-pulse {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+      background: var(--brand); box-shadow: 0 0 0 0 rgba(56,189,248,.5);
+      animation: pulse 2.4s infinite;
+    }
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0   rgba(56,189,248,.5); }
+      70%  { box-shadow: 0 0 0 10px rgba(56,189,248,0);  }
+      100% { box-shadow: 0 0 0 0   rgba(56,189,248,0);   }
+    }
+    .sb-name { font-family: "Space Grotesk", sans-serif; font-size: 0.87rem; font-weight: 700; color: var(--text); letter-spacing: 0.01em; }
+    .sb-sub  { font-size: 0.6rem; color: var(--text-faint); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .sb-nav  { flex: 1; padding: 0.8rem 0.55rem; display: flex; flex-direction: column; gap: 0.1rem; }
+    .sb-item {
+      display: flex; align-items: center; gap: 0.68rem;
+      padding: 0.52rem 0.75rem; border-radius: 8px;
+      color: var(--text-muted); text-decoration: none;
+      font-size: 0.8rem; font-weight: 500; line-height: 1;
+      transition: background .14s ease, color .14s ease;
+      cursor: pointer; border: none; background: transparent; width: 100%; text-align: left;
+    }
+    .sb-item:hover  { background: rgba(255,255,255,.04); color: #d0d0d0; }
+    .sb-item.active { background: var(--accent-dim); color: var(--brand); font-weight: 600; }
+    .sb-item svg    { width: 15px; height: 15px; flex-shrink: 0; opacity: 0.8; }
+    .sb-item.active svg { opacity: 1; }
+    .sb-divider { height: 1px; background: var(--line); margin: 0.45rem 0.75rem; }
+    .sb-footer  { padding: 0.65rem 0.55rem 1rem; border-top: 1px solid var(--line); }
+    .sb-user    { font-size: 0.68rem; color: var(--text-faint); padding: 0.35rem 0.75rem 0.4rem; word-break: break-all; }
+
+    /* Offset main content for sidebar */
+    .stats { margin-left: 220px; }
+    main   { margin-left: 220px; }
+
+    /* ── Toast notifications ──────────────────────────────────────────────── */
+    #toast-container {
+      position: fixed; top: 1.1rem; right: 1.2rem; z-index: 9999;
+      display: flex; flex-direction: column; gap: 0.55rem;
+      pointer-events: none;
+    }
+    .toast {
+      display: flex; align-items: flex-start; gap: 0.6rem;
+      padding: 0.72rem 0.9rem; border-radius: 10px; min-width: 260px; max-width: 360px;
+      font-size: 0.82rem; line-height: 1.4; font-family: "Source Sans 3", sans-serif;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4); border: 1px solid transparent;
+      pointer-events: all; animation: toast-in 0.22s ease;
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+    .toast-hide { opacity: 0; transform: translateX(30px); }
+    @keyframes toast-in { from { opacity:0; transform:translateX(30px); } to { opacity:1; transform:none; } }
+    .toast-success { background: #0a2a1d; border-color: #1e7048; color: #7af0b5; }
+    .toast-error   { background: #2a0f10; border-color: #8d3f44; color: #ffc2c0; }
+    .toast-warn    { background: #2a1e08; border-color: #7a5218; color: #fcd98a; }
+    .toast-info    { background: #07202e; border-color: #1a5e7a; color: #a6e9ff; }
+    .toast span    { flex: 1; }
+    .toast button  { background: none; border: none; color: inherit; opacity: .55; cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 0 0 0.3rem; }
+    .toast button:hover { opacity: 1; }
+
+    @media(max-width:900px) {
+      .sidebar { display: none; }
+      .stats, main { margin-left: 0; }
+    }
   </style>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 </head>
 <body>
 
-<header>
-  <div class="brand">
-    <div class="brand-pulse"></div>
+<nav class="sidebar">
+  <div class="sb-brand">
+    <div class="sb-pulse"></div>
     <div>
-      <div class="brand-name">Personal Clone</div>
-      <div class="brand-sub">Command Center - Nidin Nover</div>
+      <div class="sb-name">Personal Clone</div>
+      <div class="sb-sub">Command Center</div>
     </div>
   </div>
-  <nav class="nav">
+  <div class="sb-nav">
+    <a href="/" class="sb-item active">
+      <i data-lucide="layout-dashboard"></i> Dashboard
+    </a>
+    <a href="/web/talk" class="sb-item">
+      <i data-lucide="message-circle"></i> Talk Mode
+    </a>
+    <a href="/web/integrations" class="sb-item">
+      <i data-lucide="plug"></i> Integrations
+    </a>
+    <a href="/web/data-hub" class="sb-item">
+      <i data-lucide="database"></i> Data Hub
+    </a>
+    <div class="sb-divider"></div>
+    <a href="/docs" class="sb-item">
+      <i data-lucide="book-open"></i> API Docs
+    </a>
+    <a href="/api/v1/health" class="sb-item">
+      <i data-lucide="activity"></i> Health
+    </a>
+  </div>
+  <div class="sb-footer">
     {% if session_user %}
-    <a href="#" id="web-logout-link">Sign out ({{ session_user.email }})</a>
+    <div class="sb-user">{{ session_user.email }}</div>
+    <button class="sb-item" id="web-logout-link">
+      <i data-lucide="log-out"></i> Sign out
+    </button>
     {% else %}
-    <a href="#" id="web-login-link">Web Sign In</a>
+    <a href="/web/login" class="sb-item">
+      <i data-lucide="log-in"></i> Sign in
+    </a>
     {% endif %}
-    <a href="/web/talk">Talk Mode</a>
-    <a href="/web/data-hub">Data Hub</a>
-    <a href="/web/integrations">Integrations</a>
-    <a href="/docs">API Docs</a>
-    <a href="/api/v1/health">Health</a>
-  </nav>
-</header>
+  </div>
+</nav>
 
 <div class="stats">
   <div class="stat"><span>Commands</span><strong>{{ commands|length }}</strong></div>
@@ -519,17 +743,49 @@
   </div>
 
   <div class="section-label">Executive Snapshot</div>
+  <div class="card" style="margin-bottom:1.18rem">
+    <div class="card-head">
+      <span class="card-title">Morning Brief - Executive Diff Engine</span>
+      <div style="display:flex;gap:.45rem;align-items:center">
+        <span class="card-count">{{ intelligence_diff.date_yesterday }} -> {{ intelligence_diff.date_today }}</span>
+        <span class="card-count">Confidence {{ '%.0f'|format(intelligence_diff.confidence_score * 100) }}%</span>
+        <span class="card-count">Risk {{ intelligence_diff.risk_tier|upper }}</span>
+      </div>
+    </div>
+    <div class="item">
+      <div class="item-text" style="font-weight:700">What changed since yesterday?</div>
+      <div class="item-meta">{{ intelligence_diff.what_changed_since_yesterday }}</div>
+    </div>
+    <div class="item">
+      <div class="item-text" style="font-weight:700">What risk increased?</div>
+      <div class="item-meta">{{ intelligence_diff.risk_increased }}</div>
+    </div>
+    <div class="item">
+      <div class="item-text" style="font-weight:700">What opportunity increased?</div>
+      <div class="item-meta">{{ intelligence_diff.opportunity_increased }}</div>
+    </div>
+    <div class="item">
+      <div class="item-text" style="font-weight:700">What decision is now urgent?</div>
+      <div class="item-meta">{{ intelligence_diff.urgent_decision }}</div>
+      <div class="item-sub">Why: {{ intelligence_diff.reasoning|join(' | ') }}</div>
+    </div>
+  </div>
   <div class="grid-2">
     <div class="card">
       <div class="card-head">
         <span class="card-title">Executive Briefing</span>
-        <span class="card-count">{{ executive.date }}</span>
+        <div style="display:flex;gap:.45rem;align-items:center">
+          <span class="card-count">{{ executive.date }}</span>
+          <span class="card-count">Confidence {{ '%.0f'|format(intelligence_summary.confidence_score * 100) }}%</span>
+          <span class="card-count">Risk {{ intelligence_summary.risk_tier|upper }}</span>
+        </div>
       </div>
       <div class="item">
         <div class="item-text">Team members: {{ executive.team_summary.total_members }}</div>
         <div class="item-meta">With plan: {{ executive.team_summary.members_with_plan }}</div>
         <div class="item-meta">Pending approvals: {{ executive.approvals.pending_count }}</div>
         <div class="item-meta">Unread emails: {{ executive.inbox.unread_count }}</div>
+        <div class="item-meta">Summary: {{ intelligence_summary.decision_summary }}</div>
       </div>
       <div class="item">
         <div class="item-text" style="font-weight:600">Today's Priorities</div>
@@ -1794,6 +2050,26 @@
     if (!window.__apiToken) window.__apiToken = token;
     await loadTasks();
   })();
+</script>
+
+<!-- Toast notification system -->
+<div id="toast-container"></div>
+<script>
+  window.showToast = function(msg, type) {
+    var t = type || "info";
+    var el = document.createElement("div");
+    el.className = "toast toast-" + t;
+    el.innerHTML = "<span>" + String(msg).replace(/</g,"&lt;") + "</span>" +
+      "<button onclick=\"this.parentNode.remove()\">\u00d7</button>";
+    var c = document.getElementById("toast-container");
+    if (c) c.appendChild(el);
+    setTimeout(function() {
+      el.classList.add("toast-hide");
+      setTimeout(function() { el.remove(); }, 400);
+    }, 4000);
+  };
+  // Init Lucide icons
+  if (typeof lucide !== "undefined") lucide.createIcons();
 </script>
 </body>
 </html>

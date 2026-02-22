@@ -11,12 +11,14 @@ from app.logs.audit import record_action
 from app.models.approval import Approval
 from app.schemas.daily_run import DailyRunRead
 from app.schemas.event import EventRead
+from app.schemas.intelligence import DecisionTraceCreate
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectStatusUpdate
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
 from app.services import briefing as briefing_service
 from app.services import daily_run as daily_run_service
 from app.services import email_service
 from app.services import event as event_service
+from app.services import intelligence as intelligence_service
 from app.services import project as project_service
 from app.services import task as task_service
 from app.services import task_engine
@@ -111,22 +113,11 @@ async def run_daily_run_workflow(
             "pending_approvals": pending_approvals,
         }
 
-        await daily_run_service.complete_daily_run(
+        run_event = await record_action(
             db=db,
-            run_id=run.id,
             organization_id=org_id,
-            status="completed",
-            drafted_plan_count=len(plans),
-            drafted_email_count=len(drafted_email_ids),
-            pending_approvals=pending_approvals,
-            result_json=result_payload,
-        )
-
-        await record_action(
-            db=db,
             event_type="daily_run_drafted",
             actor_user_id=actor_user_id,
-            organization_id=org_id,
             entity_type="ops_daily_run",
             entity_id=run.id,
             payload_json={
@@ -136,6 +127,64 @@ async def run_daily_run_workflow(
                 "team_filter": team_filter,
                 "run_date": str(run_date),
             },
+        )
+
+        confidence_score = min(
+            1.0,
+            0.2
+            + (0.25 if len(plans) > 0 else 0.0)
+            + (0.25 if len(drafted_email_ids) > 0 else 0.0)
+            + (0.15 if pending_approvals == 0 else 0.0)
+            + (0.15 if pending_approvals <= 3 else 0.0),
+        )
+        risk_tier = "low" if confidence_score >= 0.8 else ("medium" if confidence_score >= 0.55 else "high")
+        confidence_reasoning = [
+            "Team plan drafts were generated." if len(plans) > 0 else "No team plan drafts were generated.",
+            "Email draft generation succeeded." if len(drafted_email_ids) > 0 else "No email drafts were generated.",
+            (
+                "Pending approvals are low."
+                if pending_approvals <= 3
+                else "Pending approvals are elevated and may slow execution."
+            ),
+        ]
+        trace = await intelligence_service.create_decision_trace(
+            db=db,
+            data=DecisionTraceCreate(
+                organization_id=org_id,
+                trace_type="daily_run",
+                title=f"Daily Run {run_date.isoformat()} ({team_filter})",
+                summary=(
+                    f"Drafted {len(plans)} plans and {len(drafted_email_ids)} email replies; "
+                    f"{pending_approvals} approvals pending."
+                ),
+                confidence_score=confidence_score,
+                signals_json={
+                    "team_filter": team_filter,
+                    "drafted_plan_count": len(plans),
+                    "drafted_email_count": len(drafted_email_ids),
+                    "pending_approvals": pending_approvals,
+                    "risk_tier": risk_tier,
+                    "reasoning": confidence_reasoning,
+                },
+                actor_user_id=actor_user_id,
+                daily_run_id=run.id,
+                source_event_id=run_event.id,
+            ),
+        )
+        result_payload["decision_trace_id"] = trace.id
+        result_payload["confidence_score"] = confidence_score
+        result_payload["risk_tier"] = risk_tier
+        result_payload["confidence_reasoning"] = confidence_reasoning
+
+        await daily_run_service.complete_daily_run(
+            db=db,
+            run_id=run.id,
+            organization_id=org_id,
+            status="completed",
+            drafted_plan_count=len(plans),
+            drafted_email_count=len(drafted_email_ids),
+            pending_approvals=pending_approvals,
+            result_json=result_payload,
         )
 
         return {

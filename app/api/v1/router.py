@@ -14,6 +14,7 @@ from app.api.v1.endpoints import (
     contacts,
     data_collection,
     inbox,
+    intelligence,
     executions,
     finance,
     integrations,
@@ -43,6 +44,7 @@ api_router.include_router(goals.router)
 api_router.include_router(contacts.router)
 api_router.include_router(data_collection.router)
 api_router.include_router(inbox.router)
+api_router.include_router(intelligence.router)
 api_router.include_router(executions.router)
 api_router.include_router(integrations.router)
 api_router.include_router(finance.router)
