@@ -31,3 +31,6 @@ htmlcov/
 
 # Local server logs
 uvicorn*.log
+
+# Windows reserved-name artifact
+nul
