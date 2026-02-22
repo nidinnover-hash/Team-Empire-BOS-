@@ -170,6 +170,8 @@ async def _call_openai(
             max_tokens=max_tokens,
             timeout=20.0,
         )
+        if not result.choices:
+            return "No response from OpenAI.", True
         return result.choices[0].message.content or "No response from OpenAI.", False
     except Exception as e:
         error_type = type(e).__name__
@@ -232,6 +234,8 @@ async def _call_groq(
             max_tokens=max_tokens,
             timeout=20.0,
         )
+        if not result.choices:
+            return "No response from Groq.", True
         return result.choices[0].message.content or "No response from Groq.", False
     except Exception as e:
         error_type = type(e).__name__

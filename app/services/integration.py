@@ -93,6 +93,7 @@ async def disconnect_integration(
         return None
     item.status = "disconnected"
     item.updated_at = datetime.now(timezone.utc)
+    item.config_json = encrypt_config(item.config_json or {})
     await db.commit()
     await db.refresh(item)
     return _decrypted(item)
@@ -104,6 +105,9 @@ async def mark_sync_time(
     now = datetime.now(timezone.utc)
     integration.last_sync_at = now
     integration.updated_at = now
+    # Re-encrypt config before committing — _decrypted() may have mutated the ORM
+    # object to plaintext in-place; always encrypt so tokens are never stored raw.
+    integration.config_json = encrypt_config(integration.config_json or {})
     await db.commit()
     await db.refresh(integration)
     return integration

@@ -92,6 +92,7 @@ async def sync_slack_messages(db: AsyncSession, org_id: int) -> dict[str, Any]:
     channels_synced = 0
     messages_read = 0
     today = date.today()
+    user_name_cache: dict[str, str] = {}  # cache user_id → display_name within this sync
 
     try:
         channels = await list_channels(token)
@@ -114,7 +115,12 @@ async def sync_slack_messages(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 text = (msg.get("text") or "").replace("\n", " ").strip()
                 if not text:
                     continue
-                display_name = await get_user_name(token, user_id) if user_id else "unknown"
+                if user_id:
+                    if user_id not in user_name_cache:
+                        user_name_cache[user_id] = await get_user_name(token, user_id)
+                    display_name = user_name_cache[user_id]
+                else:
+                    display_name = "unknown"
                 preview = text[:_MAX_MSG_CHARS] + ("…" if len(text) > _MAX_MSG_CHARS else "")
                 lines.append(f"@{display_name}: {preview}")
                 messages_read += 1

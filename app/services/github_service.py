@@ -225,5 +225,6 @@ async def _upsert_task(
     try:
         await db.commit()
     except Exception:
+        logger.exception("GitHub task upsert failed: %s", external_id)
         await db.rollback()
         raise

@@ -170,5 +170,6 @@ async def _upsert_task(db: AsyncSession, org_id: int, cu_task: dict[str, Any]) -
     try:
         await db.commit()
     except Exception:
+        logger.exception("ClickUp task upsert failed: %s", external_id)
         await db.rollback()
         raise

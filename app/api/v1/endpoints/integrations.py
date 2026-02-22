@@ -1,3 +1,4 @@
+import logging
 import secrets
 import hmac
 from datetime import date, datetime, timezone
@@ -53,7 +54,9 @@ from app.tools.google_calendar import (
 )
 from app.tools.whatsapp_business import get_phone_number_details, send_text_message
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
+_whatsapp_webhook_seen_signatures: dict[str, float] = {}
 
 
 def _safe_provider_error(prefix: str) -> str:
@@ -467,6 +470,15 @@ async def whatsapp_webhook_receive(
         ).hexdigest()
         if not sig_header or not hmac.compare_digest(sig_header, expected_sig):
             raise HTTPException(status_code=403, detail="Webhook signature verification failed")
+        # Replay protection: reject duplicate signatures within short window.
+        now = time()
+        window = max(30, int(settings.WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS))
+        for seen_sig, seen_at in list(_whatsapp_webhook_seen_signatures.items()):
+            if now - seen_at > window:
+                _whatsapp_webhook_seen_signatures.pop(seen_sig, None)
+        if sig_header in _whatsapp_webhook_seen_signatures:
+            raise HTTPException(status_code=409, detail="Webhook replay detected")
+        _whatsapp_webhook_seen_signatures[sig_header] = now
 
     try:
         payload = _json.loads(raw_body)
@@ -582,7 +594,7 @@ async def github_connect(
                 status_hint = f" GitHub returned HTTP {code}."
         raise HTTPException(
             status_code=400,
-            detail=f"GitHub connection failed.{status_hint} ({type(exc).__name__}: {exc})",
+            detail=f"GitHub connection failed.{status_hint} ({type(exc).__name__}). Check your token and scopes.",
         ) from exc
 
     await record_action(
@@ -823,6 +835,7 @@ async def test_integration(
                         status = "ok"
                         message = "Connection test passed after token refresh"
                     except Exception:
+                        logger.warning("Google Calendar token refresh failed", exc_info=True)
                         status = "failed"
                         message = _safe_provider_error("Google Calendar test failed after token refresh")
                 else:
