@@ -5,7 +5,7 @@ from app.db.base import Base
 
 
 class Goal(Base):
-    """A long-term goal with progress tracking (0â€“100%)."""
+    """A long-term goal with progress tracking (0-100%)."""
 
     __tablename__ = "goals"
 
@@ -24,7 +24,7 @@ class Goal(Base):
     target_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     # active | completed | paused | abandoned
     status: Mapped[str] = mapped_column(String(50), default="active")
-    progress: Mapped[int] = mapped_column(Integer, default=0)  # 0â€“100
+    progress: Mapped[int] = mapped_column(Integer, default=0)  # 0-100
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -5,7 +5,7 @@ from app.db.base import Base
 
 
 class Contact(Base):
-    """A person in your network â€” personal or business."""
+    """A person in your network - personal or business."""
 
     __tablename__ = "contacts"
 

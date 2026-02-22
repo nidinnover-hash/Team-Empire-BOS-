@@ -1,3 +1,5 @@
+from typing import cast
+
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -33,7 +35,7 @@ async def complete_execution(
     error_text: str | None = None,
 ) -> Execution | None:
     result = await db.execute(select(Execution).where(Execution.id == execution_id))
-    execution = result.scalar_one_or_none()
+    execution = cast(Execution | None, result.scalar_one_or_none())
     if execution is None:
         return None
     execution.status = status

@@ -1,3 +1,5 @@
+from typing import cast
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,7 +38,7 @@ async def update_goal_progress(
     result = await db.execute(
         select(Goal).where(Goal.id == goal_id, Goal.organization_id == organization_id)
     )
-    goal = result.scalar_one_or_none()
+    goal = cast(Goal | None, result.scalar_one_or_none())
     if goal is None:
         return None
     goal.progress = data.progress
@@ -56,7 +58,7 @@ async def update_goal_status(
     result = await db.execute(
         select(Goal).where(Goal.id == goal_id, Goal.organization_id == organization_id)
     )
-    goal = result.scalar_one_or_none()
+    goal = cast(Goal | None, result.scalar_one_or_none())
     if goal is None:
         return None
     goal.status = data.status

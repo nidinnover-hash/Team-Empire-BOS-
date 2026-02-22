@@ -5,7 +5,7 @@ from app.db.base import Base
 
 
 class Project(Base):
-    """A container that groups related tasks â€” business or personal."""
+    """A container that groups related tasks - business or personal."""
 
     __tablename__ = "projects"
 

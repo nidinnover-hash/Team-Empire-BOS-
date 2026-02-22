@@ -1,3 +1,5 @@
+from typing import cast
+
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -32,7 +34,7 @@ async def get_approval(
     if organization_id is not None:
         query = query.where(Approval.organization_id == organization_id)
     result = await db.execute(query)
-    return result.scalar_one_or_none()
+    return cast(Approval | None, result.scalar_one_or_none())
 
 
 async def list_approvals(

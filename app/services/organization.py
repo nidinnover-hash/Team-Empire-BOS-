@@ -1,3 +1,5 @@
+from typing import cast
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,12 +8,12 @@ from app.models.organization import Organization
 
 async def get_organization_by_slug(db: AsyncSession, slug: str) -> Organization | None:
     result = await db.execute(select(Organization).where(Organization.slug == slug))
-    return result.scalar_one_or_none()
+    return cast(Organization | None, result.scalar_one_or_none())
 
 
 async def get_organization_by_id(db: AsyncSession, organization_id: int) -> Organization | None:
     result = await db.execute(select(Organization).where(Organization.id == organization_id))
-    return result.scalar_one_or_none()
+    return cast(Organization | None, result.scalar_one_or_none())
 
 
 async def list_organizations(db: AsyncSession, limit: int = 200) -> list[Organization]:
