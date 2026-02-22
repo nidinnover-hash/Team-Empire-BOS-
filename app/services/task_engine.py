@@ -8,6 +8,8 @@ Flow:
   4. get_team_plans()      → shows all plans for today
 """
 
+from typing import cast
+
 from datetime import date, datetime, timezone
 
 from sqlalchemy import select
@@ -127,9 +129,9 @@ async def draft_team_plans(
     memory_context = await build_memory_context(db, organization_id=org_id)
 
     # Get active team members
-    query = select(TeamMember).where(  # noqa: E712
+    query = select(TeamMember).where(
         TeamMember.organization_id == org_id,
-        TeamMember.is_active == True,
+        TeamMember.is_active.is_(True),
     )
     if team:
         query = query.where(TeamMember.team == team)
@@ -224,7 +226,7 @@ async def approve_plan(
             DailyTaskPlan.organization_id == org_id,
         )
     )
-    plan = result.scalar_one_or_none()
+    plan = cast(DailyTaskPlan | None, result.scalar_one_or_none())
     if not plan or plan.status != "draft":
         return None
 
@@ -259,7 +261,7 @@ async def mark_task_done(
             DailyTaskPlan.organization_id == org_id,
         )
     )
-    plan = result.scalar_one_or_none()
+    plan = cast(DailyTaskPlan | None, result.scalar_one_or_none())
     if not plan:
         return None
 

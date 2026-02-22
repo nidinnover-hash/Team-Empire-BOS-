@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Personal Clone â€” Command Center</title>
+  <title>Personal Clone - Command Center</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #080810; color: #d1d5db; min-height: 100vh; }
@@ -94,7 +94,7 @@
     <div class="brand-pulse"></div>
     <div>
       <div class="brand-name">Personal Clone</div>
-      <div class="brand-sub">Command Center Â· Nidin Nover</div>
+      <div class="brand-sub">Command Center - Nidin Nover</div>
     </div>
   </div>
   <nav class="nav">
@@ -191,9 +191,9 @@
         <div class="item">
           <div class="item-text">{{ cmd.command_text }}</div>
           {% if cmd.ai_response %}
-          <div class="item-sub">{{ cmd.ai_response[:120] }}{% if cmd.ai_response|length > 120 %}â€¦{% endif %}</div>
+          <div class="item-sub">{{ cmd.ai_response[:120] }}{% if cmd.ai_response|length > 120 %}...{% endif %}</div>
           {% endif %}
-          <div class="item-meta">{{ cmd.created_at.strftime('%b %d Â· %H:%M') }}{% if cmd.model_used %} Â· {{ cmd.model_used }}{% endif %}</div>
+          <div class="item-meta">{{ cmd.created_at.strftime('%b %d - %H:%M') }}{% if cmd.model_used %} - {{ cmd.model_used }}{% endif %}</div>
         </div>
         {% endfor %}
       {% else %}
@@ -211,7 +211,7 @@
             <div class="p-dot p{{ t.priority }}"></div>
             <div class="item-text" style="flex:1">{{ t.title }}</div>
           </div>
-          <div class="item-meta">{{ t.category }}{% if t.due_date %} Â· due {{ t.due_date }}{% endif %}</div>
+          <div class="item-meta">{{ t.category }}{% if t.due_date %} - due {{ t.due_date }}{% endif %}</div>
         </div>
         {% endfor %}
       {% else %}
@@ -228,7 +228,7 @@
           {% if n.title %}<div class="item-text" style="font-weight:600;margin-bottom:.2rem">{{ n.title }}</div>{% endif %}
           <div class="item-text" style="{% if n.title %}color:#9ca3af;font-size:.8rem{% endif %}">{{ n.content }}</div>
           {% if n.tags %}<div class="item-meta">{{ n.tags }}</div>{% endif %}
-          <div class="item-meta">{{ n.created_at.strftime('%b %d Â· %H:%M') }}</div>
+          <div class="item-meta">{{ n.created_at.strftime('%b %d - %H:%M') }}</div>
         </div>
         {% endfor %}
       {% else %}
@@ -251,7 +251,7 @@
             <div class="item-text">{{ p.title }}</div>
             <span class="badge b-{{ p.status }}">{{ p.status }}</span>
           </div>
-          <div class="item-meta">{{ p.category }}{% if p.due_date %} Â· due {{ p.due_date }}{% endif %}</div>
+          <div class="item-meta">{{ p.category }}{% if p.due_date %} - due {{ p.due_date }}{% endif %}</div>
         </div>
         {% endfor %}
       {% else %}
@@ -270,7 +270,7 @@
             <span class="badge b-{{ g.status }}">{{ g.status }}</span>
           </div>
           <div class="prog-wrap"><div class="prog-fill" style="width:{{ g.progress }}%"></div></div>
-          <div class="item-meta">{{ g.progress }}% Â· {{ g.category }}{% if g.target_date %} Â· {{ g.target_date }}{% endif %}</div>
+          <div class="item-meta">{{ g.progress }}% - {{ g.category }}{% if g.target_date %} - {{ g.target_date }}{% endif %}</div>
         </div>
         {% endfor %}
       {% else %}
@@ -292,7 +292,7 @@
           <div class="task-row">
             <div>
               <div class="item-text">{{ c.name }}</div>
-              {% if c.company %}<div class="item-meta">{{ c.company }}{% if c.role %} Â· {{ c.role }}{% endif %}</div>{% endif %}
+              {% if c.company %}<div class="item-meta">{{ c.company }}{% if c.role %} - {{ c.role }}{% endif %}</div>{% endif %}
             </div>
             <span class="badge b-{{ c.relationship }}">{{ c.relationship }}</span>
           </div>
@@ -322,7 +322,7 @@
         </span>
       </div>
       <div style="padding:.6rem 1.1rem">
-        <a href="/api/v1/finance" style="color:#374151;text-decoration:none;font-size:.72rem">View all entries â†’</a>
+        <a href="/api/v1/finance" style="color:#374151;text-decoration:none;font-size:.72rem">View all entries -></a>
       </div>
     </div>
 

@@ -1,3 +1,5 @@
+from typing import cast
+
 from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +21,7 @@ async def create_task(
 async def list_tasks(
     db: AsyncSession,
     limit: int = 50,
+    offset: int = 0,
     organization_id: int | None = None,
     project_id: int | None = None,
     category: str | None = None,
@@ -34,7 +37,7 @@ async def list_tasks(
     if is_done is not None:
         query = query.where(Task.is_done == is_done)
     # Sort by priority desc (urgent first), then newest
-    query = query.order_by(Task.priority.desc(), Task.created_at.desc()).limit(limit)
+    query = query.order_by(Task.priority.desc(), Task.created_at.desc()).offset(offset).limit(limit)
     result = await db.execute(query)
     return list(result.scalars().all())
 
@@ -49,7 +52,7 @@ async def update_task(
     if organization_id is not None:
         query = query.where(Task.organization_id == organization_id)
     result = await db.execute(query)
-    task = result.scalar_one_or_none()
+    task = cast(Task | None, result.scalar_one_or_none())
     if task is None:
         return None
 

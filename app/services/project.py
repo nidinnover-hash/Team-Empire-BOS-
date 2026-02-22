@@ -1,3 +1,5 @@
+from typing import cast
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,12 +18,14 @@ async def create_project(
 
 
 async def list_projects(
-    db: AsyncSession, limit: int = 50, organization_id: int | None = None
+    db: AsyncSession, limit: int = 50, offset: int = 0, organization_id: int | None = None
 ) -> list[Project]:
     query = select(Project)
     if organization_id is not None:
         query = query.where(Project.organization_id == organization_id)
-    result = await db.execute(query.order_by(Project.created_at.desc()).limit(limit))
+    result = await db.execute(
+        query.order_by(Project.created_at.desc()).offset(offset).limit(limit)
+    )
     return list(result.scalars().all())
 
 
@@ -35,7 +39,7 @@ async def update_project_status(
     if organization_id is not None:
         query = query.where(Project.organization_id == organization_id)
     result = await db.execute(query)
-    project = result.scalar_one_or_none()
+    project = cast(Project | None, result.scalar_one_or_none())
     if project is None:
         return None
     project.status = data.status

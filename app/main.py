@@ -9,16 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.router import api_router
 from app.api.v1.endpoints.ops import run_daily_run_workflow
-from app.core.config import settings
-
-# ── Startup safety guard ──────────────────────────────────────────────────────
-_UNSAFE_SECRET_KEYS = {"change_me_in_env", "changeme", "secret", "change-me", ""}
-if settings.SECRET_KEY in _UNSAFE_SECRET_KEYS or len(settings.SECRET_KEY) < 32:
-    raise RuntimeError(
-        "SECRET_KEY is insecure. Set a 32+ character random value in .env. "
-        "Generate one: python -c \"import secrets; print(secrets.token_hex(32))\""
-    )
+from app.core.config import settings, validate_startup_settings
 from app.core.deps import get_current_web_user, get_db, verify_csrf
+from app.core.middleware import CorrelationIDMiddleware, RateLimitMiddleware
 from app.core.security import create_access_token, decode_access_token, get_current_user, verify_password
 from app.db.base import Base
 from app.db.session import engine
@@ -34,22 +27,36 @@ from app.services import task as task_service
 from app.services import user as user_service
 
 # Register every model with Base.metadata so create_all sees them
-import app.models.command  # noqa: F401
-import app.models.task  # noqa: F401
-import app.models.note  # noqa: F401
-import app.models.project  # noqa: F401
-import app.models.goal  # noqa: F401
-import app.models.contact  # noqa: F401
-import app.models.finance  # noqa: F401
-import app.models.event  # noqa: F401
-import app.models.user  # noqa: F401
-import app.models.approval  # noqa: F401
-import app.models.organization  # noqa: F401
-import app.models.execution  # noqa: F401
-import app.models.integration  # noqa: F401
-import app.models.memory  # noqa: F401
-import app.models.email  # noqa: F401
-import app.models.daily_run  # noqa: F401
+from app.models import approval as _model_approval  # noqa: F401
+from app.models import command as _model_command  # noqa: F401
+from app.models import contact as _model_contact  # noqa: F401
+from app.models import daily_run as _model_daily_run  # noqa: F401
+from app.models import email as _model_email  # noqa: F401
+from app.models import event as _model_event  # noqa: F401
+from app.models import execution as _model_execution  # noqa: F401
+from app.models import finance as _model_finance  # noqa: F401
+from app.models import goal as _model_goal  # noqa: F401
+from app.models import integration as _model_integration  # noqa: F401
+from app.models import memory as _model_memory  # noqa: F401
+from app.models import note as _model_note  # noqa: F401
+from app.models import organization as _model_organization  # noqa: F401
+from app.models import project as _model_project  # noqa: F401
+from app.models import task as _model_task  # noqa: F401
+from app.models import user as _model_user  # noqa: F401
+
+# Startup safety guard
+_UNSAFE_SECRET_KEYS = {"change_me_in_env", "changeme", "secret", "change-me", ""}
+if settings.SECRET_KEY in _UNSAFE_SECRET_KEYS or len(settings.SECRET_KEY) < 32:
+    raise RuntimeError(
+        "SECRET_KEY is insecure. Set a 32+ character random value in .env. "
+        "Generate one: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
+if settings.ENFORCE_STARTUP_VALIDATION:
+    startup_issues = validate_startup_settings(settings)
+    if startup_issues:
+        raise RuntimeError(
+            "Startup configuration validation failed: " + "; ".join(startup_issues)
+        )
 
 templates = Jinja2Templates(directory="app/templates")
 
@@ -67,9 +74,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
     await engine.dispose()
 
-
-from app.core.middleware import CorrelationIDMiddleware
-
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
@@ -77,6 +81,8 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+# Middleware is applied in reverse order - CorrelationID wraps RateLimit
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(CorrelationIDMiddleware)
 
 
@@ -135,7 +141,7 @@ async def web_login(
         max_age=max_age,
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=settings.COOKIE_SECURE,
         path="/",
     )
     response.set_cookie(
@@ -144,7 +150,7 @@ async def web_login(
         max_age=max_age,
         httponly=False,
         samesite="lax",
-        secure=False,
+        secure=settings.COOKIE_SECURE,
         path="/",
     )
     return {"status": "ok", "email": user.email, "role": user.role}
@@ -256,3 +262,5 @@ async def dashboard(
             "session_user": user,
         },
     )
+
+

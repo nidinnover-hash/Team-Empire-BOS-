@@ -5,6 +5,8 @@ The most important function here is build_memory_context() which assembles
 everything into a single string that gets injected into every AI call.
 """
 
+from typing import cast
+
 from datetime import date, datetime, timezone
 
 from sqlalchemy import select
@@ -16,6 +18,7 @@ from app.schemas.memory import (
     TeamMemberCreate,
     TeamMemberUpdate,
 )
+from app.memory.retrieval import build_focused_context, DEFAULT_CONTEXT_CHAR_LIMIT
 
 
 # ── Profile Memory ────────────────────────────────────────────────────────────
@@ -45,7 +48,7 @@ async def upsert_profile_memory(
             ProfileMemory.key == key,
         )
     )
-    existing = result.scalar_one_or_none()
+    existing = cast(ProfileMemory | None, result.scalar_one_or_none())
 
     if existing:
         existing.value = value
@@ -81,7 +84,7 @@ async def get_team_members(
     if team:
         query = query.where(TeamMember.team == team)
     if active_only:
-        query = query.where(TeamMember.is_active == True)  # noqa: E712
+        query = query.where(TeamMember.is_active.is_(True))
     query = query.order_by(TeamMember.team, TeamMember.name)
     result = await db.execute(query)
     return list(result.scalars().all())
@@ -96,7 +99,7 @@ async def get_team_member(
             TeamMember.organization_id == organization_id,
         )
     )
-    return result.scalar_one_or_none()
+    return cast(TeamMember | None, result.scalar_one_or_none())
 
 
 async def create_team_member(
@@ -175,55 +178,34 @@ async def add_daily_context(
 
 # ── Memory Context Builder ────────────────────────────────────────────────────
 
-async def build_memory_context(db: AsyncSession, organization_id: int) -> str:
+async def build_memory_context(
+    db: AsyncSession,
+    organization_id: int,
+    categories: list[str] | None = None,
+    char_limit: int = DEFAULT_CONTEXT_CHAR_LIMIT,
+) -> str:
     """
-    Assemble all memory into a single string for AI injection.
+    Assemble memory into a trimmed string for AI injection.
+
+    Uses build_focused_context() from app/memory/retrieval.py to:
+    - Optionally filter profile entries by category
+    - Automatically trim to char_limit to prevent context bloat
 
     This is what makes the clone feel like Nidin — it knows who he is,
     who his team is, and what's happening today.
     """
-    lines: list[str] = []
-
-    # Profile memory
     profile = await get_profile_memory(db, organization_id=organization_id)
-    if profile:
-        lines.append("PROFILE:")
-        for entry in profile:
-            lines.append(f"  - {entry.key}: {entry.value}")
-        lines.append("")
-
-    # Team members grouped by team
     members = await get_team_members(db, organization_id=organization_id, active_only=True)
-    if members:
-        teams: dict[str, list[TeamMember]] = {}
-        for m in members:
-            key = m.team or "general"
-            teams.setdefault(key, []).append(m)
-
-        for team_name, team_members in sorted(teams.items()):
-            lines.append(f"TEAM ({team_name}):")
-            for m in team_members:
-                ai_label = ["", "no AI", "basic AI", "intermediate AI", "advanced AI", "AI expert"][m.ai_level]
-                project = f" | Project: {m.current_project}" if m.current_project else ""
-                lines.append(
-                    f"  - {m.name} | {m.role_title or 'Staff'} | {ai_label}{project}"
-                )
-        lines.append("")
-
-    # Today's context
     today_context = await get_daily_context(
         db,
         organization_id=organization_id,
         for_date=date.today(),
     )
-    if today_context:
-        lines.append("TODAY'S CONTEXT:")
-        for ctx in today_context:
-            related = f" (re: {ctx.related_to})" if ctx.related_to else ""
-            lines.append(f"  [{ctx.context_type.upper()}] {ctx.content}{related}")
-        lines.append("")
 
-    if not lines:
-        return ""
-
-    return "\n".join(lines)
+    return build_focused_context(
+        profile_entries=profile,
+        team_members=members,
+        daily_contexts=today_context,
+        categories=categories,
+        char_limit=char_limit,
+    )

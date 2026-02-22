@@ -1,3 +1,5 @@
+from typing import cast
+
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -35,7 +37,7 @@ async def _seed_email_for_org1(gmail_id: str = "draft-flow-gmail-id") -> int:
         session.add(email)
         await session.commit()
         await session.refresh(email)
-        return email.id
+        return cast(int, email.id)
     finally:
         await agen.aclose()
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
@@ -19,10 +19,12 @@ async def create_project(
 
 @router.get("", response_model=list[ProjectRead])
 async def list_projects(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
 ) -> list[ProjectRead]:
-    """List all projects, newest first."""
-    return await project_service.list_projects(db)
+    """List all projects, newest first. Use limit/offset for pagination."""
+    return await project_service.list_projects(db, limit=limit, offset=offset)
 
 
 @router.patch("/{project_id}/status", response_model=ProjectRead)

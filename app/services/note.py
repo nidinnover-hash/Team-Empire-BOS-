@@ -15,12 +15,13 @@ async def create_note(
 
 
 async def list_notes(
-    db: AsyncSession, limit: int = 50, organization_id: int = 1
+    db: AsyncSession, limit: int = 50, offset: int = 0, organization_id: int = 1
 ) -> list[Note]:
     result = await db.execute(
         select(Note)
         .where(Note.organization_id == organization_id)
         .order_by(Note.created_at.desc(), Note.id.desc())
+        .offset(offset)
         .limit(limit)
     )
     return list(result.scalars().all())

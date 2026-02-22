@@ -1,3 +1,5 @@
+from typing import cast
+
 from datetime import date, datetime, timezone
 
 from sqlalchemy import select
@@ -19,7 +21,7 @@ async def get_daily_run_by_scope(
             DailyRun.team_filter == team_filter,
         )
     )
-    return result.scalar_one_or_none()
+    return cast(DailyRun | None, result.scalar_one_or_none())
 
 
 async def create_daily_run(
@@ -53,7 +55,7 @@ async def complete_daily_run(
     result_json: dict,
 ) -> DailyRun | None:
     result = await db.execute(select(DailyRun).where(DailyRun.id == run_id))
-    run = result.scalar_one_or_none()
+    run = cast(DailyRun | None, result.scalar_one_or_none())
     if run is None:
         return None
     run.status = status

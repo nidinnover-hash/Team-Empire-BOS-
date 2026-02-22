@@ -23,10 +23,13 @@ async def list_tasks(
     project_id: int | None = Query(None, description="Filter by project"),
     category: str | None = Query(None, description="personal|business|health|finance|other"),
     is_done: bool | None = Query(None, description="true=done, false=open"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ) -> list[TaskRead]:
     """List tasks. Filter by project, category, or status. Sorted by priority."""
     return await task_service.list_tasks(
-        db, project_id=project_id, category=category, is_done=is_done
+        db, project_id=project_id, category=category, is_done=is_done,
+        limit=limit, offset=offset,
     )
 
 

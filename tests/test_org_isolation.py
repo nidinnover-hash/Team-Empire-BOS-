@@ -1,3 +1,5 @@
+from typing import cast
+
 from app.core.security import create_access_token
 from app.core.deps import get_db
 from app.main import app as fastapi_app
@@ -18,7 +20,7 @@ async def _create_second_org(client, headers: dict) -> int:
         headers=headers,
     )
     assert response.status_code == 201
-    return response.json()["id"]
+    return cast(int, response.json()["id"])
 
 
 async def test_orgs_create_and_list(client):

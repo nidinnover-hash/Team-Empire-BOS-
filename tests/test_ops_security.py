@@ -1,3 +1,5 @@
+from typing import cast
+
 from datetime import datetime, timezone
 
 from app.core.security import create_access_token
@@ -116,7 +118,7 @@ async def _seed_email_for_org1() -> int:
         session.add(email)
         await session.commit()
         await session.refresh(email)
-        return email.id
+        return cast(int, email.id)
     finally:
         await agen.aclose()
 

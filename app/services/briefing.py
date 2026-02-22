@@ -16,6 +16,7 @@ from app.models.daily_plan import DailyTaskPlan
 from app.models.email import Email
 from app.models.memory import TeamMember
 from app.services.ai_router import call_ai
+from app.services.calendar_service import get_calendar_events_from_context
 from app.services.memory import build_memory_context, get_daily_context
 
 
@@ -30,9 +31,10 @@ async def get_team_dashboard(db: AsyncSession, org_id: int) -> dict:
 
     # Get all active team members
     members_result = await db.execute(
-        select(TeamMember).where(  # noqa: E712
+        select(TeamMember)
+        .where(
             TeamMember.organization_id == org_id,
-            TeamMember.is_active == True,
+            TeamMember.is_active.is_(True),
         )
         .order_by(TeamMember.team, TeamMember.name)
     )
@@ -130,13 +132,19 @@ async def get_daily_briefing(
     # Gather all data
     dashboard = await get_team_dashboard(db, org_id)
     today_context = await get_daily_context(db, organization_id=org_id, for_date=today)
+    calendar_events = await get_calendar_events_from_context(db, organization_id=org_id, for_date=today)
     memory_context = await build_memory_context(db, organization_id=org_id)
 
     # Build a data summary to feed the AI
     context_items = "\n".join(
         f"  [{c.context_type.upper()}] {c.content}" + (f" (re: {c.related_to})" if c.related_to else "")
         for c in today_context
+        if c.context_type != "calendar_event"
     ) or "  None added yet."
+
+    calendar_lines = "\n".join(
+        f"  - {e.content}" for e in calendar_events
+    ) or "  No calendar events synced for today."
 
     members_without_plan = dashboard["summary"]["members_without_plan"]
     no_plan_text = ", ".join(members_without_plan) if members_without_plan else "All members have plans"
@@ -155,11 +163,15 @@ TEAM STATUS:
 TODAY'S CONTEXT:
 {context_items}
 
+TODAY'S CALENDAR:
+{calendar_lines}
+
 Write a sharp, direct morning briefing. Structure it as:
 1. SITUATION (2 sentences max — what's the state of the team today)
 2. URGENT (what needs my attention first)
-3. WATCH (what could become a problem)
-4. FOCUS (my #1 priority today as CEO)
+3. CALENDAR (key meetings/events to prepare for)
+4. WATCH (what could become a problem)
+5. FOCUS (my #1 priority today as CEO)
 """
 
     briefing_text = await call_ai(
@@ -191,6 +203,7 @@ async def get_executive_briefing(
     today = date.today()
     dashboard = await get_team_dashboard(db, org_id)
     today_context = await get_daily_context(db, organization_id=org_id, for_date=today)
+    calendar_events = await get_calendar_events_from_context(db, organization_id=org_id, for_date=today)
 
     approvals_result = await db.execute(
         select(Approval)
@@ -223,6 +236,10 @@ async def get_executive_briefing(
         "date": str(today),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "team_summary": dashboard["summary"],
+        "calendar": {
+            "event_count": len(calendar_events),
+            "events": [{"content": e.content, "location": e.related_to} for e in calendar_events],
+        },
         "approvals": {
             "pending_count": dashboard["summary"]["pending_approvals"],
             "recent": [
