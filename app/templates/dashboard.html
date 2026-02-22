@@ -142,6 +142,19 @@
     .btn-reject   { background:#1a0505; color:#fca5a5; border:1px solid #7f1d1d; border-radius:5px; padding:.22rem .6rem; font-size:.68rem; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:.04em; }
     .btn-reject:hover   { border-color:#ef4444; }
     .btn-approve:disabled,.btn-execute:disabled,.btn-reject:disabled { opacity:.4; cursor:default; }
+
+    /* Audit Log */
+    .audit-row { display:flex; align-items:flex-start; gap:.75rem; padding:.6rem 1.1rem; border-bottom:1px solid #141420; }
+    .audit-row:last-child { border-bottom:none; }
+    .audit-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:5px; }
+    .a-green  { background:#34d399; }
+    .a-red    { background:#f87171; box-shadow:0 0 5px #f8717155; }
+    .a-orange { background:#f97316; }
+    .a-purple { background:#a78bfa; }
+    .a-gray   { background:#374151; }
+    .audit-type   { font-size:.78rem; font-weight:700; color:#d1d5db; }
+    .audit-detail { font-size:.72rem; color:#6b7280; margin-top:.18rem; line-height:1.4; }
+    .audit-time   { font-size:.65rem; color:#374151; white-space:nowrap; flex-shrink:0; }
   </style>
 </head>
 <body>
@@ -456,6 +469,21 @@
     </div>
 
   </div>
+
+  <div class="section-label">Audit Log</div>
+  <div class="card" id="audit-card">
+    <div class="card-head">
+      <span class="card-title">Recent Activity</span>
+      <div style="display:flex;gap:.6rem;align-items:center">
+        <span id="audit-count" class="card-count">...</span>
+        <button id="audit-refresh-btn" class="btn-run" type="button">Refresh</button>
+      </div>
+    </div>
+    <div id="audit-list">
+      <div class="empty">Loading activity log…</div>
+    </div>
+  </div>
+
 </main>
 <script>
   // ── Shared auth bootstrap ───────────────────────────────────────────────────
@@ -952,6 +980,91 @@
 
     // Auto-refresh every 60 seconds
     setInterval(function() { if (window.__apiToken) loadApprovals(); }, 60000);
+  })();
+
+  // ── Audit Log Panel ─────────────────────────────────────────────────────────
+  (async function () {
+    var list       = document.getElementById("audit-list");
+    var countBadge = document.getElementById("audit-count");
+    var refreshBtn = document.getElementById("audit-refresh-btn");
+    if (!list) return;
+
+    function esc(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+    // Colour-code the dot based on outcome
+    function dotClass(t) {
+      if (!t) return "a-gray";
+      t = t.toLowerCase();
+      if (t.includes("failed") || t.includes("blocked") || t.includes("denied") || t.includes("error")) return "a-red";
+      if (t.includes("rejected")) return "a-orange";
+      if (t.includes("sent") || t.includes("succeeded") || t.includes("granted") || t.includes("passed") || t.includes("connected")) return "a-green";
+      if (t.includes("sync") || t.includes("daily_run") || t.includes("draft") || t.includes("briefing") || t.includes("composed") || t.includes("strategize")) return "a-purple";
+      return "a-gray";
+    }
+
+    // Build a human-readable one-liner from the event
+    function fmtDetail(e) {
+      var parts = [];
+      if (e.entity_type) parts.push(e.entity_type + (e.entity_id ? " #" + e.entity_id : ""));
+      if (e.actor_user_id) parts.push("user #" + e.actor_user_id);
+      var p = e.payload_json || {};
+      if (p.username)             parts.push("login: " + String(p.username).slice(0, 50));
+      if (p.ip)                   parts.push("ip: " + p.ip);
+      if (p.subject)              parts.push(String(p.subject).slice(0, 60));
+      if (p.to)                   parts.push("to: " + String(p.to).slice(0, 50));
+      if (p.error)                parts.push("error: " + String(p.error).slice(0, 80));
+      if (p.new_emails !== undefined) parts.push("new emails: " + p.new_emails);
+      if (p.drafted_plan_count !== undefined)
+        parts.push("plans: " + p.drafted_plan_count + " · email drafts: " + (p.drafted_email_count || 0));
+      if (p.provider)             parts.push(p.provider);
+      if (p.type)                 parts.push(p.type);
+      return parts.join(" · ");
+    }
+
+    function fmt(iso) {
+      if (!iso) return "";
+      var d = new Date(iso);
+      return d.toLocaleDateString("en-US",{month:"short",day:"numeric"}) + " " +
+             d.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});
+    }
+
+    async function loadAudit() {
+      var token = window.__apiToken;
+      if (!token) { list.innerHTML = '<div class="empty">Sign in to view activity.</div>'; return; }
+      try {
+        var r = await fetch("/api/v1/ops/events?limit=40", { headers:{"Authorization":"Bearer "+token} });
+        if (!r.ok) { list.innerHTML = '<div class="empty">Could not load activity log.</div>'; return; }
+        var events = await r.json();
+        if (countBadge) countBadge.textContent = events.length + " events";
+        if (!events.length) { list.innerHTML = '<div class="empty">No activity logged yet.</div>'; return; }
+        list.innerHTML = events.map(function(e) {
+          var detail = fmtDetail(e);
+          return '<div class="audit-row">' +
+            '<div class="audit-dot ' + dotClass(e.event_type) + '"></div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem">' +
+                '<span class="audit-type">' + esc(e.event_type) + '</span>' +
+                '<span class="audit-time">' + esc(fmt(e.created_at)) + '</span>' +
+              '</div>' +
+              (detail ? '<div class="audit-detail">' + esc(detail) + '</div>' : '') +
+            '</div>' +
+          '</div>';
+        }).join("");
+      } catch(err) {
+        list.innerHTML = '<div class="empty">Error loading activity log.</div>';
+      }
+    }
+
+    refreshBtn && refreshBtn.addEventListener("click", loadAudit);
+
+    // Bootstrap: wait for shared auth, then load
+    var token = await window.__bootPromise;
+    if (!token) { list.innerHTML = '<div class="empty">Sign in to view activity.</div>'; return; }
+    if (!window.__apiToken) window.__apiToken = token;
+    await loadAudit();
+
+    // Auto-refresh every 30 seconds
+    setInterval(function() { if (window.__apiToken) loadAudit(); }, 30000);
   })();
 </script>
 </body>
