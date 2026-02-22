@@ -111,6 +111,11 @@ async def login(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
+@app.get("/web/login", response_class=HTMLResponse, include_in_schema=False)
+async def web_login_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request, "login.html", {"request": request, "error": None})
+
+
 @app.post("/web/login")
 async def web_login(
     response: Response,

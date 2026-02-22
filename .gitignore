@@ -25,3 +25,9 @@ htmlcov/
 .vscode/
 .idea/
 *.swp
+
+# Local Codex/Claude metadata
+.claude/
+
+# Local server logs
+uvicorn*.log

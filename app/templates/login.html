@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personal Clone - Sign In</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #080810;
+      color: #d1d5db;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #0f0f1a;
+      border: 1px solid #1c1c30;
+      border-radius: 12px;
+      padding: 2.5rem 2rem;
+      width: 100%;
+      max-width: 360px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 2rem;
+      justify-content: center;
+    }
+    .brand-pulse {
+      width: 10px; height: 10px;
+      background: #7c3aed;
+      border-radius: 50%;
+      box-shadow: 0 0 12px #7c3aed;
+      animation: pulse 2s infinite;
+      flex-shrink: 0;
+    }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 6px #7c3aed }
+      50%      { box-shadow: 0 0 18px #7c3aed, 0 0 30px #7c3aed44 }
+    }
+    .brand-name { font-size: 1.1rem; font-weight: 700; color: #f3f4f6; }
+    label { display: block; font-size: 0.75rem; color: #6b7280; margin-bottom: 0.4rem; }
+    input {
+      width: 100%;
+      background: #13131f;
+      border: 1px solid #1c1c30;
+      border-radius: 6px;
+      color: #f3f4f6;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.9rem;
+      margin-bottom: 1.1rem;
+      outline: none;
+      transition: border-color .15s;
+    }
+    input:focus { border-color: #7c3aed; }
+    button {
+      width: 100%;
+      background: #7c3aed;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 0.65rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    button:hover { background: #6d28d9; }
+    .error {
+      background: #1f0d0d;
+      border: 1px solid #7f1d1d;
+      color: #f87171;
+      border-radius: 6px;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.8rem;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">
+      <div class="brand-pulse"></div>
+      <span class="brand-name">Personal Clone</span>
+    </div>
+
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <form id="login-form">
+      <label for="username">Email</label>
+      <input id="username" name="username" type="email" autocomplete="username" autofocus required />
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required />
+
+      <button type="submit">Sign in</button>
+    </form>
+  </div>
+
+  <script>
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const body = new FormData(form);
+      const res = await fetch('/web/login', { method: 'POST', body });
+      if (res.ok) {
+        window.location.href = '/';
+      } else {
+        const data = await res.json().catch(() => ({}));
+        let msg = data.detail || 'Invalid email or password.';
+        let err = document.querySelector('.error');
+        if (!err) {
+          err = document.createElement('div');
+          err.className = 'error';
+          form.prepend(err);
+        }
+        err.textContent = msg;
+      }
+    });
+  </script>
+</body>
+</html>
