@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import cast
 
 from app.core.token_crypto import decrypt_config, encrypt_config
 from app.models.integration import Integration
@@ -106,3 +107,25 @@ async def mark_sync_time(
     await db.commit()
     await db.refresh(integration)
     return integration
+
+
+async def find_whatsapp_integration_by_phone_number_id(
+    db: AsyncSession,
+    phone_number_id: str,
+) -> Integration | None:
+    """
+    Resolve WhatsApp integration for an incoming webhook by phone_number_id.
+    phone_number_id is stored in config_json for whatsapp_business.
+    """
+    result = await db.execute(
+        select(Integration).where(
+            Integration.type == "whatsapp_business",
+            Integration.status == "connected",
+        )
+    )
+    for item in result.scalars().all():
+        cfg = decrypt_config(item.config_json or {})
+        if cfg.get("phone_number_id") == phone_number_id:
+            item.config_json = cfg
+            return cast(Integration, item)
+    return None

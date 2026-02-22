@@ -70,10 +70,18 @@ async def call_ai(
     # If requested/default provider isn't configured, use first available.
     chosen = requested if requested in configured else configured[0]
 
-    # Inject memory into system prompt if provided
+    # Inject memory into system prompt if provided.
+    # Escape delimiter tokens to prevent prompt injection via memory writes.
     full_system = system_prompt
     if memory_context:
-        full_system = f"[MEMORY CONTEXT]\n{memory_context}\n[END MEMORY]\n\n{system_prompt}"
+        safe_context = (
+            memory_context
+            .replace("[MEMORY CONTEXT]", "[MEMORY CONTEXT (escaped)]")
+            .replace("[END MEMORY]", "[END MEMORY (escaped)]")
+        )
+        if len(safe_context) > 4000:
+            safe_context = safe_context[:4000] + "\n... (memory truncated)"
+        full_system = f"[MEMORY CONTEXT]\n{safe_context}\n[END MEMORY]\n\n{system_prompt}"
 
     # Try primary provider
     result, is_transient = await _call_provider(chosen, full_system, user_message, max_tokens)

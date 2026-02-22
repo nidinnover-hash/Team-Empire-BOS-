@@ -132,36 +132,45 @@ async def sync_emails(
 
     new_count = 0
     for raw in raw_emails:
-        # Deduplicate by (gmail_id, organization_id) - not just gmail_id
-        exists = await db.execute(
-            select(Email).where(
-                Email.gmail_id == raw["gmail_id"],
-                Email.organization_id == org_id,
+        try:
+            # Deduplicate by (gmail_id, organization_id) - not just gmail_id
+            exists = await db.execute(
+                select(Email).where(
+                    Email.gmail_id == raw["gmail_id"],
+                    Email.organization_id == org_id,
+                )
             )
-        )
-        if exists.scalar_one_or_none():
+            if exists.scalar_one_or_none():
+                continue
+
+            received_at = None
+            if raw.get("received_at"):
+                try:
+                    received_at = datetime.fromisoformat(raw["received_at"])
+                except ValueError:
+                    pass
+
+            email = Email(
+                organization_id=org_id,
+                gmail_id=raw["gmail_id"],
+                thread_id=raw.get("thread_id"),
+                from_address=raw.get("from_address"),
+                to_address=raw.get("to_address"),
+                subject=raw.get("subject"),
+                body_text=raw.get("body_text"),
+                received_at=received_at,
+                created_at=datetime.now(timezone.utc),
+            )
+            db.add(email)
+            new_count += 1
+        except Exception as exc:
+            logger.warning(
+                "Skipping email %s during sync (org %s): %s",
+                raw.get("gmail_id", "?"),
+                org_id,
+                exc,
+            )
             continue
-
-        received_at = None
-        if raw.get("received_at"):
-            try:
-                received_at = datetime.fromisoformat(raw["received_at"])
-            except ValueError:
-                pass
-
-        email = Email(
-            organization_id=org_id,
-            gmail_id=raw["gmail_id"],
-            thread_id=raw.get("thread_id"),
-            from_address=raw.get("from_address"),
-            to_address=raw.get("to_address"),
-            subject=raw.get("subject"),
-            body_text=raw.get("body_text"),
-            received_at=received_at,
-            created_at=datetime.now(timezone.utc),
-        )
-        db.add(email)
-        new_count += 1
 
     if new_count:
         await db.commit()

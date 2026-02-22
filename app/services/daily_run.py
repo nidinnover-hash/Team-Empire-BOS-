@@ -48,13 +48,19 @@ async def create_daily_run(
 async def complete_daily_run(
     db: AsyncSession,
     run_id: int,
+    organization_id: int,
     status: str,
     drafted_plan_count: int,
     drafted_email_count: int,
     pending_approvals: int,
     result_json: dict,
 ) -> DailyRun | None:
-    result = await db.execute(select(DailyRun).where(DailyRun.id == run_id))
+    result = await db.execute(
+        select(DailyRun).where(
+            DailyRun.id == run_id,
+            DailyRun.organization_id == organization_id,
+        )
+    )
     run = cast(DailyRun | None, result.scalar_one_or_none())
     if run is None:
         return None

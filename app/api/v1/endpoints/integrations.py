@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from hashlib import sha256
 from time import time
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +26,7 @@ from app.schemas.integration import (
     WhatsAppSendResult,
 )
 from app.services import integration as integration_service
+from app.services import whatsapp_service
 from app.services.calendar_service import (
     get_calendar_events_from_context,
     sync_calendar_events,
@@ -433,11 +434,39 @@ async def whatsapp_webhook_verify(
 
 
 @router.post("/whatsapp/webhook", include_in_schema=False)
-async def whatsapp_webhook_receive(payload: dict) -> dict:
-    # Ack quickly; processing pipelines can be added behind this endpoint.
+async def whatsapp_webhook_receive(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Receive webhook events from WhatsApp Business.
+    Verifies X-Hub-Signature-256 when WHATSAPP_APP_SECRET is configured.
+    Acks quickly — processing pipelines can be added behind this endpoint.
+    """
+    import json as _json
+    raw_body = await request.body()
+
+    # Verify HMAC signature when app secret is configured
+    app_secret = (settings.WHATSAPP_APP_SECRET or "").strip()
+    if app_secret:
+        sig_header = request.headers.get("X-Hub-Signature-256", "")
+        expected_sig = "sha256=" + hmac.new(
+            app_secret.encode("utf-8"),
+            raw_body,
+            sha256,
+        ).hexdigest()
+        if not sig_header or not hmac.compare_digest(sig_header, expected_sig):
+            raise HTTPException(status_code=403, detail="Webhook signature verification failed")
+
+    try:
+        payload = _json.loads(raw_body)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload") from exc
+
     entries = payload.get("entry")
     count = len(entries) if isinstance(entries, list) else 0
-    return {"status": "received", "entries": count}
+    stored = await whatsapp_service.ingest_webhook_payload(db, payload)
+    return {"status": "received", "entries": count, "stored": stored}
 
 
 # ── Parametric endpoints (/{integration_id}/…) — MUST be last ─────────────────

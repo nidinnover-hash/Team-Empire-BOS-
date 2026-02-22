@@ -113,6 +113,7 @@ async def run_daily_run_workflow(
         await daily_run_service.complete_daily_run(
             db=db,
             run_id=run.id,
+            organization_id=org_id,
             status="completed",
             drafted_plan_count=len(plans),
             drafted_email_count=len(drafted_email_ids),
@@ -150,6 +151,7 @@ async def run_daily_run_workflow(
         await daily_run_service.complete_daily_run(
             db=db,
             run_id=run.id,
+            organization_id=org_id,
             status="failed",
             drafted_plan_count=0,
             drafted_email_count=0,
@@ -253,12 +255,14 @@ async def list_events_ops(
     user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
     actor_user_id: int | None = Query(None),
     event_date: date | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
 ) -> list[EventRead]:
     return await event_service.list_events(
         db,
         organization_id=user["org_id"],
         actor_user_id=actor_user_id,
         event_date=event_date,
+        limit=limit,
     )
 
 

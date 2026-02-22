@@ -34,7 +34,14 @@ async def execute_approval(
     db: AsyncSession,
     approval: Approval,
     actor_user_id: int,
+    actor_org_id: int | None = None,
 ) -> None:
+    # Defence-in-depth: verify the approval belongs to the actor's org when provided.
+    if actor_org_id is not None and approval.organization_id != actor_org_id:
+        raise ValueError(
+            f"Cross-org execution denied: approval org {approval.organization_id} "
+            f"!= actor org {actor_org_id}"
+        )
     execution = await execution_service.create_execution(
         db,
         organization_id=approval.organization_id,

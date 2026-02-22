@@ -150,6 +150,7 @@ async def approve(
             db,
             approval=approval,
             actor_user_id=actor["id"],
+            actor_org_id=actor["org_id"],
         )
     return approval
 

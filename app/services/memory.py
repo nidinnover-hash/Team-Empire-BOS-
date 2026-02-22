@@ -54,8 +54,12 @@ async def upsert_profile_memory(
         existing.value = value
         existing.category = category
         existing.updated_at = datetime.now(timezone.utc)
-        await db.commit()
-        await db.refresh(existing)
+        try:
+            await db.commit()
+            await db.refresh(existing)
+        except Exception:
+            await db.rollback()
+            raise
         return existing
 
     new_entry = ProfileMemory(
@@ -67,8 +71,12 @@ async def upsert_profile_memory(
         updated_at=datetime.now(timezone.utc),
     )
     db.add(new_entry)
-    await db.commit()
-    await db.refresh(new_entry)
+    try:
+        await db.commit()
+        await db.refresh(new_entry)
+    except Exception:
+        await db.rollback()
+        raise
     return new_entry
 
 

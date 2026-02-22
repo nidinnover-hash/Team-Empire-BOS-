@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: str | None = None
 
     # Internal API and rate limiting
+    WHATSAPP_APP_SECRET: str | None = None   # Used to verify X-Hub-Signature-256 on webhook POSTs
     CLONE_API_KEY: str | None = None
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_WINDOW_SECONDS: int = 60

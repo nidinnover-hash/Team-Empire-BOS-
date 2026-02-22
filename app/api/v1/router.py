@@ -12,6 +12,7 @@ from app.api.v1.endpoints import (
     projects,
     goals,
     contacts,
+    inbox,
     executions,
     finance,
     integrations,
@@ -38,6 +39,7 @@ api_router.include_router(notes.router)
 api_router.include_router(projects.router)
 api_router.include_router(goals.router)
 api_router.include_router(contacts.router)
+api_router.include_router(inbox.router)
 api_router.include_router(executions.router)
 api_router.include_router(integrations.router)
 api_router.include_router(finance.router)

@@ -43,6 +43,7 @@ from app.models import organization as _model_organization  # noqa: F401
 from app.models import project as _model_project  # noqa: F401
 from app.models import task as _model_task  # noqa: F401
 from app.models import user as _model_user  # noqa: F401
+from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
 
 # Startup safety guard
 _UNSAFE_SECRET_KEYS = {"change_me_in_env", "changeme", "secret", "change-me", ""}
@@ -88,12 +89,27 @@ app.add_middleware(CorrelationIDMiddleware)
 
 @app.post("/token")
 async def login(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.logs.audit import record_action
+    import logging
+    _log = logging.getLogger(__name__)
     user = await user_service.get_user_by_email(db, username)
     if user is None or not user.is_active or not verify_password(password, user.password_hash):
+        client_ip = request.client.host if request.client else "unknown"
+        _log.warning("Failed API login for '%s' from %s", username, client_ip)
+        await record_action(
+            db,
+            event_type="login_failed",
+            actor_user_id=None,
+            organization_id=user.organization_id if user else 1,
+            entity_type="user",
+            entity_id=user.id if user else None,
+            payload_json={"username": username[:200], "ip": client_ip, "endpoint": "/token"},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username/password",
@@ -118,13 +134,28 @@ async def web_login_page(request: Request) -> HTMLResponse:
 
 @app.post("/web/login")
 async def web_login(
+    request: Request,
     response: Response,
     username: str = Form(...),
     password: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
+    from app.logs.audit import record_action
+    import logging
+    _log = logging.getLogger(__name__)
     user = await user_service.get_user_by_email(db, username)
     if user is None or not user.is_active or not verify_password(password, user.password_hash):
+        client_ip = request.client.host if request.client else "unknown"
+        _log.warning("Failed web login for '%s' from %s", username, client_ip)
+        await record_action(
+            db,
+            event_type="login_failed",
+            actor_user_id=None,
+            organization_id=user.organization_id if user else 1,
+            entity_type="user",
+            entity_id=user.id if user else None,
+            payload_json={"username": username[:200], "ip": client_ip, "endpoint": "/web/login"},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username/password",
@@ -305,5 +336,4 @@ async def dashboard(
             "session_user": user,
         },
     )
-
 
