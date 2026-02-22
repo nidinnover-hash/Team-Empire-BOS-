@@ -13,7 +13,6 @@ from typing import cast
 from datetime import date, datetime, timezone
 
 from sqlalchemy import select
-from sqlalchemy.orm import outerjoin
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.logs.audit import record_action

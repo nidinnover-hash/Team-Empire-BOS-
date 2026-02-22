@@ -83,6 +83,27 @@
     .run-status.ok { color:#34d399; }
     .run-status.err { color:#f87171; }
 
+    /* Chat panel */
+    .chat-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+    .chat-input-area { display: flex; flex-direction: column; gap: .6rem; }
+    .chat-role-row { display: flex; gap: .5rem; flex-wrap: wrap; }
+    .role-btn { background: #0f0f1a; color: #4b5563; border: 1px solid #1c1c30; border-radius: 6px; padding: .3rem .7rem; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; cursor: pointer; transition: all .15s; }
+    .role-btn.active,.role-btn:hover { background: #1a0f35; color: #a78bfa; border-color: #3b2a77; }
+    .chat-textarea { background: #080810; border: 1px solid #1c1c30; border-radius: 8px; color: #e5e7eb; font-size: .85rem; font-family: inherit; padding: .7rem .9rem; resize: vertical; min-height: 90px; outline: none; transition: border-color .15s; width: 100%; }
+    .chat-textarea:focus { border-color: #3b2a77; }
+    .chat-send { background: #1a0f35; color: #c4b5fd; border: 1px solid #3b2a77; border-radius: 8px; padding: .5rem 1.2rem; font-size: .78rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; align-self: flex-end; transition: all .15s; }
+    .chat-send:hover { background: #2d1b69; border-color: #7c3aed; }
+    .chat-send:disabled { opacity: .4; cursor: default; }
+    .chat-history { display: flex; flex-direction: column; gap: .6rem; max-height: 300px; overflow-y: auto; padding-right: .25rem; }
+    .chat-history::-webkit-scrollbar { width: 4px; }
+    .chat-history::-webkit-scrollbar-thumb { background: #1c1c30; border-radius: 9999px; }
+    .chat-msg-user { background: #0a0a18; border: 1px solid #1c1c30; border-radius: 8px; padding: .55rem .85rem; font-size: .82rem; color: #9ca3af; align-self: flex-end; max-width: 88%; word-break: break-word; }
+    .chat-msg-agent { background: #0f0f1a; border: 1px solid #2d1b69; border-radius: 8px; padding: .65rem .85rem; font-size: .82rem; color: #e5e7eb; line-height: 1.5; word-break: break-word; }
+    .chat-role-tag { font-size: .63rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #7c3aed; margin-bottom: .3rem; }
+    .chat-approval-warn { margin-top: .45rem; padding: .3rem .55rem; background: #1c0505; border: 1px solid #7f1d1d; border-radius: 6px; font-size: .7rem; color: #f87171; }
+    .chat-empty { color: #2d2d3a; font-size: .8rem; text-align: center; padding: 2.5rem 0; }
+    .chat-hint { font-size: .68rem; color: #374151; }
+    @media(max-width:800px){.chat-panel{grid-template-columns:1fr}}
     @media(max-width:1000px){.grid-3{grid-template-columns:1fr 1fr}}
     @media(max-width:640px){.grid-3,.grid-2{grid-template-columns:1fr}}
   </style>
@@ -123,6 +144,35 @@
 </div>
 
 <main>
+
+  <div class="section-label">AI Clone Chat</div>
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">Talk to your clone</span>
+      <span class="card-count" id="chat-role-display">CEO Clone</span>
+    </div>
+    <div style="padding:1rem 1.1rem">
+      <div class="chat-panel">
+        <div class="chat-input-area">
+          <div class="chat-role-row">
+            <button class="role-btn active" data-role="CEO Clone">CEO</button>
+            <button class="role-btn" data-role="Ops Manager Clone">Ops</button>
+            <button class="role-btn" data-role="Sales Lead Clone">Sales</button>
+            <button class="role-btn" data-role="Tech PM Clone">Tech PM</button>
+            <button class="role-btn" data-role="">Auto</button>
+          </div>
+          <textarea id="chat-input" class="chat-textarea" placeholder='Ask your clone anything… e.g. "What should I focus on today?" or "Create task: review contracts"'></textarea>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span class="chat-hint">Ctrl+Enter to send</span>
+            <button id="chat-send" class="chat-send" type="button">Send</button>
+          </div>
+        </div>
+        <div class="chat-history" id="chat-history">
+          <div class="chat-empty" id="chat-placeholder">Your conversation will appear here.</div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="section-label">Executive Snapshot</div>
   <div class="grid-2">
@@ -418,6 +468,129 @@
         if (loginRes.ok) window.location.reload();
       });
     }
+  })();
+
+  // ── Agent Chat ─────────────────────────────────────────────────────────────
+  (function () {
+    const input      = document.getElementById("chat-input");
+    const sendBtn    = document.getElementById("chat-send");
+    const history    = document.getElementById("chat-history");
+    const placeholder = document.getElementById("chat-placeholder");
+    const roleDisplay = document.getElementById("chat-role-display");
+    const roleBtns   = document.querySelectorAll(".role-btn");
+    if (!input || !sendBtn || !history) return;
+
+    let selectedRole = "CEO Clone";
+
+    roleBtns.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        roleBtns.forEach(function (b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        selectedRole = btn.dataset.role || "";
+        roleDisplay.textContent = selectedRole || "Auto";
+      });
+    });
+
+    function esc(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function appendNode(html) {
+      if (placeholder && placeholder.parentNode) placeholder.remove();
+      const wrap = document.createElement("div");
+      wrap.innerHTML = html;
+      history.appendChild(wrap.firstChild);
+      history.scrollTop = history.scrollHeight;
+    }
+
+    function getCsrf() {
+      const pair = document.cookie.split("; ").find(function (c) { return c.startsWith("pc_csrf="); });
+      return pair ? decodeURIComponent(pair.split("=")[1]) : "";
+    }
+
+    async function ensureLoggedIn() {
+      const res = await fetch("/web/session");
+      const data = await res.json();
+      if (data.logged_in) return true;
+      const username = window.prompt("Sign in — Email");
+      const password = window.prompt("Sign in — Password");
+      if (!username || !password) return false;
+      const form = new URLSearchParams();
+      form.set("username", username);
+      form.set("password", password);
+      const loginRes = await fetch("/web/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form.toString()
+      });
+      return loginRes.ok;
+    }
+
+    async function send() {
+      const message = input.value.trim();
+      if (!message) return;
+
+      const loggedIn = await ensureLoggedIn();
+      if (!loggedIn) {
+        appendNode('<div class="chat-msg-agent"><div class="chat-role-tag">Error</div>Please sign in first.</div>');
+        return;
+      }
+
+      const csrf = getCsrf();
+      if (!csrf) {
+        appendNode('<div class="chat-msg-agent"><div class="chat-role-tag">Error</div>Missing CSRF token — try refreshing the page after signing in.</div>');
+        return;
+      }
+
+      appendNode('<div class="chat-msg-user">' + esc(message) + '</div>');
+      input.value = "";
+      sendBtn.disabled = true;
+
+      const form = new URLSearchParams();
+      form.set("message", message);
+      if (selectedRole) form.set("force_role", selectedRole);
+
+      try {
+        const res = await fetch("/web/agents/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-CSRF-Token": csrf
+          },
+          body: form.toString()
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          appendNode('<div class="chat-msg-agent"><div class="chat-role-tag">Error</div>' + esc(data.detail || "Request failed") + '</div>');
+        } else {
+          const approvalHtml = data.requires_approval
+            ? '<div class="chat-approval-warn">Heads up: this response involves a risky action — review before proceeding.</div>'
+            : "";
+          appendNode(
+            '<div class="chat-msg-agent">' +
+              '<div class="chat-role-tag">' + esc(data.role) + '</div>' +
+              esc(data.response).replace(/\n/g, "<br>") +
+              approvalHtml +
+            '</div>'
+          );
+          roleDisplay.textContent = data.role;
+        }
+      } catch (err) {
+        appendNode('<div class="chat-msg-agent"><div class="chat-role-tag">Error</div>Could not reach server.</div>');
+      } finally {
+        sendBtn.disabled = false;
+        input.focus();
+      }
+    }
+
+    sendBtn.addEventListener("click", send);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send();
+    });
   })();
 </script>
 </body>

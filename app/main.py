@@ -183,6 +183,34 @@ async def web_session(request: Request) -> dict:
     }
 
 
+@app.post("/web/agents/chat")
+async def web_agent_chat(
+    message: str = Form(...),
+    force_role: str | None = Form(None),
+    _csrf_ok: None = Depends(verify_csrf),
+    user: dict = Depends(get_current_web_user),
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    from app.agents.orchestrator import AgentChatRequest, run_agent
+    from app.services.memory import build_memory_context
+
+    org_id = int(user["org_id"])
+    memory_context = await build_memory_context(db, organization_id=org_id)
+    result = await run_agent(
+        request=AgentChatRequest(
+            message=message,
+            force_role=force_role if force_role else None,
+        ),
+        memory_context=memory_context,
+    )
+    return JSONResponse(content={
+        "role": result.role,
+        "response": result.response,
+        "requires_approval": result.requires_approval,
+        "proposed_actions_count": len(result.proposed_actions),
+    })
+
+
 @app.post("/web/ops/daily-run")
 async def web_daily_run(
     draft_email_limit: int = 3,
