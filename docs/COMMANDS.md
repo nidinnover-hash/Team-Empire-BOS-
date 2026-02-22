@@ -3,8 +3,14 @@
 ## Run app
 `uvicorn app.main:app --reload`
 
+## OAuth recovery runbook
+`docs/OAUTH_RECOVERY.md`
+
 ## Run tests
 `pytest -q`
+
+## Production-like local smoke
+`$env:ENFORCE_STARTUP_VALIDATION='true'; $env:COOKIE_SECURE='true'; .\.venv\Scripts\python.exe -c "from fastapi.testclient import TestClient; from app.main import app; c=TestClient(app); print('/health', c.get('/health').status_code); print('/api/v1/health', c.get('/api/v1/health').status_code)"`
 
 ## DB migration (target flow)
 `alembic revision --autogenerate -m "message"`
