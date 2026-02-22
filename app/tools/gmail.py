@@ -149,14 +149,14 @@ def _build_gmail_service(
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
 
-    # Parse expiry so the Credentials object knows if token is stale
+    # Parse expiry so the Credentials object knows if token is stale.
+    # google-auth compares against a naive utcnow(), so keep expiry naive UTC.
     expiry: datetime | None = None
     if expires_at:
         try:
             expiry = datetime.fromisoformat(expires_at)
-            # Make timezone-aware if naive
-            if expiry.tzinfo is None:
-                expiry = expiry.replace(tzinfo=timezone.utc)
+            if expiry.tzinfo is not None:
+                expiry = expiry.astimezone(timezone.utc).replace(tzinfo=None)
         except ValueError:
             expiry = None
 

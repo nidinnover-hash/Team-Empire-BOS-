@@ -13,8 +13,6 @@ import logging
 from datetime import datetime, timezone
 from typing import cast
 
-logger = logging.getLogger(__name__)
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +24,8 @@ from app.schemas.approval import ApprovalRequestCreate
 from app.services.approval import request_approval
 from app.services.integration import connect_integration, get_integration_by_type, mark_sync_time
 from app.tools import gmail as gmail_tool
+
+logger = logging.getLogger(__name__)
 
 # Prefixes that indicate call_ai() returned an error string instead of content
 _AI_ERROR_PREFIXES = ("Error:", "error:", "I'm sorry", "I cannot", "I'm unable")
@@ -502,4 +502,3 @@ async def send_approved_reply(
         await _record_send_blocked("gmail_send_failed", approval_id=approval.id)
 
     return sent
-

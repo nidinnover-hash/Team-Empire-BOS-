@@ -224,6 +224,15 @@ async def send_email(
         actor_user_id=int(current_user["id"]),
     )
     if not sent:
+        # Approving with "YES EXECUTE" can already dispatch send_message.
+        # Treat repeat /send calls as idempotent success if email is already sent.
+        existing = await email_service.get_email(db, email_id=email_id, org_id=org_id)
+        if existing and existing.reply_sent:
+            return {
+                "email_id": email_id,
+                "status": "already_sent",
+                "message": "Email was already sent previously.",
+            }
         raise HTTPException(
             status_code=409,
             detail="Cannot send. Either no approved approval exists, email already sent, or Gmail not connected.",
