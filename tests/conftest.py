@@ -26,6 +26,7 @@ from app.main import app as fastapi_app
 # Register all models so Base.metadata knows about the tables
 from app.models import approval as _model_approval  # noqa: F401
 from app.models import command as _model_command  # noqa: F401
+from app.models import conversation as _model_conversation  # noqa: F401
 from app.models import contact as _model_contact  # noqa: F401
 from app.models import daily_plan as _model_daily_plan  # noqa: F401
 from app.models import daily_run as _model_daily_run  # noqa: F401

@@ -147,3 +147,41 @@ async def test_unified_conversations_groups_items(client):
 
     wa_conv = next(c for c in conversations if c["channel"] == "whatsapp")
     assert wa_conv["message_count"] >= 2
+
+
+async def test_conversation_assign_and_state_update(client):
+    connected = await client.post(
+        "/api/v1/integrations/connect",
+        json={
+            "type": "whatsapp_business",
+            "config_json": {
+                "access_token": "wa-token",
+                "phone_number_id": "1234567890",
+            },
+        },
+    )
+    assert connected.status_code == 201
+
+    await _seed_email_for_org1(gmail_id="unified-email-assign", from_address="owner-test@example.com", is_read=False)
+
+    conversations_resp = await client.get("/api/v1/inbox/conversations?limit=20")
+    assert conversations_resp.status_code == 200
+    conversations = conversations_resp.json()
+    email_conv = next(c for c in conversations if c["channel"] == "email" and c["participant"] == "owner-test@example.com")
+    convo_id = email_conv["conversation_id"]
+
+    assign_resp = await client.patch(
+        f"/api/v1/inbox/conversations/{convo_id}/assign",
+        json={"owner_user_id": 42},
+    )
+    assert assign_resp.status_code == 200
+    assert assign_resp.json()["owner_user_id"] == 42
+
+    state_resp = await client.patch(
+        f"/api/v1/inbox/conversations/{convo_id}/state",
+        json={"status": "in_review", "priority": "high"},
+    )
+    assert state_resp.status_code == 200
+    state_body = state_resp.json()
+    assert state_body["status"] == "in_review"
+    assert state_body["priority"] == "high"

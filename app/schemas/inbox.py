@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class UnifiedInboxItem(BaseModel):
@@ -18,9 +18,24 @@ class UnifiedInboxItem(BaseModel):
 
 
 class UnifiedConversation(BaseModel):
+    record_id: int
     conversation_id: str
     channel: str
     participant: str | None = None
+    owner_user_id: int | None = None
+    priority: str
+    status: str
+    sla_due_at: datetime | None = None
     message_count: int
     unread_count: int
     last_message: UnifiedInboxItem
+
+
+class ConversationAssignRequest(BaseModel):
+    owner_user_id: int | None = None
+
+
+class ConversationStateUpdateRequest(BaseModel):
+    status: str | None = Field(default=None, pattern="^(new|in_review|waiting|done)$")
+    priority: str | None = Field(default=None, pattern="^(low|medium|high|urgent)$")
+    sla_due_at: datetime | None = None

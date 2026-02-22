@@ -34,6 +34,7 @@ from app.services import user as user_service
 # Register every model with Base.metadata so create_all sees them
 from app.models import approval as _model_approval  # noqa: F401
 from app.models import command as _model_command  # noqa: F401
+from app.models import conversation as _model_conversation  # noqa: F401
 from app.models import contact as _model_contact  # noqa: F401
 from app.models import daily_run as _model_daily_run  # noqa: F401
 from app.models import email as _model_email  # noqa: F401
@@ -353,4 +354,3 @@ async def dashboard(
             "session_user": user,
         },
     )
-

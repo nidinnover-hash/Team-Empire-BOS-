@@ -4,6 +4,7 @@ from typing import cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.inbox import UnifiedConversation, UnifiedInboxItem
+from app.services import conversation as conversation_service
 from app.services import email_service, whatsapp_service
 
 
@@ -119,16 +120,29 @@ async def get_unified_conversations(
     for (channel, participant_key), items in grouped.items():
         items.sort(key=_sort_key, reverse=True)
         last_item = items[0]
+        participant = last_item.from_address or last_item.to_address
+        record = await conversation_service.create_if_missing(
+            db=db,
+            org_id=org_id,
+            channel=channel,
+            participant_key=participant_key,
+            participant_display=participant,
+            last_message_at=last_item.timestamp,
+        )
         unread_count = 0
         for i in items:
             if i.channel == "email" and i.is_read is False:
                 unread_count += 1
-        participant = last_item.from_address or last_item.to_address
         conversations.append(
             UnifiedConversation(
+                record_id=record.id,
                 conversation_id=f"{channel}:{participant_key}",
                 channel=channel,
                 participant=participant,
+                owner_user_id=record.owner_user_id,
+                priority=record.priority,
+                status=record.status,
+                sla_due_at=record.sla_due_at,
                 message_count=len(items),
                 unread_count=unread_count,
                 last_message=cast(UnifiedInboxItem, last_item),
