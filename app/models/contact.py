@@ -1,15 +1,22 @@
-from datetime import datetime, timezone
-from sqlalchemy import String, Text, DateTime
+﻿from datetime import datetime, timezone
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
 
 class Contact(Base):
-    """A person in your network — personal or business."""
+    """A person in your network â€” personal or business."""
 
     __tablename__ = "contacts"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    organization_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+        default=1,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(500), nullable=False)
     email: Mapped[str | None] = mapped_column(String(500), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -22,3 +29,4 @@ class Contact(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
+

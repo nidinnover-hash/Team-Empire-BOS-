@@ -14,6 +14,19 @@ from app.db.base import Base
 import app.models.command  # noqa: F401
 import app.models.task     # noqa: F401
 import app.models.note     # noqa: F401
+import app.models.project  # noqa: F401
+import app.models.goal     # noqa: F401
+import app.models.contact  # noqa: F401
+import app.models.finance  # noqa: F401
+import app.models.event    # noqa: F401
+import app.models.user     # noqa: F401
+import app.models.approval # noqa: F401
+import app.models.organization # noqa: F401
+import app.models.execution # noqa: F401
+import app.models.integration # noqa: F401
+import app.models.memory # noqa: F401
+import app.models.email # noqa: F401
+import app.models.daily_run # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

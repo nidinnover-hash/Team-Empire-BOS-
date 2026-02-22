@@ -1,0 +1,108 @@
+from datetime import datetime, timezone
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.token_crypto import decrypt_config, encrypt_config
+from app.models.integration import Integration
+
+
+def _decrypted(integration: Integration) -> Integration:
+    """
+    Return the integration with config_json tokens decrypted in-place (on the
+    loaded object). Does NOT write to DB. Used so callers always get plaintext
+    tokens for API calls.
+    """
+    integration.config_json = decrypt_config(integration.config_json or {})
+    return integration
+
+
+async def list_integrations(
+    db: AsyncSession, organization_id: int, limit: int = 100
+) -> list[Integration]:
+    result = await db.execute(
+        select(Integration)
+        .where(Integration.organization_id == organization_id)
+        .order_by(Integration.created_at.desc())
+        .limit(limit)
+    )
+    return [_decrypted(i) for i in result.scalars().all()]
+
+
+async def get_integration(
+    db: AsyncSession, integration_id: int, organization_id: int
+) -> Integration | None:
+    result = await db.execute(
+        select(Integration).where(
+            Integration.id == integration_id,
+            Integration.organization_id == organization_id,
+        )
+    )
+    item = result.scalar_one_or_none()
+    return _decrypted(item) if item else None
+
+
+async def get_integration_by_type(
+    db: AsyncSession, organization_id: int, integration_type: str
+) -> Integration | None:
+    result = await db.execute(
+        select(Integration).where(
+            Integration.organization_id == organization_id,
+            Integration.type == integration_type,
+        )
+    )
+    item = result.scalar_one_or_none()
+    return _decrypted(item) if item else None
+
+
+async def connect_integration(
+    db: AsyncSession,
+    organization_id: int,
+    integration_type: str,
+    config_json: dict,
+) -> Integration:
+    encrypted = encrypt_config(config_json)
+    existing = await get_integration_by_type(db, organization_id, integration_type)
+    if existing is not None:
+        # get_integration_by_type returns decrypted object; re-encrypt for storage
+        existing.config_json = encrypted
+        existing.status = "connected"
+        existing.updated_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(existing)
+        return _decrypted(existing)
+
+    item = Integration(
+        organization_id=organization_id,
+        type=integration_type,
+        config_json=encrypted,
+        status="connected",
+    )
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return _decrypted(item)
+
+
+async def disconnect_integration(
+    db: AsyncSession, integration_id: int, organization_id: int
+) -> Integration | None:
+    item = await get_integration(db, integration_id, organization_id)
+    if item is None:
+        return None
+    item.status = "disconnected"
+    item.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(item)
+    return _decrypted(item)
+
+
+async def mark_sync_time(
+    db: AsyncSession, integration: Integration
+) -> Integration:
+    now = datetime.now(timezone.utc)
+    integration.last_sync_at = now
+    integration.updated_at = now
+    await db.commit()
+    await db.refresh(integration)
+    return integration

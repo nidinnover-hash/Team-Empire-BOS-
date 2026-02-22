@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Personal Clone — Command Center</title>
+  <title>Personal Clone â€” Command Center</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #080810; color: #d1d5db; min-height: 100vh; }
@@ -72,6 +72,16 @@
     /* Empty */
     .empty { padding:2rem 1.1rem; text-align:center; color:#2d2d3a; font-size:.8rem; }
     .empty code { display:block; margin-top:.35rem; color:#374151; font-size:.72rem; font-family:monospace; }
+    .action-wrap { display:flex; flex-wrap:wrap; gap:.6rem; align-items:center; }
+    .btn-run {
+      background:#1a0f35; color:#c4b5fd; border:1px solid #3b2a77; border-radius:8px;
+      padding:.45rem .75rem; font-size:.72rem; font-weight:700; letter-spacing:.04em;
+      text-transform:uppercase; cursor:pointer;
+    }
+    .btn-run:hover { border-color:#7c3aed; color:#ddd6fe; }
+    .run-status { font-size:.72rem; color:#6b7280; }
+    .run-status.ok { color:#34d399; }
+    .run-status.err { color:#f87171; }
 
     @media(max-width:1000px){.grid-3{grid-template-columns:1fr 1fr}}
     @media(max-width:640px){.grid-3,.grid-2{grid-template-columns:1fr}}
@@ -84,10 +94,15 @@
     <div class="brand-pulse"></div>
     <div>
       <div class="brand-name">Personal Clone</div>
-      <div class="brand-sub">Command Center · Nidin Nover</div>
+      <div class="brand-sub">Command Center Â· Nidin Nover</div>
     </div>
   </div>
   <nav class="nav">
+    {% if session_user %}
+    <a href="#" id="web-logout-link">Sign out ({{ session_user.email }})</a>
+    {% else %}
+    <a href="#" id="web-login-link">Web Sign In</a>
+    {% endif %}
     <a href="/docs">API Docs</a>
     <a href="/api/v1/health">Health</a>
   </nav>
@@ -109,6 +124,62 @@
 
 <main>
 
+  <div class="section-label">Executive Snapshot</div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Executive Briefing</span>
+        <span class="card-count">{{ executive.date }}</span>
+      </div>
+      <div class="item">
+        <div class="item-text">Team members: {{ executive.team_summary.total_members }}</div>
+        <div class="item-meta">With plan: {{ executive.team_summary.members_with_plan }}</div>
+        <div class="item-meta">Pending approvals: {{ executive.approvals.pending_count }}</div>
+        <div class="item-meta">Unread emails: {{ executive.inbox.unread_count }}</div>
+      </div>
+      <div class="item">
+        <div class="item-text" style="font-weight:600">Today's Priorities</div>
+        {% if executive.today_priorities %}
+          {% for p in executive.today_priorities %}
+          <div class="item-meta">- {{ p }}</div>
+          {% endfor %}
+        {% else %}
+          <div class="item-meta">No priorities captured yet.</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Recent Approvals</span>
+        <span class="card-count">{{ executive.approvals.recent|length }}</span>
+      </div>
+      <div class="item">
+        <div class="action-wrap">
+          <button id="daily-run-btn" class="btn-run" type="button">Generate Daily Run (Draft Only)</button>
+          <span id="daily-run-status" class="run-status">Creates drafts only. No sending/execution.</span>
+        </div>
+      </div>
+      <div id="daily-run-result" class="item" style="display:none">
+        <div class="item-text" id="run-msg"></div>
+        <div class="item-meta" id="run-counts"></div>
+        <div class="item-meta"><a href="/api/v1/approvals" style="color:#7c3aed;text-decoration:none">Open approvals →</a></div>
+      </div>
+      {% if executive.approvals.recent %}
+        {% for a in executive.approvals.recent[:5] %}
+        <div class="item">
+          <div class="task-row">
+            <div class="item-text">{{ a.approval_type }}</div>
+            <span class="badge b-{{ a.status }}">{{ a.status }}</span>
+          </div>
+          <div class="item-meta">Requested by #{{ a.requested_by }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">No approvals yet.</div>
+      {% endif %}
+    </div>
+  </div>
+
   <div class="section-label">Core Operations</div>
   <div class="grid-3">
 
@@ -120,9 +191,9 @@
         <div class="item">
           <div class="item-text">{{ cmd.command_text }}</div>
           {% if cmd.ai_response %}
-          <div class="item-sub">{{ cmd.ai_response[:120] }}{% if cmd.ai_response|length > 120 %}…{% endif %}</div>
+          <div class="item-sub">{{ cmd.ai_response[:120] }}{% if cmd.ai_response|length > 120 %}â€¦{% endif %}</div>
           {% endif %}
-          <div class="item-meta">{{ cmd.created_at.strftime('%b %d · %H:%M') }}{% if cmd.model_used %} · {{ cmd.model_used }}{% endif %}</div>
+          <div class="item-meta">{{ cmd.created_at.strftime('%b %d Â· %H:%M') }}{% if cmd.model_used %} Â· {{ cmd.model_used }}{% endif %}</div>
         </div>
         {% endfor %}
       {% else %}
@@ -140,11 +211,11 @@
             <div class="p-dot p{{ t.priority }}"></div>
             <div class="item-text" style="flex:1">{{ t.title }}</div>
           </div>
-          <div class="item-meta">{{ t.category }}{% if t.due_date %} · due {{ t.due_date }}{% endif %}</div>
+          <div class="item-meta">{{ t.category }}{% if t.due_date %} Â· due {{ t.due_date }}{% endif %}</div>
         </div>
         {% endfor %}
       {% else %}
-        <div class="empty">No open tasks.<code>POST /api/v1/tasks</code></div>
+        <div class="empty">No tasks yet.<code>POST /api/v1/tasks</code></div>
       {% endif %}
     </div>
 
@@ -157,7 +228,7 @@
           {% if n.title %}<div class="item-text" style="font-weight:600;margin-bottom:.2rem">{{ n.title }}</div>{% endif %}
           <div class="item-text" style="{% if n.title %}color:#9ca3af;font-size:.8rem{% endif %}">{{ n.content }}</div>
           {% if n.tags %}<div class="item-meta">{{ n.tags }}</div>{% endif %}
-          <div class="item-meta">{{ n.created_at.strftime('%b %d · %H:%M') }}</div>
+          <div class="item-meta">{{ n.created_at.strftime('%b %d Â· %H:%M') }}</div>
         </div>
         {% endfor %}
       {% else %}
@@ -180,7 +251,7 @@
             <div class="item-text">{{ p.title }}</div>
             <span class="badge b-{{ p.status }}">{{ p.status }}</span>
           </div>
-          <div class="item-meta">{{ p.category }}{% if p.due_date %} · due {{ p.due_date }}{% endif %}</div>
+          <div class="item-meta">{{ p.category }}{% if p.due_date %} Â· due {{ p.due_date }}{% endif %}</div>
         </div>
         {% endfor %}
       {% else %}
@@ -199,7 +270,7 @@
             <span class="badge b-{{ g.status }}">{{ g.status }}</span>
           </div>
           <div class="prog-wrap"><div class="prog-fill" style="width:{{ g.progress }}%"></div></div>
-          <div class="item-meta">{{ g.progress }}% · {{ g.category }}{% if g.target_date %} · {{ g.target_date }}{% endif %}</div>
+          <div class="item-meta">{{ g.progress }}% Â· {{ g.category }}{% if g.target_date %} Â· {{ g.target_date }}{% endif %}</div>
         </div>
         {% endfor %}
       {% else %}
@@ -221,7 +292,7 @@
           <div class="task-row">
             <div>
               <div class="item-text">{{ c.name }}</div>
-              {% if c.company %}<div class="item-meta">{{ c.company }}{% if c.role %} · {{ c.role }}{% endif %}</div>{% endif %}
+              {% if c.company %}<div class="item-meta">{{ c.company }}{% if c.role %} Â· {{ c.role }}{% endif %}</div>{% endif %}
             </div>
             <span class="badge b-{{ c.relationship }}">{{ c.relationship }}</span>
           </div>
@@ -251,11 +322,104 @@
         </span>
       </div>
       <div style="padding:.6rem 1.1rem">
-        <a href="/api/v1/finance" style="color:#374151;text-decoration:none;font-size:.72rem">View all entries →</a>
+        <a href="/api/v1/finance" style="color:#374151;text-decoration:none;font-size:.72rem">View all entries â†’</a>
       </div>
     </div>
 
   </div>
 </main>
+<script>
+  (function () {
+    const btn = document.getElementById("daily-run-btn");
+    const status = document.getElementById("daily-run-status");
+    const panel = document.getElementById("daily-run-result");
+    const msg = document.getElementById("run-msg");
+    const counts = document.getElementById("run-counts");
+    if (!btn || !status || !panel || !msg || !counts) return;
+
+    btn.addEventListener("click", async function () {
+      const ok = window.confirm("This creates drafts only. No sending or execution will happen. Continue?");
+      if (!ok) return;
+
+      btn.disabled = true;
+      status.className = "run-status";
+      status.textContent = "Running daily draft workflow...";
+
+      try {
+        const sessionRes = await fetch("/web/session");
+        const sessionData = await sessionRes.json();
+        if (!sessionData.logged_in) {
+          const username = window.prompt("Email");
+          const password = window.prompt("Password");
+          if (!username || !password) throw new Error("Login cancelled");
+          const form = new URLSearchParams();
+          form.set("username", username);
+          form.set("password", password);
+          const loginRes = await fetch("/web/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: form.toString()
+          });
+          if (!loginRes.ok) throw new Error("Web login failed");
+        }
+
+        const csrfToken = (document.cookie.split("; ").find((c) => c.startsWith("pc_csrf=")) || "").split("=")[1];
+        if (!csrfToken) throw new Error("Missing CSRF token");
+
+        const res = await fetch("/web/ops/daily-run?draft_email_limit=3", {
+          method: "POST",
+          headers: { "X-CSRF-Token": decodeURIComponent(csrfToken) }
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || "Request failed");
+        }
+        panel.style.display = "block";
+        msg.textContent = data.message || "Daily run completed.";
+        counts.textContent =
+          "Plans: " + (data.drafted_plan_count || 0) +
+          " | Email drafts: " + (data.drafted_email_count || 0) +
+          " | Pending approvals: " + (data.pending_approvals || 0);
+        status.className = "run-status ok";
+        status.textContent = "Draft-only run completed.";
+      } catch (err) {
+        panel.style.display = "none";
+        status.className = "run-status err";
+        status.textContent = "Daily run failed: " + (err && err.message ? err.message : "unknown error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    const logoutLink = document.getElementById("web-logout-link");
+    if (logoutLink) {
+      logoutLink.addEventListener("click", async function (e) {
+        e.preventDefault();
+        await fetch("/web/logout", { method: "POST" });
+        window.location.reload();
+      });
+    }
+
+    const loginLink = document.getElementById("web-login-link");
+    if (loginLink) {
+      loginLink.addEventListener("click", async function (e) {
+        e.preventDefault();
+        const username = window.prompt("Email");
+        const password = window.prompt("Password");
+        if (!username || !password) return;
+        const form = new URLSearchParams();
+        form.set("username", username);
+        form.set("password", password);
+        const loginRes = await fetch("/web/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: form.toString()
+        });
+        if (loginRes.ok) window.location.reload();
+      });
+    }
+  })();
+</script>
 </body>
 </html>
+

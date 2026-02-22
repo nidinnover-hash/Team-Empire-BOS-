@@ -6,8 +6,10 @@ from app.models.task import Task
 from app.schemas.task import TaskCreate, TaskUpdate
 
 
-async def create_task(db: AsyncSession, data: TaskCreate) -> Task:
-    task = Task(**data.model_dump())
+async def create_task(
+    db: AsyncSession, data: TaskCreate, organization_id: int = 1
+) -> Task:
+    task = Task(**data.model_dump(), organization_id=organization_id)
     db.add(task)
     await db.commit()
     await db.refresh(task)
@@ -17,11 +19,14 @@ async def create_task(db: AsyncSession, data: TaskCreate) -> Task:
 async def list_tasks(
     db: AsyncSession,
     limit: int = 50,
+    organization_id: int | None = None,
     project_id: int | None = None,
     category: str | None = None,
     is_done: bool | None = None,
 ) -> list[Task]:
     query = select(Task)
+    if organization_id is not None:
+        query = query.where(Task.organization_id == organization_id)
     if project_id is not None:
         query = query.where(Task.project_id == project_id)
     if category is not None:
@@ -35,9 +40,15 @@ async def list_tasks(
 
 
 async def update_task(
-    db: AsyncSession, task_id: int, data: TaskUpdate
+    db: AsyncSession,
+    task_id: int,
+    data: TaskUpdate,
+    organization_id: int | None = None,
 ) -> Task | None:
-    result = await db.execute(select(Task).where(Task.id == task_id))
+    query = select(Task).where(Task.id == task_id)
+    if organization_id is not None:
+        query = query.where(Task.organization_id == organization_id)
+    result = await db.execute(query)
     task = result.scalar_one_or_none()
     if task is None:
         return None

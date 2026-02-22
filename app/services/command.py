@@ -41,7 +41,9 @@ async def _call_openai(text: str) -> tuple[str | None, str | None]:
         return None, None
 
 
-async def create_command(db: AsyncSession, data: CommandCreate) -> Command:
+async def create_command(
+    db: AsyncSession, data: CommandCreate, organization_id: int = 1
+) -> Command:
     ai_response = data.ai_response
     model_used = None
 
@@ -50,6 +52,7 @@ async def create_command(db: AsyncSession, data: CommandCreate) -> Command:
         ai_response, model_used = await _call_openai(data.command_text)
 
     command = Command(
+        organization_id=organization_id,
         command_text=data.command_text,
         ai_response=ai_response,
         model_used=model_used,
@@ -60,8 +63,13 @@ async def create_command(db: AsyncSession, data: CommandCreate) -> Command:
     return command
 
 
-async def list_commands(db: AsyncSession, limit: int = 50) -> list[Command]:
+async def list_commands(
+    db: AsyncSession, limit: int = 50, organization_id: int = 1
+) -> list[Command]:
     result = await db.execute(
-        select(Command).order_by(Command.created_at.desc()).limit(limit)
+        select(Command)
+        .where(Command.organization_id == organization_id)
+        .order_by(Command.created_at.desc(), Command.id.desc())
+        .limit(limit)
     )
     return list(result.scalars().all())

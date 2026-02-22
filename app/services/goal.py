@@ -5,25 +5,37 @@ from app.models.goal import Goal
 from app.schemas.goal import GoalCreate, GoalProgressUpdate, GoalStatusUpdate
 
 
-async def create_goal(db: AsyncSession, data: GoalCreate) -> Goal:
-    goal = Goal(**data.model_dump())
+async def create_goal(
+    db: AsyncSession, data: GoalCreate, organization_id: int = 1
+) -> Goal:
+    goal = Goal(**data.model_dump(), organization_id=organization_id)
     db.add(goal)
     await db.commit()
     await db.refresh(goal)
     return goal
 
 
-async def list_goals(db: AsyncSession, limit: int = 50) -> list[Goal]:
+async def list_goals(
+    db: AsyncSession, limit: int = 50, organization_id: int = 1
+) -> list[Goal]:
     result = await db.execute(
-        select(Goal).order_by(Goal.created_at.desc()).limit(limit)
+        select(Goal)
+        .where(Goal.organization_id == organization_id)
+        .order_by(Goal.created_at.desc())
+        .limit(limit)
     )
     return list(result.scalars().all())
 
 
 async def update_goal_progress(
-    db: AsyncSession, goal_id: int, data: GoalProgressUpdate
+    db: AsyncSession,
+    goal_id: int,
+    data: GoalProgressUpdate,
+    organization_id: int = 1,
 ) -> Goal | None:
-    result = await db.execute(select(Goal).where(Goal.id == goal_id))
+    result = await db.execute(
+        select(Goal).where(Goal.id == goal_id, Goal.organization_id == organization_id)
+    )
     goal = result.scalar_one_or_none()
     if goal is None:
         return None
@@ -36,9 +48,14 @@ async def update_goal_progress(
 
 
 async def update_goal_status(
-    db: AsyncSession, goal_id: int, data: GoalStatusUpdate
+    db: AsyncSession,
+    goal_id: int,
+    data: GoalStatusUpdate,
+    organization_id: int = 1,
 ) -> Goal | None:
-    result = await db.execute(select(Goal).where(Goal.id == goal_id))
+    result = await db.execute(
+        select(Goal).where(Goal.id == goal_id, Goal.organization_id == organization_id)
+    )
     goal = result.scalar_one_or_none()
     if goal is None:
         return None
