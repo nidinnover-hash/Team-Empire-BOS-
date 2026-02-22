@@ -62,3 +62,14 @@ class AITestResult(BaseModel):
     status: str            # "ok" | "failed" | "not_configured"
     message: str
     sample_response: str | None = None
+
+
+class WhatsAppSendRequest(BaseModel):
+    to: str
+    body: str
+
+
+class WhatsAppSendResult(BaseModel):
+    status: str
+    to: str
+    message_id: str | None = None

@@ -1,10 +1,14 @@
 import secrets
+import hmac
 from datetime import date, datetime, timezone
+from hashlib import sha256
+from time import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.core.config import PLACEHOLDER_AI_KEYS, settings
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
@@ -18,6 +22,8 @@ from app.schemas.integration import (
     IntegrationConnectRequest,
     IntegrationRead,
     IntegrationTestResult,
+    WhatsAppSendRequest,
+    WhatsAppSendResult,
 )
 from app.services import integration as integration_service
 from app.services.calendar_service import (
@@ -30,6 +36,7 @@ from app.tools.google_calendar import (
     list_events_for_day,
     refresh_access_token,
 )
+from app.tools.whatsapp_business import get_phone_number_details, send_text_message
 
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
 
@@ -38,10 +45,45 @@ def _safe_provider_error(prefix: str) -> str:
     return f"{prefix}. Reconnect integration and retry."
 
 
+def _sign_google_calendar_state(org_id: int) -> str:
+    ts = int(time())
+    nonce = secrets.token_urlsafe(16)
+    payload = f"{org_id}:{ts}:{nonce}"
+    sig = hmac.new(
+        settings.SECRET_KEY.encode("utf-8"),
+        payload.encode("utf-8"),
+        sha256,
+    ).hexdigest()
+    return f"{payload}:{sig}"
+
+
+def _verify_google_calendar_state(state: str, expected_org_id: int, max_age_seconds: int = 600) -> None:
+    try:
+        parts = state.split(":", 3)
+        if len(parts) != 4:
+            raise ValueError("Invalid state format")
+        org_id_str, ts_str, nonce, sig = parts
+        payload = f"{org_id_str}:{ts_str}:{nonce}"
+        expected_sig = hmac.new(
+            settings.SECRET_KEY.encode("utf-8"),
+            payload.encode("utf-8"),
+            sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(sig, expected_sig):
+            raise ValueError("Invalid state signature")
+        if int(org_id_str) != expected_org_id:
+            raise ValueError("State organization mismatch")
+        ts = int(ts_str)
+        if int(time()) - ts > max_age_seconds:
+            raise ValueError("State expired")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
+
+
 def _redact_integration(item: IntegrationRead | object) -> IntegrationRead:
     data = IntegrationRead.model_validate(item).model_dump()
     config = dict(data["config_json"])
-    for key in ("access_token", "refresh_token", "client_secret"):
+    for key in ("access_token", "refresh_token", "client_secret", "webhook_verify_token"):
         if key in config:
             config[key] = "***"
     data["config_json"] = config
@@ -91,7 +133,7 @@ async def google_calendar_auth_url(
 ) -> GoogleAuthUrlRead:
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_REDIRECT_URI:
         raise HTTPException(status_code=400, detail="Google OAuth is not configured")
-    state = f"org:{actor['org_id']}:{secrets.token_urlsafe(24)}"
+    state = _sign_google_calendar_state(int(actor["org_id"]))
     return GoogleAuthUrlRead(
         auth_url=build_google_auth_url(
             client_id=settings.GOOGLE_CLIENT_ID,
@@ -110,9 +152,7 @@ async def google_calendar_oauth_callback(
 ) -> IntegrationRead:
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET or not settings.GOOGLE_REDIRECT_URI:
         raise HTTPException(status_code=400, detail="Google OAuth is not configured")
-    expected_prefix = f"org:{actor['org_id']}:"
-    if not data.state.startswith(expected_prefix):
-        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    _verify_google_calendar_state(data.state, expected_org_id=int(actor["org_id"]))
     tokens = await exchange_code_for_tokens(
         code=data.code,
         client_id=settings.GOOGLE_CLIENT_ID,
@@ -204,11 +244,8 @@ async def list_calendar_events(
 
 # ── AI Provider (literal prefix — must be before /{integration_id}/…) ─────────
 
-_PLACEHOLDER_KEYS = {"sk-your-key-here", "sk-xxxxxxxxxxxxxxxxxxxxxxxx", "", "your-anthropic-key-here"}
-
-
 def _key_is_configured(key: str | None) -> bool:
-    return bool(key) and key not in _PLACEHOLDER_KEYS
+    return bool(key) and key not in PLACEHOLDER_AI_KEYS
 
 
 @router.get("/ai/status", response_model=list[AIProviderStatus])
@@ -320,6 +357,89 @@ async def test_ai_provider(
     )
 
 
+@router.post("/whatsapp/send-test", response_model=WhatsAppSendResult)
+async def whatsapp_send_test_message(
+    data: WhatsAppSendRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> WhatsAppSendResult:
+    item = await integration_service.get_integration_by_type(
+        db,
+        organization_id=actor["org_id"],
+        integration_type="whatsapp_business",
+    )
+    if item is None or item.status != "connected":
+        raise HTTPException(status_code=400, detail="WhatsApp Business is not connected")
+
+    access_token = item.config_json.get("access_token")
+    phone_number_id = item.config_json.get("phone_number_id")
+    if not access_token or not phone_number_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing access_token or phone_number_id in whatsapp_business config_json",
+        )
+
+    try:
+        resp = await send_text_message(
+            access_token=str(access_token),
+            phone_number_id=str(phone_number_id),
+            to=data.to,
+            body=data.body,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=_safe_provider_error("WhatsApp message send failed"),
+        ) from exc
+
+    await integration_service.mark_sync_time(db, item)
+    await record_action(
+        db,
+        event_type="whatsapp_test_message_sent",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="integration",
+        entity_id=item.id,
+        payload_json={"to": data.to},
+    )
+    message_id: str | None = None
+    messages = resp.get("messages")
+    if isinstance(messages, list) and messages:
+        first = messages[0]
+        if isinstance(first, dict):
+            raw_id = first.get("id")
+            if isinstance(raw_id, str):
+                message_id = raw_id
+
+    return WhatsAppSendResult(status="queued", to=data.to, message_id=message_id)
+
+
+@router.get("/whatsapp/webhook", include_in_schema=False)
+async def whatsapp_webhook_verify(
+    hub_mode: str | None = Query(None, alias="hub.mode"),
+    hub_verify_token: str | None = Query(None, alias="hub.verify_token"),
+    hub_challenge: str | None = Query(None, alias="hub.challenge"),
+) -> PlainTextResponse:
+    expected = (settings.WHATSAPP_WEBHOOK_VERIFY_TOKEN or "").strip()
+    if (
+        hub_mode == "subscribe"
+        and hub_verify_token
+        and expected
+        and hub_verify_token == expected
+        and hub_challenge is not None
+    ):
+        return PlainTextResponse(content=hub_challenge, status_code=200)
+    raise HTTPException(status_code=403, detail="Webhook verification failed")
+
+
+@router.post("/whatsapp/webhook", include_in_schema=False)
+async def whatsapp_webhook_receive(payload: dict) -> dict:
+    # Ack quickly; processing pipelines can be added behind this endpoint.
+    entries = payload.get("entry")
+    count = len(entries) if isinstance(entries, list) else 0
+    return {"status": "received", "entries": count}
+
+
 # ── Parametric endpoints (/{integration_id}/…) — MUST be last ─────────────────
 
 @router.post("/{integration_id}/disconnect", response_model=IntegrationRead)
@@ -402,6 +522,21 @@ async def test_integration(
                 else:
                     status = "failed"
                     message = "Google Calendar test failed and no refresh token is available"
+    elif item.type == "whatsapp_business":
+        access_token = item.config_json.get("access_token")
+        phone_number_id = item.config_json.get("phone_number_id")
+        if not access_token or not phone_number_id:
+            status = "failed"
+            message = "Missing access_token or phone_number_id in config_json for whatsapp_business"
+        else:
+            try:
+                await get_phone_number_details(
+                    access_token=str(access_token),
+                    phone_number_id=str(phone_number_id),
+                )
+            except Exception:
+                status = "failed"
+                message = _safe_provider_error("WhatsApp Business test failed")
 
     if status == "ok":
         await integration_service.mark_sync_time(db, item)
