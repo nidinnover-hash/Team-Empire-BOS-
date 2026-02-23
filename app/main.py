@@ -541,6 +541,22 @@ async def web_observe(request: Request) -> HTMLResponse:
     )
 
 
+@app.get("/web/ops-intel", response_class=HTMLResponse, include_in_schema=False)
+async def web_ops_intel(request: Request) -> HTMLResponse:
+    token = request.cookies.get("pc_session")
+    user = None
+    if token:
+        try:
+            user = decode_access_token(token)
+        except ValueError:
+            user = None
+    if user is None:
+        return RedirectResponse(url="/web/login", status_code=302)
+    return templates.TemplateResponse(
+        request, "ops_intel.html", {"request": request, "session_user": user},
+    )
+
+
 @app.get("/web/tasks", response_class=HTMLResponse, include_in_schema=False)
 async def web_tasks(request: Request) -> HTMLResponse:
     token = request.cookies.get("pc_session")
