@@ -15,6 +15,7 @@ class AiCallLog(Base):
     provider: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     model_name: Mapped[str] = mapped_column(String(80), nullable=False)
     prompt_type: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)

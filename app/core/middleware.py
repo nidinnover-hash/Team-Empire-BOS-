@@ -14,6 +14,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from app.core.config import settings
+from app.core.request_context import reset_current_request_id, set_current_request_id
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -36,9 +37,13 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         correlation_id = request.headers.get("X-Correlation-ID") or str(uuid.uuid4())
         request.state.correlation_id = correlation_id
-        response = cast(Response, await call_next(request))
-        response.headers["X-Correlation-ID"] = correlation_id
-        return response
+        token = set_current_request_id(correlation_id)
+        try:
+            response = cast(Response, await call_next(request))
+            response.headers["X-Correlation-ID"] = correlation_id
+            return response
+        finally:
+            reset_current_request_id(token)
 
 
 # ── Rate Limiter ──────────────────────────────────────────────────────────────

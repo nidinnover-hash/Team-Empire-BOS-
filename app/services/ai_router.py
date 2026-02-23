@@ -17,6 +17,7 @@ import time
 from typing import cast
 
 from app.core.config import PLACEHOLDER_AI_KEYS, settings
+from app.core.request_context import get_current_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ async def _log_ai_call(
     fallback_from: str | None = None,
     error_type: str | None = None,
     prompt_type: str | None = None,
+    organization_id: int | None = None,
+    request_id: str | None = None,
 ) -> None:
     """Persist AI call metrics to DB and in-memory buffer."""
     entry = {
@@ -50,6 +53,8 @@ async def _log_ai_call(
         "fallback_from": fallback_from,
         "error_type": error_type,
         "prompt_type": prompt_type,
+        "organization_id": organization_id,
+        "request_id": request_id,
         "ts": time.time(),
     }
     _recent_calls.append(entry)
@@ -62,8 +67,10 @@ async def _log_ai_call(
         from app.models.ai_call_log import AiCallLog
         async with AsyncSessionLocal() as db:
             db.add(AiCallLog(
+                organization_id=organization_id,
                 provider=provider,
                 model_name=model_name,
+                request_id=request_id,
                 latency_ms=latency_ms,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
@@ -105,6 +112,8 @@ async def call_ai(
     provider: str | None = None,
     max_tokens: int = 800,
     conversation_history: list[dict] | None = None,
+    organization_id: int | None = None,
+    request_id: str | None = None,
 ) -> str:
     """
     Route to OpenAI, Anthropic, or Groq based on config.
@@ -164,13 +173,21 @@ async def call_ai(
             f"{system_prompt}"
         )
 
+    effective_request_id = request_id or get_current_request_id()
+
     # Try primary provider
     t0 = time.monotonic()
     result, is_transient = await _call_provider(chosen, full_system, user_message, max_tokens, conversation_history)
     latency = int((time.monotonic() - t0) * 1000)
 
     if not result.startswith("Error:"):
-        await _log_ai_call(provider=chosen, model_name=_get_model(chosen), latency_ms=latency)
+        await _log_ai_call(
+            provider=chosen,
+            model_name=_get_model(chosen),
+            latency_ms=latency,
+            organization_id=organization_id,
+            request_id=effective_request_id,
+        )
         return result
 
     # On transient failure, try other configured providers
@@ -186,6 +203,7 @@ async def call_ai(
                 await _log_ai_call(
                     provider=fallback, model_name=_get_model(fallback),
                     latency_ms=fb_latency, used_fallback=True, fallback_from=chosen,
+                    organization_id=organization_id, request_id=effective_request_id,
                 )
                 return fb_result
 
@@ -193,6 +211,7 @@ async def call_ai(
     await _log_ai_call(
         provider=chosen, model_name=_get_model(chosen),
         latency_ms=latency, error_type=result[:80],
+        organization_id=organization_id, request_id=effective_request_id,
     )
     return result  # Return the original error if all fail
 
@@ -362,4 +381,3 @@ def _groq_error_message(error_type: str) -> str:
     if error_type == "APIConnectionError":
         return "Cannot reach Groq API. Check your internet connection."
     return f"Groq error ({error_type}). Check your API key and network."
-

@@ -22,6 +22,7 @@ class DecisionTrace(Base):
     confidence_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     signals_json: Mapped[dict] = mapped_column(JSON, default=dict)
     actor_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     daily_run_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     source_event_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(

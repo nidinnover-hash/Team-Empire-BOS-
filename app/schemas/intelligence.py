@@ -14,6 +14,7 @@ class DecisionTraceCreate(BaseModel):
     confidence_score: float = Field(ge=0.0, le=1.0)
     signals_json: dict = Field(default_factory=dict)
     actor_user_id: int | None = None
+    request_id: str | None = None
     daily_run_id: int | None = None
     source_event_id: int | None = None
 
@@ -29,6 +30,7 @@ class DecisionTraceRead(BaseModel):
     reasoning: list[str] = Field(default_factory=list)
     signals_json: dict
     actor_user_id: int | None
+    request_id: str | None = None
     daily_run_id: int | None
     source_event_id: int | None
     created_at: datetime
