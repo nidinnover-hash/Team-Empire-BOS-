@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class IntegrationConnectRequest(BaseModel):
-    type: str
+    type: str = Field(..., max_length=50)
     config_json: dict = Field(default_factory=dict)
 
 
@@ -33,9 +33,9 @@ class GoogleAuthUrlRead(BaseModel):
 
 
 class GoogleOAuthCallbackRequest(BaseModel):
-    code: str
-    state: str
-    calendar_id: str = "primary"
+    code: str = Field(..., max_length=2000)
+    state: str = Field(..., max_length=1000)
+    calendar_id: str = Field("primary", max_length=200)
 
 
 class CalendarSyncResult(BaseModel):
@@ -51,22 +51,22 @@ class CalendarEventRead(BaseModel):
 
 
 class AIProviderStatus(BaseModel):
-    provider: str          # "openai" or "anthropic"
-    configured: bool       # key is present and not a placeholder
-    active: bool           # this is the DEFAULT_AI_PROVIDER
-    model: str             # model that will be used
+    provider: str
+    configured: bool
+    active: bool
+    model: str
 
 
 class AITestResult(BaseModel):
     provider: str
-    status: str            # "ok" | "failed" | "not_configured"
+    status: str
     message: str
     sample_response: str | None = None
 
 
 class WhatsAppSendRequest(BaseModel):
-    to: str
-    body: str
+    to: str = Field(..., min_length=5, max_length=30)
+    body: str = Field(..., min_length=1, max_length=4096)
 
 
 class WhatsAppSendResult(BaseModel):
@@ -76,7 +76,7 @@ class WhatsAppSendResult(BaseModel):
 
 
 class ClickUpConnectRequest(BaseModel):
-    api_token: str
+    api_token: str = Field(..., min_length=2, max_length=200)
 
 
 class ClickUpSyncResult(BaseModel):
@@ -92,7 +92,7 @@ class ClickUpStatusRead(BaseModel):
 
 
 class GitHubConnectRequest(BaseModel):
-    api_token: str  # Personal Access Token (classic or fine-grained)
+    api_token: str = Field(..., min_length=2, max_length=200)
 
 
 class GitHubSyncResult(BaseModel):
@@ -104,12 +104,12 @@ class GitHubSyncResult(BaseModel):
 class GitHubStatusRead(BaseModel):
     connected: bool
     last_sync_at: str | None = None
-    login: str | None = None        # GitHub username
+    login: str | None = None
     repos_tracked: int | None = None
 
 
 class SlackConnectRequest(BaseModel):
-    bot_token: str  # Bot token starting with xoxb-
+    bot_token: str = Field(..., min_length=1, max_length=200)
 
 
 class SlackSyncResult(BaseModel):
@@ -126,5 +126,5 @@ class SlackStatusRead(BaseModel):
 
 
 class SlackSendRequest(BaseModel):
-    channel_id: str
-    text: str
+    channel_id: str = Field(..., min_length=1, max_length=100)
+    text: str = Field(..., min_length=1, max_length=4000)

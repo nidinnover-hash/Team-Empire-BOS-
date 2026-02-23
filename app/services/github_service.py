@@ -120,6 +120,9 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
 
         repos_tracked = len(active_repos)
 
+        # Collect all upsert items first, then batch-load existing tasks
+        upsert_batch: list[dict[str, Any]] = []
+
         for repo in active_repos:
             owner = repo.get("owner", {}).get("login", "")
             name = repo.get("name", "")
@@ -127,19 +130,91 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 continue
 
             # Sync open PRs
-            prs = await get_pull_requests(token, owner, name)
+            try:
+                prs = await get_pull_requests(token, owner, name)
+            except Exception as exc:
+                logger.warning("GitHub PR fetch failed for %s/%s: %s", owner, name, type(exc).__name__)
+                continue
             for pr in prs:
-                await _upsert_pr(db, org_id, owner, name, pr)
-                prs_synced += 1
+                pr_id = pr.get("number")
+                if not pr_id:
+                    continue
+                ext_id = f"{owner}/{name}#{pr_id}"
+                title = f"[PR] {name}: {(pr.get('title') or 'Untitled')}"[:500]
+                author = pr.get("user", {}).get("login", "unknown")
+                url = pr.get("html_url", "")
+                desc = f"Author: @{author}\n{url}"
+                is_draft = pr.get("draft", False)
+                prio = 2 if is_draft else 3
+                upsert_batch.append({"external_id": ext_id, "source": "github_pr", "title": title, "description": desc, "priority": prio})
 
             # Sync open bug/critical issues
-            issues = await get_issues(token, owner, name, labels="bug")
+            try:
+                issues = await get_issues(token, owner, name, labels="bug")
+            except Exception as exc:
+                logger.warning("GitHub issue fetch failed for %s/%s: %s", owner, name, type(exc).__name__)
+                continue
             for issue in issues:
-                await _upsert_issue(db, org_id, owner, name, issue)
-                issues_synced += 1
+                issue_id = issue.get("number")
+                if not issue_id:
+                    continue
+                ext_id = f"{owner}/{name}#{issue_id}"
+                title = f"[BUG] {name}: {(issue.get('title') or 'Untitled')}"[:500]
+                labels = [lb.get("name", "") for lb in (issue.get("labels") or []) if isinstance(lb, dict)]
+                url = issue.get("html_url", "")
+                desc = f"Labels: {', '.join(labels)}\n{url}"
+                prio = 4 if "critical" in labels or "urgent" in labels else 3
+                upsert_batch.append({"external_id": ext_id, "source": "github_issue", "title": title, "description": desc, "priority": prio})
+
+        # Batch-load all existing tasks for this org + sources to avoid N+1
+        ext_ids = [item["external_id"] for item in upsert_batch]
+        existing_map: dict[tuple[str, str], Task] = {}
+        if ext_ids:
+            result = await db.execute(
+                select(Task).where(
+                    Task.organization_id == org_id,
+                    Task.external_source.in_(["github_pr", "github_issue"]),
+                    Task.external_id.in_(ext_ids),
+                )
+            )
+            for task in result.scalars().all():
+                existing_map[(task.external_source, task.external_id)] = task
+
+        # Upsert all items with per-item error handling
+        for upsert_item in upsert_batch:
+            try:
+                key = (upsert_item["source"], upsert_item["external_id"])
+                existing = existing_map.get(key)
+                if existing:
+                    existing.title = upsert_item["title"]
+                    existing.description = upsert_item["description"]
+                    existing.priority = upsert_item["priority"]
+                    existing.is_done = False
+                else:
+                    task = Task(
+                        organization_id=org_id,
+                        title=upsert_item["title"],
+                        description=upsert_item["description"],
+                        priority=upsert_item["priority"],
+                        category="business",
+                        is_done=False,
+                        external_id=upsert_item["external_id"],
+                        external_source=upsert_item["source"],
+                    )
+                    db.add(task)
+                if upsert_item["source"] == "github_pr":
+                    prs_synced += 1
+                else:
+                    issues_synced += 1
+            except Exception as exc:
+                logger.warning("GitHub upsert skipped %s: %s", upsert_item["external_id"], exc)
+                continue
+
+        await db.commit()
 
     except Exception as exc:
         logger.warning("GitHub sync failed: %s", type(exc).__name__)
+        await db.rollback()
         return {"prs_synced": prs_synced, "issues_synced": issues_synced, "error": type(exc).__name__}
 
     # Update config with repos_tracked count + mark sync time
@@ -148,83 +223,3 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
     await integration_service.mark_sync_time(db, item)
     return {"prs_synced": prs_synced, "issues_synced": issues_synced, "error": None}
 
-
-async def _upsert_pr(
-    db: AsyncSession, org_id: int, owner: str, repo_name: str, pr: dict[str, Any]
-) -> None:
-    """Insert or update a GitHub PR as a local Task."""
-    pr_id = pr.get("number")
-    if not pr_id:
-        return
-
-    external_id = f"{owner}/{repo_name}#{pr_id}"
-    title = f"[PR] {repo_name}: {(pr.get('title') or 'Untitled')}"[:500]
-    author = pr.get("user", {}).get("login", "unknown")
-    url = pr.get("html_url", "")
-    description = f"Author: @{author}\n{url}"
-    is_draft = pr.get("draft", False)
-    priority = 2 if is_draft else 3   # high for active PRs, medium for drafts
-
-    await _upsert_task(db, org_id, external_id, "github_pr", title, description, priority)
-
-
-async def _upsert_issue(
-    db: AsyncSession, org_id: int, owner: str, repo_name: str, issue: dict[str, Any]
-) -> None:
-    """Insert or update a GitHub issue as a local Task."""
-    issue_id = issue.get("number")
-    if not issue_id:
-        return
-
-    external_id = f"{owner}/{repo_name}#{issue_id}"
-    title = f"[BUG] {repo_name}: {(issue.get('title') or 'Untitled')}"[:500]
-    labels = [lb.get("name", "") for lb in (issue.get("labels") or []) if isinstance(lb, dict)]
-    url = issue.get("html_url", "")
-    description = f"Labels: {', '.join(labels)}\n{url}"
-    priority = 4 if "critical" in labels or "urgent" in labels else 3
-
-    await _upsert_task(db, org_id, external_id, "github_issue", title, description, priority)
-
-
-async def _upsert_task(
-    db: AsyncSession,
-    org_id: int,
-    external_id: str,
-    external_source: str,
-    title: str,
-    description: str | None,
-    priority: int,
-) -> None:
-    result = await db.execute(
-        select(Task).where(
-            Task.organization_id == org_id,
-            Task.external_source == external_source,
-            Task.external_id == external_id,
-        )
-    )
-    existing = result.scalar_one_or_none()
-
-    if existing:
-        existing.title = title
-        existing.description = description
-        existing.priority = priority
-        existing.is_done = False  # re-opened if it was closed
-    else:
-        task = Task(
-            organization_id=org_id,
-            title=title,
-            description=description,
-            priority=priority,
-            category="business",
-            is_done=False,
-            external_id=external_id,
-            external_source=external_source,
-        )
-        db.add(task)
-
-    try:
-        await db.commit()
-    except Exception:
-        logger.exception("GitHub task upsert failed: %s", external_id)
-        await db.rollback()
-        raise

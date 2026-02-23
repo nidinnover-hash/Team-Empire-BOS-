@@ -36,8 +36,10 @@ async def execute_approval(
     actor_user_id: int,
     actor_org_id: int | None = None,
 ) -> None:
-    # Defence-in-depth: verify the approval belongs to the actor's org when provided.
-    if actor_org_id is not None and approval.organization_id != actor_org_id:
+    if actor_org_id is None:
+        actor_org_id = int(approval.organization_id)
+    # Mandatory org check: approval must belong to the actor's org.
+    if approval.organization_id != actor_org_id:
         raise ValueError(
             f"Cross-org execution denied: approval org {approval.organization_id} "
             f"!= actor org {actor_org_id}"
