@@ -7,7 +7,7 @@ from app.core.config import settings
 REDACTED = "***"
 _MAX_DEPTH = 8
 
-_SENSITIVE_EXACT_KEYS = {
+_SECRET_EXACT_KEYS = {
     "access_token",
     "refresh_token",
     "id_token",
@@ -22,7 +22,7 @@ _SENSITIVE_EXACT_KEYS = {
     "pc_session",
     "pc_csrf",
 }
-_SENSITIVE_KEY_MARKERS = (
+_SECRET_KEY_MARKERS = (
     "password",
     "secret",
     "token",
@@ -30,9 +30,9 @@ _SENSITIVE_KEY_MARKERS = (
     "authorization",
     "cookie",
 )
-_SENSITIVE_KEY_EXCEPTIONS = {"token_type"}
+_SECRET_KEY_EXCEPTIONS = {"token_type"}
 
-_PII_KEYS = {
+_PII_EXACT_KEYS = {
     "email",
     "username",
     "to",
@@ -44,22 +44,44 @@ _PII_KEYS = {
     "display_phone_number",
     "ip",
 }
+_DATA_CLASSIFICATION: dict[str, str] = {
+    **{k: "secret" for k in _SECRET_EXACT_KEYS},
+    **{k: "pii" for k in _PII_EXACT_KEYS},
+}
 
 _EMAIL_RE = re.compile(r"\b([A-Za-z0-9._%+-]{1,64})@([A-Za-z0-9.-]+\.[A-Za-z]{2,63})\b")
 _PHONE_RE = re.compile(r"\+?\d[\d\-\s().]{7,}\d")
 _BEARER_RE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._\-]+\b")
 _TOKENISH_RE = re.compile(r"\b[A-Za-z0-9._\-]{32,}\b")
+_IP_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+
+
+def _privacy_profile() -> str:
+    return settings.PRIVACY_POLICY_PROFILE
+
+
+def _mask_pii_enabled() -> bool:
+    profile = _privacy_profile()
+    if profile == "strict":
+        return True
+    if profile == "debug":
+        return False
+    return settings.PRIVACY_MASK_PII
+
+
+def _classify_key(key: str) -> str | None:
+    return _DATA_CLASSIFICATION.get(key.strip().lower())
 
 
 def _is_sensitive_key(key: str) -> bool:
     k = key.strip().lower()
     if not k:
         return False
-    if k in _SENSITIVE_KEY_EXCEPTIONS:
+    if k in _SECRET_KEY_EXCEPTIONS:
         return False
-    if k in _SENSITIVE_EXACT_KEYS:
+    if _classify_key(k) == "secret":
         return True
-    return any(marker in k for marker in _SENSITIVE_KEY_MARKERS)
+    return any(marker in k for marker in _SECRET_KEY_MARKERS)
 
 
 def _mask_email(value: str) -> str:
@@ -101,9 +123,11 @@ def _sanitize_string(value: str) -> str:
         return REDACTED if has_alpha and has_digit else token
 
     out = value
-    if settings.PRIVACY_MASK_PII:
+    if _mask_pii_enabled():
         out = _EMAIL_RE.sub(lambda m: _mask_email(f"{m.group(1)}@{m.group(2)}"), out)
         out = _PHONE_RE.sub(lambda m: _mask_phone(m.group(0)), out)
+        if _privacy_profile() == "strict":
+            out = _IP_RE.sub(lambda m: _mask_ip(m.group(0)), out)
     out = _BEARER_RE.sub("Bearer ***", out)
     out = _TOKENISH_RE.sub(_mask_tokenish, out)
     max_chars = settings.PRIVACY_AUDIT_MAX_VALUE_CHARS
@@ -128,14 +152,14 @@ def _sanitize_value(value: Any, key_hint: str | None, depth: int) -> Any:
         return [_sanitize_value(v, key_hint=key_hint, depth=depth + 1) for v in value]
     if isinstance(value, str):
         key = (key_hint or "").lower()
-        if settings.PRIVACY_MASK_PII:
+        if _mask_pii_enabled():
             if key in {"email", "username", "to", "from", "to_address", "from_address"}:
                 return _mask_email(value)
             if key in {"phone", "phone_number", "display_phone_number"}:
                 return _mask_phone(value)
             if key == "ip":
                 return _mask_ip(value)
-            if key in _PII_KEYS and "@" in value:
+            if _classify_key(key) == "pii" and "@" in value:
                 return _mask_email(value)
         return _sanitize_string(value)
     return value

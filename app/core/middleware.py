@@ -1,10 +1,10 @@
 """
 Middleware stack:
 - CorrelationIDMiddleware: attaches a per-request correlation ID.
-# -- Rate Limiter --------------------------------------------------------------
+- RateLimitMiddleware: sliding-window limiter (Redis or in-memory backend).
+- RequestLogMiddleware: structured request logging with correlation metadata.
 """
 from __future__ import annotations
-# for a personal tool; use Redis for multi-instance deployments).
 
 import time
 import uuid

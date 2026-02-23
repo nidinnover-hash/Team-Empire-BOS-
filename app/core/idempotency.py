@@ -133,6 +133,8 @@ def get_cached_response(scope: str, key: str, fingerprint: str | None = None) ->
                 try:
                     payload = cast(dict[str, Any], json.loads(raw))
                     return _unpack_cached(payload, fingerprint)
+                except IdempotencyConflictError:
+                    raise
                 except Exception:
                     return None
     now = time.monotonic()

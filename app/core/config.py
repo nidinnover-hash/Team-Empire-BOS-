@@ -14,6 +14,7 @@ AIProvider = Literal["openai", "anthropic", "groq"]
 IdempotencyBackend = Literal["auto", "memory", "redis"]
 AppMode = Literal["NIDIN_AI", "EMPIREO_AI"]
 RateLimitBackend = Literal["auto", "memory", "redis"]
+PrivacyPolicyProfile = Literal["strict", "balanced", "debug"]
 
 
 class Settings(BaseSettings):
@@ -78,8 +79,13 @@ class Settings(BaseSettings):
     PRIVACY_REDACTION_ENABLED: bool = True
     PRIVACY_MASK_PII: bool = True
     PRIVACY_RESPONSE_SANITIZATION_ENABLED: bool = True
+    PRIVACY_POLICY_PROFILE: PrivacyPolicyProfile = "balanced"
     PRIVACY_AUDIT_MAX_VALUE_CHARS: int = 200
     CLONE_AUTO_LEARN_FROM_CHAT: bool = True
+
+    # Ops Intelligence guardrails
+    WORK_EMAIL_DOMAINS: str = ""  # Comma-separated: "empire.com,empireo.ai"
+    GMAIL_LABEL_ALLOWLIST: str = ""  # Comma-separated: "INBOX,work"
 
     # Background sync scheduler
     SYNC_ENABLED: bool = True
@@ -87,7 +93,7 @@ class Settings(BaseSettings):
     SYNC_THROTTLE_MINUTES: int = 15   # min gap for on-demand (login/dashboard) syncs
 
     @field_validator(
-        "DEFAULT_AI_PROVIDER", "IDEMPOTENCY_BACKEND", "RATE_LIMIT_BACKEND",
+        "DEFAULT_AI_PROVIDER", "IDEMPOTENCY_BACKEND", "RATE_LIMIT_BACKEND", "PRIVACY_POLICY_PROFILE",
         mode="before",
     )
     @classmethod
@@ -195,6 +201,8 @@ def validate_startup_settings(s: Settings) -> list[str]:
             issues.append("TOKEN_ENCRYPTION_KEY should be at least 32 characters")
     if s.WHATSAPP_WEBHOOK_VERIFY_TOKEN and not s.WHATSAPP_APP_SECRET:
         issues.append("WHATSAPP_APP_SECRET should be set when WhatsApp webhook verify token is configured")
+    if not s.DEBUG and s.PRIVACY_POLICY_PROFILE == "debug":
+        issues.append("PRIVACY_POLICY_PROFILE=debug is not allowed when DEBUG=false")
 
     # --- Security: reject insecure defaults ---
     _WEAK_SECRETS = {"change_me_in_env", "secret", "changeme", "your_32_plus_char_secret_here"}

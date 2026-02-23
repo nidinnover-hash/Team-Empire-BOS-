@@ -152,3 +152,9 @@ def test_format_startup_issues_groups_by_domain():
     assert "security:" in text
     assert "integrations:" in text
     assert "runtime:" in text
+
+
+def test_validate_startup_rejects_debug_privacy_profile_in_production():
+    s = _base_settings(DEBUG=False, PRIVACY_POLICY_PROFILE="debug")
+    issues = validate_startup_settings(s)
+    assert any("PRIVACY_POLICY_PROFILE=debug" in i for i in issues)
