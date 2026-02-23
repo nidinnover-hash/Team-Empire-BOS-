@@ -315,6 +315,7 @@ async def summarize_email(
             f"{email.body_text}"
         ),
         provider="openai",
+        organization_id=org_id,
     )
 
     email.ai_summary = summary
@@ -370,6 +371,7 @@ async def draft_reply(
         user_message=user_prompt,
         provider="openai",
         max_tokens=600,
+        organization_id=org_id,
     )
 
     # Degrade gracefully during provider outage/rate-limit by creating a
@@ -465,6 +467,7 @@ async def strategize_email(
         ),
         provider="openai",
         max_tokens=700,
+        organization_id=org_id,
     )
 
     if _is_ai_error(analysis):
@@ -510,6 +513,7 @@ async def compose_email(
         ),
         provider="openai",
         max_tokens=600,
+        organization_id=org_id,
     )
 
     if _is_ai_error(draft):
