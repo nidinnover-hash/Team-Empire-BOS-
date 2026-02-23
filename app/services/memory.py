@@ -5,6 +5,7 @@ The most important function here is build_memory_context() which assembles
 everything into a single string that gets injected into every AI call.
 """
 
+from collections.abc import Mapping
 from typing import cast
 
 from datetime import date, datetime, timezone
@@ -18,7 +19,11 @@ from app.schemas.memory import (
     TeamMemberCreate,
     TeamMemberUpdate,
 )
-from app.memory.retrieval import build_focused_context, DEFAULT_CONTEXT_CHAR_LIMIT
+from app.memory.retrieval import (
+    DEFAULT_CONTEXT_CHAR_LIMIT,
+    build_focused_context,
+    build_typed_context,
+)
 
 
 # ── Profile Memory ────────────────────────────────────────────────────────────
@@ -234,6 +239,17 @@ async def build_memory_context(
         organization_id=organization_id,
         for_date=date.today(),
     )
+    from app.services.integration import list_integrations as _list_integrations
+
+    integrations = await _list_integrations(db, organization_id=organization_id)
+    integration_statuses: list[Mapping[str, object]] = [
+        {
+            "type": item.type,
+            "status": item.status,
+            "last_sync_at": item.last_sync_at.isoformat() if item.last_sync_at else None,
+        }
+        for item in integrations
+    ]
 
     base_context = build_focused_context(
         profile_entries=profile,
@@ -242,6 +258,22 @@ async def build_memory_context(
         categories=categories,
         char_limit=char_limit,
     )
+
+    # Reuse typed context assembly so integration layer stays populated in live AI flows.
+    typed_layers = build_typed_context(
+        profile_entries=profile,
+        team_members=members,
+        daily_contexts=today_context,
+        integration_statuses=integration_statuses,
+        categories=categories,
+        char_limit=char_limit,
+    )
+    integration_layer = next((layer for layer in typed_layers if layer.get("layer_type") == "integration"), None)
+    if integration_layer and integration_layer.get("content"):
+        integration_block = str(integration_layer["content"])
+        remaining = char_limit - len(base_context)
+        if remaining > 100:
+            base_context = base_context + "\n\n" + integration_block[:remaining]
 
     # Append open ClickUp tasks so the AI knows what's in the work queue
     cu_result = await db.execute(
