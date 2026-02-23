@@ -200,6 +200,7 @@ Write a sharp, direct morning briefing. Structure it as:
         ),
         user_message=user_message,
         memory_context=memory_context,
+        organization_id=org_id,
     )
 
     return {
