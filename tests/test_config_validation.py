@@ -60,6 +60,12 @@ def test_validate_startup_flags_redis_without_url():
     assert any("IDEMPOTENCY_REDIS_URL" in i for i in issues)
 
 
+def test_validate_startup_flags_rate_limit_redis_without_url():
+    s = _base_settings(RATE_LIMIT_BACKEND="redis", RATE_LIMIT_REDIS_URL=None)
+    issues = validate_startup_settings(s)
+    assert any("RATE_LIMIT_REDIS_URL" in i for i in issues)
+
+
 def test_settings_normalize_provider_and_backend_and_mode():
     s = _base_settings(
         DEFAULT_AI_PROVIDER=" AnThRoPiC ",

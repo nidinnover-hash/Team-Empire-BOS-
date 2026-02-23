@@ -3,13 +3,16 @@ Middleware stack:
 - CorrelationIDMiddleware: attaches a per-request correlation ID.
 - RateLimitMiddleware: simple in-memory sliding window rate limiter.
 """
+from __future__ import annotations
 
 import time
 import uuid
 from collections import defaultdict, deque
 import logging
+from importlib import import_module
+from threading import Lock
 from urllib.parse import parse_qsl, urlencode
-from typing import cast
+from typing import Protocol, cast
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -137,6 +140,7 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
 # for a personal tool — use Redis for multi-instance deployments).
 
 _rate_buckets: dict[str, deque] = defaultdict(deque)
+_rate_limit_lock = Lock()
 
 # Paths exempt from rate limiting (health checks, docs)
 _EXEMPT_PREFIXES = ("/health", "/docs", "/redoc", "/openapi.json")
@@ -147,25 +151,129 @@ _EXEMPT_PREFIXES = ("/health", "/docs", "/redoc", "/openapi.json")
 _login_failures: dict[str, deque] = defaultdict(deque)
 LOGIN_FAIL_WINDOW = 900   # 15-minute window
 LOGIN_FAIL_MAX = 10       # max failures before lockout
+_login_lock = Lock()
+
+_redis_client: "_RedisLike" | None = None
+_redis_initialized = False
+
+
+class _RedisLike(Protocol):
+    def zremrangebyscore(self, key: str, min: int | float | str, max: int | float | str) -> int: ...
+    def zcard(self, key: str) -> int: ...
+    def zadd(self, key: str, mapping: dict[str, int]) -> int: ...
+    def expire(self, key: str, seconds: int) -> bool: ...
+    def delete(self, key: str) -> int: ...
+    def ping(self) -> bool: ...
+
+
+def _resolve_rate_limit_redis_url() -> str:
+    primary = (settings.RATE_LIMIT_REDIS_URL or "").strip()
+    if primary:
+        return primary
+    # Backward-compatible fallback: reuse idempotency Redis if configured.
+    return (settings.IDEMPOTENCY_REDIS_URL or "").strip()
+
+
+def _get_redis_client() -> _RedisLike | None:
+    global _redis_client, _redis_initialized
+    if _redis_initialized:
+        return _redis_client
+    _redis_initialized = True
+    redis_url = _resolve_rate_limit_redis_url()
+    if not redis_url:
+        return None
+    try:
+        redis_module = import_module("redis")
+        client = cast(
+            _RedisLike,
+            redis_module.Redis.from_url(
+                redis_url,
+                decode_responses=True,
+                socket_timeout=0.25,
+                socket_connect_timeout=0.25,
+            ),
+        )
+        client.ping()
+        _redis_client = client
+        return _redis_client
+    except Exception:
+        logger.warning("Redis unavailable for rate limiting; using in-memory fallback.", exc_info=True)
+        return None
+
+
+def _rate_backend() -> str:
+    backend = settings.RATE_LIMIT_BACKEND
+    if backend == "memory":
+        return "memory"
+    if backend == "redis":
+        return "redis" if _get_redis_client() is not None else "memory"
+    return "redis" if _get_redis_client() is not None else "memory"
+
+
+def _rate_key(client_ip: str) -> str:
+    prefix = (settings.RATE_LIMIT_REDIS_PREFIX or "pc:ratelimit").strip() or "pc:ratelimit"
+    return f"{prefix}:request:{client_ip}"
+
+
+def _login_key(client_ip: str) -> str:
+    prefix = (settings.RATE_LIMIT_REDIS_PREFIX or "pc:ratelimit").strip() or "pc:ratelimit"
+    return f"{prefix}:login:{client_ip}"
+
+
+def _mark_and_count_redis(key: str, window_seconds: int, add_event: bool) -> int | None:
+    client = _get_redis_client()
+    if client is None:
+        return None
+    now_ms = int(time.time() * 1000)
+    window_ms = window_seconds * 1000
+    min_score = now_ms - window_ms
+    member = f"{now_ms}:{uuid.uuid4().hex}"
+    try:
+        client.zremrangebyscore(key, 0, min_score)
+        if add_event:
+            client.zadd(key, {member: now_ms})
+            client.expire(key, window_seconds + 10)
+        return int(client.zcard(key))
+    except Exception:
+        logger.warning("Redis rate-limit operation failed; using in-memory fallback.", exc_info=True)
+        return None
 
 
 def check_login_allowed(ip: str) -> bool:
     """Return True if the IP is below the failed-login threshold."""
+    if _rate_backend() == "redis":
+        count = _mark_and_count_redis(_login_key(ip), LOGIN_FAIL_WINDOW, add_event=False)
+        if count is not None:
+            return count < LOGIN_FAIL_MAX
     now = time.monotonic()
-    bucket = _login_failures[ip]
-    while bucket and now - bucket[0] > LOGIN_FAIL_WINDOW:
-        bucket.popleft()
-    return len(bucket) < LOGIN_FAIL_MAX
+    with _login_lock:
+        bucket = _login_failures[ip]
+        while bucket and now - bucket[0] > LOGIN_FAIL_WINDOW:
+            bucket.popleft()
+        return len(bucket) < LOGIN_FAIL_MAX
 
 
 def record_login_failure(ip: str) -> None:
     """Record one failed login attempt for this IP."""
-    _login_failures[ip].append(time.monotonic())
+    if _rate_backend() == "redis":
+        count = _mark_and_count_redis(_login_key(ip), LOGIN_FAIL_WINDOW, add_event=True)
+        if count is not None:
+            return
+    with _login_lock:
+        _login_failures[ip].append(time.monotonic())
 
 
 def clear_login_failures(ip: str) -> None:
     """Clear failed-login history for this IP after successful authentication."""
-    _login_failures.pop(ip, None)
+    if _rate_backend() == "redis":
+        client = _get_redis_client()
+        if client is not None:
+            try:
+                client.delete(_login_key(ip))
+            except Exception:
+                logger.warning("Redis login-failure clear failed; clearing memory fallback.", exc_info=True)
+    with _login_lock:
+        _login_failures.pop(ip, None)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -178,26 +286,49 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return cast(Response, await call_next(request))
 
         client_ip = request.client.host if request.client else "unknown"
-        now = time.monotonic()
         window = settings.RATE_LIMIT_WINDOW_SECONDS
         max_req = settings.RATE_LIMIT_MAX_REQUESTS
-
-        bucket = _rate_buckets[client_ip]
-        # Drop timestamps outside the sliding window
-        while bucket and now - bucket[0] > window:
-            bucket.popleft()
-
-        if len(bucket) >= max_req:
-            return JSONResponse(
-                status_code=429,
-                content={
-                    "detail": (
-                        f"Rate limit exceeded: {max_req} requests per "
-                        f"{window}s. Please slow down."
+        if _rate_backend() == "redis":
+            count = _mark_and_count_redis(_rate_key(client_ip), window, add_event=False)
+            if count is not None:
+                if count >= max_req:
+                    return JSONResponse(
+                        status_code=429,
+                        content={
+                            "detail": (
+                                f"Rate limit exceeded: {max_req} requests per "
+                                f"{window}s. Please slow down."
+                            )
+                        },
+                        headers={"Retry-After": str(window)},
                     )
-                },
-                headers={"Retry-After": str(window)},
-            )
+                _ = _mark_and_count_redis(_rate_key(client_ip), window, add_event=True)
+                return cast(Response, await call_next(request))
 
-        bucket.append(now)
+        now = time.monotonic()
+        acquired = _rate_limit_lock.acquire(timeout=1.0)
+        if not acquired:
+            # Lock contention — let the request through rather than deadlock
+            return cast(Response, await call_next(request))
+        try:
+            bucket = _rate_buckets[client_ip]
+            # Drop timestamps outside the sliding window
+            while bucket and now - bucket[0] > window:
+                bucket.popleft()
+
+            if len(bucket) >= max_req:
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "detail": (
+                            f"Rate limit exceeded: {max_req} requests per "
+                            f"{window}s. Please slow down."
+                        )
+                    },
+                    headers={"Retry-After": str(window)},
+                )
+
+            bucket.append(now)
+        finally:
+            _rate_limit_lock.release()
         return cast(Response, await call_next(request))

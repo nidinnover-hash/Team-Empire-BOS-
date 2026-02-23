@@ -13,6 +13,7 @@ _PLACEHOLDER_GOOGLE_VALUES = {"", "replace-me", "your-google-client-id", "your-g
 AIProvider = Literal["openai", "anthropic", "groq"]
 IdempotencyBackend = Literal["auto", "memory", "redis"]
 AppMode = Literal["NIDIN_AI", "EMPIREO_AI"]
+RateLimitBackend = Literal["auto", "memory", "redis"]
 
 
 class Settings(BaseSettings):
@@ -46,6 +47,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_WINDOW_SECONDS: int = 60
     RATE_LIMIT_MAX_REQUESTS: int = 20
+    RATE_LIMIT_BACKEND: RateLimitBackend = "auto"
+    RATE_LIMIT_REDIS_URL: str | None = None
+    RATE_LIMIT_REDIS_PREFIX: str = "pc:ratelimit"
     IDEMPOTENCY_BACKEND: IdempotencyBackend = "auto"
     IDEMPOTENCY_REDIS_URL: str | None = None
     IDEMPOTENCY_REDIS_PREFIX: str = "pc:idempotency"
@@ -96,6 +100,13 @@ class Settings(BaseSettings):
             return value.strip().lower()
         return value
 
+    @field_validator("RATE_LIMIT_BACKEND", mode="before")
+    @classmethod
+    def _normalize_rate_limit_backend(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
+
     @field_validator("APP_MODE", mode="before")
     @classmethod
     def _normalize_app_mode(cls, value: Any) -> Any:
@@ -129,6 +140,12 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("IDEMPOTENCY_TTL_SECONDS must be >= 60")
     if s.IDEMPOTENCY_MAX_ITEMS < 100:
         issues.append("IDEMPOTENCY_MAX_ITEMS must be >= 100")
+    if s.RATE_LIMIT_BACKEND == "redis" and not (s.RATE_LIMIT_REDIS_URL or "").strip():
+        issues.append("RATE_LIMIT_REDIS_URL must be set when RATE_LIMIT_BACKEND=redis")
+    if s.RATE_LIMIT_WINDOW_SECONDS < 1:
+        issues.append("RATE_LIMIT_WINDOW_SECONDS must be >= 1")
+    if s.RATE_LIMIT_MAX_REQUESTS < 1:
+        issues.append("RATE_LIMIT_MAX_REQUESTS must be >= 1")
 
     provider = s.DEFAULT_AI_PROVIDER
     if provider == "openai":
