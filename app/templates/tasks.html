@@ -103,17 +103,26 @@
   </div>
 
   <script>
-    window.__bootPromise = fetch('/web/api-token').then(r=>r.json()).then(d=>d.token);
+    window.__bootPromise = fetch('/web/api-token')
+      .then(r => { if (!r.ok) throw new Error('Session expired'); return r.json(); })
+      .then(d => d.token);
     let allTasks = [];
     let currentFilter = 'all';
 
     async function loadTasks() {
-      const token = await window.__bootPromise;
-      const h = {'Authorization': 'Bearer ' + token};
-      const res = await fetch('/api/v1/tasks?limit=100&is_done=false', {headers:h});
-      allTasks = await res.json();
-      updateKPIs();
-      renderTasks();
+      const container = document.getElementById('task-list');
+      try {
+        const token = await window.__bootPromise;
+        if (!token) throw new Error('Session expired');
+        const h = {'Authorization': 'Bearer ' + token};
+        const res = await fetch('/api/v1/tasks?limit=100&is_done=false', {headers:h});
+        if (!res.ok) throw new Error('Failed to load tasks');
+        allTasks = await res.json();
+        updateKPIs();
+        renderTasks();
+      } catch (e) {
+        container.innerHTML = '<div class="empty">Could not load tasks. Refresh and sign in again.</div>';
+      }
     }
 
     function updateKPIs() {
@@ -162,8 +171,13 @@
     if (logoutBtn) logoutBtn.addEventListener('click', async () => {
       const csrf = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('pc_csrf='));
       const csrfVal = csrf ? csrf.split('=')[1] : '';
-      await fetch('/web/logout', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':csrfVal}});
-      window.location.href = '/web/login';
+      try {
+        const r = await fetch('/web/logout', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':csrfVal}});
+        if (!r.ok) throw new Error('Logout failed');
+        window.location.href = '/web/login';
+      } catch (_e) {
+        alert('Logout failed. Please try again.');
+      }
     });
 
     if (typeof lucide !== "undefined") lucide.createIcons();

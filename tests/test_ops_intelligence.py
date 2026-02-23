@@ -3,6 +3,8 @@ import json
 from datetime import date, datetime, timedelta, timezone
 from typing import cast
 
+from sqlalchemy import func, select
+
 from app.core.deps import get_db
 from app.core.security import create_access_token
 from app.main import app as fastapi_app
@@ -320,3 +322,230 @@ async def test_policy_activate_not_found(client):
     await _seed()
     resp = await client.post("/api/v1/ops/policy/activate/999")
     assert resp.status_code == 404
+
+
+# ---- CI/CD Signal Ingestion Tests ----
+
+async def test_sync_github_cicd_not_connected(client):
+    await _seed()
+    resp = await client.post("/api/v1/ops/sync/github-cicd")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["error"] == "GitHub not connected"
+    assert body["workflow_runs"] == 0
+    assert body["deployments"] == 0
+
+
+async def test_sync_github_cicd_requires_admin(client):
+    resp = await client.post(
+        "/api/v1/ops/sync/github-cicd",
+        headers=_auth(role="STAFF"),
+    )
+    assert resp.status_code == 403
+
+
+async def test_sync_github_cicd_with_data(client, monkeypatch):
+    """Full end-to-end: mock GitHub API, ingest workflow runs + deployments."""
+    await _seed()
+    await _seed_employee(
+        org_id=1, name="Dev", email="dev@test.com", github_username="dev-user",
+    )
+
+    # Seed a connected GitHub integration
+    override = fastapi_app.dependency_overrides[get_db]
+    agen = override()
+    session = await agen.__anext__()
+    try:
+        from app.models.integration import Integration
+        integ = Integration(
+            organization_id=1, type="github", status="connected",
+            config_json={"access_token": "ghp_fake"},
+        )
+        session.add(integ)
+        await session.commit()
+    finally:
+        await agen.aclose()
+
+    # Mock GitHub API calls
+    async def fake_list_repos(token):
+        return [{"owner": {"login": "myorg"}, "name": "myrepo"}]
+
+    async def fake_get_workflow_runs(token, owner, repo, per_page=15):
+        return [
+            {
+                "id": 100,
+                "name": "CI",
+                "status": "completed",
+                "conclusion": "success",
+                "head_branch": "main",
+                "actor": {"login": "dev-user"},
+                "event": "push",
+                "run_number": 42,
+                "run_attempt": 1,
+                "run_started_at": "2026-02-24T10:00:00Z",
+                "updated_at": "2026-02-24T10:05:30Z",
+                "created_at": "2026-02-24T10:00:00Z",
+            },
+            {
+                "id": 101,
+                "name": "Deploy",
+                "status": "completed",
+                "conclusion": "failure",
+                "head_branch": "feature-x",
+                "actor": {"login": "unknown-user"},
+                "event": "pull_request",
+                "run_number": 43,
+                "run_attempt": 1,
+                "updated_at": "2026-02-24T11:00:00Z",
+                "created_at": "2026-02-24T11:00:00Z",
+            },
+        ]
+
+    async def fake_get_deployments(token, owner, repo, per_page=10):
+        return [
+            {
+                "id": 200,
+                "environment": "production",
+                "ref": "main",
+                "task": "deploy",
+                "creator": {"login": "dev-user"},
+                "description": "Deploy v1.2.0",
+                "updated_at": "2026-02-24T12:00:00Z",
+                "created_at": "2026-02-24T12:00:00Z",
+            },
+        ]
+
+    from app.tools import github as github_tool
+    monkeypatch.setattr(github_tool, "list_repos", fake_list_repos)
+    monkeypatch.setattr(github_tool, "get_workflow_runs", fake_get_workflow_runs)
+    monkeypatch.setattr(github_tool, "get_deployments", fake_get_deployments)
+
+    resp = await client.post("/api/v1/ops/sync/github-cicd")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["workflow_runs"] == 2
+    assert body["deployments"] == 1
+    assert body["error"] is None
+
+
+async def test_sync_github_cicd_calculates_duration(client, monkeypatch):
+    """Verify duration_seconds is calculated for completed runs."""
+    await _seed()
+
+    override = fastapi_app.dependency_overrides[get_db]
+    agen = override()
+    session = await agen.__anext__()
+    try:
+        from app.models.integration import Integration
+        integ = Integration(
+            organization_id=1, type="github", status="connected",
+            config_json={"access_token": "ghp_fake"},
+        )
+        session.add(integ)
+        await session.commit()
+    finally:
+        await agen.aclose()
+
+    async def fake_list_repos(token):
+        return [{"owner": {"login": "org"}, "name": "repo"}]
+
+    async def fake_get_workflow_runs(token, owner, repo, per_page=15):
+        return [{
+            "id": 300,
+            "name": "Build",
+            "status": "completed",
+            "conclusion": "success",
+            "head_branch": "main",
+            "actor": {"login": ""},
+            "event": "push",
+            "run_number": 1,
+            "run_attempt": 1,
+            "run_started_at": "2026-02-24T10:00:00Z",
+            "updated_at": "2026-02-24T10:02:30Z",
+            "created_at": "2026-02-24T10:00:00Z",
+        }]
+
+    async def fake_get_deployments(token, owner, repo, per_page=10):
+        return []
+
+    from app.tools import github as github_tool
+    monkeypatch.setattr(github_tool, "list_repos", fake_list_repos)
+    monkeypatch.setattr(github_tool, "get_workflow_runs", fake_get_workflow_runs)
+    monkeypatch.setattr(github_tool, "get_deployments", fake_get_deployments)
+
+    resp = await client.post("/api/v1/ops/sync/github-cicd")
+    assert resp.status_code == 200
+    assert resp.json()["workflow_runs"] == 1
+
+    # Verify the stored signal has duration
+    agen2 = override()
+    session2 = await agen2.__anext__()
+    try:
+        result = await session2.execute(
+            select(IntegrationSignal).where(
+                IntegrationSignal.source == "github_workflow",
+            )
+        )
+        sig = result.scalar_one()
+        payload = json.loads(sig.payload_json)
+        assert payload["duration_seconds"] == 150  # 2m30s
+        assert payload["conclusion"] == "success"
+    finally:
+        await agen2.aclose()
+
+
+async def test_sync_github_cicd_dedup_on_rerun(client, monkeypatch):
+    """Running sync twice should not duplicate signals."""
+    await _seed()
+
+    override = fastapi_app.dependency_overrides[get_db]
+    agen = override()
+    session = await agen.__anext__()
+    try:
+        from app.models.integration import Integration
+        integ = Integration(
+            organization_id=1, type="github", status="connected",
+            config_json={"access_token": "ghp_fake"},
+        )
+        session.add(integ)
+        await session.commit()
+    finally:
+        await agen.aclose()
+
+    async def fake_list_repos(token):
+        return [{"owner": {"login": "org"}, "name": "repo"}]
+
+    async def fake_get_workflow_runs(token, owner, repo, per_page=15):
+        return [{
+            "id": 400, "name": "CI", "status": "completed", "conclusion": "success",
+            "head_branch": "main", "actor": {"login": ""}, "event": "push",
+            "run_number": 1, "run_attempt": 1,
+            "updated_at": "2026-02-24T10:00:00Z", "created_at": "2026-02-24T10:00:00Z",
+        }]
+
+    async def fake_get_deployments(token, owner, repo, per_page=10):
+        return []
+
+    from app.tools import github as github_tool
+    monkeypatch.setattr(github_tool, "list_repos", fake_list_repos)
+    monkeypatch.setattr(github_tool, "get_workflow_runs", fake_get_workflow_runs)
+    monkeypatch.setattr(github_tool, "get_deployments", fake_get_deployments)
+
+    # Run twice
+    resp1 = await client.post("/api/v1/ops/sync/github-cicd")
+    assert resp1.json()["workflow_runs"] == 1
+    resp2 = await client.post("/api/v1/ops/sync/github-cicd")
+    assert resp2.json()["workflow_runs"] == 1
+
+    # Should still be only 1 signal row
+    agen2 = override()
+    session2 = await agen2.__anext__()
+    try:
+        result = await session2.execute(
+            select(func.count()).select_from(IntegrationSignal).where(
+                IntegrationSignal.source == "github_workflow",
+            )
+        )
+        assert result.scalar() == 1
+    finally:
+        await agen2.aclose()

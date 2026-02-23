@@ -452,8 +452,10 @@ async def strategize_email(
     business impact, what the sender really wants, recommended action, and tone.
     """
     email = await get_email(db, email_id, org_id)
-    if not email or not email.body_text:
-        return None
+    if not email:
+        raise ValueError("Email not found")
+    if not email.body_text:
+        raise ValueError("Email has no body to analyze")
 
     analysis = await call_ai(
         system_prompt=(
@@ -476,7 +478,7 @@ async def strategize_email(
     )
 
     if _is_ai_error(analysis):
-        return None
+        raise RuntimeError("Strategy generation failed (AI provider unavailable or misconfigured)")
 
     await record_action(
         db=db,

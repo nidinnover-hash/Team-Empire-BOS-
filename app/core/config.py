@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str | None = None
     GOOGLE_CLIENT_SECRET: str | None = None
     GOOGLE_REDIRECT_URI: str | None = None
+    GOOGLE_CALENDAR_REDIRECT_URI: str | None = None  # Separate callback for Calendar OAuth
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: str | None = None
 
     # Internal API and rate limiting

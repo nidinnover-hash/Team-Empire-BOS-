@@ -324,14 +324,17 @@ async def strategize_email(
     recommended action, and tone guide. No approval needed — read-only analysis.
     """
     org_id = int(current_user.get("org_id", 1))
-    analysis = await email_service.strategize_email(
-        db=db,
-        email_id=email_id,
-        org_id=org_id,
-        actor_user_id=int(current_user["id"]),
-    )
-    if analysis is None:
-        raise HTTPException(status_code=404, detail="Email not found or has no body")
+    try:
+        analysis = await email_service.strategize_email(
+            db=db,
+            email_id=email_id,
+            org_id=org_id,
+            actor_user_id=int(current_user["id"]),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"email_id": email_id, "strategy": analysis}
 
 

@@ -1,10 +1,7 @@
 """Tests for pattern analysis service — feedback loop from ops intelligence to AI context."""
-import hashlib
-import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 
 from app.core.deps import get_db
-from app.core.security import create_access_token
 from app.main import app as fastapi_app
 from app.models.decision_log import DecisionLog
 from app.models.employee import Employee

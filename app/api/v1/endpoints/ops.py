@@ -519,6 +519,29 @@ async def sync_github_signals(
     return result
 
 
+@router.post("/sync/github-cicd")
+async def sync_github_cicd_signals(
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Ingest GitHub Actions workflow runs and deployments as integration signals. Read-only."""
+    org_id = int(user["org_id"])
+    result = await signal_ingestion.ingest_github_cicd_signals(db, org_id)
+    await record_action(
+        db,
+        event_type="ops_sync_github_cicd",
+        actor_user_id=user["id"],
+        organization_id=org_id,
+        entity_type="integration_signal",
+        entity_id=0,
+        payload_json={
+            "workflow_runs": result.get("workflow_runs", 0),
+            "deployments": result.get("deployments", 0),
+        },
+    )
+    return result
+
+
 @router.post("/sync/gmail")
 async def sync_gmail_signals(
     db: AsyncSession = Depends(get_db),

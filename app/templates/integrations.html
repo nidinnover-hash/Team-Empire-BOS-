@@ -375,8 +375,9 @@
         <button class="btn subtle" type="button" id="add-integration-btn">+ Add New</button>
       </div>
       <div class="card-body">
-        <div class="row">
+        <div class="row" style="gap:0.4rem">
           <button class="btn" id="gmail-auth-btn" type="button">Connect Gmail OAuth</button>
+          <button class="btn" id="gcal-auth-btn" type="button">Connect Google Calendar</button>
         </div>
         <div class="help">Starts Google sign-in and stores tokens in your integration vault.</div>
         <hr style="border:0;border-top:1px solid #eeeeee;margin:0.8rem 0">
@@ -385,6 +386,7 @@
           <button class="btn sync" type="button" onclick="window.syncIntegration('clickup')">Sync ClickUp</button>
           <button class="btn sync" type="button" onclick="window.syncIntegration('github')">Sync GitHub</button>
           <button class="btn sync" type="button" onclick="window.syncIntegration('slack')">Sync Slack</button>
+          <button class="btn sync" type="button" onclick="window.syncCalendar()">Sync Calendar</button>
         </div>
         <div class="status" id="sync-status" style="margin-top:0.4rem"></div>
         <div class="status" id="connect-status" style="margin-top:0.4rem"></div>
@@ -567,14 +569,14 @@
           '<th>Type</th><th>Status</th><th>Last Sync</th><th>Actions</th>' +
         '</tr></thead><tbody>' +
         integrations.map(function(i) {
-          var hasSyncBtn = ["clickup","github","slack"].includes(i.type);
+          var hasSyncBtn = ["clickup","github","slack","google_calendar"].includes(i.type);
           return (
             '<tr>' +
               '<td><strong>' + esc(i.type) + '</strong></td>' +
               '<td><span class="pill ' + (i.status==="connected"?"connected":"disconnected") + '">' + esc(i.status) + '</span></td>' +
               '<td class="muted">' + esc(fmtDate(i.last_sync_at)) + '</td>' +
               '<td style="display:flex;gap:0.35rem;flex-wrap:wrap;padding:0.35rem 0.4rem">' +
-                (hasSyncBtn ? '<button class="btn sync" style="padding:0.28rem 0.5rem" type="button" onclick="window.syncIntegration(\'' + esc(i.type) + '\')">Sync</button>' : '') +
+                (hasSyncBtn ? '<button class="btn sync" style="padding:0.28rem 0.5rem" type="button" onclick="' + (i.type==='google_calendar' ? 'window.syncCalendar()' : 'window.syncIntegration(\'' + esc(i.type) + '\')') + '">Sync</button>' : '') +
                 '<button class="btn subtle" style="padding:0.28rem 0.5rem" type="button" onclick="window.integrationTest(' + i.id + ')">Test</button>' +
                 '<button class="btn danger" style="padding:0.28rem 0.5rem" type="button" onclick="window.integrationDisconnect(' + i.id + ')">Disconnect</button>' +
               '</td>' +
@@ -757,6 +759,36 @@
     }
   });
 
+  // ── Google Calendar OAuth ─────────────────────────────────────────────────
+  document.getElementById("gcal-auth-btn").addEventListener("click", async function() {
+    setStatus("connect-status","Requesting Google Calendar OAuth URL...","info");
+    try {
+      var r = await fetch("/api/v1/integrations/google-calendar/auth-url", { headers: { Authorization: "Bearer " + token } });
+      var body = await r.json().catch(function(){ return {}; });
+      if (!r.ok || !body.auth_url) throw new Error(body.detail || "Could not get OAuth URL");
+      setStatus("connect-status","Opening Google Calendar OAuth in a new tab.","ok");
+      window.open(body.auth_url,"_blank","noopener,noreferrer");
+    } catch (err) {
+      setStatus("connect-status", String(err.message||err), "err");
+    }
+  });
+
+  // ── Calendar Sync ─────────────────────────────────────────────────────────
+  window.syncCalendar = async function() {
+    setStatus("sync-status","Syncing Google Calendar...","info");
+    try {
+      var r = await fetch("/api/v1/integrations/google-calendar/sync", {
+        method: "POST", headers: { Authorization: "Bearer " + token }
+      });
+      var body = await r.json().catch(function(){ return {}; });
+      if (!r.ok) throw new Error(body.detail || "Calendar sync failed");
+      setStatus("sync-status","Calendar: " + (body.synced||0) + " events synced for " + (body.date||"today") + ".", "ok");
+      await fetchIntegrations();
+    } catch (err) {
+      setStatus("sync-status", String(err.message||err), "err");
+    }
+  };
+
   // ── Add New modal ─────────────────────────────────────────────────────────
   var addModal = document.getElementById("add-modal");
   var modalType = document.getElementById("modal-type");
@@ -848,8 +880,13 @@
   var logoutBtn = document.getElementById("logout-btn");
   if (logoutBtn) {
     logoutBtn.addEventListener("click", async function() {
-      await fetch("/web/logout", { method: "POST" });
-      window.location.href = "/web/login";
+      try {
+        var r = await fetch("/web/logout", { method: "POST" });
+        if (!r.ok) throw new Error("Logout failed");
+        window.location.href = "/web/login";
+      } catch (e) {
+        setStatus("integrations-status", String(e.message || e), "err");
+      }
     });
   }
 

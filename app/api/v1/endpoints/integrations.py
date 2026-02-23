@@ -149,17 +149,22 @@ async def connect_integration(
 
 # ── Google Calendar (literal prefix — must be before /{integration_id}/…) ─────
 
+def _calendar_redirect_uri() -> str:
+    return settings.GOOGLE_CALENDAR_REDIRECT_URI or settings.GOOGLE_REDIRECT_URI or ""
+
+
 @router.get("/google-calendar/auth-url", response_model=GoogleAuthUrlRead)
 async def google_calendar_auth_url(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> GoogleAuthUrlRead:
-    if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_REDIRECT_URI:
+    redir = _calendar_redirect_uri()
+    if not settings.GOOGLE_CLIENT_ID or not redir:
         raise HTTPException(status_code=400, detail="Google OAuth is not configured")
     state = _sign_google_calendar_state(int(actor["org_id"]))
     return GoogleAuthUrlRead(
         auth_url=build_google_auth_url(
             client_id=settings.GOOGLE_CLIENT_ID,
-            redirect_uri=settings.GOOGLE_REDIRECT_URI,
+            redirect_uri=redir,
             state=state,
         ),
         state=state,
@@ -172,14 +177,15 @@ async def google_calendar_oauth_callback(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> IntegrationRead:
-    if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET or not settings.GOOGLE_REDIRECT_URI:
+    redir = _calendar_redirect_uri()
+    if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET or not redir:
         raise HTTPException(status_code=400, detail="Google OAuth is not configured")
     _verify_google_calendar_state(data.state, expected_org_id=int(actor["org_id"]))
     tokens = await exchange_code_for_tokens(
         code=data.code,
         client_id=settings.GOOGLE_CLIENT_ID,
         client_secret=settings.GOOGLE_CLIENT_SECRET,
-        redirect_uri=settings.GOOGLE_REDIRECT_URI,
+        redirect_uri=redir,
     )
     # Preserve existing refresh_token — Google only returns it on first consent
     existing = await integration_service.get_integration_by_type(db, actor["org_id"], "google_calendar")
@@ -210,6 +216,62 @@ async def google_calendar_oauth_callback(
         payload_json={"type": item.type, "status": item.status, "oauth": True},
     )
     return _redact_integration(item)
+
+
+@router.get("/google-calendar/oauth/callback", include_in_schema=False)
+async def google_calendar_oauth_callback_redirect(
+    code: str,
+    state: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Handle Google OAuth browser redirect for Calendar.
+    Google redirects here with ?code=XXX&state=YYY after user grants permission.
+    No Bearer token required — org_id is extracted from the signed state.
+    """
+    redir = _calendar_redirect_uri()
+    if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET or not redir:
+        raise HTTPException(status_code=400, detail="Google OAuth is not configured")
+
+    # Extract org_id from signed state (same pattern as Gmail callback)
+    try:
+        parts = state.split(":", 3)
+        if len(parts) != 4:
+            raise ValueError("Invalid state format")
+        org_id = int(parts[0])
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
+
+    _verify_google_calendar_state(state, expected_org_id=org_id)
+
+    tokens = await exchange_code_for_tokens(
+        code=code,
+        client_id=settings.GOOGLE_CLIENT_ID,
+        client_secret=settings.GOOGLE_CLIENT_SECRET,
+        redirect_uri=redir,
+    )
+
+    existing = await integration_service.get_integration_by_type(db, org_id, "google_calendar")
+    existing_cfg = existing.config_json if existing else {}
+    refresh_token = tokens.get("refresh_token") or existing_cfg.get("refresh_token")
+
+    config_json = {
+        "access_token": tokens.get("access_token"),
+        "refresh_token": refresh_token,
+        "token_type": tokens.get("token_type"),
+        "scope": tokens.get("scope"),
+        "expires_in": tokens.get("expires_in"),
+        "calendar_id": "primary",
+        "connected_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await integration_service.connect_integration(
+        db,
+        organization_id=org_id,
+        integration_type="google_calendar",
+        config_json=config_json,
+    )
+
+    return {"status": "connected", "message": "Google Calendar connected successfully"}
 
 
 @router.post("/google-calendar/sync", response_model=CalendarSyncResult)

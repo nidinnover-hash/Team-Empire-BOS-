@@ -60,6 +60,7 @@ _scheduler_task: asyncio.Task | None = None
 async def _run_integrations(db: AsyncSession, org_id: int) -> None:
     """Sync all connected integrations for org_id. Logs but never raises."""
     from app.services import clickup_service, github_service, slack_service
+    from app.services.calendar_service import sync_calendar_events
 
     for name, fn in [
         ("clickup", clickup_service.sync_clickup_tasks),
@@ -71,6 +72,13 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             logger.debug("Sync %s org=%d → %s", name, org_id, result)
         except Exception as exc:
             logger.warning("Background %s sync failed org=%d: %s", name, org_id, type(exc).__name__)
+
+    # Google Calendar sync — stored as DailyContext, auto-included in memory
+    try:
+        result = await sync_calendar_events(db, organization_id=org_id)
+        logger.debug("Sync calendar org=%d → %s", org_id, result)
+    except Exception as exc:
+        logger.warning("Background calendar sync failed org=%d: %s", org_id, type(exc).__name__)
 
 
 # ── On-demand (throttled) trigger ────────────────────────────────────────────

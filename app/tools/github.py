@@ -110,6 +110,54 @@ async def get_pull_requests(
         return [pr for pr in data if isinstance(pr, dict)] if isinstance(data, list) else []
 
 
+async def get_workflow_runs(
+    token: str,
+    owner: str,
+    repo: str,
+    per_page: int = 20,
+    status: str | None = None,
+) -> list[dict[str, Any]]:
+    """
+    List recent GitHub Actions workflow runs for a repository.
+    Returns run id, name, status, conclusion, head_branch, created_at, updated_at, etc.
+    """
+    params: dict[str, Any] = {"per_page": per_page}
+    if status:
+        params["status"] = status
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        resp = await client.get(
+            f"{_BASE}/repos/{owner}/{repo}/actions/runs",
+            headers=_headers(token),
+            params=params,
+        )
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        data = resp.json()
+        runs = data.get("workflow_runs", [])
+        return [r for r in runs if isinstance(r, dict)]
+
+
+async def get_deployments(
+    token: str,
+    owner: str,
+    repo: str,
+    per_page: int = 15,
+) -> list[dict[str, Any]]:
+    """List recent deployments for a repository."""
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        resp = await client.get(
+            f"{_BASE}/repos/{owner}/{repo}/deployments",
+            headers=_headers(token),
+            params={"per_page": per_page},
+        )
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        data = resp.json()
+        return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
+
+
 async def get_issues(
     token: str,
     owner: str,

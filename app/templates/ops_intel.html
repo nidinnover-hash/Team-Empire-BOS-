@@ -153,6 +153,7 @@
               <button class="btn" id="btn-sync-clickup">Sync ClickUp<span class="sync-status" id="sync-clickup-status"></span></button>
               <button class="btn" id="btn-sync-github">Sync GitHub<span class="sync-status" id="sync-github-status"></span></button>
               <button class="btn" id="btn-sync-gmail">Sync Gmail<span class="sync-status" id="sync-gmail-status"></span></button>
+              <button class="btn" id="btn-sync-cicd">Sync CI/CD<span class="sync-status" id="sync-cicd-status"></span></button>
               <button class="btn primary" id="btn-compute-metrics">Compute Metrics</button>
             </div>
             <p style="font-size:.72rem;color:#999999">Signals are read-only snapshots. No external writes are performed.</p>
@@ -254,8 +255,14 @@
   </div>
 
   <script>
-    window.__bootPromise = fetch('/web/api-token').then(r=>r.json()).then(d=>d.token);
+    window.__bootPromise = fetch('/web/api-token')
+      .then(r => { if (!r.ok) throw new Error('Session expired'); return r.json(); })
+      .then(d => d.token);
     function esc(s) { const d=document.createElement('div'); d.textContent=String(s??''); return d.innerHTML; }
+    function notify(msg, type) {
+      if (window.showToast) window.showToast(msg, type || "info");
+      else window.alert(msg);
+    }
 
     // Tab switching
     document.querySelectorAll('.tab').forEach(tab => {
@@ -273,12 +280,13 @@
       const opts = { method, headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' } };
       if (body) opts.body = JSON.stringify(body);
       const r = await fetch(path, opts);
-      return r;
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.detail || `Request failed (${r.status})`);
+      return d;
     }
 
     async function loadEmployees() {
-      const r = await api('GET', '/api/v1/ops/employees?active_only=false');
-      const data = await r.json();
+      const data = await api('GET', '/api/v1/ops/employees?active_only=false');
       document.getElementById('k-emp').textContent = data.filter(e => e.is_active).length;
       const tbody = document.getElementById('emp-body');
       if (data.length === 0) {
@@ -296,8 +304,7 @@
     }
 
     async function loadDecisions() {
-      const r = await api('GET', '/api/v1/ops/decision-log?limit=50');
-      const data = await r.json();
+      const data = await api('GET', '/api/v1/ops/decision-log?limit=50');
       document.getElementById('k-decisions').textContent = data.length;
       const tbody = document.getElementById('decisions-body');
       if (data.length === 0) {
@@ -319,8 +326,7 @@
     }
 
     async function loadPolicies() {
-      const r = await api('GET', '/api/v1/ops/policies');
-      const data = await r.json();
+      const data = await api('GET', '/api/v1/ops/policies');
       document.getElementById('k-policies').textContent = data.filter(p => p.is_active).length;
       const tbody = document.getElementById('policies-body');
       if (data.length === 0) {
@@ -336,8 +342,13 @@
     }
 
     async function activatePolicy(id) {
-      await api('POST', '/api/v1/ops/policy/activate/' + id);
-      await loadPolicies();
+      try {
+        await api('POST', '/api/v1/ops/policy/activate/' + id);
+        await loadPolicies();
+        notify("Policy activated.", "success");
+      } catch (e) {
+        notify(String(e.message || e), "error");
+      }
     }
 
     // Sync buttons
@@ -345,8 +356,7 @@
       const el = document.getElementById(statusId);
       el.textContent = 'syncing...';
       try {
-        const r = await api('POST', '/api/v1/ops/sync/' + source);
-        const d = await r.json();
+        const d = await api('POST', '/api/v1/ops/sync/' + source);
         if (d.error) {
           el.textContent = d.error;
         } else {
@@ -354,23 +364,37 @@
           document.getElementById('k-signals').textContent = parseInt(document.getElementById('k-signals').textContent) + (d.synced || 0);
         }
       } catch(e) {
-        el.textContent = 'failed';
+        el.textContent = String(e.message || 'failed');
+        notify(String(e.message || e), "error");
       }
     }
 
     document.getElementById('btn-sync-clickup').addEventListener('click', () => syncSource('clickup', 'sync-clickup-status'));
     document.getElementById('btn-sync-github').addEventListener('click', () => syncSource('github', 'sync-github-status'));
     document.getElementById('btn-sync-gmail').addEventListener('click', () => syncSource('gmail', 'sync-gmail-status'));
+    document.getElementById('btn-sync-cicd').addEventListener('click', async () => {
+      const el = document.getElementById('sync-cicd-status');
+      el.textContent = 'syncing...';
+      try {
+        const d = await api('POST', '/api/v1/ops/sync/github-cicd');
+        if (d.error) { el.textContent = d.error; }
+        else {
+          const total = (d.workflow_runs || 0) + (d.deployments || 0);
+          el.textContent = d.workflow_runs + ' runs, ' + d.deployments + ' deploys';
+          document.getElementById('k-signals').textContent = parseInt(document.getElementById('k-signals').textContent) + total;
+        }
+      } catch(e) { el.textContent = String(e.message || 'failed'); notify(String(e.message || e), "error"); }
+    });
     document.getElementById('btn-compute-metrics').addEventListener('click', async () => {
       const btn = document.getElementById('btn-compute-metrics');
       btn.disabled = true;
       btn.textContent = 'Computing...';
       try {
-        const r = await api('POST', '/api/v1/ops/compute/weekly-metrics?weeks=4');
-        const d = await r.json();
+        const d = await api('POST', '/api/v1/ops/compute/weekly-metrics?weeks=4');
         btn.textContent = `Done (${d.employees_processed || 0} employees)`;
       } catch(e) {
         btn.textContent = 'Failed';
+        notify(String(e.message || e), "error");
       }
       setTimeout(() => { btn.textContent = 'Compute Metrics'; btn.disabled = false; }, 3000);
     });
@@ -383,7 +407,10 @@
       try {
         await api('POST', '/api/v1/ops/policy/generate');
         await loadPolicies();
-      } catch(e) {}
+        notify("Policy drafts generated.", "success");
+      } catch(e) {
+        notify(String(e.message || e), "error");
+      }
       btn.textContent = 'Generate Drafts';
       btn.disabled = false;
     });
@@ -398,11 +425,11 @@
       const monday = new Date(today.setDate(diff));
       const weekStart = monday.toISOString().split('T')[0];
       try {
-        const r = await api('POST', '/api/v1/ops/reports/weekly?week_start=' + weekStart + '&report_type=' + type);
-        const d = await r.json();
+        const d = await api('POST', '/api/v1/ops/reports/weekly?week_start=' + weekStart + '&report_type=' + type);
         container.innerHTML = '<pre style="white-space:pre-wrap;font-family:inherit;font-size:.82rem;line-height:1.6">' + esc(d.content_markdown || 'No content') + '</pre>';
       } catch(e) {
         container.innerHTML = '<p class="empty">Failed to generate report</p>';
+        notify(String(e.message || e), "error");
       }
     }
     document.getElementById('btn-report-health').addEventListener('click', () => generateReport('team_health'));
@@ -424,10 +451,15 @@
       if (role) body.role = role;
       if (gh) body.github_username = gh;
       if (cu) body.clickup_user_id = cu;
-      await api('POST', '/api/v1/ops/employees', body);
-      modalEmp.style.display = 'none';
-      ['emp-name','emp-email','emp-role','emp-github','emp-clickup'].forEach(id => document.getElementById(id).value = '');
-      await loadEmployees();
+      try {
+        await api('POST', '/api/v1/ops/employees', body);
+        modalEmp.style.display = 'none';
+        ['emp-name','emp-email','emp-role','emp-github','emp-clickup'].forEach(id => document.getElementById(id).value = '');
+        await loadEmployees();
+        notify("Employee saved.", "success");
+      } catch (e) {
+        notify(String(e.message || e), "error");
+      }
     });
 
     // Decision modal
@@ -443,10 +475,15 @@
       };
       const risk = document.getElementById('dec-risk').value;
       if (risk) body.risk = risk;
-      await api('POST', '/api/v1/ops/decision-log', body);
-      modalDec.style.display = 'none';
-      ['dec-context','dec-objective','dec-reason','dec-risk'].forEach(id => document.getElementById(id).value = '');
-      await loadDecisions();
+      try {
+        await api('POST', '/api/v1/ops/decision-log', body);
+        modalDec.style.display = 'none';
+        ['dec-context','dec-objective','dec-reason','dec-risk'].forEach(id => document.getElementById(id).value = '');
+        await loadDecisions();
+        notify("Decision logged.", "success");
+      } catch (e) {
+        notify(String(e.message || e), "error");
+      }
     });
 
     // Boot
@@ -467,8 +504,13 @@
     if (logoutBtn) logoutBtn.addEventListener('click', async () => {
       const csrf = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('pc_csrf='));
       const csrfVal = csrf ? csrf.split('=')[1] : '';
-      await fetch('/web/logout', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':csrfVal}});
-      window.location.href = '/web/login';
+      try {
+        const r = await fetch('/web/logout', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':csrfVal}});
+        if (!r.ok) throw new Error("Logout failed");
+        window.location.href = '/web/login';
+      } catch (e) {
+        notify(String(e.message || e), "error");
+      }
     });
 
     if (typeof lucide !== "undefined") lucide.createIcons();

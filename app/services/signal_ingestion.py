@@ -27,6 +27,8 @@ _ingestion_stats: dict[str, int] = {
     "clickup_failed": 0,
     "github_synced": 0,
     "github_failed": 0,
+    "github_cicd_synced": 0,
+    "github_cicd_failed": 0,
     "gmail_synced": 0,
     "gmail_failed": 0,
     "gmail_skipped_non_work": 0,
@@ -403,3 +405,137 @@ async def ingest_gmail_signals(db: AsyncSession, org_id: int) -> dict[str, Any]:
     _ingestion_stats["gmail_skipped_non_work"] += skipped
     logger.info("Gmail ingestion org=%d: synced=%d skipped=%d (domain filter)", org_id, count, skipped)
     return {"synced": count, "skipped_non_work": skipped, "error": None}
+
+
+# ---------------------------------------------------------------------------
+# GitHub CI/CD ingestion (workflow runs + deployments)
+# ---------------------------------------------------------------------------
+
+async def ingest_github_cicd_signals(db: AsyncSession, org_id: int) -> dict[str, Any]:
+    """
+    Fetch GitHub Actions workflow runs and deployments, store as IntegrationSignal rows.
+    Source types: 'github_workflow' and 'github_deployment'.
+    """
+    from app.tools import github as github_tool
+
+    integration = await _get_integration(db, org_id, "github")
+    if not integration:
+        return {"workflow_runs": 0, "deployments": 0, "error": "GitHub not connected"}
+
+    config = integration.config_json or {}
+    token = config.get("access_token")
+    if not token:
+        return {"workflow_runs": 0, "deployments": 0, "error": "Missing GitHub token"}
+
+    emp_maps = await _employee_map(db, org_id)
+
+    try:
+        repos = await github_tool.list_repos(token)
+    except Exception as exc:
+        logger.warning("GitHub CI/CD ingestion failed for org %d: %s", org_id, exc)
+        _ingestion_stats["github_cicd_failed"] += 1
+        return {"workflow_runs": 0, "deployments": 0, "error": str(exc)}
+
+    wf_count = 0
+    deploy_count = 0
+
+    for repo in repos[:15]:
+        owner = repo.get("owner", {}).get("login", "")
+        repo_name = repo.get("name", "")
+        if not owner or not repo_name:
+            continue
+
+        # Workflow runs
+        try:
+            runs = await github_tool.get_workflow_runs(token, owner, repo_name, per_page=15)
+        except Exception:
+            runs = []
+
+        for run in runs:
+            run_id = str(run.get("id", ""))
+            if not run_id:
+                continue
+
+            actor_login = (run.get("actor", {}) or {}).get("login", "").lower()
+            employee_id = emp_maps["github"].get(actor_login)
+
+            ts_str = run.get("updated_at") or run.get("created_at")
+            try:
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")) if ts_str else datetime.now(timezone.utc)
+            except (ValueError, TypeError):
+                ts = datetime.now(timezone.utc)
+
+            # Calculate duration if both timestamps available
+            duration_seconds = None
+            run_started = run.get("run_started_at")
+            run_updated = run.get("updated_at")
+            if run_started and run_updated and run.get("status") == "completed":
+                try:
+                    t_start = datetime.fromisoformat(run_started.replace("Z", "+00:00"))
+                    t_end = datetime.fromisoformat(run_updated.replace("Z", "+00:00"))
+                    duration_seconds = int((t_end - t_start).total_seconds())
+                except (ValueError, TypeError):
+                    pass
+
+            payload = {
+                "name": run.get("name"),
+                "status": run.get("status"),
+                "conclusion": run.get("conclusion"),
+                "repo": f"{owner}/{repo_name}",
+                "branch": run.get("head_branch"),
+                "actor": actor_login,
+                "event": run.get("event"),
+                "run_number": run.get("run_number"),
+                "run_attempt": run.get("run_attempt"),
+                "duration_seconds": duration_seconds,
+                "created_at": run.get("created_at"),
+            }
+
+            await _upsert_signal(
+                db, org_id, "github_workflow",
+                f"wf:{owner}/{repo_name}#{run_id}",
+                employee_id, ts, payload,
+            )
+            wf_count += 1
+
+        # Deployments
+        try:
+            deployments = await github_tool.get_deployments(token, owner, repo_name, per_page=10)
+        except Exception:
+            deployments = []
+
+        for deploy in deployments:
+            deploy_id = str(deploy.get("id", ""))
+            if not deploy_id:
+                continue
+
+            creator_login = (deploy.get("creator", {}) or {}).get("login", "").lower()
+            employee_id = emp_maps["github"].get(creator_login)
+
+            ts_str = deploy.get("updated_at") or deploy.get("created_at")
+            try:
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")) if ts_str else datetime.now(timezone.utc)
+            except (ValueError, TypeError):
+                ts = datetime.now(timezone.utc)
+
+            payload = {
+                "environment": deploy.get("environment"),
+                "repo": f"{owner}/{repo_name}",
+                "ref": deploy.get("ref"),
+                "task": deploy.get("task"),
+                "creator": creator_login,
+                "description": (deploy.get("description") or "")[:200],
+                "created_at": deploy.get("created_at"),
+            }
+
+            await _upsert_signal(
+                db, org_id, "github_deployment",
+                f"deploy:{owner}/{repo_name}#{deploy_id}",
+                employee_id, ts, payload,
+            )
+            deploy_count += 1
+
+    await db.commit()
+    _ingestion_stats["github_cicd_synced"] += wf_count + deploy_count
+    logger.info("GitHub CI/CD ingestion org=%d: workflows=%d deployments=%d", org_id, wf_count, deploy_count)
+    return {"workflow_runs": wf_count, "deployments": deploy_count, "error": None}

@@ -1178,6 +1178,10 @@
     const msg = document.getElementById("run-msg");
     const counts = document.getElementById("run-counts");
     if (!btn || !status || !panel || !msg || !counts) return;
+    function notifyError(message) {
+      if (window.showToast) window.showToast(message, "error");
+      else window.alert(message);
+    }
 
     btn.addEventListener("click", async function () {
       const ok = window.confirm("This creates drafts only. No sending or execution will happen. Continue?");
@@ -1237,8 +1241,13 @@
     if (logoutBtn) {
       logoutBtn.addEventListener("click", async function (e) {
         e.preventDefault();
-        await fetch("/web/logout", { method: "POST" });
-        window.location.reload();
+        try {
+          const res = await fetch("/web/logout", { method: "POST" });
+          if (!res.ok) throw new Error("Logout failed");
+          window.location.reload();
+        } catch (err) {
+          notifyError((err && err.message) ? err.message : "Logout failed");
+        }
       });
     }
 
@@ -1252,12 +1261,17 @@
         const form = new URLSearchParams();
         form.set("username", username);
         form.set("password", password);
-        const loginRes = await fetch("/web/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: form.toString()
-        });
-        if (loginRes.ok) window.location.reload();
+        try {
+          const loginRes = await fetch("/web/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: form.toString()
+          });
+          if (!loginRes.ok) throw new Error("Login failed");
+          window.location.reload();
+        } catch (err) {
+          notifyError((err && err.message) ? err.message : "Login failed");
+        }
       });
     }
   })();
@@ -1306,6 +1320,7 @@
 
     async function ensureLoggedIn() {
       const res = await fetch("/web/session");
+      if (!res.ok) throw new Error("Session check failed");
       const data = await res.json();
       if (data.logged_in) return true;
       const username = window.prompt("Sign in — Email");
@@ -1319,7 +1334,8 @@
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: form.toString()
       });
-      return loginRes.ok;
+      if (!loginRes.ok) throw new Error("Web login failed");
+      return true;
     }
 
     async function send() {
@@ -1411,7 +1427,12 @@
       var action = actions[idx];
       if (!action) { if (btn) { btn.textContent = "Error"; } return; }
       var token = window.__apiToken;
-      if (!token) { alert("Not authenticated."); if (btn) btn.disabled = false; return; }
+      if (!token) {
+        if (window.showToast) window.showToast("Not authenticated.", "error");
+        else alert("Not authenticated.");
+        if (btn) btn.disabled = false;
+        return;
+      }
       try {
         var r;
         if (action.action_type === "TASK_CREATE") {
@@ -1438,7 +1459,8 @@
             })
           });
         } else {
-          alert("Unsupported action: " + action.action_type);
+          if (window.showToast) window.showToast("Unsupported action: " + action.action_type, "error");
+          else alert("Unsupported action: " + action.action_type);
           if (btn) btn.disabled = false;
           return;
         }
@@ -1446,11 +1468,13 @@
           if (btn) { btn.textContent = "Done"; btn.style.background = "rgba(74,222,128,0.08)"; btn.style.color = "var(--ok)"; btn.style.borderColor = "rgba(74,222,128,0.25)"; }
         } else {
           var d = await r.json().catch(function(){return {};});
-          alert("Action failed: " + (d.detail || r.status));
+          if (window.showToast) window.showToast("Action failed: " + (d.detail || r.status), "error");
+          else alert("Action failed: " + (d.detail || r.status));
           if (btn) { btn.disabled = false; btn.textContent = action.action_type; }
         }
       } catch(e) {
-        alert("Network error executing action.");
+        if (window.showToast) window.showToast("Network error executing action.", "error");
+        else alert("Network error executing action.");
         if (btn) { btn.disabled = false; }
       }
     };
@@ -1476,7 +1500,9 @@
             '</div>'
           );
         });
-      } catch(e) {}
+      } catch(e) {
+        if (window.showToast) window.showToast("Failed to load chat history.", "warn");
+      }
     })();
   })();
 
@@ -1545,34 +1571,48 @@
       if (btn) { btn.disabled = true; btn.textContent = "…"; }
 
       const token = window.__apiToken;
+      const readError = async function(resp) {
+        try {
+          const body = await resp.json();
+          if (typeof body?.detail === "string") return body.detail;
+          if (body && body.detail) return JSON.stringify(body.detail);
+        } catch (_e) {}
+        return "Request failed (" + resp.status + ")";
+      };
+      if (!token) {
+        const msg = "Session missing. Please refresh and sign in again.";
+        if (window.showToast) window.showToast(msg, "error"); else alert(msg);
+        if (btn) { btn.disabled = false; btn.textContent = action === "summarize" ? "Summarize" : action === "strategize" ? "Strategy" : "Re-draft"; }
+        return;
+      }
       try {
         if (action === "summarize") {
           const r = await fetch("/api/v1/email/" + emailId + "/summarize", { method:"POST", headers:{"Authorization":"Bearer "+token} });
+          if (!r.ok) throw new Error(await readError(r));
           const d = await r.json();
-          if (r.ok) {
-            let el = item.querySelector(".inbox-summary");
-            if (!el) { el = document.createElement("div"); el.className = "inbox-summary"; item.querySelector(".inbox-actions").before(el); }
-            el.textContent = d.summary;
-            if (btn) btn.remove();
-          }
+          let el = item.querySelector(".inbox-summary");
+          if (!el) { el = document.createElement("div"); el.className = "inbox-summary"; item.querySelector(".inbox-actions").before(el); }
+          el.textContent = d.summary || "No summary returned.";
+          if (btn) btn.remove();
         } else if (action === "strategize") {
           const r = await fetch("/api/v1/email/" + emailId + "/strategize", { method:"POST", headers:{"Authorization":"Bearer "+token} });
+          if (!r.ok) throw new Error(await readError(r));
           const d = await r.json();
-          if (r.ok) {
-            let el = item.querySelector(".inbox-strategy");
-            if (!el) { el = document.createElement("div"); el.className = "inbox-strategy"; item.appendChild(el); }
-            el.textContent = d.strategy;
-          }
+          let el = item.querySelector(".inbox-strategy");
+          if (!el) { el = document.createElement("div"); el.className = "inbox-strategy"; item.appendChild(el); }
+          el.textContent = d.strategy || "No strategy returned.";
         } else if (action === "draft") {
           const r = await fetch("/api/v1/email/" + emailId + "/draft-reply", { method:"POST", headers:{"Authorization":"Bearer "+token, "Content-Type":"application/json"}, body:"{}" });
+          if (!r.ok) throw new Error(await readError(r));
           const d = await r.json();
-          if (r.ok) {
-            let el = item.querySelector(".inbox-draft");
-            if (!el) { el = document.createElement("div"); el.className = "inbox-draft"; item.appendChild(el); }
-            el.textContent = d.draft;
-          }
+          let el = item.querySelector(".inbox-draft");
+          if (!el) { el = document.createElement("div"); el.className = "inbox-draft"; item.appendChild(el); }
+          el.textContent = d.draft || "No draft returned.";
         }
-      } catch(e) {}
+      } catch(e) {
+        const msg = (e && e.message) ? e.message : "Action failed.";
+        if (window.showToast) window.showToast(msg, "error"); else alert(msg);
+      }
       if (btn) { btn.disabled = false; btn.textContent = action === "summarize" ? "Summarize" : action === "strategize" ? "Strategy" : "Re-draft"; }
     };
 
@@ -1580,8 +1620,14 @@
     syncBtn && syncBtn.addEventListener("click", async function() {
       syncBtn.disabled = true; syncBtn.textContent = "Syncing…";
       try {
-        await fetch("/api/v1/email/sync", { method:"POST", headers:{"Authorization":"Bearer "+window.__apiToken} });
+        const r = await fetch("/api/v1/email/sync", { method:"POST", headers:{"Authorization":"Bearer "+window.__apiToken} });
+        if (!r.ok) {
+          const d = await r.json().catch(function(){ return {}; });
+          throw new Error(d.detail || "Gmail sync failed");
+        }
         await loadInbox();
+      } catch (e) {
+        if (window.showToast) window.showToast((e && e.message) ? e.message : "Gmail sync failed", "error");
       } finally { syncBtn.disabled = false; syncBtn.textContent = "Sync Gmail"; }
     });
 
@@ -1707,10 +1753,15 @@
           setTimeout(loadApprovals, 700);
         } else {
           var d = await r.json().catch(function(){return {};});
-          alert("Error: " + (d.detail || "Approval failed"));
+          if (window.showToast) window.showToast("Error: " + (d.detail || "Approval failed"), "error");
+          else alert("Error: " + (d.detail || "Approval failed"));
           btns.forEach(function(b) { b.disabled = false; });
         }
-      } catch(e) { alert("Network error."); btns.forEach(function(b) { b.disabled = false; }); }
+      } catch(e) {
+        if (window.showToast) window.showToast("Network error.", "error");
+        else alert("Network error.");
+        btns.forEach(function(b) { b.disabled = false; });
+      }
     };
 
     window.approvalReject = async function(id) {
@@ -1730,10 +1781,15 @@
           setTimeout(loadApprovals, 700);
         } else {
           var d = await r.json().catch(function(){return {};});
-          alert("Error: " + (d.detail || "Reject failed"));
+          if (window.showToast) window.showToast("Error: " + (d.detail || "Reject failed"), "error");
+          else alert("Error: " + (d.detail || "Reject failed"));
           btns.forEach(function(b) { b.disabled = false; });
         }
-      } catch(e) { alert("Network error."); btns.forEach(function(b) { b.disabled = false; }); }
+      } catch(e) {
+        if (window.showToast) window.showToast("Network error.", "error");
+        else alert("Network error.");
+        btns.forEach(function(b) { b.disabled = false; });
+      }
     };
 
     refreshBtn && refreshBtn.addEventListener("click", loadApprovals);
@@ -1886,9 +1942,13 @@
         if (r.ok || r.status === 204) {
           await loadMemory();
         } else {
-          alert("Delete failed.");
+          if (window.showToast) window.showToast("Delete failed.", "error");
+          else alert("Delete failed.");
         }
-      } catch(e) { alert("Network error."); }
+      } catch(e) {
+        if (window.showToast) window.showToast("Network error.", "error");
+        else alert("Network error.");
+      }
     };
 
     addToggle && addToggle.addEventListener("click", function() {
@@ -1998,10 +2058,14 @@
           setTimeout(loadTasks, 250);
         } else {
           var d = await r.json().catch(function(){return {};});
-          alert("Update failed: " + (d.detail || r.status));
+          if (window.showToast) window.showToast("Update failed: " + (d.detail || r.status), "error");
+          else alert("Update failed: " + (d.detail || r.status));
           await loadTasks();
         }
-      } catch(e) { alert("Network error."); }
+      } catch(e) {
+        if (window.showToast) window.showToast("Network error.", "error");
+        else alert("Network error.");
+      }
     };
 
     tabOpen && tabOpen.addEventListener("click", function() {
@@ -2031,9 +2095,13 @@
           await loadTasks();
         } else {
           var d = await r.json().catch(function(){return {};});
-          alert("Create failed: " + (d.detail || r.status));
+          if (window.showToast) window.showToast("Create failed: " + (d.detail || r.status), "error");
+          else alert("Create failed: " + (d.detail || r.status));
         }
-      } catch(e) { alert("Network error."); }
+      } catch(e) {
+        if (window.showToast) window.showToast("Network error.", "error");
+        else alert("Network error.");
+      }
       addBtn.disabled = false;
     });
 
