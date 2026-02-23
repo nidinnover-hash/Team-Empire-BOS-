@@ -64,6 +64,7 @@ async def draft_plan_for_member(
         system_prompt=system_prompt,
         user_message=user_message,
         memory_context=memory_context,
+        organization_id=org_id,
     )
 
     # Parse AI response into structured tasks
