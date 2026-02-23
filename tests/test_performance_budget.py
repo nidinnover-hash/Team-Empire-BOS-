@@ -17,3 +17,11 @@ async def test_openapi_endpoint_latency_budget(client) -> None:
     elapsed = time.perf_counter() - start
     assert response.status_code == 200
     assert elapsed < 2.0
+
+
+async def test_root_health_endpoint_latency_budget(client) -> None:
+    start = time.perf_counter()
+    response = await client.get("/health")
+    elapsed = time.perf_counter() - start
+    assert response.status_code == 200
+    assert elapsed < 0.5

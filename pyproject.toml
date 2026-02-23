@@ -39,3 +39,15 @@ module = [
   "groq",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+  "app.services.employee",
+  "app.services.metrics_service",
+  "app.services.policy_service",
+  "app.services.report_service",
+  "app.services.signal_ingestion",
+]
+disallow_untyped_defs = true
+disallow_any_generics = true
+warn_return_any = true

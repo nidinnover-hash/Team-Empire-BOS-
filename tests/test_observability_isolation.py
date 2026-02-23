@@ -96,6 +96,7 @@ async def test_observability_endpoints_are_org_scoped(client):
     assert summary["total_ai_calls"] == 1
     assert summary["total_approvals"] == 1
     assert summary["provider_stats"][0]["provider"] == "openai"
+    assert "runtime_stats" in summary
 
     ai_calls_resp = await client.get("/api/v1/observability/ai-calls", headers=ceo_org1)
     assert ai_calls_resp.status_code == 200
@@ -124,6 +125,7 @@ async def test_observability_isolation_for_org2_actor(client):
     assert summary["total_ai_calls"] == 1
     assert summary["total_approvals"] == 1
     assert summary["provider_stats"][0]["provider"] == "groq"
+    assert "runtime_stats" in summary
 
     ai_calls_resp = await client.get("/api/v1/observability/ai-calls", headers=ceo_org2)
     assert ai_calls_resp.status_code == 200

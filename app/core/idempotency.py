@@ -28,6 +28,17 @@ _cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _cache_lock = Lock()
 _redis_client: _RedisLike | None = None
 _redis_initialized = False
+_idempotency_stats: dict[str, int] = {
+    "hits": 0,
+    "misses": 0,
+    "stores": 0,
+    "conflicts": 0,
+    "redis_failures": 0,
+}
+
+
+def get_idempotency_stats() -> dict[str, int]:
+    return dict(_idempotency_stats)
 
 
 def _cache_key(scope: str, key: str) -> str:
@@ -116,6 +127,7 @@ def _backend() -> str:
 def _unpack_cached(raw: dict[str, Any], fingerprint: str | None) -> dict[str, Any]:
     stored_fingerprint = raw.get("fingerprint")
     if isinstance(stored_fingerprint, str) and fingerprint and stored_fingerprint != fingerprint:
+        _idempotency_stats["conflicts"] += 1
         raise IdempotencyConflictError("Idempotency key replayed with different request fingerprint")
     payload = raw.get("payload")
     if isinstance(payload, dict):
@@ -132,16 +144,22 @@ def get_cached_response(scope: str, key: str, fingerprint: str | None = None) ->
             if raw:
                 try:
                     payload = cast(dict[str, Any], json.loads(raw))
+                    _idempotency_stats["hits"] += 1
                     return _unpack_cached(payload, fingerprint)
                 except Exception:
+                    _idempotency_stats["redis_failures"] += 1
                     return None
+            _idempotency_stats["misses"] += 1
+            return None
     now = time.monotonic()
     with _cache_lock:
         _cleanup(now)
         hit = _cache.get(_cache_key(scope, key))
         if not hit:
+            _idempotency_stats["misses"] += 1
             return None
         _ts, payload = hit
+        _idempotency_stats["hits"] += 1
         return _unpack_cached(payload, fingerprint)
 
 
@@ -162,11 +180,14 @@ def store_response(
                     _ttl_seconds(),
                     json.dumps(cache_payload),
                 )
+                _idempotency_stats["stores"] += 1
                 return
             except Exception:
                 logger.warning("Redis idempotency write failed; falling back to memory backend.", exc_info=True)
+                _idempotency_stats["redis_failures"] += 1
     now = time.monotonic()
     with _cache_lock:
         _cleanup(now)
         # Keep payload JSON-serializable and detached from caller mutation.
         _cache[_cache_key(scope, key)] = (now, cache_payload)
+    _idempotency_stats["stores"] += 1

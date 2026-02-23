@@ -8,6 +8,8 @@ from typing import TypedDict
 from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.idempotency import get_idempotency_stats
+from app.core.middleware import get_rate_limit_stats
 from app.core.tenant import apply_org_scope
 from app.models.ai_call_log import AiCallLog
 from app.models.approval import Approval
@@ -31,6 +33,7 @@ class ObservabilitySummary(TypedDict):
     total_approvals: int
     rejection_rate: float
     approval_breakdown: dict[str, int]
+    runtime_stats: dict[str, int]
 
 
 class RecentAiCall(TypedDict):
@@ -107,6 +110,10 @@ async def get_observability_summary(
         "total_approvals": total_approvals,
         "rejection_rate": round(rejected / total_approvals * 100, 1) if total_approvals else 0,
         "approval_breakdown": approval_counts,
+        "runtime_stats": {
+            **{f"rate_limit_{k}": v for k, v in get_rate_limit_stats().items()},
+            **{f"idempotency_{k}": v for k, v in get_idempotency_stats().items()},
+        },
     }
 
 

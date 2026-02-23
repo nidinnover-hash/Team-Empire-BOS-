@@ -18,6 +18,7 @@ class ObservabilitySummaryRead(BaseModel):
     total_approvals: int
     rejection_rate: float
     approval_breakdown: dict[str, int]
+    runtime_stats: dict[str, int] = {}
 
 
 class AICallLogRead(BaseModel):

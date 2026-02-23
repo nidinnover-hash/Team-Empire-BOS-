@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from app.core.config import settings
 from app.core.deps import get_db
 from app.core.security import create_access_token
 from app.main import app as fastapi_app
@@ -88,3 +89,39 @@ async def test_web_session_response_still_returns_principal_identity(client):
     body = resp.json()
     assert body["logged_in"] is True
     assert body["user"]["email"] == "ceo@org1.com"
+
+
+async def test_response_privacy_profile_strict_masks_pii(monkeypatch, client):
+    monkeypatch.setattr(settings, "PRIVACY_POLICY_PROFILE", "strict", raising=False)
+    create_resp = await client.post(
+        "/api/v1/integrations/connect",
+        json={
+            "type": "github",
+            "config_json": {
+                "username": "strict@example.com",
+                "access_token": "ghp_very_secret",
+            },
+        },
+    )
+    assert create_resp.status_code == 201
+    body = create_resp.json()
+    assert body["config_json"]["username"] == "s***@example.com"
+    assert body["config_json"]["access_token"] == "***"
+
+
+async def test_response_privacy_profile_debug_keeps_pii(monkeypatch, client):
+    monkeypatch.setattr(settings, "PRIVACY_POLICY_PROFILE", "debug", raising=False)
+    create_resp = await client.post(
+        "/api/v1/integrations/connect",
+        json={
+            "type": "github",
+            "config_json": {
+                "username": "debug@example.com",
+                "access_token": "ghp_very_secret",
+            },
+        },
+    )
+    assert create_resp.status_code == 201
+    body = create_resp.json()
+    assert body["config_json"]["username"] == "debug@example.com"
+    assert body["config_json"]["access_token"] == "***"
