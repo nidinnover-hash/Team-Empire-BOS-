@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import logging
 from datetime import datetime, timezone
+from typing import Any, Callable
 
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,19 +20,19 @@ HANDLER_TIMEOUT_SECONDS = 30
 
 # ── Handlers ──────────────────────────────────────────────────────────────────
 
-def _handler_assign_leads(payload: dict) -> dict:
+def _handler_assign_leads(payload: dict[str, Any]) -> dict[str, Any]:
     count = int(payload.get("count", 0))
     return {"action": "assign_leads", "assigned_count": count}
 
 
-def _handler_spend(payload: dict) -> dict:
+def _handler_spend(payload: dict[str, Any]) -> dict[str, Any]:
     amount = float(payload.get("amount", 0))
     if amount <= 0:
         raise ValueError("Amount must be greater than zero")
     return {"action": "spend", "approved_amount": amount}
 
 
-HANDLERS: dict[str, callable] = {
+HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "assign_leads": _handler_assign_leads,
     "spend": _handler_spend,
     "spend_money": _handler_spend,
@@ -51,15 +52,16 @@ async def _atomic_claim_executed_at(db: AsyncSession, approval_id: int) -> bool:
         .values(executed_at=datetime.now(timezone.utc))
     )
     await db.commit()
-    return result.rowcount == 1
+    return bool((result.rowcount or 0) == 1)
 
 
-async def _run_handler(handler: callable, payload: dict) -> dict:
+async def _run_handler(
+    handler: Callable[[dict[str, Any]], Any],
+    payload: dict[str, Any],
+) -> dict[str, Any]:
     """Run a handler (sync or async) with a timeout, validate return type."""
     if asyncio.iscoroutinefunction(handler) or inspect.isasyncgenfunction(handler):
-        result = await asyncio.wait_for(
-            handler(payload), timeout=HANDLER_TIMEOUT_SECONDS
-        )
+        result = await asyncio.wait_for(handler(payload), timeout=HANDLER_TIMEOUT_SECONDS)
     else:
         result = handler(payload)
         if asyncio.iscoroutine(result):
