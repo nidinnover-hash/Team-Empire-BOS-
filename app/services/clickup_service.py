@@ -14,6 +14,8 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.resilience import run_with_retry
+from app.core.tenant import require_org_id
 from app.models.task import Task
 from app.services import integration as integration_service
 from app.tools.clickup import get_authorized_user, get_tasks, get_teams, parse_due_date, parse_priority
@@ -44,8 +46,9 @@ async def connect_clickup(
     Verify the ClickUp personal token, then store it in the Integration table.
     Returns the integration info dict on success; raises on auth failure.
     """
-    user_info = await get_authorized_user(api_token)
-    teams = await get_teams(api_token)
+    require_org_id(org_id)
+    user_info = await run_with_retry(lambda: get_authorized_user(api_token))
+    teams = await run_with_retry(lambda: get_teams(api_token))
     team_id = str(teams[0]["id"]) if teams else None
 
     config_json = {
@@ -96,7 +99,10 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
         # Collect all ClickUp tasks first
         all_cu_tasks: list[dict[str, Any]] = []
         while True:
-            tasks = await get_tasks(api_token, team_id, page=page, include_closed=False)
+            async def _load_tasks(p: int = page) -> list[dict[str, Any]]:
+                return await get_tasks(api_token, team_id, page=p, include_closed=False)
+
+            tasks = await run_with_retry(_load_tasks)
             if not tasks:
                 break
             all_cu_tasks.extend(tasks)
@@ -184,3 +190,4 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
 
     await integration_service.mark_sync_time(db, item)
     return {"synced": synced, "error": None}
+    require_org_id(org_id)

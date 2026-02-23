@@ -9,7 +9,6 @@ Tests for patterns introduced in the Feb 23 improvement round:
 """
 
 from datetime import datetime, timezone
-from types import SimpleNamespace
 
 from sqlalchemy import select
 
@@ -18,7 +17,6 @@ from app.core.security import create_access_token
 from app.main import app as fastapi_app
 from app.models.approval import Approval
 from app.models.execution import Execution
-from app.services import approval as approval_service
 from app.services import email_service, execution_engine, slack_service
 
 
@@ -242,7 +240,7 @@ async def test_execution_engine_rejects_cross_org(client):
             await execution_engine.execute_approval(
                 db=db, approval=approval, actor_user_id=99, actor_org_id=999
             )
-            assert False, "Should have raised ValueError"
+            raise AssertionError("Should have raised ValueError")
         except ValueError as e:
             assert "Cross-org" in str(e)
     finally:
@@ -271,7 +269,7 @@ async def test_execution_engine_rejects_pending_approval(client):
             await execution_engine.execute_approval(
                 db=db, approval=approval, actor_user_id=1, actor_org_id=1
             )
-            assert False, "Should have raised ValueError"
+            raise AssertionError("Should have raised ValueError")
         except ValueError as e:
             assert "pending" in str(e)
     finally:
@@ -364,7 +362,7 @@ async def test_execution_email_send_message_cross_org_blocked(client, monkeypatc
             await execution_engine.execute_approval(
                 db=db, approval=approval, actor_user_id=1, actor_org_id=1
             )
-            assert False, "Should have raised ValueError"
+            raise AssertionError("Should have raised ValueError")
         except ValueError as e:
             assert "Cross-org" in str(e)
     finally:

@@ -11,7 +11,12 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import PLACEHOLDER_AI_KEYS, settings
-from app.core.idempotency import get_cached_response, store_response
+from app.core.idempotency import (
+    IdempotencyConflictError,
+    build_fingerprint,
+    get_cached_response,
+    store_response,
+)
 from app.core.privacy import sanitize_response_payload
 from app.core.deps import get_db
 from app.core.rbac import require_roles
@@ -219,10 +224,16 @@ async def sync_google_calendar(
     Events appear automatically in briefings and AI memory.
     """
     scope = f"calendar_sync:{actor['org_id']}:{for_date or date.today()}"
+    fingerprint = build_fingerprint(
+        {"org_id": int(actor["org_id"]), "for_date": str(for_date or date.today())}
+    )
     if idempotency_key:
-        cached = get_cached_response(scope, idempotency_key)
-        if cached:
-            return cast(CalendarSyncResult, CalendarSyncResult.model_validate(cached))
+        try:
+            cached = get_cached_response(scope, idempotency_key, fingerprint=fingerprint)
+            if cached:
+                return cast(CalendarSyncResult, CalendarSyncResult.model_validate(cached))
+        except IdempotencyConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
     result = await sync_calendar_events(
         db,
         organization_id=actor["org_id"],
@@ -241,7 +252,7 @@ async def sync_google_calendar(
     )
     response = CalendarSyncResult(date=result["date"], synced=result["synced"])
     if idempotency_key:
-        store_response(scope, idempotency_key, response.model_dump())
+        store_response(scope, idempotency_key, response.model_dump(), fingerprint=fingerprint)
     return response
 
 
@@ -566,10 +577,14 @@ async def clickup_sync(
 ) -> ClickUpSyncResult:
     """Fetch all open ClickUp tasks and upsert them into the local Task table."""
     scope = f"clickup_sync:{actor['org_id']}"
+    fingerprint = build_fingerprint({"org_id": int(actor["org_id"]), "action": "clickup_sync"})
     if idempotency_key:
-        cached = get_cached_response(scope, idempotency_key)
-        if cached:
-            return cast(ClickUpSyncResult, ClickUpSyncResult.model_validate(cached))
+        try:
+            cached = get_cached_response(scope, idempotency_key, fingerprint=fingerprint)
+            if cached:
+                return cast(ClickUpSyncResult, ClickUpSyncResult.model_validate(cached))
+        except IdempotencyConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
     result = await clickup_service.sync_clickup_tasks(db, org_id=int(actor["org_id"]))
     if result["error"]:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -587,7 +602,7 @@ async def clickup_sync(
     status = await clickup_service.get_clickup_status(db, org_id=int(actor["org_id"]))
     response = ClickUpSyncResult(synced=result["synced"], last_sync_at=status.get("last_sync_at"))
     if idempotency_key:
-        store_response(scope, idempotency_key, response.model_dump())
+        store_response(scope, idempotency_key, response.model_dump(), fingerprint=fingerprint)
     return response
 
 
@@ -654,10 +669,14 @@ async def github_sync(
     """Fetch open PRs and bug issues from GitHub and upsert into the local Task table."""
     org_id = int(actor["org_id"])
     scope = f"github_sync:{org_id}"
+    fingerprint = build_fingerprint({"org_id": org_id, "action": "github_sync"})
     if idempotency_key:
-        cached = get_cached_response(scope, idempotency_key)
-        if cached:
-            return cast(GitHubSyncResult, GitHubSyncResult.model_validate(cached))
+        try:
+            cached = get_cached_response(scope, idempotency_key, fingerprint=fingerprint)
+            if cached:
+                return cast(GitHubSyncResult, GitHubSyncResult.model_validate(cached))
+        except IdempotencyConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
     result = await github_service.sync_github(db, org_id=org_id)
     if result["error"]:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -681,7 +700,7 @@ async def github_sync(
         last_sync_at=status.get("last_sync_at"),
     )
     if idempotency_key:
-        store_response(scope, idempotency_key, response.model_dump())
+        store_response(scope, idempotency_key, response.model_dump(), fingerprint=fingerprint)
     return response
 
 
@@ -739,10 +758,14 @@ async def slack_sync(
     """Read recent messages from all joined Slack channels and store digests in daily context."""
     org_id = int(actor["org_id"])
     scope = f"slack_sync:{org_id}"
+    fingerprint = build_fingerprint({"org_id": org_id, "action": "slack_sync"})
     if idempotency_key:
-        cached = get_cached_response(scope, idempotency_key)
-        if cached:
-            return cast(SlackSyncResult, SlackSyncResult.model_validate(cached))
+        try:
+            cached = get_cached_response(scope, idempotency_key, fingerprint=fingerprint)
+            if cached:
+                return cast(SlackSyncResult, SlackSyncResult.model_validate(cached))
+        except IdempotencyConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
     result = await slack_service.sync_slack_messages(db, org_id=org_id)
     if result["error"]:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -766,7 +789,7 @@ async def slack_sync(
         last_sync_at=status.get("last_sync_at"),
     )
     if idempotency_key:
-        store_response(scope, idempotency_key, response.model_dump())
+        store_response(scope, idempotency_key, response.model_dump(), fingerprint=fingerprint)
     return response
 
 

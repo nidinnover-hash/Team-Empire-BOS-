@@ -71,3 +71,16 @@ def test_idempotency_falls_back_to_memory_when_redis_unavailable(monkeypatch):
 
     assert hit == {"status": "memory"}
     assert len(idempotency._cache) == 1
+
+
+def test_idempotency_conflict_when_fingerprint_differs():
+    scope = "email_send:1:10"
+    key = "same-key"
+    fp_a = idempotency.build_fingerprint({"org_id": 1, "email_id": 10, "action": "send"})
+    fp_b = idempotency.build_fingerprint({"org_id": 1, "email_id": 11, "action": "send"})
+    idempotency.store_response(scope, key, {"status": "sent"}, fingerprint=fp_a)
+    try:
+        _ = idempotency.get_cached_response(scope, key, fingerprint=fp_b)
+        raise AssertionError("expected idempotency conflict")
+    except idempotency.IdempotencyConflictError:
+        pass

@@ -18,6 +18,8 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.resilience import run_with_retry
+from app.core.tenant import require_org_id
 from app.models.memory import DailyContext
 from app.services import integration as integration_service
 from app.services import memory as memory_service
@@ -52,7 +54,8 @@ async def connect_slack(
     Verify the Slack bot token and store it encrypted in the Integration table.
     Raises on auth failure.
     """
-    info = await auth_test(bot_token)
+    require_org_id(org_id)
+    info = await run_with_retry(lambda: auth_test(bot_token))
 
     config_json = {
         "access_token": bot_token,  # encrypt_config() auto-encrypts this field
@@ -97,7 +100,7 @@ async def sync_slack_messages(db: AsyncSession, org_id: int) -> dict[str, Any]:
     user_name_cache: dict[str, str] = {}  # cache user_id → display_name within this sync
 
     try:
-        channels = await list_channels(token)
+        channels = await run_with_retry(lambda: list_channels(token))
         channels = channels[:_MAX_CHANNELS]
 
         for channel in channels:
@@ -106,7 +109,10 @@ async def sync_slack_messages(db: AsyncSession, org_id: int) -> dict[str, Any]:
             if not channel_id:
                 continue
 
-            messages = await get_channel_history(token, channel_id, limit=_MSGS_PER_CHANNEL)
+            async def _load_channel_history(cid: str = channel_id) -> list[dict[str, Any]]:
+                return await get_channel_history(token, cid, limit=_MSGS_PER_CHANNEL)
+
+            messages = await run_with_retry(_load_channel_history)
             if not messages:
                 continue
 
@@ -119,7 +125,10 @@ async def sync_slack_messages(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     continue
                 if user_id:
                     if user_id not in user_name_cache:
-                        user_name_cache[user_id] = await get_user_name(token, user_id)
+                        async def _load_user_name(uid: str = user_id) -> str:
+                            return await get_user_name(token, uid)
+
+                        user_name_cache[user_id] = await run_with_retry(_load_user_name)
                     display_name = user_name_cache[user_id]
                 else:
                     display_name = "unknown"
@@ -184,5 +193,7 @@ async def send_to_slack(
     if not token:
         raise ValueError("Missing Slack access_token")
 
-    result = await post_message(token, channel_id, text)
+    require_org_id(org_id)
+    result = await run_with_retry(lambda: post_message(token, channel_id, text))
     return {"ok": True, "ts": result.get("ts")}
+    require_org_id(org_id)

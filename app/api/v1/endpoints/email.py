@@ -10,7 +10,12 @@ from fastapi import Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.idempotency import get_cached_response, store_response
+from app.core.idempotency import (
+    IdempotencyConflictError,
+    build_fingerprint,
+    get_cached_response,
+    store_response,
+)
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.schemas.email import ComposeRequest, DraftReplyRequest, EmailRead, SyncResult
@@ -137,10 +142,15 @@ async def sync_emails(
 ) -> SyncResult:
     """Sync recent emails from Gmail into the database."""
     org_id = int(current_user.get("org_id", 1))
+    scope = f"email_sync:{org_id}"
+    fingerprint = build_fingerprint({"org_id": org_id, "action": "sync"})
     if idempotency_key:
-        cached = get_cached_response(f"email_sync:{org_id}", idempotency_key)
-        if cached:
-            return cast(SyncResult, SyncResult.model_validate(cached))
+        try:
+            cached = get_cached_response(scope, idempotency_key, fingerprint=fingerprint)
+            if cached:
+                return cast(SyncResult, SyncResult.model_validate(cached))
+        except IdempotencyConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
     try:
         new_count = await email_service.sync_emails(
             db=db,
@@ -157,7 +167,7 @@ async def sync_emails(
         message=f"Synced {new_count} new email(s) from Gmail.",
     )
     if idempotency_key:
-        store_response(f"email_sync:{org_id}", idempotency_key, response.model_dump())
+        store_response(scope, idempotency_key, response.model_dump(), fingerprint=fingerprint)
     return response
 
 
@@ -221,10 +231,17 @@ async def draft_reply(
     Creates an approval request — nothing is sent until you approve.
     """
     org_id = int(current_user.get("org_id", 1))
+    scope = f"email_draft_reply:{org_id}:{email_id}"
+    fingerprint = build_fingerprint(
+        {"org_id": org_id, "email_id": email_id, "instruction": body.instruction or ""}
+    )
     if idempotency_key:
-        cached = get_cached_response(f"email_draft_reply:{org_id}:{email_id}", idempotency_key)
-        if cached:
-            return cast(dict[str, Any], cached)
+        try:
+            cached = get_cached_response(scope, idempotency_key, fingerprint=fingerprint)
+            if cached:
+                return cast(dict[str, Any], cached)
+        except IdempotencyConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
     draft = await email_service.draft_reply(
         db=db,
         email_id=email_id,
@@ -241,7 +258,7 @@ async def draft_reply(
         "message": "Draft created. Go to /api/v1/approvals to review and approve before sending.",
     }
     if idempotency_key:
-        store_response(f"email_draft_reply:{org_id}:{email_id}", idempotency_key, response)
+        store_response(scope, idempotency_key, response, fingerprint=fingerprint)
     return response
 
 
@@ -258,10 +275,15 @@ async def send_email(
     CEO and ADMIN only.
     """
     org_id = int(current_user.get("org_id", 1))
+    scope = f"email_send:{org_id}:{email_id}"
+    fingerprint = build_fingerprint({"org_id": org_id, "email_id": email_id, "action": "send"})
     if idempotency_key:
-        cached = get_cached_response(f"email_send:{org_id}:{email_id}", idempotency_key)
-        if cached:
-            return cast(dict[str, Any], cached)
+        try:
+            cached = get_cached_response(scope, idempotency_key, fingerprint=fingerprint)
+            if cached:
+                return cast(dict[str, Any], cached)
+        except IdempotencyConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
     sent = await email_service.send_approved_reply(
         db=db,
         email_id=email_id,
@@ -279,7 +301,7 @@ async def send_email(
                 "message": "Email was already sent previously.",
             }
             if idempotency_key:
-                store_response(f"email_send:{org_id}:{email_id}", idempotency_key, response)
+                store_response(scope, idempotency_key, response, fingerprint=fingerprint)
             return response
         raise HTTPException(
             status_code=409,
@@ -287,7 +309,7 @@ async def send_email(
         )
     response = {"email_id": email_id, "status": "sent", "message": "Email sent successfully."}
     if idempotency_key:
-        store_response(f"email_send:{org_id}:{email_id}", idempotency_key, response)
+        store_response(scope, idempotency_key, response, fingerprint=fingerprint)
     return response
 
 
@@ -326,10 +348,22 @@ async def compose_email(
     """
     org_id = int(current_user.get("org_id", 1))
     _check_compose_rate(org_id)
+    scope = f"email_compose:{org_id}"
+    fingerprint = build_fingerprint(
+        {
+            "org_id": org_id,
+            "to": body.to,
+            "subject": body.subject,
+            "instruction": body.instruction,
+        }
+    )
     if idempotency_key:
-        cached = get_cached_response(f"email_compose:{org_id}", idempotency_key)
-        if cached:
-            return cast(dict[str, Any], cached)
+        try:
+            cached = get_cached_response(scope, idempotency_key, fingerprint=fingerprint)
+            if cached:
+                return cast(dict[str, Any], cached)
+        except IdempotencyConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
     draft = await email_service.compose_email(
         db=db,
         org_id=org_id,
@@ -348,5 +382,5 @@ async def compose_email(
         "message": "Draft composed. Go to /api/v1/approvals to review and approve before sending.",
     }
     if idempotency_key:
-        store_response(f"email_compose:{org_id}", idempotency_key, response)
+        store_response(scope, idempotency_key, response, fingerprint=fingerprint)
     return response

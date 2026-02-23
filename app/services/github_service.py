@@ -21,6 +21,8 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.resilience import run_with_retry
+from app.core.tenant import require_org_id
 from app.models.task import Task
 from app.services import integration as integration_service
 from app.tools.github import (
@@ -58,7 +60,8 @@ async def connect_github(
     Verify the GitHub PAT, then store it encrypted in the Integration table.
     Returns the integration info dict on success; raises on auth failure.
     """
-    user_info = await get_authenticated_user(api_token)
+    require_org_id(org_id)
+    user_info = await run_with_retry(lambda: get_authenticated_user(api_token))
 
     config_json = {
         "access_token": api_token,   # encrypt_config() auto-encrypts this field
@@ -104,7 +107,7 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
     cutoff = datetime.now(timezone.utc) - timedelta(days=_MAX_REPO_AGE_DAYS)
 
     try:
-        repos = await list_repos(token, per_page=_MAX_REPOS)
+        repos = await run_with_retry(lambda: list_repos(token, per_page=_MAX_REPOS))
         active_repos = []
         for repo in repos:
             pushed_at_str = repo.get("pushed_at")
@@ -131,7 +134,10 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
 
             # Sync open PRs
             try:
-                prs = await get_pull_requests(token, owner, name)
+                async def _load_prs(o: str = owner, n: str = name) -> list[dict[str, Any]]:
+                    return await get_pull_requests(token, o, n)
+
+                prs = await run_with_retry(_load_prs)
             except Exception as exc:
                 logger.warning("GitHub PR fetch failed for %s/%s: %s", owner, name, type(exc).__name__)
                 continue
@@ -150,7 +156,10 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
 
             # Sync open bug/critical issues
             try:
-                issues = await get_issues(token, owner, name, labels="bug")
+                async def _load_issues(o: str = owner, n: str = name) -> list[dict[str, Any]]:
+                    return await get_issues(token, o, n, labels="bug")
+
+                issues = await run_with_retry(_load_issues)
             except Exception as exc:
                 logger.warning("GitHub issue fetch failed for %s/%s: %s", owner, name, type(exc).__name__)
                 continue
@@ -222,4 +231,4 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
     item.config_json = cfg
     await integration_service.mark_sync_time(db, item)
     return {"prs_synced": prs_synced, "issues_synced": issues_synced, "error": None}
-
+    require_org_id(org_id)

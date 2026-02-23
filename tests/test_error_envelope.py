@@ -12,6 +12,7 @@ async def test_error_envelope_forbidden_includes_code_and_request_id(client):
     assert body["code"] == "forbidden"
     assert isinstance(body["detail"], str)
     assert "request_id" in body
+    assert "contract_version" in body
 
 
 async def test_error_envelope_validation_includes_code_and_request_id(client):
@@ -21,3 +22,10 @@ async def test_error_envelope_validation_includes_code_and_request_id(client):
     assert body["code"] == "validation_error"
     assert isinstance(body["detail"], list)
     assert "request_id" in body
+    assert "contract_version" in body
+
+
+async def test_contract_header_present_on_success(client):
+    response = await client.get("/api/v1/health")
+    assert response.status_code == 200
+    assert response.headers.get("X-API-Contract-Version")

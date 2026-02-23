@@ -6,7 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.privacy import sanitize_response_payload
 from app.core.deps import get_db
-from app.core.idempotency import get_cached_response, store_response
+from app.core.idempotency import (
+    IdempotencyConflictError,
+    build_fingerprint,
+    get_cached_response,
+    store_response,
+)
 from app.core.request_context import get_current_request_id
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
@@ -346,10 +351,16 @@ async def daily_run_ops(
     """
     org_id = int(user["org_id"])
     scope = f"ops_daily_run:{org_id}:{team or '*'}:{draft_email_limit}"
+    fingerprint = build_fingerprint(
+        {"org_id": org_id, "draft_email_limit": draft_email_limit, "team": team or "*"}
+    )
     if idempotency_key:
-        cached = get_cached_response(scope, idempotency_key)
-        if cached:
-            return cached
+        try:
+            cached = get_cached_response(scope, idempotency_key, fingerprint=fingerprint)
+            if cached:
+                return cached
+        except IdempotencyConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     result = await run_daily_run_workflow(
         db=db,
@@ -359,7 +370,7 @@ async def daily_run_ops(
         team=team,
     )
     if idempotency_key:
-        store_response(scope, idempotency_key, result)
+        store_response(scope, idempotency_key, result, fingerprint=fingerprint)
     return result
 
 
