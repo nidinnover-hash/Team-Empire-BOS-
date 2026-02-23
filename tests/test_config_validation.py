@@ -51,3 +51,15 @@ def test_validate_startup_accepts_case_insensitive_app_mode():
     s = _base_settings(APP_MODE=" empireo_ai ")
     issues = validate_startup_settings(s)
     assert not any("APP_MODE has unsupported value" in i for i in issues)
+
+
+def test_validate_startup_flags_redis_without_url():
+    s = _base_settings(IDEMPOTENCY_BACKEND="redis", IDEMPOTENCY_REDIS_URL=None)
+    issues = validate_startup_settings(s)
+    assert any("IDEMPOTENCY_REDIS_URL" in i for i in issues)
+
+
+def test_validate_startup_flags_bad_idempotency_backend():
+    s = _base_settings(IDEMPOTENCY_BACKEND="cachebox")
+    issues = validate_startup_settings(s)
+    assert any("IDEMPOTENCY_BACKEND has unsupported value" in i for i in issues)

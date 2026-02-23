@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_WINDOW_SECONDS: int = 60
     RATE_LIMIT_MAX_REQUESTS: int = 20
+    IDEMPOTENCY_BACKEND: str = "auto"  # auto | memory | redis
+    IDEMPOTENCY_REDIS_URL: str | None = None
+    IDEMPOTENCY_REDIS_PREFIX: str = "pc:idempotency"
+    IDEMPOTENCY_TTL_SECONDS: int = 60 * 30
+    IDEMPOTENCY_MAX_ITEMS: int = 5_000
 
     # App
     APP_NAME: str = "Personal Clone"
@@ -94,6 +99,15 @@ def validate_startup_settings(s: Settings) -> list[str]:
     app_mode = s.app_mode_normalized
     if app_mode not in {"NIDIN_AI", "EMPIREO_AI"}:
         issues.append(f"APP_MODE has unsupported value: {s.APP_MODE!r}")
+    idem_backend = (s.IDEMPOTENCY_BACKEND or "").strip().lower()
+    if idem_backend not in {"auto", "memory", "redis"}:
+        issues.append(f"IDEMPOTENCY_BACKEND has unsupported value: {s.IDEMPOTENCY_BACKEND!r}")
+    if idem_backend == "redis" and not (s.IDEMPOTENCY_REDIS_URL or "").strip():
+        issues.append("IDEMPOTENCY_REDIS_URL must be set when IDEMPOTENCY_BACKEND=redis")
+    if s.IDEMPOTENCY_TTL_SECONDS < 60:
+        issues.append("IDEMPOTENCY_TTL_SECONDS must be >= 60")
+    if s.IDEMPOTENCY_MAX_ITEMS < 100:
+        issues.append("IDEMPOTENCY_MAX_ITEMS must be >= 100")
 
     provider = (s.DEFAULT_AI_PROVIDER or "").strip().lower()
     if provider == "openai":
