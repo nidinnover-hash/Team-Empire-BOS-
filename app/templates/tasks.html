@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personal Clone - Tasks</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <style>
+    :root {
+      --bg: #070707; --bg1: #0c0c0c; --bg2: #111;
+      --surface: #161616; --line: #222; --text: #f0f0f0;
+      --muted: #888; --faint: #4e4e4e; --brand: #e5e5e5;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:"Segoe UI",system-ui,sans-serif;color:var(--text);min-height:100vh;background:linear-gradient(165deg,#050505 0%,#090909 50%,#0d0d0d 100%)}
+    .sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:#0a0a0a;border-right:1px solid #1e1e1e;display:flex;flex-direction:column;z-index:100;padding:1.25rem 0}
+    .sb-brand{display:flex;align-items:center;gap:.65rem;padding:0 1.1rem 1.5rem}
+    .sb-pulse{width:8px;height:8px;border-radius:50%;background:#e5e5e5;box-shadow:0 0 8px rgba(229,229,229,.5);animation:pulse 2.2s infinite;flex-shrink:0}
+    @keyframes pulse{70%{box-shadow:0 0 0 10px rgba(229,229,229,0)}100%{box-shadow:0 0 0 0 rgba(229,229,229,0)}}
+    .sb-name{font-size:.88rem;font-weight:700;color:#f0f0f0}
+    .sb-links{flex:1;display:flex;flex-direction:column;gap:2px;padding:0 .75rem}
+    .sb-item{display:flex;align-items:center;gap:.55rem;padding:.62rem .85rem;border-radius:8px;color:#707070;font-size:.82rem;text-decoration:none;transition:background .15s,color .15s;cursor:pointer;border:none;background:transparent}
+    .sb-item:hover{background:rgba(255,255,255,.05);color:#d0d0d0}
+    .sb-item.active{background:rgba(255,255,255,.08);color:#f0f0f0}
+    .sb-footer{padding:1rem 1.1rem 0;border-top:1px solid #1e1e1e}
+    .sb-logout{width:100%;background:#141414;border:1px solid #2a2a2a;color:#888;border-radius:6px;padding:.45rem;font-size:.75rem;cursor:pointer}
+    .sb-logout:hover{border-color:#444;color:#ccc}
+
+    .main-wrap{margin-left:220px;padding:1.5rem 2rem;max-width:1000px}
+    h1{font-size:1.1rem;font-weight:700;color:#f0f0f0;margin-bottom:1rem}
+    .filters{display:flex;gap:.4rem;margin-bottom:1rem;flex-wrap:wrap}
+    .filter-btn{background:#111;border:1px solid #252525;color:#777;border-radius:999px;padding:.35rem .75rem;font-size:.72rem;cursor:pointer;transition:all .15s;touch-action:manipulation}
+    .filter-btn.active,.filter-btn:hover{background:#1a1a1a;border-color:#444;color:#e5e5e5}
+    .task-list{display:flex;flex-direction:column;gap:4px}
+    .task-item{background:#0e0e0e;border:1px solid #1e1e1e;border-radius:8px;padding:.7rem .9rem;display:flex;align-items:flex-start;gap:.7rem;transition:background .12s;cursor:pointer;touch-action:manipulation}
+    .task-item:hover{background:#141414}
+    .p-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:6px}
+    .p-high{background:#cf6f6f} .p-med{background:#d4a847} .p-low{background:#6fcf6f} .p-none{background:#555}
+    .task-info{flex:1;min-width:0}
+    .task-title{font-size:.85rem;color:#e0e0e0;line-height:1.35}
+    .task-meta{font-size:.68rem;color:#555;margin-top:.2rem}
+    .task-source{font-size:.6rem;padding:.1rem .35rem;border-radius:4px;border:1px solid #2a2a2a;color:#666;margin-left:.4rem}
+    .task-done .task-title{text-decoration:line-through;color:#555}
+    .empty{color:#444;text-align:center;padding:3rem;font-size:.82rem}
+    .kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;margin-bottom:1.2rem}
+    .kpi{background:#111;border:1px solid #222;border-radius:10px;padding:.65rem .85rem}
+    .kpi .label{font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:#555}
+    .kpi .val{font-size:1.2rem;font-weight:700;color:#e5e5e5;margin-top:.15rem}
+  </style>
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="sb-brand"><div class="sb-pulse"></div><span class="sb-name">Personal Clone</span></div>
+    <div class="sb-links">
+      <a href="/" class="sb-item">Dashboard</a>
+      <a href="/web/talk" class="sb-item">Talk</a>
+      <a href="/web/observe" class="sb-item">Observe</a>
+      <a href="/web/tasks" class="sb-item active">Tasks</a>
+      <a href="/web/integrations" class="sb-item">Integrations</a>
+      <a href="/web/data-hub" class="sb-item">Data Hub</a>
+    </div>
+    <div class="sb-footer">
+      <button id="logoutBtn" class="sb-logout">Sign out</button>
+    </div>
+  </nav>
+
+  <div class="main-wrap">
+    <h1>Task Inbox</h1>
+    <div class="kpi-row">
+      <div class="kpi"><div class="label">Open</div><div class="val" id="k-open">0</div></div>
+      <div class="kpi"><div class="label">High Priority</div><div class="val" id="k-high">0</div></div>
+      <div class="kpi"><div class="label">Sources</div><div class="val" id="k-src">-</div></div>
+    </div>
+    <div class="filters">
+      <button class="filter-btn active" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="clickup">ClickUp</button>
+      <button class="filter-btn" data-filter="github_pr">GitHub PR</button>
+      <button class="filter-btn" data-filter="github_issue">GitHub Issue</button>
+      <button class="filter-btn" data-filter="internal">Internal</button>
+      <button class="filter-btn" data-filter="high">High Priority</button>
+    </div>
+    <div id="task-list" class="task-list"><div class="empty">Loading tasks...</div></div>
+  </div>
+
+  <script>
+    window.__bootPromise = fetch('/web/api-token').then(r=>r.json()).then(d=>d.token);
+    let allTasks = [];
+    let currentFilter = 'all';
+
+    async function loadTasks() {
+      const token = await window.__bootPromise;
+      const h = {'Authorization': 'Bearer ' + token};
+      const res = await fetch('/api/v1/tasks?limit=100&is_done=false', {headers:h});
+      allTasks = await res.json();
+      updateKPIs();
+      renderTasks();
+    }
+
+    function updateKPIs() {
+      document.getElementById('k-open').textContent = allTasks.length;
+      document.getElementById('k-high').textContent = allTasks.filter(t=>t.priority>=4).length;
+      const sources = new Set(allTasks.map(t=>t.external_source||'internal'));
+      document.getElementById('k-src').textContent = sources.size;
+    }
+
+    function renderTasks() {
+      let filtered = allTasks;
+      if (currentFilter === 'high') filtered = allTasks.filter(t=>t.priority>=4);
+      else if (currentFilter === 'internal') filtered = allTasks.filter(t=>!t.external_source);
+      else if (currentFilter !== 'all') filtered = allTasks.filter(t=>t.external_source===currentFilter);
+
+      const container = document.getElementById('task-list');
+      if (!filtered.length) { container.innerHTML = '<div class="empty">No tasks match this filter</div>'; return; }
+      container.innerHTML = filtered.map(t => {
+        const pClass = t.priority >= 4 ? 'p-high' : t.priority >= 3 ? 'p-med' : t.priority >= 2 ? 'p-low' : 'p-none';
+        const src = t.external_source ? `<span class="task-source">${escHtml(t.external_source)}</span>` : '';
+        const due = t.due_date ? ` &middot; due ${escHtml(t.due_date)}` : '';
+        return `<div class="task-item${t.is_done?' task-done':''}">
+          <div class="p-dot ${pClass}"></div>
+          <div class="task-info">
+            <div class="task-title">${escHtml(t.title)}</div>
+            <div class="task-meta">P${t.priority}${due}${src}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function escHtml(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+    document.querySelector('.filters').addEventListener('click', e => {
+      const btn = e.target.closest('.filter-btn');
+      if (!btn) return;
+      document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = btn.dataset.filter;
+      renderTasks();
+    });
+
+    loadTasks();
+
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) logoutBtn.addEventListener('click', async () => {
+      const csrf = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('pc_csrf='));
+      const csrfVal = csrf ? csrf.split('=')[1] : '';
+      await fetch('/web/logout', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':csrfVal}});
+      window.location.href = '/web/login';
+    });
+  </script>
+</body>
+</html>

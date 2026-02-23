@@ -12,7 +12,19 @@ These helpers let callers:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import TypedDict
+
 from app.models.memory import ProfileMemory, TeamMember, DailyContext
+
+
+class ContextLayer(TypedDict, total=False):
+    """Typed representation of a single context layer for structured AI injection."""
+    layer_type: str      # "profile" | "team" | "daily" | "integration"
+    source: str          # e.g. "clickup", "github", "slack", "manual"
+    priority: int        # 1=critical … 5=background
+    content: str         # the actual text block
+    char_count: int
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -135,3 +147,76 @@ def build_focused_context(
 
     raw = "\n".join(lines)
     return trim_context_to_limit(raw, char_limit)
+
+
+def build_typed_context(
+    profile_entries: list[ProfileMemory],
+    team_members: list[TeamMember],
+    daily_contexts: list[DailyContext],
+    integration_statuses: list[Mapping[str, object]] | None = None,
+    categories: list[str] | None = None,
+    char_limit: int = DEFAULT_CONTEXT_CHAR_LIMIT,
+) -> list[ContextLayer]:
+    """
+    Build typed context layers — structured alternative to build_focused_context().
+    Each layer has a type, source, priority, and content block.
+    Layers are sorted by priority (lower = more important).
+    """
+    layers: list[ContextLayer] = []
+
+    # Profile layer
+    filtered = filter_memory_by_category(profile_entries, categories) if categories else profile_entries
+    if filtered:
+        content = "\n".join(f"  - {e.key}: {e.value}" for e in filtered)
+        layers.append(ContextLayer(
+            layer_type="profile", source="manual", priority=1,
+            content=f"PROFILE:\n{content}", char_count=len(content),
+        ))
+
+    # Team layer
+    if team_members:
+        lines: list[str] = []
+        for m in team_members:
+            lines.append(f"  - {m.name} | {m.role_title or 'Staff'}")
+        content = "\n".join(lines)
+        layers.append(ContextLayer(
+            layer_type="team", source="manual", priority=2,
+            content=f"TEAM:\n{content}", char_count=len(content),
+        ))
+
+    # Daily context layers (one per context_type)
+    ctx_groups: dict[str, list[str]] = {}
+    for ctx in daily_contexts:
+        ctx_groups.setdefault(ctx.context_type, []).append(ctx.content)
+    for ctype, contents in ctx_groups.items():
+        content = "\n".join(f"  {c}" for c in contents)
+        layers.append(ContextLayer(
+            layer_type="daily", source=ctype, priority=3,
+            content=f"[{ctype.upper()}]:\n{content}", char_count=len(content),
+        ))
+
+    # Integration layer
+    if integration_statuses:
+        lines: list[str] = []
+        for item in integration_statuses:
+            name = str(item.get("type") or item.get("name") or "integration")
+            status = str(item.get("status") or "unknown")
+            last_sync = item.get("last_sync_at")
+            suffix = f" | last_sync: {last_sync}" if last_sync else ""
+            lines.append(f"  - {name}: {status}{suffix}")
+        content = "\n".join(lines)
+        layers.append(ContextLayer(
+            layer_type="integration", source="integration", priority=4,
+            content=f"INTEGRATIONS:\n{content}", char_count=len(content),
+        ))
+
+    # Sort by priority, then trim total to char_limit
+    layers.sort(key=lambda layer: layer.get("priority", 5))
+    total = 0
+    kept: list[ContextLayer] = []
+    for layer in layers:
+        if total + layer.get("char_count", 0) > char_limit:
+            break
+        kept.append(layer)
+        total += layer.get("char_count", 0)
+    return kept

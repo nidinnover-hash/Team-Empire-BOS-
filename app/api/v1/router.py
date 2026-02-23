@@ -20,6 +20,7 @@ from app.api.v1.endpoints import (
     integrations,
     layers,
     memory,
+    observability,
     ops,
     orgs,
     users,
@@ -49,4 +50,5 @@ api_router.include_router(executions.router)
 api_router.include_router(integrations.router)
 api_router.include_router(finance.router)
 api_router.include_router(layers.router)
+api_router.include_router(observability.router)
 api_router.include_router(ops.router)

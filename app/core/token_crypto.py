@@ -24,7 +24,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from app.core.config import settings
 
-_TOKEN_FIELDS = ("access_token", "refresh_token")
+_TOKEN_FIELDS = ("access_token", "refresh_token", "api_token")
 logger = logging.getLogger(__name__)
 
 

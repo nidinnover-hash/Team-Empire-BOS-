@@ -59,6 +59,7 @@ from app.models import task as _model_task  # noqa: F401
 from app.models import user as _model_user  # noqa: F401
 from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
 from app.models import chat_message as _model_chat_message  # noqa: F401
+from app.models import ai_call_log as _model_ai_call_log  # noqa: F401
 
 # Startup safety guard
 _UNSAFE_SECRET_KEYS = {"change_me_in_env", "changeme", "secret", "change-me", ""}
@@ -266,7 +267,7 @@ async def web_session(request: Request) -> dict:
         return {"logged_in": False}
     try:
         payload = decode_access_token(token)
-    except Exception:
+    except ValueError:
         return {"logged_in": False}
     return {
         "logged_in": True,
@@ -403,7 +404,7 @@ async def web_integrations(request: Request) -> HTMLResponse:
     if token:
         try:
             user = decode_access_token(token)
-        except Exception:
+        except ValueError:
             user = None
     if user is None:
         return RedirectResponse(url="/web/login", status_code=302)
@@ -424,7 +425,7 @@ async def web_talk(request: Request) -> HTMLResponse:
     if token:
         try:
             user = decode_access_token(token)
-        except Exception:
+        except ValueError:
             user = None
     if user is None:
         return RedirectResponse(url="/web/login", status_code=302)
@@ -445,7 +446,7 @@ async def web_data_hub(request: Request) -> HTMLResponse:
     if token:
         try:
             user = decode_access_token(token)
-        except Exception:
+        except ValueError:
             user = None
     if user is None:
         return RedirectResponse(url="/web/login", status_code=302)
@@ -456,6 +457,38 @@ async def web_data_hub(request: Request) -> HTMLResponse:
             "request": request,
             "session_user": user,
         },
+    )
+
+
+@app.get("/web/observe", response_class=HTMLResponse, include_in_schema=False)
+async def web_observe(request: Request) -> HTMLResponse:
+    token = request.cookies.get("pc_session")
+    user = None
+    if token:
+        try:
+            user = decode_access_token(token)
+        except ValueError:
+            user = None
+    if user is None:
+        return RedirectResponse(url="/web/login", status_code=302)
+    return templates.TemplateResponse(
+        request, "observe.html", {"request": request, "session_user": user},
+    )
+
+
+@app.get("/web/tasks", response_class=HTMLResponse, include_in_schema=False)
+async def web_tasks(request: Request) -> HTMLResponse:
+    token = request.cookies.get("pc_session")
+    user = None
+    if token:
+        try:
+            user = decode_access_token(token)
+        except ValueError:
+            user = None
+    if user is None:
+        return RedirectResponse(url="/web/login", status_code=302)
+    return templates.TemplateResponse(
+        request, "tasks.html", {"request": request, "session_user": user},
     )
 
 
@@ -526,7 +559,7 @@ async def dashboard(
     if token:
         try:
             user = decode_access_token(token)
-        except Exception:
+        except ValueError:
             user = None
     if user is None:
         return RedirectResponse(url="/web/login", status_code=302)

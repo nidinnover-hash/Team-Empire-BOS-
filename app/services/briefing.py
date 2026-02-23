@@ -19,6 +19,20 @@ from app.services.ai_router import call_ai
 from app.services.calendar_service import get_calendar_events_from_context
 from app.services.memory import build_memory_context, get_daily_context
 
+_AI_LEVEL_LABELS = [
+    "",
+    "No AI",
+    "Basic AI",
+    "Intermediate AI",
+    "Advanced AI",
+    "AI Expert",
+]
+
+
+def _ai_level_label(level: int | None) -> str:
+    """Normalize an AI level score to a bounded human-readable label."""
+    return _AI_LEVEL_LABELS[max(0, min(level or 0, 5))]
+
 
 # ── Team Dashboard ────────────────────────────────────────────────────────────
 
@@ -51,10 +65,10 @@ async def get_team_dashboard(db: AsyncSession, org_id: int) -> dict:
         p.team_member_id: p for p in plans_result.scalars().all()
     }
 
-    team_data = []
+    team_data: list[dict] = []
     total_tasks_today = 0
     total_done = 0
-    members_without_plan = []
+    members_without_plan: list[str] = []
 
     for member in members:
         plan = plans_by_member.get(member.id)
@@ -67,7 +81,7 @@ async def get_team_dashboard(db: AsyncSession, org_id: int) -> dict:
         if not plan:
             members_without_plan.append(member.name)
 
-        ai_label = ["", "No AI", "Basic AI", "Intermediate AI", "Advanced AI", "AI Expert"][max(0, min(member.ai_level or 0, 5))]
+        ai_label = _ai_level_label(member.ai_level)
 
         team_data.append({
             "id": member.id,
@@ -98,7 +112,7 @@ async def get_team_dashboard(db: AsyncSession, org_id: int) -> dict:
     emails_result = await db.execute(
         select(func.count()).where(
             Email.organization_id == org_id,
-            Email.is_read == False,  # noqa: E712
+            Email.is_read.is_(False),
         )
     )
     unread_emails = emails_result.scalar() or 0
@@ -149,19 +163,20 @@ async def get_daily_briefing(
         f"  - {e.content}" for e in calendar_events
     ) or "  No calendar events synced for today."
 
-    members_without_plan = dashboard["summary"]["members_without_plan"]
+    summary = dashboard["summary"]
+    members_without_plan = summary["members_without_plan"]
     no_plan_text = ", ".join(members_without_plan) if members_without_plan else "All members have plans"
 
     user_message = f"""
 Generate my morning briefing for {today}.
 
 TEAM STATUS:
-- {dashboard['summary']['total_members']} active team members
-- {dashboard['summary']['members_with_plan']} have task plans today
+- {summary['total_members']} active team members
+- {summary['members_with_plan']} have task plans today
 - No plan yet: {no_plan_text}
-- Total tasks today: {dashboard['summary']['total_tasks_today']}
-- Pending approvals waiting for me: {dashboard['summary']['pending_approvals']}
-- Unread emails: {dashboard['summary']['unread_emails']}
+- Total tasks today: {summary['total_tasks_today']}
+- Pending approvals waiting for me: {summary['pending_approvals']}
+- Unread emails: {summary['unread_emails']}
 
 TODAY'S CONTEXT:
 {context_items}
@@ -191,7 +206,7 @@ Write a sharp, direct morning briefing. Structure it as:
         "date": str(today),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "briefing": briefing_text,
-        "raw_data": dashboard["summary"],
+        "raw_data": summary,
     }
 
 
@@ -220,7 +235,7 @@ async def get_executive_briefing(
         select(Email)
         .where(
             Email.organization_id == org_id,
-            Email.is_read == False,  # noqa: E712
+            Email.is_read.is_(False),
         )
         .order_by(Email.received_at.desc())
         .limit(10)
@@ -238,6 +253,8 @@ async def get_executive_briefing(
     return {
         "date": str(today),
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        # Keep both keys for backward compatibility with scheduler/API clients.
+        "summary": dashboard["summary"],
         "team_summary": dashboard["summary"],
         "calendar": {
             "event_count": len(calendar_events),

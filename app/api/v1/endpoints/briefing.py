@@ -1,10 +1,20 @@
 from datetime import date
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles
+from app.schemas.briefing import (
+    ApprovePlanResponse,
+    CompleteTaskResponse,
+    DailyBriefingResponse,
+    DraftPlansResponse,
+    ExecutiveBriefingResponse,
+    TeamDashboardResponse,
+    TeamPlanRead,
+)
 from app.services.briefing import (
     get_daily_briefing,
     get_executive_briefing,
@@ -22,60 +32,63 @@ router = APIRouter(prefix="/briefing", tags=["Briefing & Task Plans"])
 
 # ── Daily Briefing ────────────────────────────────────────────────────────────
 
-@router.get("/today")
+@router.get("/today", response_model=DailyBriefingResponse)
 async def daily_briefing(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_roles("CEO", "ADMIN")),
-) -> dict:
+) -> DailyBriefingResponse:
     """
     AI-generated morning briefing for Nidin.
     Covers team status, urgent actions, and today's focus.
     """
     org_id = int(current_user.get("org_id", 1))
-    return await get_daily_briefing(
+    payload = await get_daily_briefing(
         db=db,
         org_id=org_id,
         actor_user_id=int(current_user["id"]),
     )
+    return cast(DailyBriefingResponse, DailyBriefingResponse.model_validate(payload))
 
 
 # ── Team Dashboard ────────────────────────────────────────────────────────────
 
-@router.get("/team")
+@router.get("/team", response_model=TeamDashboardResponse)
 async def team_dashboard(
     db: AsyncSession = Depends(get_db),
     _user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
-) -> dict:
+) -> TeamDashboardResponse:
     """
     Live team dashboard — all members, their plans, tasks done vs pending.
     No AI call, always fast.
     """
     org_id = int(_user.get("org_id", 1))
-    return await get_team_dashboard(db=db, org_id=org_id)
+    payload = await get_team_dashboard(db=db, org_id=org_id)
+    return cast(TeamDashboardResponse, TeamDashboardResponse.model_validate(payload))
 
 
-@router.get("/executive")
+@router.get("/executive", response_model=ExecutiveBriefingResponse)
 async def executive_briefing(
     db: AsyncSession = Depends(get_db),
     _user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
-) -> dict:
+) -> ExecutiveBriefingResponse:
     """
     Executive dashboard snapshot: team, approvals, inbox, and today's priorities.
     Non-AI and safe to call frequently.
     """
     org_id = int(_user.get("org_id", 1))
-    return await get_executive_briefing(db=db, org_id=org_id)
+    payload = await get_executive_briefing(db=db, org_id=org_id)
+    return cast(ExecutiveBriefingResponse, ExecutiveBriefingResponse.model_validate(payload))
 
 
 # ── Daily Task Plans ──────────────────────────────────────────────────────────
 
-@router.post("/plans/draft")
+@router.post("/plans/draft", response_model=DraftPlansResponse)
 async def draft_plans(
     team: str | None = None,
     plan_date: date | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
-) -> dict:
+) -> DraftPlansResponse:
     """
     AI drafts a daily task plan for each active team member.
     Plans are created as drafts — nothing is sent until approved.
@@ -89,34 +102,35 @@ async def draft_plans(
         team=team,
         plan_date=plan_date,
     )
-    return {
-        "drafted": len(plans),
-        "message": f"{len(plans)} plan(s) drafted. Review at GET /briefing/plans",
-        "plan_ids": [p.id for p in plans],
-    }
+    return DraftPlansResponse(
+        drafted=len(plans),
+        message=f"{len(plans)} plan(s) drafted. Review at GET /briefing/plans",
+        plan_ids=[p.id for p in plans],
+    )
 
 
-@router.get("/plans")
+@router.get("/plans", response_model=list[TeamPlanRead])
 async def list_plans(
     plan_date: date | None = None,
     status: str | None = None,
     db: AsyncSession = Depends(get_db),
     _user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
-) -> list[dict]:
+) -> list[TeamPlanRead]:
     """
     List all task plans for today (or a specific date).
     Filter by status: draft, approved, sent.
     """
     org_id = int(_user.get("org_id", 1))
-    return await get_team_plans(db=db, org_id=org_id, plan_date=plan_date, status=status)
+    plans = await get_team_plans(db=db, org_id=org_id, plan_date=plan_date, status=status)
+    return [TeamPlanRead.model_validate(item) for item in plans]
 
 
-@router.post("/plans/{plan_id}/approve")
+@router.post("/plans/{plan_id}/approve", response_model=ApprovePlanResponse)
 async def approve_task_plan(
     plan_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_roles("CEO", "ADMIN")),
-) -> dict:
+) -> ApprovePlanResponse:
     """
     Approve a drafted task plan. CEO/ADMIN only.
     After approval the plan is locked and ready to be communicated to the team member.
@@ -130,25 +144,29 @@ async def approve_task_plan(
     )
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found or already approved")
-    return {"plan_id": plan_id, "status": "approved", "approved_at": plan.approved_at.isoformat()}
+    return ApprovePlanResponse(
+        plan_id=plan_id,
+        status="approved",
+        approved_at=plan.approved_at.isoformat(),
+    )
 
 
-@router.post("/plans/{plan_id}/tasks/{task_index}/done")
+@router.post("/plans/{plan_id}/tasks/{task_index}/done", response_model=CompleteTaskResponse)
 async def complete_task(
     plan_id: int,
     task_index: int,
     db: AsyncSession = Depends(get_db),
     _user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
-) -> dict:
+) -> CompleteTaskResponse:
     """Mark a specific task in a plan as done. Zero-indexed."""
     org_id = int(_user.get("org_id", 1))
     plan = await mark_task_done(db=db, plan_id=plan_id, task_index=task_index, org_id=org_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan or task not found")
     done_count = sum(1 for t in plan.tasks_json if t.get("done"))
-    return {
-        "plan_id": plan_id,
-        "task_index": task_index,
-        "marked_done": True,
-        "progress": f"{done_count}/{len(plan.tasks_json)} tasks done",
-    }
+    return CompleteTaskResponse(
+        plan_id=plan_id,
+        task_index=task_index,
+        marked_done=True,
+        progress=f"{done_count}/{len(plan.tasks_json)} tasks done",
+    )

@@ -13,6 +13,7 @@ Fallback behaviour:
 """
 
 import logging
+import time
 from typing import cast
 
 from app.core.config import PLACEHOLDER_AI_KEYS, settings
@@ -21,6 +22,64 @@ logger = logging.getLogger(__name__)
 
 # Error types that should NOT trigger a fallback (permanent / config issues)
 _NO_FALLBACK_ERRORS = ("AuthenticationError", "PermissionDeniedError", "NotFoundError")
+
+# In-memory ring buffer for recent AI calls (last 200) — avoids DB dependency in hot path
+_recent_calls: list[dict] = []
+_MAX_RECENT = 200
+
+
+async def _log_ai_call(
+    provider: str,
+    model_name: str,
+    latency_ms: int,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+    used_fallback: bool = False,
+    fallback_from: str | None = None,
+    error_type: str | None = None,
+    prompt_type: str | None = None,
+) -> None:
+    """Persist AI call metrics to DB and in-memory buffer."""
+    entry = {
+        "provider": provider,
+        "model_name": model_name,
+        "latency_ms": latency_ms,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "used_fallback": used_fallback,
+        "fallback_from": fallback_from,
+        "error_type": error_type,
+        "prompt_type": prompt_type,
+        "ts": time.time(),
+    }
+    _recent_calls.append(entry)
+    if len(_recent_calls) > _MAX_RECENT:
+        _recent_calls.pop(0)
+
+    # Best-effort DB persistence — failures must never break the AI call path
+    try:
+        from app.db.session import AsyncSessionLocal
+        from app.models.ai_call_log import AiCallLog
+        async with AsyncSessionLocal() as db:
+            db.add(AiCallLog(
+                provider=provider,
+                model_name=model_name,
+                latency_ms=latency_ms,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                used_fallback=used_fallback,
+                fallback_from=fallback_from,
+                error_type=error_type,
+                prompt_type=prompt_type,
+            ))
+            await db.commit()
+    except Exception:
+        logger.debug("Failed to persist AI call log to DB", exc_info=True)
+
+
+def get_recent_calls() -> list[dict]:
+    """Return the in-memory ring buffer of recent AI calls."""
+    return list(_recent_calls)
 
 
 def _key_ok(key: str | None) -> bool:
@@ -106,8 +165,12 @@ async def call_ai(
         )
 
     # Try primary provider
+    t0 = time.monotonic()
     result, is_transient = await _call_provider(chosen, full_system, user_message, max_tokens, conversation_history)
+    latency = int((time.monotonic() - t0) * 1000)
+
     if not result.startswith("Error:"):
+        await _log_ai_call(provider=chosen, model_name=_get_model(chosen), latency_ms=latency)
         return result
 
     # On transient failure, try other configured providers
@@ -116,11 +179,32 @@ async def call_ai(
             if fallback not in configured:
                 continue
             logger.info("Primary '%s' failed transiently, trying fallback '%s'", chosen, fallback)
+            t1 = time.monotonic()
             fb_result, _ = await _call_provider(fallback, full_system, user_message, max_tokens, conversation_history)
+            fb_latency = int((time.monotonic() - t1) * 1000)
             if not fb_result.startswith("Error:"):
+                await _log_ai_call(
+                    provider=fallback, model_name=_get_model(fallback),
+                    latency_ms=fb_latency, used_fallback=True, fallback_from=chosen,
+                )
                 return fb_result
 
+    # All providers failed — log the error
+    await _log_ai_call(
+        provider=chosen, model_name=_get_model(chosen),
+        latency_ms=latency, error_type=result[:80],
+    )
     return result  # Return the original error if all fail
+
+
+def _get_model(provider: str) -> str:
+    if provider == "openai":
+        return settings.AGENT_MODEL_OPENAI or "gpt-4"
+    if provider == "anthropic":
+        return settings.AGENT_MODEL_ANTHROPIC or "claude-3-sonnet"
+    if provider == "groq":
+        return settings.AGENT_MODEL_GROQ or "llama3-8b-8192"
+    return "unknown"
 
 
 def _get_key(provider: str) -> str | None:

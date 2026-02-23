@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personal Clone - Observe</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <style>
+    :root {
+      --bg: #070707; --bg1: #0c0c0c; --bg2: #111;
+      --surface: #161616; --line: #222; --text: #f0f0f0;
+      --muted: #888; --faint: #4e4e4e; --brand: #e5e5e5;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:"Segoe UI",system-ui,sans-serif;color:var(--text);min-height:100vh;background:linear-gradient(165deg,#050505 0%,#090909 50%,#0d0d0d 100%)}
+    .sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:#0a0a0a;border-right:1px solid #1e1e1e;display:flex;flex-direction:column;z-index:100;padding:1.25rem 0}
+    .sb-brand{display:flex;align-items:center;gap:.65rem;padding:0 1.1rem 1.5rem}
+    .sb-pulse{width:8px;height:8px;border-radius:50%;background:#e5e5e5;box-shadow:0 0 8px rgba(229,229,229,.5);animation:pulse 2.2s infinite;flex-shrink:0}
+    @keyframes pulse{70%{box-shadow:0 0 0 10px rgba(229,229,229,0)}100%{box-shadow:0 0 0 0 rgba(229,229,229,0)}}
+    .sb-name{font-size:.88rem;font-weight:700;color:#f0f0f0}
+    .sb-links{flex:1;display:flex;flex-direction:column;gap:2px;padding:0 .75rem}
+    .sb-item{display:flex;align-items:center;gap:.55rem;padding:.62rem .85rem;border-radius:8px;color:#707070;font-size:.82rem;text-decoration:none;transition:background .15s,color .15s;cursor:pointer;border:none;background:transparent}
+    .sb-item:hover{background:rgba(255,255,255,.05);color:#d0d0d0}
+    .sb-item.active{background:rgba(255,255,255,.08);color:#f0f0f0}
+    .sb-footer{padding:1rem 1.1rem 0;border-top:1px solid #1e1e1e}
+    .sb-logout{width:100%;background:#141414;border:1px solid #2a2a2a;color:#888;border-radius:6px;padding:.45rem;font-size:.75rem;cursor:pointer}
+    .sb-logout:hover{border-color:#444;color:#ccc}
+
+    .main-wrap{margin-left:220px;padding:1.5rem 2rem;max-width:1200px}
+    h1{font-size:1.1rem;font-weight:700;color:#f0f0f0;margin-bottom:1.2rem}
+    .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:.8rem;margin-bottom:1.4rem}
+    .kpi{background:#111;border:1px solid #222;border-radius:10px;padding:.75rem .9rem}
+    .kpi .label{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:#666;margin-bottom:.3rem}
+    .kpi .val{font-size:1.3rem;font-weight:700;color:#e5e5e5}
+    .kpi .sub{font-size:.7rem;color:#555;margin-top:.15rem}
+
+    .card{background:#0e0e0e;border:1px solid #222;border-radius:10px;margin-bottom:1.2rem;overflow:hidden}
+    .card-head{padding:.65rem 1rem;border-bottom:1px solid #1c1c1c;font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:#777}
+    .card-body{padding:.8rem 1rem}
+    table{width:100%;border-collapse:collapse;font-size:.8rem}
+    th{text-align:left;font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#555;padding:.45rem .5rem;border-bottom:1px solid #1c1c1c}
+    td{padding:.5rem;border-bottom:1px solid #151515;color:#c0c0c0}
+    .bar-wrap{height:6px;background:#1a1a1a;border-radius:99px;margin-top:.3rem}
+    .bar-fill{height:100%;border-radius:99px;background:#e5e5e5}
+    .tag{display:inline-block;font-size:.62rem;padding:.12rem .4rem;border-radius:4px;border:1px solid #333;color:#aaa}
+    .tag.err{border-color:#5a2525;color:#cf6f6f}
+    .tag.fb{border-color:#4a4a1a;color:#d4a847}
+    .empty{color:#444;text-align:center;padding:2rem;font-size:.82rem}
+    #loading{color:#555;text-align:center;padding:3rem;font-size:.85rem}
+  </style>
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="sb-brand"><div class="sb-pulse"></div><span class="sb-name">Personal Clone</span></div>
+    <div class="sb-links">
+      <a href="/" class="sb-item">Dashboard</a>
+      <a href="/web/talk" class="sb-item">Talk</a>
+      <a href="/web/observe" class="sb-item active">Observe</a>
+      <a href="/web/tasks" class="sb-item">Tasks</a>
+      <a href="/web/integrations" class="sb-item">Integrations</a>
+      <a href="/web/data-hub" class="sb-item">Data Hub</a>
+    </div>
+    <div class="sb-footer">
+      <button id="logoutBtn" class="sb-logout">Sign out</button>
+    </div>
+  </nav>
+
+  <div class="main-wrap">
+    <h1>Observability</h1>
+    <div id="loading">Loading metrics...</div>
+    <div id="content" style="display:none">
+      <div class="kpi-row">
+        <div class="kpi"><div class="label">AI Calls</div><div class="val" id="k-calls">0</div><div class="sub" id="k-calls-sub">last 7 days</div></div>
+        <div class="kpi"><div class="label">Fallback Rate</div><div class="val" id="k-fb">0%</div><div class="sub">provider switches</div></div>
+        <div class="kpi"><div class="label">Error Rate</div><div class="val" id="k-err">0%</div><div class="sub">failed calls</div></div>
+        <div class="kpi"><div class="label">Rejection Rate</div><div class="val" id="k-rej">0%</div><div class="sub">approvals rejected</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">Provider Latency</div>
+        <div class="card-body" id="provider-stats"><p class="empty">No data yet</p></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">Recent AI Calls</div>
+        <div class="card-body" style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Provider</th><th>Model</th><th>Latency</th><th>Status</th><th>Time</th></tr></thead>
+            <tbody id="ai-calls-body"><tr><td colspan="5" class="empty">No calls recorded</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">Decision Ledger</div>
+        <div class="card-body" style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Type</th><th>Title</th><th>Confidence</th><th>Time</th></tr></thead>
+            <tbody id="decisions-body"><tr><td colspan="4" class="empty">No decisions yet</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.__bootPromise = fetch('/web/api-token').then(r=>r.json()).then(d=>d.token);
+    function esc(s) { const d=document.createElement('div'); d.textContent=String(s??''); return d.innerHTML; }
+
+    async function loadObservability() {
+      const token = await window.__bootPromise;
+      const h = {'Authorization': 'Bearer ' + token};
+      try {
+        const [summary, calls, decisions] = await Promise.all([
+          fetch('/api/v1/observability/summary?days=7', {headers:h}).then(r=>r.json()),
+          fetch('/api/v1/observability/ai-calls?limit=30', {headers:h}).then(r=>r.json()),
+          fetch('/api/v1/observability/decision-traces?limit=15', {headers:h}).then(r=>r.json()),
+        ]);
+
+        document.getElementById('k-calls').textContent = summary.total_ai_calls;
+        document.getElementById('k-fb').textContent = summary.fallback_rate + '%';
+        document.getElementById('k-err').textContent = summary.error_rate + '%';
+        document.getElementById('k-rej').textContent = summary.rejection_rate + '%';
+
+        // Provider bars
+        const ps = document.getElementById('provider-stats');
+        if (summary.provider_stats && summary.provider_stats.length) {
+          const maxLat = Math.max(...summary.provider_stats.map(p=>p.avg_latency_ms), 1);
+          ps.innerHTML = summary.provider_stats.map(p => `
+            <div style="margin-bottom:.7rem">
+              <div style="display:flex;justify-content:space-between;font-size:.78rem">
+                <span style="color:#ccc">${esc(p.provider)}</span>
+                <span style="color:#888">${esc(p.avg_latency_ms)}ms avg / ${esc(p.call_count)} calls</span>
+              </div>
+              <div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(p.avg_latency_ms/maxLat*100)}%"></div></div>
+            </div>
+          `).join('');
+        }
+
+        // AI calls table
+        const tbody = document.getElementById('ai-calls-body');
+        if (calls.length) {
+          tbody.innerHTML = calls.map(c => {
+            let status = '<span class="tag">OK</span>';
+            if (c.error_type) status = '<span class="tag err">Error</span>';
+            else if (c.used_fallback) status = `<span class="tag fb">Fallback from ${esc(c.fallback_from)}</span>`;
+            const t = c.created_at ? new Date(c.created_at).toLocaleTimeString() : '';
+            return `<tr><td>${esc(c.provider)}</td><td style="color:#666">${esc(c.model_name)}</td><td>${esc(c.latency_ms)}ms</td><td>${status}</td><td style="color:#555">${esc(t)}</td></tr>`;
+          }).join('');
+        }
+
+        // Decisions table
+        const dbody = document.getElementById('decisions-body');
+        if (decisions.length) {
+          dbody.innerHTML = decisions.map(d => {
+            const conf = (d.confidence_score * 100).toFixed(0) + '%';
+            const t = d.created_at ? new Date(d.created_at).toLocaleTimeString() : '';
+            return `<tr><td><span class="tag">${esc(d.trace_type)}</span></td><td>${esc(d.title)}</td><td>${esc(conf)}</td><td style="color:#555">${esc(t)}</td></tr>`;
+          }).join('');
+        }
+
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('content').style.display = 'block';
+      } catch(e) {
+        document.getElementById('loading').textContent = 'Failed to load metrics.';
+      }
+    }
+    loadObservability();
+
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) logoutBtn.addEventListener('click', async () => {
+      const csrf = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('pc_csrf='));
+      const csrfVal = csrf ? csrf.split('=')[1] : '';
+      await fetch('/web/logout', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':csrfVal}});
+      window.location.href = '/web/login';
+    });
+  </script>
+</body>
+</html>

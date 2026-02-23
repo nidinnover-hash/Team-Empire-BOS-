@@ -40,6 +40,16 @@ class EmailSyncError(Exception):
         self.message = message
 
 
+def _classify_gmail_error(error_text: str) -> str:
+    """Map upstream Gmail error text to stable internal error codes."""
+    text = error_text.lower()
+    if "accessnotconfigured" in text or "has not been used in project" in text:
+        return "gmail_api_disabled"
+    if "invalid_grant" in text or "invalid credentials" in text:
+        return "gmail_reconnect_required"
+    return "gmail_upstream_error"
+
+
 def _get_tokens(integration) -> tuple[str, str | None, str | None]:
     """Extract access_token, refresh_token, expires_at from integration config."""
     cfg = integration.config_json or {}
@@ -136,21 +146,22 @@ async def sync_emails(
             max_results=20,
         )
     except Exception as exc:
-        error_text = str(exc).lower()
-        if "accessnotconfigured" in error_text or "has not been used in project" in error_text:
-            raise EmailSyncError(
-                code="gmail_api_disabled",
-                message="Gmail API is disabled for this Google Cloud project. Enable gmail.googleapis.com and retry.",
-            ) from exc
-        if "invalid_grant" in error_text or "invalid credentials" in error_text:
-            raise EmailSyncError(
-                code="gmail_reconnect_required",
-                message="Gmail authentication expired or was revoked. Reconnect Gmail and try again.",
-            ) from exc
-        raise EmailSyncError(
-            code="gmail_upstream_error",
-            message="Gmail sync failed due to an upstream API error. Try again, then reconnect Gmail if needed.",
-        ) from exc
+        code = _classify_gmail_error(str(exc))
+        message_by_code = {
+            "gmail_api_disabled": (
+                "Gmail API is disabled for this Google Cloud project. "
+                "Enable gmail.googleapis.com and retry."
+            ),
+            "gmail_reconnect_required": (
+                "Gmail authentication expired or was revoked. "
+                "Reconnect Gmail and try again."
+            ),
+            "gmail_upstream_error": (
+                "Gmail sync failed due to an upstream API error. "
+                "Try again, then reconnect Gmail if needed."
+            ),
+        }
+        raise EmailSyncError(code=code, message=message_by_code[code]) from exc
 
     # Persist refreshed tokens if auto-refresh occurred
     if refreshed_tokens:
@@ -238,12 +249,7 @@ async def check_gmail_health(
             expires_at=expires_at,
         )
     except Exception as exc:
-        text = str(exc).lower()
-        if "accessnotconfigured" in text or "has not been used in project" in text:
-            return {"status": "error", "code": "gmail_api_disabled"}
-        if "invalid_grant" in text or "invalid credentials" in text:
-            return {"status": "error", "code": "gmail_reconnect_required"}
-        return {"status": "error", "code": "gmail_upstream_error"}
+        return {"status": "error", "code": _classify_gmail_error(str(exc))}
 
     if refreshed_tokens:
         await _persist_refreshed_tokens(db, org_id, integration, refreshed_tokens, refresh_token)
@@ -273,7 +279,7 @@ async def list_emails(
         .limit(limit)
     )
     if unread_only:
-        query = query.where(Email.is_read == False)  # noqa: E712
+        query = query.where(Email.is_read.is_(False))
     result = await db.execute(query)
     return list(result.scalars().all())
 
