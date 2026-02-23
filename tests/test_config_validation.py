@@ -1,4 +1,5 @@
 from app.core.config import Settings, validate_startup_settings
+from pydantic import ValidationError
 
 
 def _base_settings(**overrides) -> Settings:
@@ -59,7 +60,21 @@ def test_validate_startup_flags_redis_without_url():
     assert any("IDEMPOTENCY_REDIS_URL" in i for i in issues)
 
 
-def test_validate_startup_flags_bad_idempotency_backend():
-    s = _base_settings(IDEMPOTENCY_BACKEND="cachebox")
-    issues = validate_startup_settings(s)
-    assert any("IDEMPOTENCY_BACKEND has unsupported value" in i for i in issues)
+def test_settings_normalize_provider_and_backend_and_mode():
+    s = _base_settings(
+        DEFAULT_AI_PROVIDER=" AnThRoPiC ",
+        IDEMPOTENCY_BACKEND=" ReDiS ",
+        IDEMPOTENCY_REDIS_URL="redis://localhost:6379/0",
+        APP_MODE=" nidin_ai ",
+    )
+    assert s.DEFAULT_AI_PROVIDER == "anthropic"
+    assert s.IDEMPOTENCY_BACKEND == "redis"
+    assert s.APP_MODE == "NIDIN_AI"
+
+
+def test_settings_reject_invalid_idempotency_backend():
+    try:
+        _base_settings(IDEMPOTENCY_BACKEND="cachebox")
+        raise AssertionError("Expected Settings validation to fail")
+    except ValidationError as exc:
+        assert "IDEMPOTENCY_BACKEND" in str(exc)

@@ -1,6 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Any, Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PLACEHOLDER_OPENAI_KEYS = {"", "sk-your-key-here", "sk-xxxxxxxxxxxxxxxxxxxxxxxx"}
@@ -8,6 +10,9 @@ PLACEHOLDER_ANTHROPIC_KEYS = {"", "your-anthropic-key-here"}
 PLACEHOLDER_GROQ_KEYS = {"", "gsk_your-key-here", "gsk_your_groq_key_here"}
 PLACEHOLDER_AI_KEYS = PLACEHOLDER_OPENAI_KEYS | PLACEHOLDER_ANTHROPIC_KEYS | PLACEHOLDER_GROQ_KEYS
 _PLACEHOLDER_GOOGLE_VALUES = {"", "replace-me", "your-google-client-id", "your-google-client-secret"}
+AIProvider = Literal["openai", "anthropic", "groq"]
+IdempotencyBackend = Literal["auto", "memory", "redis"]
+AppMode = Literal["NIDIN_AI", "EMPIREO_AI"]
 
 
 class Settings(BaseSettings):
@@ -25,7 +30,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
     GROQ_API_KEY: str | None = None
-    DEFAULT_AI_PROVIDER: str = "openai"  # openai | anthropic | groq
+    DEFAULT_AI_PROVIDER: AIProvider = "openai"
     AGENT_MODEL_OPENAI: str = "gpt-4o-mini"
     AGENT_MODEL_ANTHROPIC: str = "claude-haiku-4-5-20251001"
     AGENT_MODEL_GROQ: str = "llama-3.3-70b-versatile"
@@ -41,7 +46,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_WINDOW_SECONDS: int = 60
     RATE_LIMIT_MAX_REQUESTS: int = 20
-    IDEMPOTENCY_BACKEND: str = "auto"  # auto | memory | redis
+    IDEMPOTENCY_BACKEND: IdempotencyBackend = "auto"
     IDEMPOTENCY_REDIS_URL: str | None = None
     IDEMPOTENCY_REDIS_PREFIX: str = "pc:idempotency"
     IDEMPOTENCY_TTL_SECONDS: int = 60 * 30
@@ -49,7 +54,7 @@ class Settings(BaseSettings):
 
     # App
     APP_NAME: str = "Personal Clone"
-    APP_MODE: str = "NIDIN_AI"  # NIDIN_AI | EMPIREO_AI
+    APP_MODE: AppMode = "NIDIN_AI"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
     ENFORCE_STARTUP_VALIDATION: bool = False
@@ -77,9 +82,30 @@ class Settings(BaseSettings):
     SYNC_INTERVAL_MINUTES: int = 30   # how often the scheduler fires
     SYNC_THROTTLE_MINUTES: int = 15   # min gap for on-demand (login/dashboard) syncs
 
+    @field_validator("DEFAULT_AI_PROVIDER", mode="before")
+    @classmethod
+    def _normalize_default_ai_provider(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
+
+    @field_validator("IDEMPOTENCY_BACKEND", mode="before")
+    @classmethod
+    def _normalize_idempotency_backend(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
+
+    @field_validator("APP_MODE", mode="before")
+    @classmethod
+    def _normalize_app_mode(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip().upper()
+        return value
+
     @property
     def app_mode_normalized(self) -> str:
-        return (self.APP_MODE or "").strip().upper()
+        return self.APP_MODE
 
 
 @lru_cache
@@ -96,12 +122,7 @@ def validate_startup_settings(s: Settings) -> list[str]:
     Enforcement is opt-in via ENFORCE_STARTUP_VALIDATION.
     """
     issues: list[str] = []
-    app_mode = s.app_mode_normalized
-    if app_mode not in {"NIDIN_AI", "EMPIREO_AI"}:
-        issues.append(f"APP_MODE has unsupported value: {s.APP_MODE!r}")
-    idem_backend = (s.IDEMPOTENCY_BACKEND or "").strip().lower()
-    if idem_backend not in {"auto", "memory", "redis"}:
-        issues.append(f"IDEMPOTENCY_BACKEND has unsupported value: {s.IDEMPOTENCY_BACKEND!r}")
+    idem_backend = s.IDEMPOTENCY_BACKEND
     if idem_backend == "redis" and not (s.IDEMPOTENCY_REDIS_URL or "").strip():
         issues.append("IDEMPOTENCY_REDIS_URL must be set when IDEMPOTENCY_BACKEND=redis")
     if s.IDEMPOTENCY_TTL_SECONDS < 60:
@@ -109,7 +130,7 @@ def validate_startup_settings(s: Settings) -> list[str]:
     if s.IDEMPOTENCY_MAX_ITEMS < 100:
         issues.append("IDEMPOTENCY_MAX_ITEMS must be >= 100")
 
-    provider = (s.DEFAULT_AI_PROVIDER or "").strip().lower()
+    provider = s.DEFAULT_AI_PROVIDER
     if provider == "openai":
         key = (s.OPENAI_API_KEY or "").strip()
         if key in PLACEHOLDER_OPENAI_KEYS:
@@ -122,9 +143,6 @@ def validate_startup_settings(s: Settings) -> list[str]:
         key = (s.GROQ_API_KEY or "").strip()
         if key in PLACEHOLDER_GROQ_KEYS:
             issues.append("GROQ_API_KEY is missing or placeholder while DEFAULT_AI_PROVIDER=groq")
-    else:
-        issues.append(f"DEFAULT_AI_PROVIDER has unsupported value: {provider!r}")
-
     google_id = (s.GOOGLE_CLIENT_ID or "").strip()
     google_secret = (s.GOOGLE_CLIENT_SECRET or "").strip()
     google_redirect = (s.GOOGLE_REDIRECT_URI or "").strip()
