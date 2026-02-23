@@ -1,5 +1,5 @@
 ﻿from datetime import datetime, timezone, date
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
@@ -8,6 +8,13 @@ class Goal(Base):
     """A long-term goal with progress tracking (0-100%)."""
 
     __tablename__ = "goals"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'completed', 'paused', 'abandoned')",
+            name="ck_goal_status",
+        ),
+        CheckConstraint("progress >= 0 AND progress <= 100", name="ck_goal_progress"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     organization_id: Mapped[int] = mapped_column(

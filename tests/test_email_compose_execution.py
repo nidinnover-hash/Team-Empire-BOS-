@@ -50,7 +50,7 @@ async def test_execute_send_message_compose_payload_succeeds(client, monkeypatch
         monkeypatch.setattr(email_service, "get_integration_by_type", fake_get_integration_by_type)
         monkeypatch.setattr(email_service.gmail_tool, "send_email", fake_send_email)
 
-        await execution_engine.execute_approval(db=db, approval=approval, actor_user_id=1)
+        await execution_engine.execute_approval(db=db, approval=approval, actor_user_id=1, actor_org_id=1)
         await db.refresh(approval)
         assert approval.executed_at is not None
         assert send_calls["count"] == 1
@@ -102,7 +102,7 @@ async def test_execute_send_message_compose_payload_missing_body_fails(client, m
         monkeypatch.setattr(email_service, "get_integration_by_type", fake_get_integration_by_type)
         monkeypatch.setattr(email_service.gmail_tool, "send_email", fake_send_email)
 
-        await execution_engine.execute_approval(db=db, approval=approval, actor_user_id=1)
+        await execution_engine.execute_approval(db=db, approval=approval, actor_user_id=1, actor_org_id=1)
         await db.refresh(approval)
         assert approval.executed_at is None
         assert send_calls["count"] == 0

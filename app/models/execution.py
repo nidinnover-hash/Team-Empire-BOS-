@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -8,6 +8,9 @@ from app.db.base import Base
 
 class Execution(Base):
     __tablename__ = "executions"
+    __table_args__ = (
+        UniqueConstraint("approval_id", name="uq_execution_approval"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     organization_id: Mapped[int] = mapped_column(
@@ -20,7 +23,7 @@ class Execution(Base):
         Integer,
         ForeignKey("approvals.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
+        unique=True,
     )
     triggered_by: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, index=True)

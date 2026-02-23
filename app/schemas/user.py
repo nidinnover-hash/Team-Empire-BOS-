@@ -1,14 +1,14 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class UserCreate(BaseModel):
     organization_id: int = 1
-    name: str
-    email: str
-    password: str = Field(min_length=8)
+    name: str = Field(..., min_length=1, max_length=100)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
     role: Literal["CEO", "ADMIN", "MANAGER", "STAFF"] = "STAFF"
 
 

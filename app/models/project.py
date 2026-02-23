@@ -1,5 +1,5 @@
 ﻿from datetime import datetime, timezone, date
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
@@ -8,6 +8,12 @@ class Project(Base):
     """A container that groups related tasks - business or personal."""
 
     __tablename__ = "projects"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'completed', 'paused', 'archived')",
+            name="ck_project_status",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     organization_id: Mapped[int] = mapped_column(

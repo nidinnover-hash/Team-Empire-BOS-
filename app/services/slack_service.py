@@ -15,8 +15,10 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.memory import DailyContext
 from app.services import integration as integration_service
 from app.services import memory as memory_service
 from app.schemas.memory import DailyContextCreate
@@ -127,16 +129,32 @@ async def sync_slack_messages(db: AsyncSession, org_id: int) -> dict[str, Any]:
 
             if lines:
                 digest = "\n".join(lines[:15])  # cap at 15 lines per channel
-                await memory_service.add_daily_context(
-                    db=db,
-                    organization_id=org_id,
-                    data=DailyContextCreate(
-                        date=today,
-                        context_type="slack",
-                        content=f"#{channel_name} recent activity:\n{digest}",
-                        related_to=f"#{channel_name}",
-                    ),
+                new_content = f"#{channel_name} recent activity:\n{digest}"
+                related_key = f"#{channel_name}"
+                # Dedup: update existing context for this channel+date, or insert new
+                existing_ctx = await db.execute(
+                    select(DailyContext).where(
+                        DailyContext.organization_id == org_id,
+                        DailyContext.date == today,
+                        DailyContext.context_type == "slack",
+                        DailyContext.related_to == related_key,
+                    )
                 )
+                row = existing_ctx.scalar_one_or_none()
+                if row:
+                    row.content = new_content
+                    await db.commit()
+                else:
+                    await memory_service.add_daily_context(
+                        db=db,
+                        organization_id=org_id,
+                        data=DailyContextCreate(
+                            date=today,
+                            context_type="slack",
+                            content=new_content,
+                            related_to=related_key,
+                        ),
+                    )
                 channels_synced += 1
 
     except Exception as exc:

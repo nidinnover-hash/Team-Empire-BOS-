@@ -162,7 +162,7 @@ async def get_expenditure_efficiency(
         )
 
     if digital_total > 0:
-        max_single = max(x.amount for x in digital_expenses)
+        max_single = float(max(x.amount for x in digital_expenses))
         concentration = max_single / digital_total
         if concentration >= 0.45:
             score -= 15

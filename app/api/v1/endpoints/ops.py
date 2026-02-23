@@ -1,11 +1,12 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.privacy import sanitize_response_payload
 from app.core.deps import get_db
+from app.core.idempotency import get_cached_response, store_response
 from app.core.request_context import get_current_request_id
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
@@ -331,6 +332,7 @@ async def list_events_ops(
 async def daily_run_ops(
     draft_email_limit: int = Query(5, ge=0, le=20),
     team: str | None = Query(None),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> dict:
@@ -342,13 +344,23 @@ async def daily_run_ops(
     - Creates approvals only
     Never auto-sends or auto-executes anything.
     """
-    return await run_daily_run_workflow(
+    org_id = int(user["org_id"])
+    scope = f"ops_daily_run:{org_id}:{team or '*'}:{draft_email_limit}"
+    if idempotency_key:
+        cached = get_cached_response(scope, idempotency_key)
+        if cached:
+            return cached
+
+    result = await run_daily_run_workflow(
         db=db,
-        org_id=int(user["org_id"]),
+        org_id=org_id,
         actor_user_id=int(user["id"]),
         draft_email_limit=draft_email_limit,
         team=team,
     )
+    if idempotency_key:
+        store_response(scope, idempotency_key, result)
+    return result
 
 
 @router.get("/daily-runs", response_model=list[DailyRunRead])

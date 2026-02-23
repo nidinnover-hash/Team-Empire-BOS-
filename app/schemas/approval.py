@@ -5,12 +5,12 @@ from pydantic import BaseModel, Field
 
 class ApprovalRequestCreate(BaseModel):
     organization_id: int = 1
-    approval_type: str
+    approval_type: str = Field(..., max_length=100)
     payload_json: dict = Field(default_factory=dict)
 
 
 class ApprovalDecision(BaseModel):
-    note: str | None = None
+    note: str | None = Field(None, max_length=500)
 
 
 class ApprovalRead(BaseModel):

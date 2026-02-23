@@ -4,8 +4,11 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+DataSource = Literal["manual", "whatsapp", "call", "meeting", "docs"]
+
+
 class DataCollectRequest(BaseModel):
-    source: str = Field(..., max_length=80, description="manual | whatsapp | call | meeting | docs")
+    source: DataSource = Field(..., description="manual | whatsapp | call | meeting | docs")
     target: Literal["profile_memory", "daily_context", "notes"] = "notes"
     content: str = Field(..., min_length=3, max_length=6000, description="Raw content to ingest")
     split_lines: bool = Field(

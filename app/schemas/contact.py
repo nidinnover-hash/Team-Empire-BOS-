@@ -1,19 +1,19 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
 
 ContactRelationship = Literal["personal", "business", "family", "mentor", "other"]
 
 
 class ContactCreate(BaseModel):
-    name: str
-    email: str | None = None
-    phone: str | None = None
-    company: str | None = None
-    role: str | None = None
+    name: str = Field(..., min_length=1, max_length=200)
+    email: EmailStr | None = None
+    phone: str | None = Field(None, max_length=30)
+    company: str | None = Field(None, max_length=200)
+    role: str | None = Field(None, max_length=100)
     relationship: ContactRelationship = "personal"
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=2000)
 
 
 class ContactRead(BaseModel):

@@ -5,9 +5,9 @@ from pydantic import BaseModel, Field
 
 class EventCreate(BaseModel):
     organization_id: int = 1
-    event_type: str
+    event_type: str = Field(..., max_length=100)
     actor_user_id: int | None = None
-    entity_type: str | None = None
+    entity_type: str | None = Field(None, max_length=100)
     entity_id: int | None = None
     payload_json: dict = Field(default_factory=dict)
 

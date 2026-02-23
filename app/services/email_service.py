@@ -319,7 +319,9 @@ async def summarize_email(
     )
 
     email.ai_summary = summary
-    email.is_read = True
+    # Only mark read if AI produced a real summary (not an error placeholder)
+    if not _is_ai_error(summary):
+        email.is_read = True
     await db.commit()
     await db.refresh(email)
 
@@ -613,7 +615,12 @@ async def send_approved_compose(
 
     integration = await get_integration_by_type(db, org_id, "gmail")
     if not integration:
-        approval.executed_at = None
+        # Atomic rollback — only release if our claim_ts still matches
+        await db.execute(
+            update(Approval)
+            .where(Approval.id == approval.id, Approval.executed_at == _claim_ts)
+            .values(executed_at=None)
+        )
         await db.commit()
         await _record_send_blocked("gmail_not_connected")
         return False
@@ -629,7 +636,11 @@ async def send_approved_compose(
         expires_at=expires_at,
     ))
     if not sent:
-        approval.executed_at = None
+        await db.execute(
+            update(Approval)
+            .where(Approval.id == approval.id, Approval.executed_at == _claim_ts)
+            .values(executed_at=None)
+        )
         await db.commit()
         await _record_send_blocked("gmail_send_failed")
         return False
@@ -730,8 +741,12 @@ async def send_approved_reply(
     # Get Gmail tokens
     integration = await get_integration_by_type(db, org_id, "gmail")
     if not integration:
-        # No integration - roll back the executed_at claim
-        approval.executed_at = None
+        # Atomic rollback — only release if our claim_ts still matches
+        await db.execute(
+            update(Approval)
+            .where(Approval.id == approval.id, Approval.executed_at == _claim_ts)
+            .values(executed_at=None)
+        )
         await db.commit()
         await _record_send_blocked("gmail_not_connected", approval_id=approval.id)
         return False
@@ -763,8 +778,12 @@ async def send_approved_reply(
             organization_id=org_id,
         )
     else:
-        # Gmail send failed - release the executed_at slot so a retry is possible
-        approval.executed_at = None
+        # Gmail send failed — atomic rollback so only our claim is released
+        await db.execute(
+            update(Approval)
+            .where(Approval.id == approval.id, Approval.executed_at == _claim_ts)
+            .values(executed_at=None)
+        )
         await db.commit()
         await _record_send_blocked("gmail_send_failed", approval_id=approval.id)
 

@@ -7,6 +7,7 @@ Two functions:
 """
 
 from datetime import date, datetime, timezone
+from typing import Any, TypedDict
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +30,41 @@ _AI_LEVEL_LABELS = [
 ]
 
 
+class TeamDashboardSummary(TypedDict):
+    total_members: int
+    members_with_plan: int
+    members_without_plan: list[str]
+    total_tasks_today: int
+    tasks_done: int
+    tasks_pending: int
+    pending_approvals: int
+    unread_emails: int
+
+
+class TeamDashboardResult(TypedDict):
+    date: str
+    summary: TeamDashboardSummary
+    team: list[dict[str, Any]]
+
+
+class DailyBriefingResult(TypedDict):
+    date: str
+    generated_at: str
+    briefing: str
+    raw_data: TeamDashboardSummary
+
+
+class ExecutiveBriefingResult(TypedDict):
+    date: str
+    generated_at: str
+    summary: TeamDashboardSummary
+    team_summary: TeamDashboardSummary
+    calendar: dict[str, Any]
+    approvals: dict[str, Any]
+    inbox: dict[str, Any]
+    today_priorities: list[str]
+
+
 def _ai_level_label(level: int | None) -> str:
     """Normalize an AI level score to a bounded human-readable label."""
     return _AI_LEVEL_LABELS[max(0, min(level or 0, 5))]
@@ -36,7 +72,7 @@ def _ai_level_label(level: int | None) -> str:
 
 # ── Team Dashboard ────────────────────────────────────────────────────────────
 
-async def get_team_dashboard(db: AsyncSession, org_id: int) -> dict:
+async def get_team_dashboard(db: AsyncSession, org_id: int) -> TeamDashboardResult:
     """
     Returns a structured snapshot of your entire team right now.
     No AI call — pure data. Fast and always accurate.
@@ -139,7 +175,7 @@ async def get_daily_briefing(
     db: AsyncSession,
     org_id: int,
     actor_user_id: int,
-) -> dict:
+) -> DailyBriefingResult:
     """
     AI-generated morning briefing for Nidin.
     Combines team status + pending actions + today's context into one summary.
@@ -214,7 +250,7 @@ Write a sharp, direct morning briefing. Structure it as:
 async def get_executive_briefing(
     db: AsyncSession,
     org_id: int,
-) -> dict:
+) -> ExecutiveBriefingResult:
     """
     Executive snapshot for dashboard cards.
     Fast, structured, and non-AI for reliability.

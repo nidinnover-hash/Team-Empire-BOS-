@@ -2,7 +2,7 @@ from typing import cast
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.approval import Approval
@@ -54,15 +54,24 @@ async def approve_approval(
     approver_id: int,
     organization_id: int,
 ) -> Approval | None:
-    approval = await get_approval(db, approval_id, organization_id=organization_id)
-    if approval is None or approval.status != "pending":
-        return None
-    approval.status = "approved"
-    approval.approved_by = approver_id
-    approval.approved_at = datetime.now(timezone.utc)
+    # Atomic UPDATE WHERE status = 'pending' prevents two concurrent approvers
+    result = await db.execute(
+        update(Approval)
+        .where(
+            Approval.id == approval_id,
+            Approval.organization_id == organization_id,
+            Approval.status == "pending",
+        )
+        .values(
+            status="approved",
+            approved_by=approver_id,
+            approved_at=datetime.now(timezone.utc),
+        )
+    )
     await db.commit()
-    await db.refresh(approval)
-    return approval
+    if result.rowcount == 0:
+        return None
+    return await get_approval(db, approval_id, organization_id=organization_id)
 
 
 async def reject_approval(
@@ -71,12 +80,21 @@ async def reject_approval(
     approver_id: int,
     organization_id: int,
 ) -> Approval | None:
-    approval = await get_approval(db, approval_id, organization_id=organization_id)
-    if approval is None or approval.status != "pending":
-        return None
-    approval.status = "rejected"
-    approval.approved_by = approver_id
-    approval.approved_at = datetime.now(timezone.utc)
+    # Atomic UPDATE WHERE status = 'pending' prevents race conditions
+    result = await db.execute(
+        update(Approval)
+        .where(
+            Approval.id == approval_id,
+            Approval.organization_id == organization_id,
+            Approval.status == "pending",
+        )
+        .values(
+            status="rejected",
+            approved_by=approver_id,
+            approved_at=datetime.now(timezone.utc),
+        )
+    )
     await db.commit()
-    await db.refresh(approval)
-    return approval
+    if result.rowcount == 0:
+        return None
+    return await get_approval(db, approval_id, organization_id=organization_id)

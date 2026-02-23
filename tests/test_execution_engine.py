@@ -38,7 +38,7 @@ async def test_execution_failure_is_recorded(client):
     requester = _auth_headers(3, "manager@org.com", "MANAGER", 1)
     req = await client.post(
         "/api/v1/approvals/request",
-        json={"organization_id": 1, "approval_type": "spend", "payload_json": {"force_fail": True, "amount": 10}},
+        json={"organization_id": 1, "approval_type": "spend", "payload_json": {"amount": -5}},
         headers=requester,
     )
     assert req.status_code == 201

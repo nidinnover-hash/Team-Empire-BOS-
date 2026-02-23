@@ -6,9 +6,11 @@ from time import time
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.idempotency import get_cached_response, store_response
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.schemas.email import ComposeRequest, DraftReplyRequest, EmailRead, SyncResult
@@ -18,6 +20,24 @@ from app.tools.gmail import exchange_code_for_tokens, get_gmail_auth_url
 from app.services.integration import connect_integration, get_integration_by_type
 
 router = APIRouter(prefix="/email", tags=["Email"])
+
+# Per-org compose rate limit: max N composes per rolling window
+_compose_counts: dict[int, list[float]] = {}
+_COMPOSE_MAX_PER_HOUR = 20
+_COMPOSE_WINDOW = 3600  # 1 hour
+
+
+def _check_compose_rate(org_id: int) -> None:
+    """Raise 429 if the org has exceeded the compose rate limit."""
+    now = time()
+    bucket = _compose_counts.setdefault(org_id, [])
+    _compose_counts[org_id] = [t for t in bucket if now - t < _COMPOSE_WINDOW]
+    if len(_compose_counts[org_id]) >= _COMPOSE_MAX_PER_HOUR:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Compose rate limit: max {_COMPOSE_MAX_PER_HOUR} per hour.",
+        )
+    _compose_counts[org_id].append(now)
 
 
 def _oauth_error_detail(error_code: str) -> str:
@@ -111,11 +131,16 @@ async def gmail_callback(
 
 @router.post("/sync", response_model=SyncResult)
 async def sync_emails(
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=256),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> SyncResult:
     """Sync recent emails from Gmail into the database."""
     org_id = int(current_user.get("org_id", 1))
+    if idempotency_key:
+        cached = get_cached_response(f"email_sync:{org_id}", idempotency_key)
+        if cached:
+            return cast(SyncResult, SyncResult.model_validate(cached))
     try:
         new_count = await email_service.sync_emails(
             db=db,
@@ -127,10 +152,13 @@ async def sync_emails(
             status_code=502,
             detail={"code": exc.code, "message": exc.message},
         ) from exc
-    return SyncResult(
+    response = SyncResult(
         new_emails=new_count,
         message=f"Synced {new_count} new email(s) from Gmail.",
     )
+    if idempotency_key:
+        store_response(f"email_sync:{org_id}", idempotency_key, response.model_dump())
+    return response
 
 
 @router.get("/health")
@@ -184,6 +212,7 @@ async def summarize_email(
 async def draft_reply(
     email_id: int,
     body: DraftReplyRequest = DraftReplyRequest(),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=256),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> dict:
@@ -192,6 +221,10 @@ async def draft_reply(
     Creates an approval request — nothing is sent until you approve.
     """
     org_id = int(current_user.get("org_id", 1))
+    if idempotency_key:
+        cached = get_cached_response(f"email_draft_reply:{org_id}:{email_id}", idempotency_key)
+        if cached:
+            return cast(dict[str, Any], cached)
     draft = await email_service.draft_reply(
         db=db,
         email_id=email_id,
@@ -201,17 +234,21 @@ async def draft_reply(
     )
     if draft is None:
         raise HTTPException(status_code=404, detail="Email not found or has no body")
-    return {
+    response: dict[str, Any] = {
         "email_id": email_id,
         "draft": draft,
         "status": "pending_approval",
         "message": "Draft created. Go to /api/v1/approvals to review and approve before sending.",
     }
+    if idempotency_key:
+        store_response(f"email_draft_reply:{org_id}:{email_id}", idempotency_key, response)
+    return response
 
 
 @router.post("/{email_id}/send")
 async def send_email(
     email_id: int,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=256),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> dict:
@@ -221,6 +258,10 @@ async def send_email(
     CEO and ADMIN only.
     """
     org_id = int(current_user.get("org_id", 1))
+    if idempotency_key:
+        cached = get_cached_response(f"email_send:{org_id}:{email_id}", idempotency_key)
+        if cached:
+            return cast(dict[str, Any], cached)
     sent = await email_service.send_approved_reply(
         db=db,
         email_id=email_id,
@@ -232,16 +273,22 @@ async def send_email(
         # Treat repeat /send calls as idempotent success if email is already sent.
         existing = await email_service.get_email(db, email_id=email_id, org_id=org_id)
         if existing and existing.reply_sent:
-            return {
+            response = {
                 "email_id": email_id,
                 "status": "already_sent",
                 "message": "Email was already sent previously.",
             }
+            if idempotency_key:
+                store_response(f"email_send:{org_id}:{email_id}", idempotency_key, response)
+            return response
         raise HTTPException(
             status_code=409,
             detail="Cannot send. Either no approved approval exists, email already sent, or Gmail not connected.",
         )
-    return {"email_id": email_id, "status": "sent", "message": "Email sent successfully."}
+    response = {"email_id": email_id, "status": "sent", "message": "Email sent successfully."}
+    if idempotency_key:
+        store_response(f"email_send:{org_id}:{email_id}", idempotency_key, response)
+    return response
 
 
 @router.post("/{email_id}/strategize")
@@ -269,6 +316,7 @@ async def strategize_email(
 @router.post("/compose")
 async def compose_email(
     body: ComposeRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=256),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> dict:
@@ -277,6 +325,11 @@ async def compose_email(
     Creates an approval request — nothing sends until you approve it.
     """
     org_id = int(current_user.get("org_id", 1))
+    _check_compose_rate(org_id)
+    if idempotency_key:
+        cached = get_cached_response(f"email_compose:{org_id}", idempotency_key)
+        if cached:
+            return cast(dict[str, Any], cached)
     draft = await email_service.compose_email(
         db=db,
         org_id=org_id,
@@ -287,10 +340,13 @@ async def compose_email(
     )
     if draft is None:
         raise HTTPException(status_code=502, detail="AI failed to generate draft. Check OpenAI key.")
-    return {
+    response: dict[str, Any] = {
         "to": body.to,
         "subject": body.subject,
         "draft": draft,
         "status": "pending_approval",
         "message": "Draft composed. Go to /api/v1/approvals to review and approve before sending.",
     }
+    if idempotency_key:
+        store_response(f"email_compose:{org_id}", idempotency_key, response)
+    return response

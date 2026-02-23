@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
@@ -50,7 +52,7 @@ async def request_approval(
 
 @router.get("", response_model=list[ApprovalRead])
 async def list_approvals(
-    status: str | None = Query(None),
+    status: Literal["pending", "approved", "rejected"] | None = Query(None),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> list[ApprovalRead]:

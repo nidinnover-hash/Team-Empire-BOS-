@@ -4,12 +4,14 @@ import hmac
 from datetime import date, datetime, timezone
 from hashlib import sha256
 from time import time
+from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Header
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import PLACEHOLDER_AI_KEYS, settings
+from app.core.idempotency import get_cached_response, store_response
 from app.core.privacy import sanitize_response_payload
 from app.core.deps import get_db
 from app.core.rbac import require_roles
@@ -57,6 +59,7 @@ from app.tools.whatsapp_business import get_phone_number_details, send_text_mess
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
 _whatsapp_webhook_seen_signatures: dict[str, float] = {}
+_WHATSAPP_REPLAY_CACHE_MAX = 5000
 
 
 def _safe_provider_error(prefix: str) -> str:
@@ -207,6 +210,7 @@ async def google_calendar_oauth_callback(
 @router.post("/google-calendar/sync", response_model=CalendarSyncResult)
 async def sync_google_calendar(
     for_date: date | None = Query(None, description="Date to sync (defaults to today, YYYY-MM-DD)"),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=256),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> CalendarSyncResult:
@@ -214,6 +218,11 @@ async def sync_google_calendar(
     Fetch Google Calendar events and store them as daily context entries.
     Events appear automatically in briefings and AI memory.
     """
+    scope = f"calendar_sync:{actor['org_id']}:{for_date or date.today()}"
+    if idempotency_key:
+        cached = get_cached_response(scope, idempotency_key)
+        if cached:
+            return cast(CalendarSyncResult, CalendarSyncResult.model_validate(cached))
     result = await sync_calendar_events(
         db,
         organization_id=actor["org_id"],
@@ -230,7 +239,10 @@ async def sync_google_calendar(
         entity_id=None,
         payload_json={"date": result["date"], "synced": result["synced"]},
     )
-    return CalendarSyncResult(date=result["date"], synced=result["synced"])
+    response = CalendarSyncResult(date=result["date"], synced=result["synced"])
+    if idempotency_key:
+        store_response(scope, idempotency_key, response.model_dump())
+    return response
 
 
 @router.get("/google-calendar/events", response_model=list[CalendarEventRead])
@@ -477,6 +489,10 @@ async def whatsapp_webhook_receive(
         for seen_sig, seen_at in list(_whatsapp_webhook_seen_signatures.items()):
             if now - seen_at > window:
                 _whatsapp_webhook_seen_signatures.pop(seen_sig, None)
+        # Evict oldest entries if cache exceeds max size
+        if len(_whatsapp_webhook_seen_signatures) >= _WHATSAPP_REPLAY_CACHE_MAX:
+            oldest_key = min(_whatsapp_webhook_seen_signatures, key=_whatsapp_webhook_seen_signatures.get)  # type: ignore[arg-type]
+            _whatsapp_webhook_seen_signatures.pop(oldest_key, None)
         if sig_header in _whatsapp_webhook_seen_signatures:
             raise HTTPException(status_code=409, detail="Webhook replay detected")
         _whatsapp_webhook_seen_signatures[sig_header] = now
@@ -544,10 +560,16 @@ async def clickup_status(
 
 @router.post("/clickup/sync", response_model=ClickUpSyncResult)
 async def clickup_sync(
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=256),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> ClickUpSyncResult:
     """Fetch all open ClickUp tasks and upsert them into the local Task table."""
+    scope = f"clickup_sync:{actor['org_id']}"
+    if idempotency_key:
+        cached = get_cached_response(scope, idempotency_key)
+        if cached:
+            return cast(ClickUpSyncResult, ClickUpSyncResult.model_validate(cached))
     result = await clickup_service.sync_clickup_tasks(db, org_id=int(actor["org_id"]))
     if result["error"]:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -563,7 +585,10 @@ async def clickup_sync(
     )
 
     status = await clickup_service.get_clickup_status(db, org_id=int(actor["org_id"]))
-    return ClickUpSyncResult(synced=result["synced"], last_sync_at=status.get("last_sync_at"))
+    response = ClickUpSyncResult(synced=result["synced"], last_sync_at=status.get("last_sync_at"))
+    if idempotency_key:
+        store_response(scope, idempotency_key, response.model_dump())
+    return response
 
 
 # ── GitHub ──────────────────────────────────────────────────────────────────────
@@ -622,11 +647,17 @@ async def github_status(
 
 @router.post("/github/sync", response_model=GitHubSyncResult)
 async def github_sync(
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=256),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> GitHubSyncResult:
     """Fetch open PRs and bug issues from GitHub and upsert into the local Task table."""
     org_id = int(actor["org_id"])
+    scope = f"github_sync:{org_id}"
+    if idempotency_key:
+        cached = get_cached_response(scope, idempotency_key)
+        if cached:
+            return cast(GitHubSyncResult, GitHubSyncResult.model_validate(cached))
     result = await github_service.sync_github(db, org_id=org_id)
     if result["error"]:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -644,11 +675,14 @@ async def github_sync(
         },
     )
     status = await github_service.get_github_status(db, org_id=org_id)
-    return GitHubSyncResult(
+    response = GitHubSyncResult(
         prs_synced=result["prs_synced"],
         issues_synced=result["issues_synced"],
         last_sync_at=status.get("last_sync_at"),
     )
+    if idempotency_key:
+        store_response(scope, idempotency_key, response.model_dump())
+    return response
 
 
 # ── Slack ────────────────────────────────────────────────────────────────────────
@@ -698,11 +732,17 @@ async def slack_status(
 
 @router.post("/slack/sync", response_model=SlackSyncResult)
 async def slack_sync(
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=256),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> SlackSyncResult:
     """Read recent messages from all joined Slack channels and store digests in daily context."""
     org_id = int(actor["org_id"])
+    scope = f"slack_sync:{org_id}"
+    if idempotency_key:
+        cached = get_cached_response(scope, idempotency_key)
+        if cached:
+            return cast(SlackSyncResult, SlackSyncResult.model_validate(cached))
     result = await slack_service.sync_slack_messages(db, org_id=org_id)
     if result["error"]:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -720,11 +760,14 @@ async def slack_sync(
         },
     )
     status = await slack_service.get_slack_status(db, org_id=org_id)
-    return SlackSyncResult(
+    response = SlackSyncResult(
         channels_synced=result["channels_synced"],
         messages_read=result["messages_read"],
         last_sync_at=status.get("last_sync_at"),
     )
+    if idempotency_key:
+        store_response(scope, idempotency_key, response.model_dump())
+    return response
 
 
 @router.post("/slack/send")

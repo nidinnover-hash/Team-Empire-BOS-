@@ -1,18 +1,18 @@
-/* Shared monochrome design tokens and reusable primitives */
+/* Shared monochrome design tokens and reusable primitives — LIGHT MODE */
 :root {
-  --mono-bg-0: #0a0a0a;
-  --mono-bg-1: #111111;
-  --mono-bg-2: #171717;
-  --mono-surface: #161616;
-  --mono-surface-2: #1d1d1d;
-  --mono-line: #353535;
-  --mono-line-soft: #2b2b2b;
-  --mono-text: #f5f5f5;
-  --mono-muted: #a3a3a3;
-  --mono-subtle: #8a8a8a;
-  --mono-accent: #e5e5e5;
+  --mono-bg-0: #ffffff;
+  --mono-bg-1: #fafafa;
+  --mono-bg-2: #f5f5f5;
+  --mono-surface: #ffffff;
+  --mono-surface-2: #f8f8f8;
+  --mono-line: #e5e5e5;
+  --mono-line-soft: #eeeeee;
+  --mono-text: #111111;
+  --mono-muted: #666666;
+  --mono-subtle: #999999;
+  --mono-accent: #111111;
   --mono-radius: 14px;
-  --mono-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+  --mono-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -28,15 +28,15 @@ body {
 
 .nav a.active,
 .nav button.active {
-  background: #f2f2f2 !important;
-  color: #111 !important;
-  border-color: #f2f2f2 !important;
+  background: #111 !important;
+  color: #fff !important;
+  border-color: #111 !important;
 }
 
 .pro-card {
   border: 1px solid var(--mono-line);
   border-radius: var(--mono-radius);
-  background: linear-gradient(180deg, var(--mono-surface), var(--mono-surface-2));
+  background: var(--mono-surface);
   box-shadow: var(--mono-shadow);
 }
 
@@ -48,20 +48,20 @@ body {
 
 .pro-btn {
   border: 1px solid var(--mono-line);
-  background: #1b1b1b;
-  color: #efefef;
+  background: #ffffff;
+  color: #111111;
   border-radius: 8px;
 }
 
 .pro-btn:hover {
-  border-color: #5a5a5a;
-  background: #232323;
+  border-color: #cccccc;
+  background: #f5f5f5;
 }
 
 .pro-focus:focus {
   outline: none;
-  border-color: #6a6a6a !important;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+  border-color: #999 !important;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
 }
 
 /* ── Mobile Navigation ───────────────────────────────────────────── */
@@ -74,9 +74,9 @@ body {
   z-index: 200;
   width: 44px;
   height: 44px;
-  border: 1px solid var(--mono-line, #353535);
+  border: 1px solid var(--mono-line, #e5e5e5);
   border-radius: 10px;
-  background: rgba(10, 10, 10, 0.95);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
   cursor: pointer;
   align-items: center;
@@ -92,7 +92,7 @@ body {
   display: block;
   width: 18px;
   height: 2px;
-  background: var(--mono-text, #f5f5f5);
+  background: var(--mono-text, #111);
   border-radius: 2px;
   transition: transform 0.25s ease, opacity 0.2s ease;
   position: relative;
@@ -120,8 +120,8 @@ body {
   position: fixed;
   inset: 0;
   z-index: 55;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(3px);
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(2px);
   opacity: 0;
   transition: opacity 0.25s ease;
   -webkit-tap-highlight-color: transparent;

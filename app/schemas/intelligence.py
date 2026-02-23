@@ -8,13 +8,13 @@ RiskTier = Literal["low", "medium", "high"]
 
 class DecisionTraceCreate(BaseModel):
     organization_id: int
-    trace_type: str
-    title: str
-    summary: str
+    trace_type: str = Field(..., max_length=100)
+    title: str = Field(..., max_length=255)
+    summary: str = Field(..., max_length=5000)
     confidence_score: float = Field(ge=0.0, le=1.0)
     signals_json: dict = Field(default_factory=dict)
     actor_user_id: int | None = None
-    request_id: str | None = None
+    request_id: str | None = Field(None, max_length=100)
     daily_run_id: int | None = None
     source_event_id: int | None = None
 

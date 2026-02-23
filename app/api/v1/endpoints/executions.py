@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +13,7 @@ router = APIRouter(prefix="/executions", tags=["Executions"])
 
 @router.get("", response_model=list[ExecutionRead])
 async def list_executions(
-    status: str | None = Query(None),
+    status: Literal["running", "succeeded", "failed", "skipped"] | None = Query(None),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> list[ExecutionRead]:

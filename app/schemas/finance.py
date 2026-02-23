@@ -5,13 +5,20 @@ from pydantic import BaseModel, Field
 
 FinanceType = Literal["income", "expense"]
 FinanceSeverity = Literal["low", "medium", "high"]
+FinanceCategory = Literal[
+    "salary", "freelance", "sales", "consulting", "study",
+    "food", "transport", "housing", "health", "entertainment",
+    "software", "saas", "subscription", "cloud", "hosting",
+    "ai", "ads", "marketing", "tools", "internet", "domain",
+    "education", "office", "travel", "utilities", "other",
+]
 
 
 class FinanceEntryCreate(BaseModel):
     type: FinanceType
-    amount: float = Field(gt=0)
-    category: str  # salary | freelance | food | transport | housing | health | entertainment | other
-    description: str | None = None
+    amount: float = Field(gt=0, le=999_999_999.99)
+    category: FinanceCategory
+    description: str | None = Field(None, max_length=500)
     entry_date: date
 
 

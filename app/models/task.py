@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, date
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
@@ -10,6 +10,10 @@ class Task(Base):
     __tablename__ = "tasks"
     __table_args__ = (
         UniqueConstraint("organization_id", "external_source", "external_id", name="uq_task_external"),
+        CheckConstraint(
+            "category IN ('personal', 'business', 'health', 'finance', 'other')",
+            name="ck_task_category",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -39,4 +43,4 @@ class Task(Base):
         DateTime(timezone=True), nullable=True
     )
     external_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
-    external_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    external_source: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)

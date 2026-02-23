@@ -11,6 +11,7 @@ from typing import cast
 from datetime import date, datetime, timezone
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.memory import DailyContext, ProfileMemory, TeamMember
@@ -46,7 +47,11 @@ async def upsert_profile_memory(
     value: str,
     category: str | None = None,
 ) -> ProfileMemory:
-    """Create or update a profile memory entry by key."""
+    """Create or update a profile memory entry by key.
+
+    Handles the TOCTOU race: if two concurrent calls both pass the SELECT,
+    the INSERT that loses gets an IntegrityError and retries as an UPDATE.
+    """
     result = await db.execute(
         select(ProfileMemory).where(
             ProfileMemory.organization_id == organization_id,
@@ -79,6 +84,22 @@ async def upsert_profile_memory(
     try:
         await db.commit()
         await db.refresh(new_entry)
+    except IntegrityError:
+        # Concurrent insert won the race — retry as update
+        await db.rollback()
+        retry = await db.execute(
+            select(ProfileMemory).where(
+                ProfileMemory.organization_id == organization_id,
+                ProfileMemory.key == key,
+            )
+        )
+        existing = cast(ProfileMemory, retry.scalar_one())
+        existing.value = value
+        existing.category = category
+        existing.updated_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(existing)
+        return existing
     except Exception:
         await db.rollback()
         raise
@@ -275,15 +296,20 @@ async def build_memory_context(
         if remaining > 100:
             base_context = base_context + "\n\n" + integration_block[:remaining]
 
-    # Append open ClickUp tasks so the AI knows what's in the work queue
-    cu_result = await db.execute(
+    # Single query for all external tasks (ClickUp + GitHub PRs + GitHub issues)
+    ext_result = await db.execute(
         _select(_Task).where(
             _Task.organization_id == organization_id,
-            _Task.external_source == "clickup",
+            _Task.external_source.in_(["clickup", "github_pr", "github_issue"]),
             _Task.is_done.is_(False),
-        ).limit(20)
+        ).order_by(_Task.priority.desc()).limit(45)
     )
-    cu_tasks = list(cu_result.scalars().all())
+    ext_tasks = list(ext_result.scalars().all())
+
+    cu_tasks = [t for t in ext_tasks if t.external_source == "clickup"][:20]
+    gh_prs = [t for t in ext_tasks if t.external_source == "github_pr"][:15]
+    gh_issues = [t for t in ext_tasks if t.external_source == "github_issue"][:10]
+
     if cu_tasks:
         lines = ["[CLICKUP OPEN TASKS]"]
         for t in cu_tasks:
@@ -294,26 +320,6 @@ async def build_memory_context(
         remaining = char_limit - len(base_context)
         if remaining > 100:
             base_context = base_context + "\n\n" + clickup_block[:remaining]
-
-    # Append open GitHub PRs — what your dev team is shipping right now
-    pr_result = await db.execute(
-        _select(_Task).where(
-            _Task.organization_id == organization_id,
-            _Task.external_source == "github_pr",
-            _Task.is_done.is_(False),
-        ).order_by(_Task.priority.desc()).limit(15)
-    )
-    gh_prs = list(pr_result.scalars().all())
-
-    # Append open GitHub bug issues — what's broken in production
-    issue_result = await db.execute(
-        _select(_Task).where(
-            _Task.organization_id == organization_id,
-            _Task.external_source == "github_issue",
-            _Task.is_done.is_(False),
-        ).order_by(_Task.priority.desc()).limit(10)
-    )
-    gh_issues = list(issue_result.scalars().all())
 
     if gh_prs or gh_issues:
         lines = ["[GITHUB DEV ACTIVITY]"]

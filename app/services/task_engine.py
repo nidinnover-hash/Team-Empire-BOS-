@@ -8,7 +8,7 @@ Flow:
   4. get_team_plans()      → shows all plans for today
 """
 
-from typing import cast
+from typing import Any, TypedDict, cast
 
 from datetime import date, datetime, timezone
 
@@ -20,6 +20,18 @@ from app.models.daily_plan import DailyTaskPlan
 from app.models.memory import TeamMember
 from app.services.ai_router import call_ai
 from app.services.memory import build_memory_context
+
+
+class TeamPlanResult(TypedDict):
+    plan_id: int
+    member_name: str
+    member_role: str
+    member_team: str
+    date: str
+    status: str
+    tasks: list[dict[str, Any]]
+    ai_reasoning: str
+    approved_at: str | None
 
 
 # ── Draft Plans ───────────────────────────────────────────────────────────────
@@ -139,17 +151,18 @@ async def draft_team_plans(
     result = await db.execute(query)
     members = list(result.scalars().all())
 
+    # Batch-load all existing plans for this date (single query, not N+1)
+    existing_result = await db.execute(
+        select(DailyTaskPlan.team_member_id).where(
+            DailyTaskPlan.organization_id == org_id,
+            DailyTaskPlan.date == target_date,
+        )
+    )
+    existing_member_ids = {row[0] for row in existing_result.all()}
+
     new_plans = []
     for member in members:
-        # Skip if plan already exists for today
-        existing = await db.execute(
-            select(DailyTaskPlan).where(
-                DailyTaskPlan.organization_id == org_id,
-                DailyTaskPlan.team_member_id == member.id,
-                DailyTaskPlan.date == target_date,
-            )
-        )
-        if existing.scalar_one_or_none():
+        if member.id in existing_member_ids:
             continue
 
         plan = await draft_plan_for_member(
@@ -172,7 +185,7 @@ async def get_team_plans(
     org_id: int,
     plan_date: date | None = None,
     status: str | None = None,
-) -> list[dict]:
+) -> list[TeamPlanResult]:
     """
     Get all task plans for a given date, enriched with team member info.
     Returns list of dicts with member name + plan details.
@@ -191,7 +204,7 @@ async def get_team_plans(
     query = query.add_columns(TeamMember)
     rows = (await db.execute(query)).all()
 
-    enriched = []
+    enriched: list[TeamPlanResult] = []
     for plan, member in rows:
         enriched.append({
             "plan_id": plan.id,

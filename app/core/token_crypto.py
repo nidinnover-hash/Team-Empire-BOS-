@@ -34,8 +34,18 @@ def _looks_like_fernet(value: str) -> bool:
 
 def _fernet() -> Fernet:
     # Use a dedicated TOKEN_ENCRYPTION_KEY when available (key separation).
-    # Falls back to SECRET_KEY so existing encrypted tokens remain readable.
-    raw_key = settings.TOKEN_ENCRYPTION_KEY or settings.SECRET_KEY
+    # Falls back to SECRET_KEY for backward compat but logs a warning.
+    raw_key = settings.TOKEN_ENCRYPTION_KEY
+    if not raw_key:
+        logger.warning(
+            "TOKEN_ENCRYPTION_KEY not set — falling back to SECRET_KEY. "
+            "Set TOKEN_ENCRYPTION_KEY in .env for proper key separation."
+        )
+        raw_key = settings.SECRET_KEY
+    elif raw_key == settings.SECRET_KEY:
+        raise ValueError(
+            "TOKEN_ENCRYPTION_KEY must differ from SECRET_KEY for key separation"
+        )
     key_bytes = hashlib.sha256(raw_key.encode("utf-8")).digest()
     return Fernet(base64.urlsafe_b64encode(key_bytes))
 

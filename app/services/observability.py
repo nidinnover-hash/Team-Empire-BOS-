@@ -8,6 +8,7 @@ from typing import TypedDict
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.tenant import apply_org_scope
 from app.models.ai_call_log import AiCallLog
 from app.models.approval import Approval
 from app.models.decision_trace import DecisionTrace
@@ -62,20 +63,15 @@ async def get_observability_summary(
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     # AI call stats
-    ai_result = await db.execute(
-        select(
-            AiCallLog.provider,
-            func.count(AiCallLog.id).label("call_count"),
-            func.avg(AiCallLog.latency_ms).label("avg_latency"),
-            func.sum(AiCallLog.input_tokens).label("total_input_tokens"),
-            func.sum(AiCallLog.output_tokens).label("total_output_tokens"),
-        )
-        .where(
-            AiCallLog.organization_id == org_id,
-            AiCallLog.created_at >= cutoff,
-        )
-        .group_by(AiCallLog.provider)
+    ai_query = select(
+        AiCallLog.provider,
+        func.count(AiCallLog.id).label("call_count"),
+        func.avg(AiCallLog.latency_ms).label("avg_latency"),
+        func.sum(AiCallLog.input_tokens).label("total_input_tokens"),
+        func.sum(AiCallLog.output_tokens).label("total_output_tokens"),
     )
+    ai_query = apply_org_scope(ai_query, AiCallLog, org_id).where(AiCallLog.created_at >= cutoff)
+    ai_result = await db.execute(ai_query.group_by(AiCallLog.provider))
     provider_stats: list[ProviderStats] = []
     total_calls = 0
     total_fallbacks = 0
@@ -90,33 +86,27 @@ async def get_observability_summary(
         total_calls += row.call_count
 
     # Fallback rate
-    fb_result = await db.execute(
-        select(func.count(AiCallLog.id))
-        .where(
-            AiCallLog.organization_id == org_id,
-            AiCallLog.created_at >= cutoff,
-            AiCallLog.used_fallback.is_(True),
-        )
+    fb_query = select(func.count(AiCallLog.id))
+    fb_query = apply_org_scope(fb_query, AiCallLog, org_id).where(
+        AiCallLog.created_at >= cutoff,
+        AiCallLog.used_fallback.is_(True),
     )
+    fb_result = await db.execute(fb_query)
     total_fallbacks = fb_result.scalar() or 0
 
     # Error rate
-    err_result = await db.execute(
-        select(func.count(AiCallLog.id))
-        .where(
-            AiCallLog.organization_id == org_id,
-            AiCallLog.created_at >= cutoff,
-            AiCallLog.error_type.isnot(None),
-        )
+    err_query = select(func.count(AiCallLog.id))
+    err_query = apply_org_scope(err_query, AiCallLog, org_id).where(
+        AiCallLog.created_at >= cutoff,
+        AiCallLog.error_type.isnot(None),
     )
+    err_result = await db.execute(err_query)
     total_errors = err_result.scalar() or 0
 
     # Approval stats
-    approval_result = await db.execute(
-        select(Approval.status, func.count(Approval.id))
-        .where(Approval.organization_id == org_id, Approval.created_at >= cutoff)
-        .group_by(Approval.status)
-    )
+    approval_query = select(Approval.status, func.count(Approval.id))
+    approval_query = apply_org_scope(approval_query, Approval, org_id).where(Approval.created_at >= cutoff)
+    approval_result = await db.execute(approval_query.group_by(Approval.status))
     approval_counts = {row[0]: row[1] for row in approval_result.all()}
     total_approvals = sum(approval_counts.values())
     rejected = approval_counts.get("rejected", 0)
@@ -136,12 +126,9 @@ async def get_observability_summary(
 async def get_recent_ai_calls(
     db: AsyncSession, org_id: int, limit: int = 50
 ) -> list[RecentAiCall]:
-    result = await db.execute(
-        select(AiCallLog)
-        .where(AiCallLog.organization_id == org_id)
-        .order_by(AiCallLog.created_at.desc())
-        .limit(limit)
-    )
+    ai_calls_query = select(AiCallLog)
+    ai_calls_query = apply_org_scope(ai_calls_query, AiCallLog, org_id)
+    result = await db.execute(ai_calls_query.order_by(AiCallLog.created_at.desc()).limit(limit))
     return [
         {
             "id": row.id,
@@ -163,12 +150,9 @@ async def get_recent_ai_calls(
 async def get_recent_decisions(
     db: AsyncSession, org_id: int, limit: int = 20
 ) -> list[RecentDecision]:
-    result = await db.execute(
-        select(DecisionTrace)
-        .where(DecisionTrace.organization_id == org_id)
-        .order_by(DecisionTrace.created_at.desc())
-        .limit(limit)
-    )
+    traces_query = select(DecisionTrace)
+    traces_query = apply_org_scope(traces_query, DecisionTrace, org_id)
+    result = await db.execute(traces_query.order_by(DecisionTrace.created_at.desc()).limit(limit))
     return [
         {
             "id": row.id,
