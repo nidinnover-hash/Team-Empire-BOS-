@@ -3,6 +3,7 @@ Observability service — aggregate AI call metrics, approval stats, and decisio
 """
 
 from datetime import datetime, timedelta, timezone
+from typing import TypedDict
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,9 +13,52 @@ from app.models.approval import Approval
 from app.models.decision_trace import DecisionTrace
 
 
+class ProviderStats(TypedDict):
+    provider: str
+    call_count: int
+    avg_latency_ms: int
+    total_input_tokens: int
+    total_output_tokens: int
+
+
+class ObservabilitySummary(TypedDict):
+    days: int
+    total_ai_calls: int
+    provider_stats: list[ProviderStats]
+    fallback_rate: float
+    error_rate: float
+    total_approvals: int
+    rejection_rate: float
+    approval_breakdown: dict[str, int]
+
+
+class RecentAiCall(TypedDict):
+    id: int
+    provider: str
+    model_name: str | None
+    latency_ms: int
+    input_tokens: int | None
+    output_tokens: int | None
+    used_fallback: bool
+    fallback_from: str | None
+    error_type: str | None
+    request_id: str | None
+    created_at: str | None
+
+
+class RecentDecision(TypedDict):
+    id: int
+    trace_type: str
+    title: str
+    summary: str
+    confidence_score: float
+    request_id: str | None
+    created_at: str | None
+
+
 async def get_observability_summary(
     db: AsyncSession, org_id: int, days: int = 7
-) -> dict:
+) -> ObservabilitySummary:
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     # AI call stats
@@ -26,10 +70,13 @@ async def get_observability_summary(
             func.sum(AiCallLog.input_tokens).label("total_input_tokens"),
             func.sum(AiCallLog.output_tokens).label("total_output_tokens"),
         )
-        .where(AiCallLog.created_at >= cutoff)
+        .where(
+            AiCallLog.organization_id == org_id,
+            AiCallLog.created_at >= cutoff,
+        )
         .group_by(AiCallLog.provider)
     )
-    provider_stats = []
+    provider_stats: list[ProviderStats] = []
     total_calls = 0
     total_fallbacks = 0
     for row in ai_result.all():
@@ -45,14 +92,22 @@ async def get_observability_summary(
     # Fallback rate
     fb_result = await db.execute(
         select(func.count(AiCallLog.id))
-        .where(AiCallLog.created_at >= cutoff, AiCallLog.used_fallback.is_(True))
+        .where(
+            AiCallLog.organization_id == org_id,
+            AiCallLog.created_at >= cutoff,
+            AiCallLog.used_fallback.is_(True),
+        )
     )
     total_fallbacks = fb_result.scalar() or 0
 
     # Error rate
     err_result = await db.execute(
         select(func.count(AiCallLog.id))
-        .where(AiCallLog.created_at >= cutoff, AiCallLog.error_type.isnot(None))
+        .where(
+            AiCallLog.organization_id == org_id,
+            AiCallLog.created_at >= cutoff,
+            AiCallLog.error_type.isnot(None),
+        )
     )
     total_errors = err_result.scalar() or 0
 
@@ -79,10 +134,11 @@ async def get_observability_summary(
 
 
 async def get_recent_ai_calls(
-    db: AsyncSession, limit: int = 50
-) -> list[dict]:
+    db: AsyncSession, org_id: int, limit: int = 50
+) -> list[RecentAiCall]:
     result = await db.execute(
         select(AiCallLog)
+        .where(AiCallLog.organization_id == org_id)
         .order_by(AiCallLog.created_at.desc())
         .limit(limit)
     )
@@ -97,6 +153,7 @@ async def get_recent_ai_calls(
             "used_fallback": row.used_fallback,
             "fallback_from": row.fallback_from,
             "error_type": row.error_type,
+            "request_id": row.request_id,
             "created_at": row.created_at.isoformat() if row.created_at else None,
         }
         for row in result.scalars().all()
@@ -105,7 +162,7 @@ async def get_recent_ai_calls(
 
 async def get_recent_decisions(
     db: AsyncSession, org_id: int, limit: int = 20
-) -> list[dict]:
+) -> list[RecentDecision]:
     result = await db.execute(
         select(DecisionTrace)
         .where(DecisionTrace.organization_id == org_id)
@@ -119,6 +176,7 @@ async def get_recent_decisions(
             "title": row.title,
             "summary": row.summary,
             "confidence_score": row.confidence_score,
+            "request_id": row.request_id,
             "created_at": row.created_at.isoformat() if row.created_at else None,
         }
         for row in result.scalars().all()

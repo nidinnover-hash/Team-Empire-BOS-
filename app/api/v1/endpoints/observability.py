@@ -30,7 +30,7 @@ async def recent_ai_calls(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
     db: AsyncSession = Depends(get_db),
 ) -> list[AICallLogRead]:
-    payload = await obs_service.get_recent_ai_calls(db, limit=limit)
+    payload = await obs_service.get_recent_ai_calls(db, org_id=actor["org_id"], limit=limit)
     return [AICallLogRead.model_validate(item) for item in payload]
 
 

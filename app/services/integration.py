@@ -9,6 +9,15 @@ from app.core.token_crypto import decrypt_config, encrypt_config
 from app.models.integration import Integration
 
 
+def _validate_token_fields(config_json: dict) -> None:
+    for field in ("access_token", "refresh_token", "api_token"):
+        value = config_json.get(field)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            raise ValueError(f"Integration token field '{field}' must be a string")
+
+
 def _decrypted(integration: Integration) -> Integration:
     """
     Return the integration with config_json tokens decrypted in-place (on the
@@ -65,6 +74,7 @@ async def connect_integration(
     integration_type: str,
     config_json: dict,
 ) -> Integration:
+    _validate_token_fields(config_json)
     encrypted = encrypt_config(config_json)
     existing = await get_integration_by_type(db, organization_id, integration_type)
     if existing is not None:

@@ -110,7 +110,10 @@ _INTENT_SYSTEM = (
 )
 
 
-async def extract_proposed_actions(message: str) -> list[ProposedAction]:
+async def extract_proposed_actions(
+    message: str,
+    organization_id: int | None = None,
+) -> list[ProposedAction]:
     """
     Second cheap AI call to extract structured intent from the user message.
     Returns a list of ProposedAction objects; falls back to [NONE] on any error.
@@ -118,6 +121,7 @@ async def extract_proposed_actions(message: str) -> list[ProposedAction]:
     raw = await call_ai(
         system_prompt=_INTENT_SYSTEM,
         user_message=message[:1000],  # cap to keep the call cheap
+        organization_id=organization_id,
     )
     try:
         items = json.loads(raw or "[]")
@@ -138,6 +142,7 @@ async def run_agent(
     request: AgentChatRequest,
     memory_context: str = "",
     conversation_history: list[dict] | None = None,
+    organization_id: int | None = None,
 ) -> AgentChatResponse:
     """
     Route the message to the right role and get a real AI response.
@@ -158,10 +163,14 @@ async def run_agent(
         user_message=request.message,
         memory_context=memory_context,
         conversation_history=conversation_history,
+        organization_id=organization_id,
     )
 
     requires_approval = any(t in request.message.lower() for t in _RISKY_TOKENS)
-    proposed_actions = await extract_proposed_actions(request.message)
+    proposed_actions = await extract_proposed_actions(
+        request.message,
+        organization_id=organization_id,
+    )
 
     return AgentChatResponse(
         role=role,

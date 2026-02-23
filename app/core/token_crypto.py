@@ -28,6 +28,10 @@ _TOKEN_FIELDS = ("access_token", "refresh_token", "api_token")
 logger = logging.getLogger(__name__)
 
 
+def _looks_like_fernet(value: str) -> bool:
+    return value.startswith("gAAAA")
+
+
 def _fernet() -> Fernet:
     # Use a dedicated TOKEN_ENCRYPTION_KEY when available (key separation).
     # Falls back to SECRET_KEY so existing encrypted tokens remain readable.
@@ -56,8 +60,21 @@ def encrypt_config(config_json: dict) -> dict:
     """
     result = dict(config_json)
     for field in _TOKEN_FIELDS:
-        if result.get(field):
-            result[field] = encrypt_token(result[field])
+        value = result.get(field)
+        if not value or not isinstance(value, str):
+            continue
+        # Normalize accidentally pre-encrypted values before re-encrypting.
+        if _looks_like_fernet(value):
+            try:
+                value = decrypt_token(value)
+            except InvalidToken:
+                # Treat non-decryptable value as plaintext and re-encrypt under
+                # the active key; this repairs malformed storage over time.
+                logger.warning(
+                    "Token field '%s' looked encrypted but was invalid; re-encrypting raw value",
+                    field,
+                )
+        result[field] = encrypt_token(value)
     return result
 
 
@@ -74,6 +91,10 @@ def decrypt_config(config_json: dict) -> dict:
             except InvalidToken:
                 # Pre-migration plaintext value — leave as-is.
                 value = result.get(field)
-                if isinstance(value, str) and value.startswith("gAAAA"):
-                    logger.warning("Invalid encrypted integration token for field '%s'; leaving value unchanged", field)
+                if isinstance(value, str) and _looks_like_fernet(value):
+                    logger.warning(
+                        "Invalid encrypted integration token for field '%s'; clearing value",
+                        field,
+                    )
+                    result[field] = ""
     return result

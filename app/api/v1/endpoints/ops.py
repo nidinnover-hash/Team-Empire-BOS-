@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.privacy import sanitize_response_payload
 from app.core.deps import get_db
+from app.core.request_context import get_current_request_id
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
 from app.models.approval import Approval
@@ -167,6 +168,7 @@ async def run_daily_run_workflow(
                     "reasoning": confidence_reasoning,
                 },
                 actor_user_id=actor_user_id,
+                request_id=get_current_request_id(),
                 daily_run_id=run.id,
                 source_event_id=run_event.id,
             ),

@@ -71,6 +71,7 @@ async def list_traces(
                 reasoning=reasoning,
                 signals_json=signals,
                 actor_user_id=row.actor_user_id,
+                request_id=row.request_id,
                 daily_run_id=row.daily_run_id,
                 source_event_id=row.source_event_id,
                 created_at=row.created_at,

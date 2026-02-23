@@ -339,6 +339,7 @@ async def test_ai_provider(
         user_message="ping",
         provider=chosen,
         max_tokens=20,
+        organization_id=actor["org_id"],
     )
 
     # call_ai never raises — error strings start with "Error:"

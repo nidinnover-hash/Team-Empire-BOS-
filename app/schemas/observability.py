@@ -30,6 +30,7 @@ class AICallLogRead(BaseModel):
     used_fallback: bool
     fallback_from: str | None = None
     error_type: str | None = None
+    request_id: str | None = None
     created_at: str | None = None
 
 
@@ -39,4 +40,5 @@ class DecisionTraceSummaryRead(BaseModel):
     title: str
     summary: str
     confidence_score: float | None = None
+    request_id: str | None = None
     created_at: str | None = None

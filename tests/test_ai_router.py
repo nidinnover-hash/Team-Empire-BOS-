@@ -142,3 +142,24 @@ async def test_no_memory_context_skips_injection(monkeypatch):
     await ai_router.call_ai(system_prompt="Be helpful.", user_message="test")
     assert "[MEMORY CONTEXT" not in captured["system"]
     assert captured["system"] == "Be helpful."
+
+
+async def test_call_ai_logs_org_and_request_correlation(monkeypatch):
+    async def _fake_call(provider, system, user, max_tokens, history):
+        return "ok", False
+
+    monkeypatch.setattr(ai_router, "_call_provider", _fake_call)
+    monkeypatch.setattr(ai_router, "_configured_providers", lambda: ["groq"])
+    before = len(ai_router.get_recent_calls())
+
+    result = await ai_router.call_ai(
+        system_prompt="sys",
+        user_message="msg",
+        organization_id=42,
+        request_id="req-123",
+    )
+    assert result == "ok"
+
+    latest = ai_router.get_recent_calls()[before]
+    assert latest["organization_id"] == 42
+    assert latest["request_id"] == "req-123"

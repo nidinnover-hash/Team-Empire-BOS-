@@ -46,6 +46,7 @@ from app.models import task as _model_task  # noqa: F401
 from app.models import user as _model_user  # noqa: F401
 from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
 from app.models import chat_message as _model_chat_message  # noqa: F401
+from app.models import ai_call_log as _model_ai_call_log  # noqa: F401
 
 # StaticPool + check_same_thread=False makes all connections share one
 # in-memory SQLite database — required for :memory: to work across requests.
