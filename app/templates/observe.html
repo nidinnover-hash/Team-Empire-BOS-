@@ -81,7 +81,7 @@
       <a href="/docs" class="sb-item" target="_blank"><i data-lucide="book-open"></i> API Docs</a>
     </div>
     <div class="sb-footer">
-      <button class="sb-item" id="logoutBtn" type="button"><i data-lucide="log-out"></i> Sign out</button>
+      <button class="sb-item" id="logout-btn" type="button"><i data-lucide="log-out"></i> Sign out</button>
     </div>
   </nav>
 
@@ -187,7 +187,7 @@
     }
     loadObservability();
 
-    const logoutBtn = document.getElementById('logoutBtn');
+    const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) logoutBtn.addEventListener('click', async () => {
       const csrf = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('pc_csrf='));
       const csrfVal = csrf ? csrf.split('=')[1] : '';

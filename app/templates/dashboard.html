@@ -582,9 +582,8 @@
     .toast button:hover { opacity: 1; }
 
     @media (max-width: 768px) {
-      .stats { padding-left: 1rem; padding-right: 1rem; padding-top: 3.5rem; }
+      .stats { padding: 3.5rem 1rem 0.5rem; grid-template-columns: repeat(2, minmax(100px, 1fr)); }
       main { padding: 1rem; }
-      .stats { grid-template-columns: repeat(2, minmax(100px, 1fr)); }
       .grid-3, .grid-2 { grid-template-columns: 1fr; }
       .hero { grid-template-columns: 1fr; }
       .hero-chips { justify-content: flex-start; }
@@ -629,7 +628,7 @@
   <div class="sb-footer">
     {% if session_user %}
     <div class="sb-user">{{ session_user.email }}</div>
-    <button class="sb-item" id="web-logout-link">
+    <button class="sb-item" id="logout-btn" type="button">
       <i data-lucide="log-out"></i> Sign out
     </button>
     {% else %}
@@ -1235,9 +1234,9 @@
       }
     });
 
-    const logoutLink = document.getElementById("web-logout-link");
-    if (logoutLink) {
-      logoutLink.addEventListener("click", async function (e) {
+    const logoutBtn = document.getElementById("logout-btn");
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", async function (e) {
         e.preventDefault();
         await fetch("/web/logout", { method: "POST" });
         window.location.reload();
