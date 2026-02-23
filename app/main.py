@@ -4,6 +4,7 @@ import secrets
 from typing import AsyncGenerator
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -74,7 +75,7 @@ if settings.ADMIN_PASSWORD in _UNSAFE_PASSWORDS or len(settings.ADMIN_PASSWORD) 
     raise RuntimeError(
         "ADMIN_PASSWORD is insecure. Set a strong password (8+ chars) in .env."
     )
-if settings.ENFORCE_STARTUP_VALIDATION:
+if settings.ENFORCE_STARTUP_VALIDATION or not settings.DEBUG:
     startup_issues = validate_startup_settings(settings)
     if startup_issues:
         raise RuntimeError(
@@ -117,6 +118,60 @@ app.add_middleware(RateLimitMiddleware)
 app.add_middleware(CorrelationIDMiddleware)
 app.add_middleware(RequestLogMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+
+
+def _request_id_from_state(request: Request) -> str | None:
+    return getattr(request.state, "correlation_id", None)
+
+
+def _status_code_to_error_code(status_code: int) -> str:
+    mapping = {
+        400: "bad_request",
+        401: "unauthorized",
+        403: "forbidden",
+        404: "not_found",
+        409: "conflict",
+        422: "validation_error",
+        429: "rate_limited",
+    }
+    return mapping.get(status_code, "http_error")
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "code": _status_code_to_error_code(exc.status_code),
+            "detail": exc.detail,
+            "request_id": _request_id_from_state(request),
+        },
+        headers=exc.headers,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={
+            "code": "validation_error",
+            "detail": exc.errors(),
+            "request_id": _request_id_from_state(request),
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, _exc: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={
+            "code": "internal_error",
+            "detail": "Internal server error",
+            "request_id": _request_id_from_state(request),
+        },
+    )
 
 
 @app.post("/token")

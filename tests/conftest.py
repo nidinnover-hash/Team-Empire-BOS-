@@ -15,6 +15,8 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-that-is-long-enough-for-tests-32c")
 os.environ.setdefault("ADMIN_PASSWORD", "TestPassword2026!")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+os.environ["DEBUG"] = "true"
+os.environ["ENFORCE_STARTUP_VALIDATION"] = "false"
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
