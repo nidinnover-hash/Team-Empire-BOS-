@@ -1,9 +1,10 @@
 """
 Middleware stack:
 - CorrelationIDMiddleware: attaches a per-request correlation ID.
-- RateLimitMiddleware: simple in-memory sliding window rate limiter.
+# -- Rate Limiter --------------------------------------------------------------
 """
 from __future__ import annotations
+# for a personal tool; use Redis for multi-instance deployments).
 
 import time
 import uuid
@@ -146,9 +147,9 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
             )
 
 
-# ── Rate Limiter ──────────────────────────────────────────────────────────────
+# -- Rate Limiter --------------------------------------------------------------
 # In-memory sliding window per client IP. Resets on server restart (by design
-# for a personal tool — use Redis for multi-instance deployments).
+# for a personal tool; use Redis for multi-instance deployments).
 
 _rate_buckets: dict[str, deque] = defaultdict(deque)
 _rate_limit_lock = Lock()
@@ -156,8 +157,8 @@ _rate_limit_lock = Lock()
 # Paths exempt from rate limiting (health checks, docs)
 _EXEMPT_PREFIXES = ("/health", "/docs", "/redoc", "/openapi.json")
 
-# ── Login Failure Tracker ──────────────────────────────────────────────────────
-# Sliding window per IP — resets on server restart (acceptable for a personal tool).
+# -- Login Failure Tracker -----------------------------------------------------
+# Sliding window per IP; resets on server restart (acceptable for a personal tool).
 
 _login_failures: dict[str, deque] = defaultdict(deque)
 LOGIN_FAIL_WINDOW = 900   # 15-minute window
@@ -165,7 +166,7 @@ LOGIN_FAIL_MAX = 10       # max failures before lockout
 _LOGIN_MAX_IPS = 10_000   # cap to prevent memory leak from IP churn
 _login_lock = Lock()
 
-_redis_client: "_RedisLike" | None = None
+_redis_client: _RedisLike | None = None
 _redis_initialized = False
 
 

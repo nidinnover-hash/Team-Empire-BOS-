@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,9 +15,6 @@ from app.services import conversation as conversation_service
 from app.services import inbox as inbox_service
 
 router = APIRouter(prefix="/inbox", tags=["Inbox"])
-
-
-import re
 
 _PARTICIPANT_KEY_RE = re.compile(r"^[a-zA-Z0-9_.@+\-]+$")
 

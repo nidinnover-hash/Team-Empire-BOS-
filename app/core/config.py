@@ -86,30 +86,19 @@ class Settings(BaseSettings):
     SYNC_INTERVAL_MINUTES: int = 30   # how often the scheduler fires
     SYNC_THROTTLE_MINUTES: int = 15   # min gap for on-demand (login/dashboard) syncs
 
-    @field_validator("DEFAULT_AI_PROVIDER", mode="before")
+    @field_validator(
+        "DEFAULT_AI_PROVIDER", "IDEMPOTENCY_BACKEND", "RATE_LIMIT_BACKEND",
+        mode="before",
+    )
     @classmethod
-    def _normalize_default_ai_provider(cls, value: Any) -> Any:
-        if isinstance(value, str):
-            return value.strip().lower()
-        return value
-
-    @field_validator("IDEMPOTENCY_BACKEND", mode="before")
-    @classmethod
-    def _normalize_idempotency_backend(cls, value: Any) -> Any:
-        if isinstance(value, str):
-            return value.strip().lower()
-        return value
-
-    @field_validator("RATE_LIMIT_BACKEND", mode="before")
-    @classmethod
-    def _normalize_rate_limit_backend(cls, value: Any) -> Any:
+    def _normalize_lowercase(cls, value: Any) -> Any:
         if isinstance(value, str):
             return value.strip().lower()
         return value
 
     @field_validator("APP_MODE", mode="before")
     @classmethod
-    def _normalize_app_mode(cls, value: Any) -> Any:
+    def _normalize_uppercase(cls, value: Any) -> Any:
         if isinstance(value, str):
             return value.strip().upper()
         return value
@@ -133,11 +122,27 @@ def validate_startup_settings(s: Settings) -> list[str]:
     Enforcement is opt-in via ENFORCE_STARTUP_VALIDATION.
     """
     issues: list[str] = []
+
+    # --- Numeric bounds ---
+    if s.ACCESS_TOKEN_EXPIRE_MINUTES < 5:
+        issues.append("ACCESS_TOKEN_EXPIRE_MINUTES must be >= 5")
+    if s.ACCESS_TOKEN_EXPIRE_MINUTES > 40_320:  # 28 days
+        issues.append("ACCESS_TOKEN_EXPIRE_MINUTES must be <= 40320 (28 days)")
+    if s.SYNC_INTERVAL_MINUTES < 1:
+        issues.append("SYNC_INTERVAL_MINUTES must be >= 1")
+    if s.SYNC_INTERVAL_MINUTES > 1_440:  # 24 hours
+        issues.append("SYNC_INTERVAL_MINUTES must be <= 1440 (24 hours)")
+    if s.SYNC_THROTTLE_MINUTES < 0:
+        issues.append("SYNC_THROTTLE_MINUTES must be >= 0")
+
+    # --- Rate limiting / idempotency ---
     idem_backend = s.IDEMPOTENCY_BACKEND
     if idem_backend == "redis" and not (s.IDEMPOTENCY_REDIS_URL or "").strip():
         issues.append("IDEMPOTENCY_REDIS_URL must be set when IDEMPOTENCY_BACKEND=redis")
     if s.IDEMPOTENCY_TTL_SECONDS < 60:
         issues.append("IDEMPOTENCY_TTL_SECONDS must be >= 60")
+    if s.IDEMPOTENCY_TTL_SECONDS > 86_400:  # 24 hours
+        issues.append("IDEMPOTENCY_TTL_SECONDS must be <= 86400 (24 hours)")
     if s.IDEMPOTENCY_MAX_ITEMS < 100:
         issues.append("IDEMPOTENCY_MAX_ITEMS must be >= 100")
     if s.RATE_LIMIT_BACKEND == "redis" and not (s.RATE_LIMIT_REDIS_URL or "").strip():
@@ -146,6 +151,8 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("RATE_LIMIT_WINDOW_SECONDS must be >= 1")
     if s.RATE_LIMIT_MAX_REQUESTS < 1:
         issues.append("RATE_LIMIT_MAX_REQUESTS must be >= 1")
+    if s.RATE_LIMIT_MAX_REQUESTS > 10_000:
+        issues.append("RATE_LIMIT_MAX_REQUESTS must be <= 10000")
 
     provider = s.DEFAULT_AI_PROVIDER
     if provider == "openai":
@@ -189,6 +196,14 @@ def validate_startup_settings(s: Settings) -> list[str]:
     if s.WHATSAPP_WEBHOOK_VERIFY_TOKEN and not s.WHATSAPP_APP_SECRET:
         issues.append("WHATSAPP_APP_SECRET should be set when WhatsApp webhook verify token is configured")
 
+    # --- Security: reject insecure defaults ---
+    _WEAK_SECRETS = {"change_me_in_env", "secret", "changeme", "your_32_plus_char_secret_here"}
+    if s.SECRET_KEY in _WEAK_SECRETS or len(s.SECRET_KEY) < 16:
+        issues.append("SECRET_KEY is a placeholder or too short (min 16 chars)")
+    _WEAK_PASSWORDS = {"demo", "password", "admin", "123456", "changeme"}
+    if s.ADMIN_PASSWORD in _WEAK_PASSWORDS or len(s.ADMIN_PASSWORD) < 8:
+        issues.append("ADMIN_PASSWORD is weak or too short (min 8 chars)")
+
     return issues
 
 
@@ -200,7 +215,7 @@ def format_startup_issues(issues: list[str]) -> str:
     }
     for issue in issues:
         upper = issue.upper()
-        if any(k in upper for k in {"SECRET", "COOKIE", "TOKEN_ENCRYPTION_KEY", "WHATSAPP_APP_SECRET"}):
+        if any(k in upper for k in {"SECRET", "COOKIE", "TOKEN_ENCRYPTION_KEY", "WHATSAPP_APP_SECRET", "ADMIN_PASSWORD"}):
             groups["security"].append(issue)
         elif any(k in upper for k in {"OPENAI", "ANTHROPIC", "GROQ", "GOOGLE", "WHATSAPP"}):
             groups["integrations"].append(issue)
