@@ -197,14 +197,14 @@ def build_typed_context(
 
     # Integration layer
     if integration_statuses:
-        lines: list[str] = []
+        integration_lines: list[str] = []
         for item in integration_statuses:
             name = str(item.get("type") or item.get("name") or "integration")
             status = str(item.get("status") or "unknown")
             last_sync = item.get("last_sync_at")
             suffix = f" | last_sync: {last_sync}" if last_sync else ""
-            lines.append(f"  - {name}: {status}{suffix}")
-        content = "\n".join(lines)
+            integration_lines.append(f"  - {name}: {status}{suffix}")
+        content = "\n".join(integration_lines)
         layers.append(ContextLayer(
             layer_type="integration", source="integration", priority=4,
             content=f"INTEGRATIONS:\n{content}", char_count=len(content),
