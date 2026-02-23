@@ -7,6 +7,8 @@ Middleware stack:
 import time
 import uuid
 from collections import defaultdict, deque
+import logging
+from urllib.parse import parse_qsl, urlencode
 from typing import cast
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -15,6 +17,45 @@ from starlette.responses import JSONResponse, Response
 
 from app.core.config import settings
 from app.core.request_context import reset_current_request_id, set_current_request_id
+from app.core.security import decode_access_token
+
+logger = logging.getLogger("request")
+
+_SENSITIVE_QUERY_KEYS = {
+    "access_token",
+    "api_key",
+    "apikey",
+    "client_secret",
+    "code",
+    "hub.verify_token",
+    "id_token",
+    "password",
+    "refresh_token",
+    "secret",
+    "signature",
+    "sig",
+    "state",
+    "token",
+}
+
+
+def sanitize_query_for_logs(query: str) -> str:
+    if not query:
+        return ""
+    pairs = parse_qsl(query, keep_blank_values=True)
+    safe_pairs: list[tuple[str, str]] = []
+    for key, value in pairs:
+        key_lower = key.lower()
+        if (
+            key_lower in _SENSITIVE_QUERY_KEYS
+            or "token" in key_lower
+            or "secret" in key_lower
+            or "password" in key_lower
+        ):
+            safe_pairs.append((key, "[REDACTED]"))
+        else:
+            safe_pairs.append((key, value))
+    return urlencode(safe_pairs)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -44,6 +85,51 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
             return response
         finally:
             reset_current_request_id(token)
+
+
+class RequestLogMiddleware(BaseHTTPMiddleware):
+    """Emit one structured log line per request with correlation context."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        start = time.monotonic()
+        response: Response | None = None
+        status_code = 500
+        try:
+            response = cast(Response, await call_next(request))
+            status_code = response.status_code
+            return response
+        finally:
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            request_id = getattr(request.state, "correlation_id", None)
+            org_id = None
+            user_id = None
+            auth_header = request.headers.get("Authorization", "")
+            token = None
+            if auth_header.lower().startswith("bearer "):
+                token = auth_header.split(" ", 1)[1].strip()
+            if not token:
+                token = request.cookies.get("pc_session")
+            if token:
+                try:
+                    claims = decode_access_token(token)
+                    org_id = claims.get("org_id")
+                    user_id = claims.get("id")
+                except Exception:
+                    pass
+            logger.info(
+                "request",
+                extra={
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "query": sanitize_query_for_logs(request.url.query),
+                    "status_code": status_code,
+                    "latency_ms": elapsed_ms,
+                    "org_id": org_id,
+                    "user_id": user_id,
+                    "client_ip": request.client.host if request.client else None,
+                },
+            )
 
 
 # ── Rate Limiter ──────────────────────────────────────────────────────────────

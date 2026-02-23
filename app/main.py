@@ -16,6 +16,7 @@ from app.core.deps import get_current_web_user, get_db, verify_csrf
 from app.core.middleware import (
     CorrelationIDMiddleware,
     RateLimitMiddleware,
+    RequestLogMiddleware,
     SecurityHeadersMiddleware,
     clear_login_failures,
     check_login_allowed,
@@ -114,6 +115,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # SecurityHeaders → CorrelationID → RateLimit → handler
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(CorrelationIDMiddleware)
+app.add_middleware(RequestLogMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 
@@ -394,7 +396,14 @@ def health_check():
     return {"status": "ok"}
 
 
-app.include_router(api_router, prefix="/api/v1")
+if settings.app_mode_normalized == "NIDIN_AI":
+    app.include_router(api_router, prefix="/api/v1")
+elif settings.app_mode_normalized == "EMPIREO_AI":
+    # Scaffold: keep shared router for now. When Empireo-specific endpoints
+    # are ready, replace with an Empireo router module here.
+    app.include_router(api_router, prefix="/api/v1")
+else:
+    raise RuntimeError(f"Unsupported APP_MODE: {settings.APP_MODE!r}")
 
 
 @app.get("/web/integrations", response_class=HTMLResponse, include_in_schema=False)

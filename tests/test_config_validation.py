@@ -45,3 +45,9 @@ def test_validate_startup_flags_missing_whatsapp_app_secret():
     s = _base_settings(WHATSAPP_WEBHOOK_VERIFY_TOKEN="verify-me", WHATSAPP_APP_SECRET=None)
     issues = validate_startup_settings(s)
     assert any("WHATSAPP_APP_SECRET" in i for i in issues)
+
+
+def test_validate_startup_accepts_case_insensitive_app_mode():
+    s = _base_settings(APP_MODE=" empireo_ai ")
+    issues = validate_startup_settings(s)
+    assert not any("APP_MODE has unsupported value" in i for i in issues)

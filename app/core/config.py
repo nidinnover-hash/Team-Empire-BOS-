@@ -44,6 +44,7 @@ class Settings(BaseSettings):
 
     # App
     APP_NAME: str = "Personal Clone"
+    APP_MODE: str = "NIDIN_AI"  # NIDIN_AI | EMPIREO_AI
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
     ENFORCE_STARTUP_VALIDATION: bool = False
@@ -71,6 +72,10 @@ class Settings(BaseSettings):
     SYNC_INTERVAL_MINUTES: int = 30   # how often the scheduler fires
     SYNC_THROTTLE_MINUTES: int = 15   # min gap for on-demand (login/dashboard) syncs
 
+    @property
+    def app_mode_normalized(self) -> str:
+        return (self.APP_MODE or "").strip().upper()
+
 
 @lru_cache
 def get_settings() -> Settings:
@@ -86,6 +91,9 @@ def validate_startup_settings(s: Settings) -> list[str]:
     Enforcement is opt-in via ENFORCE_STARTUP_VALIDATION.
     """
     issues: list[str] = []
+    app_mode = s.app_mode_normalized
+    if app_mode not in {"NIDIN_AI", "EMPIREO_AI"}:
+        issues.append(f"APP_MODE has unsupported value: {s.APP_MODE!r}")
 
     provider = (s.DEFAULT_AI_PROVIDER or "").strip().lower()
     if provider == "openai":
