@@ -28,7 +28,7 @@ async def compute_weekly_metrics(
     db: AsyncSession,
     org_id: int,
     weeks: int = 1,
-) -> dict:
+) -> dict[str, int]:
     """
     Compute metrics for the last N weeks from IntegrationSignal data.
     Returns summary of what was computed.
@@ -61,7 +61,7 @@ async def compute_weekly_metrics(
         signals = list(sig_result.scalars().all())
 
         # Group signals by employee and source
-        emp_signals: dict[int, dict[str, list]] = {}
+        emp_signals: dict[int, dict[str, list[IntegrationSignal]]] = {}
         for sig in signals:
             if sig.employee_id is None:
                 continue

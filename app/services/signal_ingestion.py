@@ -43,9 +43,9 @@ def get_ingestion_stats() -> dict[str, int]:
 _SANITIZE_KEYS = {"access_token", "refresh_token", "token", "secret", "password", "api_key"}
 
 
-def _sanitize_payload(raw: dict) -> dict:
+def _sanitize_payload(raw: dict[str, Any]) -> dict[str, Any]:
     """Remove secrets/tokens from payload before storage."""
-    clean = {}
+    clean: dict[str, Any] = {}
     for k, v in raw.items():
         if k.lower() in _SANITIZE_KEYS:
             continue
@@ -56,7 +56,7 @@ def _sanitize_payload(raw: dict) -> dict:
     return clean
 
 
-def _hash_payload(payload: dict) -> str:
+def _hash_payload(payload: dict[str, Any]) -> str:
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, default=str).encode()
     ).hexdigest()
@@ -114,7 +114,7 @@ async def _upsert_signal(
     external_id: str,
     employee_id: int | None,
     timestamp: datetime,
-    payload: dict,
+    payload: dict[str, Any],
 ) -> IntegrationSignal:
     sanitized = _sanitize_payload(payload)
     payload_hash = _hash_payload(sanitized)
@@ -154,7 +154,7 @@ async def _upsert_signal(
 # ClickUp ingestion
 # ---------------------------------------------------------------------------
 
-async def ingest_clickup_signals(db: AsyncSession, org_id: int) -> dict:
+async def ingest_clickup_signals(db: AsyncSession, org_id: int) -> dict[str, Any]:
     """Fetch ClickUp tasks and store as IntegrationSignal rows."""
     from app.tools import clickup as clickup_tool
 
@@ -220,7 +220,7 @@ async def ingest_clickup_signals(db: AsyncSession, org_id: int) -> dict:
 # GitHub ingestion
 # ---------------------------------------------------------------------------
 
-async def ingest_github_signals(db: AsyncSession, org_id: int) -> dict:
+async def ingest_github_signals(db: AsyncSession, org_id: int) -> dict[str, Any]:
     """Fetch GitHub PRs and issues, store as IntegrationSignal rows."""
     from app.tools import github as github_tool
 
@@ -318,7 +318,7 @@ async def ingest_github_signals(db: AsyncSession, org_id: int) -> dict:
 # Gmail ingestion (metadata only — no raw body storage)
 # ---------------------------------------------------------------------------
 
-async def ingest_gmail_signals(db: AsyncSession, org_id: int) -> dict:
+async def ingest_gmail_signals(db: AsyncSession, org_id: int) -> dict[str, Any]:
     """
     Fetch Gmail threads (metadata only), store as IntegrationSignal rows.
     Respects WORK_EMAIL_DOMAINS allowlist — skips non-work emails.
