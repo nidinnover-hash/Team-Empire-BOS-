@@ -27,6 +27,12 @@ import app.models.integration # noqa: F401
 import app.models.memory # noqa: F401
 import app.models.email # noqa: F401
 import app.models.daily_run # noqa: F401
+import app.models.employee # noqa: F401
+import app.models.integration_signal # noqa: F401
+import app.models.ops_metrics # noqa: F401
+import app.models.decision_log # noqa: F401
+import app.models.policy_rule # noqa: F401
+import app.models.weekly_report # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

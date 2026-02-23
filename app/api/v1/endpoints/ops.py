@@ -19,10 +19,12 @@ from app.models.approval import Approval
 from app.schemas.daily_run import DailyRunRead
 from app.schemas.event import EventRead
 from app.schemas.intelligence import DecisionTraceCreate
+from app.schemas.ops import EmployeeCreate, EmployeeRead, EmployeeUpdate
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectStatusUpdate
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
 from app.services import briefing as briefing_service
 from app.services import daily_run as daily_run_service
+from app.services import employee as employee_service
 from app.services import email_service
 from app.services import event as event_service
 from app.services import intelligence as intelligence_service
@@ -387,3 +389,76 @@ async def list_daily_runs_ops(
         run_date=run_date,
         limit=limit,
     )
+
+
+# ---- Employee Mapping Endpoints ----
+
+
+@router.post("/employees", response_model=EmployeeRead, status_code=201)
+async def create_employee(
+    data: EmployeeCreate,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> EmployeeRead:
+    emp = await employee_service.create_or_update_employee(
+        db=db, org_id=int(user["org_id"]), data=data,
+    )
+    await record_action(
+        db,
+        event_type="employee_created",
+        actor_user_id=user["id"],
+        organization_id=user["org_id"],
+        entity_type="employee",
+        entity_id=emp.id,
+        payload_json={"name": emp.name, "email": emp.email},
+    )
+    return emp
+
+
+@router.get("/employees", response_model=list[EmployeeRead])
+async def list_employees(
+    active_only: bool = Query(True),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> list[EmployeeRead]:
+    return await employee_service.list_employees(
+        db=db, org_id=int(user["org_id"]), active_only=active_only,
+    )
+
+
+@router.get("/employees/{employee_id}", response_model=EmployeeRead)
+async def get_employee(
+    employee_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> EmployeeRead:
+    emp = await employee_service.get_employee(
+        db=db, org_id=int(user["org_id"]), employee_id=employee_id,
+    )
+    if emp is None:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    return emp
+
+
+@router.patch("/employees/{employee_id}", response_model=EmployeeRead)
+async def update_employee(
+    employee_id: int,
+    data: EmployeeUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> EmployeeRead:
+    emp = await employee_service.update_employee(
+        db=db, org_id=int(user["org_id"]), employee_id=employee_id, data=data,
+    )
+    if emp is None:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    await record_action(
+        db,
+        event_type="employee_updated",
+        actor_user_id=user["id"],
+        organization_id=user["org_id"],
+        entity_type="employee",
+        entity_id=emp.id,
+        payload_json={"name": emp.name, "email": emp.email},
+    )
+    return emp
