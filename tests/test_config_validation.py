@@ -141,6 +141,12 @@ def test_validate_startup_clean_passes():
     assert issues == []
 
 
+def test_validate_startup_rejects_debug_privacy_profile_in_production():
+    s = _base_settings(DEBUG=False, PRIVACY_POLICY_PROFILE="debug")
+    issues = validate_startup_settings(s)
+    assert any("PRIVACY_POLICY_PROFILE=debug is not allowed" in i for i in issues)
+
+
 def test_format_startup_issues_groups_by_domain():
     text = format_startup_issues(
         [

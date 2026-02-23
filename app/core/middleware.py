@@ -1,10 +1,11 @@
 """
 Middleware stack:
-- CorrelationIDMiddleware: attaches a per-request correlation ID.
-# -- Rate Limiter --------------------------------------------------------------
+- SecurityHeadersMiddleware: adds security and contract headers.
+- RequestLogMiddleware: structured request logging with context.
+- CorrelationIDMiddleware: per-request correlation IDs.
+- RateLimitMiddleware: in-memory/Redis sliding window throttling.
 """
 from __future__ import annotations
-# for a personal tool; use Redis for multi-instance deployments).
 
 import time
 import uuid
@@ -83,6 +84,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
         response.headers["X-API-Contract-Version"] = API_CONTRACT_VERSION
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'"
+        )
         # Strict-Transport-Security only when served over HTTPS
         if settings.COOKIE_SECURE:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"

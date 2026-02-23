@@ -5,6 +5,7 @@ from typing import AsyncGenerator
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -88,6 +89,10 @@ templates = Jinja2Templates(directory="app/templates")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    # DB health probe — fail fast if database is unreachable
+    from sqlalchemy import text
+    async with engine.connect() as conn:
+        await conn.execute(text("SELECT 1"))
     # Production should use migrations only; optional auto-create/seed for local dev.
     if settings.AUTO_CREATE_SCHEMA:
         async with engine.begin() as conn:
@@ -113,6 +118,21 @@ app = FastAPI(
     redoc_url="/redoc" if settings.DEBUG else None,
 )
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+# CORS: strict-origin whitelist from config
+_cors_origins = [
+    o.strip() for o in settings.CORS_ALLOWED_ORIGINS.split(",")
+    if o.strip()
+]
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-CSRF-Token", "X-Correlation-ID"],
+    )
+
 # Middleware is applied in reverse order (last added = outermost)
 # SecurityHeaders → CorrelationID → RateLimit → handler
 app.add_middleware(RateLimitMiddleware)

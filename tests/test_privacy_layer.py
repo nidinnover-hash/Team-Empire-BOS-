@@ -1,4 +1,5 @@
 from app.core.privacy import REDACTED, sanitize_audit_payload
+from app.core.config import settings
 from app.logs import audit as audit_log
 
 
@@ -56,3 +57,19 @@ async def test_record_action_applies_privacy_sanitizer(monkeypatch):
     assert captured["payload_json"]["access_token"] == REDACTED
     assert captured["payload_json"]["email"] == "a***@example.com"
     assert captured["payload_json"]["reason"] == "safe_reason"
+
+
+def test_privacy_profile_strict_masks_ip_in_free_text(monkeypatch):
+    monkeypatch.setattr(settings, "PRIVACY_POLICY_PROFILE", "strict", raising=False)
+    payload = {"note": "client ip 192.168.1.100 and email founder@example.com"}
+    safe = sanitize_audit_payload(payload)
+    assert "192.168.1.100" not in safe["note"]
+    assert "founder@example.com" not in safe["note"]
+
+
+def test_privacy_profile_debug_keeps_pii_but_redacts_secrets(monkeypatch):
+    monkeypatch.setattr(settings, "PRIVACY_POLICY_PROFILE", "debug", raising=False)
+    payload = {"email": "founder@example.com", "access_token": "top-secret"}
+    safe = sanitize_audit_payload(payload)
+    assert safe["email"] == "founder@example.com"
+    assert safe["access_token"] == REDACTED

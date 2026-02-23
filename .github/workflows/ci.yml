@@ -36,6 +36,11 @@ jobs:
       - name: Type check
         run: python -m mypy app tests
 
+      - name: Security lint (bandit)
+        run: |
+          pip install bandit
+          bandit -r app -ll -q || true
+
   full-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -53,6 +58,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
+          pip install pytest-cov
 
       - name: Migration check
         env:
@@ -72,8 +78,15 @@ jobs:
           DATABASE_URL: sqlite:///./ci.db
         run: python -c "import app.main"
 
-      - name: Tests
-        run: python -m pytest -q -p no:cacheprovider
+      - name: Tests with coverage
+        run: python -m pytest -q -p no:cacheprovider --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=60
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
 
       - name: Performance Budget
         run: python -m pytest -q tests/test_performance_budget.py -p no:cacheprovider --durations=10 | tee perf-baseline.txt
@@ -83,6 +96,17 @@ jobs:
         with:
           name: perf-baseline
           path: perf-baseline.txt
+
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: full-checks
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t personal-clone:ci-${{ github.sha }} .
 
   secret-scan:
     runs-on: ubuntu-latest

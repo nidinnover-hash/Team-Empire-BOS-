@@ -97,3 +97,11 @@ async def test_security_headers_present(client):
     assert response.headers.get("x-frame-options") == "DENY"
     assert response.headers.get("referrer-policy") == "strict-origin-when-cross-origin"
     assert "x-xss-protection" in response.headers
+
+
+async def test_csp_header_present(client):
+    response = await client.get("/health")
+    csp = response.headers.get("content-security-policy", "")
+    assert "default-src 'self'" in csp
+    assert "frame-ancestors 'none'" in csp
+    assert "script-src" in csp
