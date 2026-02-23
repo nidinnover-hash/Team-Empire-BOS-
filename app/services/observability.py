@@ -5,7 +5,7 @@ Observability service — aggregate AI call metrics, approval stats, and decisio
 from datetime import datetime, timedelta, timezone
 from typing import TypedDict
 
-from sqlalchemy import func, select
+from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tenant import apply_org_scope
@@ -62,19 +62,22 @@ async def get_observability_summary(
 ) -> ObservabilitySummary:
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
-    # AI call stats
+    # AI call stats + fallback/error counts in a single query (was 3 separate queries)
     ai_query = select(
         AiCallLog.provider,
         func.count(AiCallLog.id).label("call_count"),
         func.avg(AiCallLog.latency_ms).label("avg_latency"),
         func.sum(AiCallLog.input_tokens).label("total_input_tokens"),
         func.sum(AiCallLog.output_tokens).label("total_output_tokens"),
+        func.sum(func.cast(AiCallLog.used_fallback, Integer)).label("fallback_count"),
+        func.count(AiCallLog.error_type).label("error_count"),
     )
     ai_query = apply_org_scope(ai_query, AiCallLog, org_id).where(AiCallLog.created_at >= cutoff)
     ai_result = await db.execute(ai_query.group_by(AiCallLog.provider))
     provider_stats: list[ProviderStats] = []
     total_calls = 0
     total_fallbacks = 0
+    total_errors = 0
     for row in ai_result.all():
         provider_stats.append({
             "provider": row.provider,
@@ -84,24 +87,8 @@ async def get_observability_summary(
             "total_output_tokens": int(row.total_output_tokens or 0),
         })
         total_calls += row.call_count
-
-    # Fallback rate
-    fb_query = select(func.count(AiCallLog.id))
-    fb_query = apply_org_scope(fb_query, AiCallLog, org_id).where(
-        AiCallLog.created_at >= cutoff,
-        AiCallLog.used_fallback.is_(True),
-    )
-    fb_result = await db.execute(fb_query)
-    total_fallbacks = fb_result.scalar() or 0
-
-    # Error rate
-    err_query = select(func.count(AiCallLog.id))
-    err_query = apply_org_scope(err_query, AiCallLog, org_id).where(
-        AiCallLog.created_at >= cutoff,
-        AiCallLog.error_type.isnot(None),
-    )
-    err_result = await db.execute(err_query)
-    total_errors = err_result.scalar() or 0
+        total_fallbacks += int(row.fallback_count or 0)
+        total_errors += int(row.error_count or 0)
 
     # Approval stats
     approval_query = select(Approval.status, func.count(Approval.id))

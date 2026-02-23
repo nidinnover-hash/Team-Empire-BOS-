@@ -150,7 +150,7 @@ async def sync_emails(
     except EmailSyncError as exc:
         raise HTTPException(
             status_code=502,
-            detail={"code": exc.code, "message": exc.message},
+            detail=f"Email sync failed [{exc.code}]: {exc.message}",
         ) from exc
     response = SyncResult(
         new_emails=new_count,

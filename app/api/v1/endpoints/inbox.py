@@ -15,6 +15,11 @@ from app.services import inbox as inbox_service
 router = APIRouter(prefix="/inbox", tags=["Inbox"])
 
 
+import re
+
+_PARTICIPANT_KEY_RE = re.compile(r"^[a-zA-Z0-9_.@+\-]+$")
+
+
 def _parse_conversation_id(conversation_id: str) -> tuple[str, str]:
     parts = conversation_id.split(":", 1)
     if len(parts) != 2:
@@ -22,6 +27,8 @@ def _parse_conversation_id(conversation_id: str) -> tuple[str, str]:
     channel, participant_key = parts[0], parts[1]
     if channel not in {"email", "whatsapp"} or not participant_key:
         raise HTTPException(status_code=400, detail="Invalid conversation_id format")
+    if len(participant_key) > 300 or not _PARTICIPANT_KEY_RE.match(participant_key):
+        raise HTTPException(status_code=400, detail="Invalid participant_key format")
     return channel, participant_key
 
 

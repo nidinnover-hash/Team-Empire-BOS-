@@ -190,3 +190,29 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("WHATSAPP_APP_SECRET should be set when WhatsApp webhook verify token is configured")
 
     return issues
+
+
+def format_startup_issues(issues: list[str]) -> str:
+    groups: dict[str, list[str]] = {
+        "security": [],
+        "integrations": [],
+        "runtime": [],
+    }
+    for issue in issues:
+        upper = issue.upper()
+        if any(k in upper for k in {"SECRET", "COOKIE", "TOKEN_ENCRYPTION_KEY", "WHATSAPP_APP_SECRET"}):
+            groups["security"].append(issue)
+        elif any(k in upper for k in {"OPENAI", "ANTHROPIC", "GROQ", "GOOGLE", "WHATSAPP"}):
+            groups["integrations"].append(issue)
+        else:
+            groups["runtime"].append(issue)
+
+    lines: list[str] = []
+    for name in ("security", "integrations", "runtime"):
+        items = groups[name]
+        if not items:
+            continue
+        lines.append(f"{name}:")
+        for item in items:
+            lines.append(f"- {item}")
+    return "\n".join(lines)

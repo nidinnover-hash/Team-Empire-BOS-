@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
@@ -15,6 +16,10 @@ logger = logging.getLogger(__name__)
 class _RedisLike(Protocol):
     def get(self, key: str) -> str | bytes | None: ...
     def setex(self, key: str, time: int, value: str) -> object: ...
+
+
+class IdempotencyConflictError(ValueError):
+    pass
 
 
 _IN_MEMORY_DEFAULT_TTL_SECONDS = 60 * 30
@@ -36,6 +41,11 @@ def _redis_key(scope: str, key: str) -> str:
 
 def _json_clone(payload: dict[str, Any]) -> dict[str, Any]:
     return cast(dict[str, Any], json.loads(json.dumps(payload)))
+
+
+def build_fingerprint(payload: dict[str, Any]) -> str:
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _ttl_seconds() -> int:
@@ -103,7 +113,18 @@ def _backend() -> str:
     return "memory"
 
 
-def get_cached_response(scope: str, key: str) -> dict[str, Any] | None:
+def _unpack_cached(raw: dict[str, Any], fingerprint: str | None) -> dict[str, Any]:
+    stored_fingerprint = raw.get("fingerprint")
+    if isinstance(stored_fingerprint, str) and fingerprint and stored_fingerprint != fingerprint:
+        raise IdempotencyConflictError("Idempotency key replayed with different request fingerprint")
+    payload = raw.get("payload")
+    if isinstance(payload, dict):
+        return _json_clone(payload)
+    # Backward compatibility with legacy entries that store payload directly.
+    return _json_clone(raw)
+
+
+def get_cached_response(scope: str, key: str, fingerprint: str | None = None) -> dict[str, Any] | None:
     if _backend() == "redis":
         client = _get_redis_client()
         if client is not None:
@@ -111,7 +132,7 @@ def get_cached_response(scope: str, key: str) -> dict[str, Any] | None:
             if raw:
                 try:
                     payload = cast(dict[str, Any], json.loads(raw))
-                    return _json_clone(payload)
+                    return _unpack_cached(payload, fingerprint)
                 except Exception:
                     return None
     now = time.monotonic()
@@ -121,11 +142,17 @@ def get_cached_response(scope: str, key: str) -> dict[str, Any] | None:
         if not hit:
             return None
         _ts, payload = hit
-        return _json_clone(payload)
+        return _unpack_cached(payload, fingerprint)
 
 
-def store_response(scope: str, key: str, payload: dict[str, Any]) -> None:
+def store_response(
+    scope: str,
+    key: str,
+    payload: dict[str, Any],
+    fingerprint: str | None = None,
+) -> None:
     safe_payload = _json_clone(payload)
+    cache_payload: dict[str, Any] = {"payload": safe_payload, "fingerprint": fingerprint}
     if _backend() == "redis":
         client = _get_redis_client()
         if client is not None:
@@ -133,7 +160,7 @@ def store_response(scope: str, key: str, payload: dict[str, Any]) -> None:
                 client.setex(
                     _redis_key(scope, key),
                     _ttl_seconds(),
-                    json.dumps(safe_payload),
+                    json.dumps(cache_payload),
                 )
                 return
             except Exception:
@@ -142,4 +169,4 @@ def store_response(scope: str, key: str, payload: dict[str, Any]) -> None:
     with _cache_lock:
         _cleanup(now)
         # Keep payload JSON-serializable and detached from caller mutation.
-        _cache[_cache_key(scope, key)] = (now, safe_payload)
+        _cache[_cache_key(scope, key)] = (now, cache_payload)

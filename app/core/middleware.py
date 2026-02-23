@@ -19,10 +19,20 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from app.core.config import settings
+from app.core.contracts import API_CONTRACT_VERSION
 from app.core.request_context import reset_current_request_id, set_current_request_id
 from app.core.security import decode_access_token
 
 logger = logging.getLogger("request")
+_rate_limit_stats: dict[str, int] = {
+    "allowed": 0,
+    "blocked": 0,
+    "fallback_to_memory": 0,
+}
+
+
+def get_rate_limit_stats() -> dict[str, int]:
+    return dict(_rate_limit_stats)
 
 _SENSITIVE_QUERY_KEYS = {
     "access_token",
@@ -71,6 +81,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        response.headers["X-API-Contract-Version"] = API_CONTRACT_VERSION
         # Strict-Transport-Security only when served over HTTPS
         if settings.COOKIE_SECURE:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
@@ -151,6 +162,7 @@ _EXEMPT_PREFIXES = ("/health", "/docs", "/redoc", "/openapi.json")
 _login_failures: dict[str, deque] = defaultdict(deque)
 LOGIN_FAIL_WINDOW = 900   # 15-minute window
 LOGIN_FAIL_MAX = 10       # max failures before lockout
+_LOGIN_MAX_IPS = 10_000   # cap to prevent memory leak from IP churn
 _login_lock = Lock()
 
 _redis_client: "_RedisLike" | None = None
@@ -236,6 +248,7 @@ def _mark_and_count_redis(key: str, window_seconds: int, add_event: bool) -> int
         return int(client.zcard(key))
     except Exception:
         logger.warning("Redis rate-limit operation failed; using in-memory fallback.", exc_info=True)
+        _rate_limit_stats["fallback_to_memory"] += 1
         return None
 
 
@@ -259,8 +272,17 @@ def record_login_failure(ip: str) -> None:
         count = _mark_and_count_redis(_login_key(ip), LOGIN_FAIL_WINDOW, add_event=True)
         if count is not None:
             return
+    now = time.monotonic()
     with _login_lock:
-        _login_failures[ip].append(time.monotonic())
+        # Evict stale IPs if dict exceeds cap to prevent memory leak
+        if len(_login_failures) >= _LOGIN_MAX_IPS:
+            stale = [
+                k for k, v in _login_failures.items()
+                if not v or now - v[-1] > LOGIN_FAIL_WINDOW
+            ]
+            for k in stale:
+                del _login_failures[k]
+        _login_failures[ip].append(now)
 
 
 def clear_login_failures(ip: str) -> None:
@@ -292,6 +314,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             count = _mark_and_count_redis(_rate_key(client_ip), window, add_event=False)
             if count is not None:
                 if count >= max_req:
+                    _rate_limit_stats["blocked"] += 1
                     return JSONResponse(
                         status_code=429,
                         content={
@@ -303,6 +326,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                         headers={"Retry-After": str(window)},
                     )
                 _ = _mark_and_count_redis(_rate_key(client_ip), window, add_event=True)
+                _rate_limit_stats["allowed"] += 1
                 return cast(Response, await call_next(request))
 
         now = time.monotonic()
@@ -317,6 +341,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 bucket.popleft()
 
             if len(bucket) >= max_req:
+                _rate_limit_stats["blocked"] += 1
                 return JSONResponse(
                     status_code=429,
                     content={
@@ -329,6 +354,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 )
 
             bucket.append(now)
+            _rate_limit_stats["allowed"] += 1
         finally:
             _rate_limit_lock.release()
         return cast(Response, await call_next(request))

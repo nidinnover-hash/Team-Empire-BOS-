@@ -12,7 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.router import api_router
 from app.api.v1.endpoints.ops import run_daily_run_workflow
-from app.core.config import settings, validate_startup_settings
+from app.core.config import format_startup_issues, settings, validate_startup_settings
+from app.core.contracts import error_envelope
 from app.core.deps import get_current_web_user, get_db, verify_csrf
 from app.core.middleware import (
     CorrelationIDMiddleware,
@@ -79,7 +80,7 @@ if settings.ENFORCE_STARTUP_VALIDATION or not settings.DEBUG:
     startup_issues = validate_startup_settings(settings)
     if startup_issues:
         raise RuntimeError(
-            "Startup configuration validation failed: " + "; ".join(startup_issues)
+            "Startup configuration validation failed:\n" + format_startup_issues(startup_issues)
         )
 
 templates = Jinja2Templates(directory="app/templates")
@@ -141,11 +142,11 @@ def _status_code_to_error_code(status_code: int) -> str:
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
-        content={
-            "code": _status_code_to_error_code(exc.status_code),
-            "detail": exc.detail,
-            "request_id": _request_id_from_state(request),
-        },
+        content=error_envelope(
+            code=_status_code_to_error_code(exc.status_code),
+            detail=exc.detail,
+            request_id=_request_id_from_state(request),
+        ),
         headers=exc.headers,
     )
 
@@ -154,11 +155,11 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     return JSONResponse(
         status_code=422,
-        content={
-            "code": "validation_error",
-            "detail": exc.errors(),
-            "request_id": _request_id_from_state(request),
-        },
+        content=error_envelope(
+            code="validation_error",
+            detail=exc.errors(),
+            request_id=_request_id_from_state(request),
+        ),
     )
 
 
@@ -166,11 +167,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 async def unhandled_exception_handler(request: Request, _exc: Exception) -> JSONResponse:
     return JSONResponse(
         status_code=500,
-        content={
-            "code": "internal_error",
-            "detail": "Internal server error",
-            "request_id": _request_id_from_state(request),
-        },
+        content=error_envelope(
+            code="internal_error",
+            detail="Internal server error",
+            request_id=_request_id_from_state(request),
+        ),
     )
 
 

@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 from typing import cast
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.conversation import Conversation
 from app.schemas.inbox import UnifiedConversation, UnifiedInboxItem
 from app.services import conversation as conversation_service
 from app.services import email_service, whatsapp_service
@@ -144,6 +146,9 @@ async def get_unified_conversations(
 ) -> list[UnifiedConversation]:
     """
     Return grouped conversation summaries across email and WhatsApp channels.
+
+    Batch-loads existing Conversation records in a single query to avoid
+    N+1 DB round trips (one per grouped conversation key).
     """
     all_items = await get_unified_inbox(
         db=db,
@@ -156,23 +161,33 @@ async def get_unified_conversations(
         key = _conversation_key(item)
         grouped.setdefault(key, []).append(item)
 
+    # Batch-load all existing conversation records for this org in 1 query
+    existing_result = await db.execute(
+        select(Conversation).where(Conversation.organization_id == org_id)
+    )
+    existing_map: dict[tuple[str, str], Conversation] = {
+        (c.channel, c.participant_key): c for c in existing_result.scalars().all()
+    }
+
+    # Only call create_if_missing for conversations not already in DB
     conversations: list[UnifiedConversation] = []
     for (channel, participant_key), items in grouped.items():
         items.sort(key=_sort_key, reverse=True)
         last_item = items[0]
         participant = last_item.from_address or last_item.to_address
-        record = await conversation_service.create_if_missing(
-            db=db,
-            org_id=org_id,
-            channel=channel,
-            participant_key=participant_key,
-            participant_display=participant,
-            last_message_at=last_item.timestamp,
+        record = existing_map.get((channel, participant_key))
+        if record is None:
+            record = await conversation_service.create_if_missing(
+                db=db,
+                org_id=org_id,
+                channel=channel,
+                participant_key=participant_key,
+                participant_display=participant,
+                last_message_at=last_item.timestamp,
+            )
+        unread_count = sum(
+            1 for i in items if i.channel == "email" and i.is_read is False
         )
-        unread_count = 0
-        for i in items:
-            if i.channel == "email" and i.is_read is False:
-                unread_count += 1
         conversations.append(
             UnifiedConversation(
                 record_id=record.id,

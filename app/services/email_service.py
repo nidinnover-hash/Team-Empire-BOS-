@@ -386,15 +386,18 @@ async def draft_reply(
     gmail_draft_id: str | None = None
     if integration:
         access_token, refresh_token, expires_at = _get_tokens(integration)
-        gmail_draft_id = await asyncio.to_thread(
-            gmail_tool.create_draft,
-            access_token=access_token,
-            to=email.from_address or "",
-            subject=f"Re: {email.subject or ''}",
-            body=draft,
-            refresh_token=refresh_token,
-            expires_at=expires_at,
-        )
+        try:
+            gmail_draft_id = await asyncio.to_thread(
+                gmail_tool.create_draft,
+                access_token=access_token,
+                to=email.from_address or "",
+                subject=f"Re: {email.subject or ''}",
+                body=draft,
+                refresh_token=refresh_token,
+                expires_at=expires_at,
+            )
+        except Exception as exc:
+            logger.warning("Gmail draft creation failed for email %d: %s", email_id, type(exc).__name__)
 
     # Create approval request first so we have its ID
     approval = await request_approval(
@@ -526,15 +529,18 @@ async def compose_email(
     gmail_draft_id: str | None = None
     if integration:
         access_token, refresh_token, expires_at = _get_tokens(integration)
-        gmail_draft_id = await asyncio.to_thread(
-            gmail_tool.create_draft,
-            access_token=access_token,
-            to=to,
-            subject=subject,
-            body=draft,
-            refresh_token=refresh_token,
-            expires_at=expires_at,
-        )
+        try:
+            gmail_draft_id = await asyncio.to_thread(
+                gmail_tool.create_draft,
+                access_token=access_token,
+                to=to,
+                subject=subject,
+                body=draft,
+                refresh_token=refresh_token,
+                expires_at=expires_at,
+            )
+        except Exception as exc:
+            logger.warning("Gmail draft creation failed for compose to %s: %s", to, type(exc).__name__)
 
     # Require approval before anything can be sent
     approval = await request_approval(
