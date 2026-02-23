@@ -337,4 +337,16 @@ async def build_memory_context(
         if remaining > 100:
             base_context = base_context + "\n\n" + github_block[:remaining]
 
+    # ── Work pattern feedback loop ──
+    # Inject ops intelligence patterns so the AI reasons about real work data.
+    from app.services.pattern_analysis import build_work_patterns_context
+    try:
+        patterns_block = await build_work_patterns_context(db, organization_id, weeks=2)
+        if patterns_block:
+            remaining = char_limit - len(base_context)
+            if remaining > 200:
+                base_context = base_context + "\n\n" + patterns_block[:remaining]
+    except Exception:
+        pass  # Graceful degradation — patterns are supplementary
+
     return base_context
