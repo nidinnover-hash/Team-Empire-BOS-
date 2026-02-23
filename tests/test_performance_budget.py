@@ -25,3 +25,19 @@ async def test_root_health_endpoint_latency_budget(client) -> None:
     elapsed = time.perf_counter() - start
     assert response.status_code == 200
     assert elapsed < 0.5
+
+
+def _p95(samples: list[float]) -> float:
+    ordered = sorted(samples)
+    idx = max(0, int(len(ordered) * 0.95) - 1)
+    return ordered[idx]
+
+
+async def test_health_endpoint_p95_budget(client) -> None:
+    samples: list[float] = []
+    for _ in range(20):
+        start = time.perf_counter()
+        response = await client.get("/api/v1/health")
+        samples.append(time.perf_counter() - start)
+        assert response.status_code == 200
+    assert _p95(samples) < 0.8

@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     # CORS
     CORS_ALLOWED_ORIGINS: str = ""  # Comma-separated, e.g. "http://localhost:8002,https://app.nidin.ai"
 
+    # Ops Intelligence guardrails
+    WORK_EMAIL_DOMAINS: str = ""  # Comma-separated: "empire.com,empireo.ai"
+    GMAIL_LABEL_ALLOWLIST: str = ""  # Comma-separated: "INBOX,work"
+
     # Background sync scheduler
     SYNC_ENABLED: bool = True
     SYNC_INTERVAL_MINUTES: int = 30   # how often the scheduler fires

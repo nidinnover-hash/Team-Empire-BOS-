@@ -19,14 +19,28 @@ from app.models.approval import Approval
 from app.schemas.daily_run import DailyRunRead
 from app.schemas.event import EventRead
 from app.schemas.intelligence import DecisionTraceCreate
+from app.schemas.ops import (
+    DecisionLogCreate,
+    DecisionLogRead,
+    EmployeeCreate,
+    EmployeeRead,
+    EmployeeUpdate,
+    PolicyRuleRead,
+    WeeklyReportRead,
+)
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectStatusUpdate
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
 from app.services import briefing as briefing_service
 from app.services import daily_run as daily_run_service
+from app.services import employee as employee_service
 from app.services import email_service
 from app.services import event as event_service
 from app.services import intelligence as intelligence_service
+from app.services import metrics_service
+from app.services import policy_service
 from app.services import project as project_service
+from app.services import report_service
+from app.services import signal_ingestion
 from app.services import task as task_service
 from app.services import task_engine
 
@@ -387,3 +401,289 @@ async def list_daily_runs_ops(
         run_date=run_date,
         limit=limit,
     )
+
+
+# ---- Employee Mapping Endpoints ----
+
+
+@router.post("/employees", response_model=EmployeeRead, status_code=201)
+async def create_employee(
+    data: EmployeeCreate,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> EmployeeRead:
+    emp = await employee_service.create_or_update_employee(
+        db=db, org_id=int(user["org_id"]), data=data,
+    )
+    await record_action(
+        db,
+        event_type="employee_created",
+        actor_user_id=user["id"],
+        organization_id=user["org_id"],
+        entity_type="employee",
+        entity_id=emp.id,
+        payload_json={"name": emp.name, "email": emp.email},
+    )
+    return emp
+
+
+@router.get("/employees", response_model=list[EmployeeRead])
+async def list_employees(
+    active_only: bool = Query(True),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> list[EmployeeRead]:
+    return await employee_service.list_employees(
+        db=db, org_id=int(user["org_id"]), active_only=active_only,
+    )
+
+
+@router.get("/employees/{employee_id}", response_model=EmployeeRead)
+async def get_employee(
+    employee_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> EmployeeRead:
+    emp = await employee_service.get_employee(
+        db=db, org_id=int(user["org_id"]), employee_id=employee_id,
+    )
+    if emp is None:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    return emp
+
+
+@router.patch("/employees/{employee_id}", response_model=EmployeeRead)
+async def update_employee(
+    employee_id: int,
+    data: EmployeeUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> EmployeeRead:
+    emp = await employee_service.update_employee(
+        db=db, org_id=int(user["org_id"]), employee_id=employee_id, data=data,
+    )
+    if emp is None:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    await record_action(
+        db,
+        event_type="employee_updated",
+        actor_user_id=user["id"],
+        organization_id=user["org_id"],
+        entity_type="employee",
+        entity_id=emp.id,
+        payload_json={"name": emp.name, "email": emp.email},
+    )
+    return emp
+
+
+# ---- Signal Ingestion Endpoints (draft-only, observer mode) ----
+
+
+@router.post("/sync/clickup")
+async def sync_clickup_signals(
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Ingest ClickUp tasks as integration signals. Read-only, no external writes."""
+    org_id = int(user["org_id"])
+    result = await signal_ingestion.ingest_clickup_signals(db, org_id)
+    await record_action(
+        db,
+        event_type="ops_sync_clickup",
+        actor_user_id=user["id"],
+        organization_id=org_id,
+        entity_type="integration_signal",
+        entity_id=0,
+        payload_json={"synced": result.get("synced", 0)},
+    )
+    return result
+
+
+@router.post("/sync/github")
+async def sync_github_signals(
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Ingest GitHub PRs and issues as integration signals. Read-only, no external writes."""
+    org_id = int(user["org_id"])
+    result = await signal_ingestion.ingest_github_signals(db, org_id)
+    await record_action(
+        db,
+        event_type="ops_sync_github",
+        actor_user_id=user["id"],
+        organization_id=org_id,
+        entity_type="integration_signal",
+        entity_id=0,
+        payload_json={"synced": result.get("synced", 0)},
+    )
+    return result
+
+
+@router.post("/sync/gmail")
+async def sync_gmail_signals(
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Ingest Gmail metadata as integration signals. Respects WORK_EMAIL_DOMAINS allowlist. No body storage."""
+    org_id = int(user["org_id"])
+    result = await signal_ingestion.ingest_gmail_signals(db, org_id)
+    await record_action(
+        db,
+        event_type="ops_sync_gmail",
+        actor_user_id=user["id"],
+        organization_id=org_id,
+        entity_type="integration_signal",
+        entity_id=0,
+        payload_json={"synced": result.get("synced", 0), "skipped": result.get("skipped_non_work", 0)},
+    )
+    return result
+
+
+# ---- Metrics Computation ----
+
+
+@router.post("/compute/weekly-metrics")
+async def compute_weekly_metrics(
+    weeks: int = Query(1, ge=1, le=12),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Compute weekly metrics from ingested signals for the last N weeks."""
+    org_id = int(user["org_id"])
+    result = await metrics_service.compute_weekly_metrics(db, org_id, weeks=weeks)
+    await record_action(
+        db,
+        event_type="ops_compute_metrics",
+        actor_user_id=user["id"],
+        organization_id=org_id,
+        entity_type="metrics",
+        entity_id=0,
+        payload_json=result,
+    )
+    return result
+
+
+# ---- Weekly Reports ----
+
+
+@router.get("/reports/weekly", response_model=WeeklyReportRead | None)
+async def get_weekly_report(
+    week_start: date = Query(...),
+    report_type: str = Query(..., pattern="^(team_health|project_risk|founder_review)$"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> WeeklyReportRead | None:
+    return await report_service.get_report(db, int(user["org_id"]), week_start, report_type)
+
+
+@router.post("/reports/weekly", response_model=WeeklyReportRead, status_code=201)
+async def generate_weekly_report(
+    week_start: date = Query(...),
+    report_type: str = Query(..., pattern="^(team_health|project_risk|founder_review)$"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> WeeklyReportRead:
+    """Generate a weekly report from computed metrics."""
+    org_id = int(user["org_id"])
+    report = await report_service.generate_weekly_report(db, org_id, week_start, report_type)
+    await record_action(
+        db,
+        event_type="ops_report_generated",
+        actor_user_id=user["id"],
+        organization_id=org_id,
+        entity_type="weekly_report",
+        entity_id=report.id,
+        payload_json={"week_start": str(week_start), "report_type": report_type},
+    )
+    return report
+
+
+# ---- Decision Log ----
+
+
+@router.post("/decision-log", response_model=DecisionLogRead, status_code=201)
+async def create_decision(
+    data: DecisionLogCreate,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> DecisionLogRead:
+    org_id = int(user["org_id"])
+    entry = await policy_service.create_decision(db, org_id, int(user["id"]), data)
+    await record_action(
+        db,
+        event_type="decision_logged",
+        actor_user_id=user["id"],
+        organization_id=org_id,
+        entity_type="decision_log",
+        entity_id=entry.id,
+        payload_json={"decision_type": entry.decision_type, "context": entry.context[:100]},
+    )
+    return entry
+
+
+@router.get("/decision-log", response_model=list[DecisionLogRead])
+async def list_decision_log(
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> list[DecisionLogRead]:
+    return await policy_service.list_decisions(
+        db, int(user["org_id"]), start_date=start_date, end_date=end_date, limit=limit,
+    )
+
+
+# ---- Policy Engine ----
+
+
+@router.post("/policy/generate", response_model=list[PolicyRuleRead])
+async def generate_policies(
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> list[PolicyRuleRead]:
+    """AI-assisted draft policy generation from decision history. All drafts are INACTIVE."""
+    org_id = int(user["org_id"])
+    drafts = await policy_service.generate_policy_drafts(db, org_id)
+    await record_action(
+        db,
+        event_type="policy_drafts_generated",
+        actor_user_id=user["id"],
+        organization_id=org_id,
+        entity_type="policy_rule",
+        entity_id=0,
+        payload_json={"drafts_count": len(drafts)},
+    )
+    return drafts
+
+
+@router.get("/policies", response_model=list[PolicyRuleRead])
+async def list_policies(
+    active_only: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> list[PolicyRuleRead]:
+    return await policy_service.list_policies(db, int(user["org_id"]), active_only=active_only)
+
+
+@router.post("/policy/activate/{policy_id}", response_model=PolicyRuleRead)
+async def activate_policy(
+    policy_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> PolicyRuleRead:
+    """Activate a draft policy. Requires admin role."""
+    org_id = int(user["org_id"])
+    policy = await policy_service.activate_policy(db, org_id, policy_id)
+    if policy is None:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    await record_action(
+        db,
+        event_type="policy_activated",
+        actor_user_id=user["id"],
+        organization_id=org_id,
+        entity_type="policy_rule",
+        entity_id=policy.id,
+        payload_json={"title": policy.title},
+    )
+    return policy

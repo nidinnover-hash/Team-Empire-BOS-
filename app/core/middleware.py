@@ -1,8 +1,8 @@
 """
 Middleware stack:
 - SecurityHeadersMiddleware: adds security and contract headers.
-- RequestLogMiddleware: structured request logging with context.
 - CorrelationIDMiddleware: per-request correlation IDs.
+- RequestLogMiddleware: structured request logging with context.
 - RateLimitMiddleware: in-memory/Redis sliding window throttling.
 """
 from __future__ import annotations

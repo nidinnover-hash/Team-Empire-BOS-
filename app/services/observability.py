@@ -10,10 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.idempotency import get_idempotency_stats
 from app.core.middleware import get_rate_limit_stats
+from app.core.resilience import get_retry_stats
 from app.core.tenant import apply_org_scope
 from app.models.ai_call_log import AiCallLog
 from app.models.approval import Approval
 from app.models.decision_trace import DecisionTrace
+from app.services.signal_ingestion import get_ingestion_stats
 
 
 class ProviderStats(TypedDict):
@@ -113,6 +115,8 @@ async def get_observability_summary(
         "runtime_stats": {
             **{f"rate_limit_{k}": v for k, v in get_rate_limit_stats().items()},
             **{f"idempotency_{k}": v for k, v in get_idempotency_stats().items()},
+            **{f"retry_{k}": v for k, v in get_retry_stats().items()},
+            **{f"ingestion_{k}": v for k, v in get_ingestion_stats().items()},
         },
     }
 

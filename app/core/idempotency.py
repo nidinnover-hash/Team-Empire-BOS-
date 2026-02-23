@@ -146,6 +146,8 @@ def get_cached_response(scope: str, key: str, fingerprint: str | None = None) ->
                     payload = cast(dict[str, Any], json.loads(raw))
                     _idempotency_stats["hits"] += 1
                     return _unpack_cached(payload, fingerprint)
+                except IdempotencyConflictError:
+                    raise
                 except Exception:
                     _idempotency_stats["redis_failures"] += 1
                     return None
