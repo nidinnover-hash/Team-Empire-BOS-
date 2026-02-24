@@ -306,7 +306,7 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
     except Exception as exc:
         logger.warning("ClickUp sync failed: %s", exc)
         await db.rollback()
-        return {"synced": synced, "error": str(exc)}
+        return {"synced": synced, "error": type(exc).__name__}
 
     await integration_service.mark_sync_time(db, item)
     return {"synced": synced, "critical_synced": critical_synced, "error": None}

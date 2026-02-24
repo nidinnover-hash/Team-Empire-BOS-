@@ -39,6 +39,10 @@ _ingestion_stats: dict[str, int] = {
 def get_ingestion_stats() -> dict[str, int]:
     return dict(_ingestion_stats)
 
+
+def _safe_ingestion_error(exc: Exception) -> str:
+    return f"{type(exc).__name__}"
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -96,7 +100,7 @@ async def _employee_map(
 ) -> dict[str, dict[str, int]]:
     """Build lookup maps: email->id, github_username->id, clickup_user_id->id."""
     result = await db.execute(
-        select(Employee).where(Employee.organization_id == org_id, Employee.is_active == True)  # noqa: E712
+        select(Employee).where(Employee.organization_id == org_id, Employee.is_active.is_(True))
     )
     employees = result.scalars().all()
     maps: dict[str, dict[str, int]] = {"email": {}, "github": {}, "clickup": {}}
@@ -178,7 +182,7 @@ async def ingest_clickup_signals(db: AsyncSession, org_id: int) -> dict[str, Any
     except Exception as exc:
         logger.warning("ClickUp signal ingestion failed for org %d: %s", org_id, exc)
         _ingestion_stats["clickup_failed"] += 1
-        return {"synced": 0, "error": str(exc)}
+        return {"synced": 0, "error": _safe_ingestion_error(exc)}
 
     count = 0
     for task in tasks:
@@ -243,7 +247,7 @@ async def ingest_github_signals(db: AsyncSession, org_id: int) -> dict[str, Any]
     except Exception as exc:
         logger.warning("GitHub signal ingestion failed for org %d: %s", org_id, exc)
         _ingestion_stats["github_failed"] += 1
-        return {"synced": 0, "error": str(exc)}
+        return {"synced": 0, "error": _safe_ingestion_error(exc)}
 
     count = 0
     for repo in repos[:20]:  # Cap to avoid API rate limits
@@ -354,7 +358,7 @@ async def ingest_gmail_signals(db: AsyncSession, org_id: int) -> dict[str, Any]:
     except Exception as exc:
         logger.warning("Gmail signal ingestion failed for org %d: %s", org_id, exc)
         _ingestion_stats["gmail_failed"] += 1
-        return {"synced": 0, "error": str(exc)}
+        return {"synced": 0, "error": _safe_ingestion_error(exc)}
 
     count = 0
     skipped = 0
@@ -436,7 +440,7 @@ async def ingest_github_cicd_signals(db: AsyncSession, org_id: int) -> dict[str,
     except Exception as exc:
         logger.warning("GitHub CI/CD ingestion failed for org %d: %s", org_id, exc)
         _ingestion_stats["github_cicd_failed"] += 1
-        return {"workflow_runs": 0, "deployments": 0, "error": str(exc)}
+        return {"workflow_runs": 0, "deployments": 0, "error": _safe_ingestion_error(exc)}
 
     wf_count = 0
     deploy_count = 0

@@ -53,9 +53,12 @@ async def sync_digitalocean(db: AsyncSession, org_id: int) -> dict[str, Any]:
         return {"droplets": 0, "members": 0, "error": "Missing access_token in DigitalOcean config"}
 
     now = datetime.now(timezone.utc)
-    droplets = await do_tool.list_droplets(token)
-    members = await do_tool.list_team_members(token)
-    balance = await do_tool.get_balance(token)
+    try:
+        droplets = await do_tool.list_droplets(token)
+        members = await do_tool.list_team_members(token)
+        balance = await do_tool.get_balance(token)
+    except Exception as exc:
+        return {"droplets": 0, "members": 0, "error": type(exc).__name__}
 
     await db.execute(delete(DigitalOceanDropletSnapshot).where(DigitalOceanDropletSnapshot.organization_id == org_id))
     await db.execute(delete(DigitalOceanTeamSnapshot).where(DigitalOceanTeamSnapshot.organization_id == org_id))
