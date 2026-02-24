@@ -3,104 +3,67 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Personal Clone - Sign In</title>
+  <title>Nidin Nover</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
   <style>
-    :root {
-      --bg: #fafafa;
-      --surface: #ffffff;
-      --surface-2: #ffffff;
-      --line: #e5e5e5;
-      --text: #111111;
-      --muted: #666666;
-      --accent: #111111;
-      --danger-bg: #ffffff;
-      --danger-line: #e5e5e5;
-      --danger-text: #ef4444;
-    }
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      background: #fafafa;
-      color: var(--text);
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg);
     }
-    .card {
-      background: #ffffff;
-      border: 1px solid #e5e5e5;
-      border-radius: 12px;
-      padding: 2.5rem 2rem;
-      width: 100%;
-      max-width: 360px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: 2.5rem 2rem 2rem;
+      width: 100%; max-width: 380px;
+      box-shadow: var(--shadow-md);
     }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 2rem;
-      justify-content: center;
+    .login-brand {
+      display: flex; align-items: center; gap: .7rem;
+      margin-bottom: .35rem; justify-content: center;
     }
-    .brand-pulse {
-      width: 10px; height: 10px;
-      background: #111111;
-      border-radius: 50%;
-      box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
-      animation: pulse 2s infinite;
+    .login-pulse {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--ok);
+      box-shadow: 0 0 0 0 rgba(34,197,94,.3);
+      animation: sb-pulse 2.4s infinite;
       flex-shrink: 0;
     }
-    @keyframes pulse {
-      0%,100% { box-shadow: 0 0 6px rgba(0, 0, 0, 0.1) }
-      50%      { box-shadow: 0 0 12px rgba(0, 0, 0, 0.2), 0 0 20px rgba(0, 0, 0, 0.08) }
+    .login-name { font-size: 1.15rem; font-weight: 700; color: var(--text); }
+    .login-sub {
+      text-align: center; font-size: .72rem; color: var(--text-faint);
+      margin-bottom: 2rem; letter-spacing: .04em;
     }
-    .brand-name { font-size: 1.1rem; font-weight: 700; color: #111111; }
-    label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 0.4rem; }
-    input {
-      width: 100%;
-      background: #ffffff;
-      border: 1px solid #e5e5e5;
-      border-radius: 6px;
-      color: #111111;
-      padding: 0.6rem 0.75rem;
-      font-size: 0.9rem;
-      margin-bottom: 1.1rem;
-      outline: none;
-      transition: border-color .15s;
+    .login-card label { text-transform: none; letter-spacing: 0; font-weight: 500; }
+    .login-card input { margin-bottom: 1rem; }
+    .login-card button {
+      width: 100%; padding: .6rem;
+      font-size: .82rem; font-weight: 600;
+      background: var(--brand); color: #fff;
+      border: 1px solid var(--brand);
+      border-radius: var(--radius-sm);
+      cursor: pointer; transition: background .15s;
+      font-family: var(--font);
     }
-    input:focus { border-color: #999999; }
-    button {
-      width: 100%;
-      background: #111111;
-      color: #ffffff;
-      border: 1px solid #111111;
-      border-radius: 6px;
-      padding: 0.65rem;
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all .15s;
-    }
-    button:hover { background: #333333; }
+    .login-card button:hover { background: var(--brand-hover); }
     .error {
-      background: var(--danger-bg);
-      border: 1px solid var(--danger-line);
-      color: var(--danger-text);
-      border-radius: 6px;
-      padding: 0.6rem 0.75rem;
-      font-size: 0.8rem;
+      background: var(--danger-soft);
+      border: 1px solid var(--danger-border);
+      color: var(--danger);
+      border-radius: var(--radius-sm);
+      padding: .55rem .7rem; font-size: .78rem;
       margin-bottom: 1rem;
     }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="brand">
-      <div class="brand-pulse"></div>
-      <span class="brand-name">Personal Clone</span>
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="login-pulse"></div>
+      <span class="login-name">Nidin Nover</span>
     </div>
+    <div class="login-sub">AI Command Center</div>
 
     {% if error %}
     <div class="error">{{ error }}</div>
@@ -124,26 +87,15 @@
       const body = new FormData(form);
       try {
         const res = await fetch('/web/login', { method: 'POST', body });
-        if (res.ok) {
-          window.location.href = '/';
-          return;
-        }
+        if (res.ok) { window.location.href = '/'; return; }
         const data = await res.json().catch(() => ({}));
         let msg = data.detail || 'Invalid email or password.';
         let err = document.querySelector('.error');
-        if (!err) {
-          err = document.createElement('div');
-          err.className = 'error';
-          form.prepend(err);
-        }
+        if (!err) { err = document.createElement('div'); err.className = 'error'; form.prepend(err); }
         err.textContent = msg;
       } catch (_e) {
         let err = document.querySelector('.error');
-        if (!err) {
-          err = document.createElement('div');
-          err.className = 'error';
-          form.prepend(err);
-        }
+        if (!err) { err = document.createElement('div'); err.className = 'error'; form.prepend(err); }
         err.textContent = 'Network error. Please try again.';
       }
     });

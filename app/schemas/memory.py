@@ -12,6 +12,7 @@ class ProfileMemoryCreate(BaseModel):
     key: str = Field(..., max_length=100, description="Unique key e.g. 'business_rule', 'personal_goal'")
     value: str = Field(..., max_length=5000, description="The memory content")
     category: str | None = Field(None, max_length=50)
+    expires_at: dt.datetime | None = Field(None, description="Auto-expire this memory entry after this time")
 
 
 class ProfileMemoryRead(BaseModel):
@@ -20,6 +21,7 @@ class ProfileMemoryRead(BaseModel):
     key: str
     value: str
     category: str | None
+    expires_at: dt.datetime | None = None
     updated_at: dt.datetime
 
     model_config = {"from_attributes": True}

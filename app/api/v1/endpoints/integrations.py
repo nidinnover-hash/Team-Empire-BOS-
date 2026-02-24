@@ -7,7 +7,7 @@ from time import time
 from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Header
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import PLACEHOLDER_AI_KEYS, settings
@@ -150,7 +150,26 @@ async def connect_integration(
 # ── Google Calendar (literal prefix — must be before /{integration_id}/…) ─────
 
 def _calendar_redirect_uri() -> str:
-    return settings.GOOGLE_CALENDAR_REDIRECT_URI or settings.GOOGLE_REDIRECT_URI or ""
+    direct = (settings.GOOGLE_CALENDAR_REDIRECT_URI or "").strip()
+    if direct:
+        return direct
+    # Backward-compatible fallback: derive calendar callback from GOOGLE_REDIRECT_URI host/scheme.
+    gmail_redirect = (settings.GOOGLE_REDIRECT_URI or "").strip()
+    if not gmail_redirect:
+        return ""
+    from urllib.parse import urlsplit, urlunsplit
+    parsed = urlsplit(gmail_redirect)
+    if not parsed.scheme or not parsed.netloc:
+        return ""
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            "/api/v1/integrations/google-calendar/oauth/callback",
+            "",
+            "",
+        )
+    )
 
 
 @router.get("/google-calendar/auth-url", response_model=GoogleAuthUrlRead)
@@ -218,12 +237,13 @@ async def google_calendar_oauth_callback(
     return _redact_integration(item)
 
 
-@router.get("/google-calendar/oauth/callback", include_in_schema=False)
+@router.get("/google-calendar/oauth/callback", include_in_schema=False, response_model=None)
 async def google_calendar_oauth_callback_redirect(
+    request: Request,
     code: str,
     state: str,
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> Response:
     """
     Handle Google OAuth browser redirect for Calendar.
     Google redirects here with ?code=XXX&state=YYY after user grants permission.
@@ -271,6 +291,12 @@ async def google_calendar_oauth_callback_redirect(
         config_json=config_json,
     )
 
+    accepts = (request.headers.get("accept") or "").lower()
+    if "text/html" in accepts:
+        return RedirectResponse(
+            url="/web/integrations?google_calendar=connected",
+            status_code=303,
+        )
     return {"status": "connected", "message": "Google Calendar connected successfully"}
 
 
@@ -356,24 +382,35 @@ async def ai_provider_status(
     Does NOT make a live API call — just inspects the current settings.
     """
     active = settings.DEFAULT_AI_PROVIDER
+    email = settings.EMAIL_AI_PROVIDER or active
     return [
         AIProviderStatus(
             provider="openai",
             configured=_key_is_configured(settings.OPENAI_API_KEY),
             active=(active == "openai"),
+            email_active=(email == "openai"),
             model=settings.AGENT_MODEL_OPENAI,
         ),
         AIProviderStatus(
             provider="anthropic",
             configured=_key_is_configured(settings.ANTHROPIC_API_KEY),
             active=(active == "anthropic"),
+            email_active=(email == "anthropic"),
             model=settings.AGENT_MODEL_ANTHROPIC,
         ),
         AIProviderStatus(
             provider="groq",
             configured=_key_is_configured(settings.GROQ_API_KEY),
             active=(active == "groq"),
+            email_active=(email == "groq"),
             model=settings.AGENT_MODEL_GROQ,
+        ),
+        AIProviderStatus(
+            provider="gemini",
+            configured=_key_is_configured(settings.GEMINI_API_KEY),
+            active=(active == "gemini"),
+            email_active=(email == "gemini"),
+            model=settings.AGENT_MODEL_GEMINI,
         ),
     ]
 
@@ -393,11 +430,11 @@ async def test_ai_provider(
     from app.services.ai_router import call_ai
 
     chosen = (provider or settings.DEFAULT_AI_PROVIDER or "").strip().lower()
-    if chosen not in {"openai", "anthropic", "groq"}:
+    if chosen not in {"openai", "anthropic", "groq", "gemini"}:
         return AITestResult(
             provider=chosen or "unknown",
             status="failed",
-            message="Unsupported provider. Use one of: openai, anthropic, groq.",
+            message="Unsupported provider. Use one of: openai, anthropic, groq, gemini.",
         )
 
     if chosen == "openai" and not _key_is_configured(settings.OPENAI_API_KEY):
@@ -417,6 +454,12 @@ async def test_ai_provider(
             provider="groq",
             status="not_configured",
             message="GROQ_API_KEY is missing or is still a placeholder in .env",
+        )
+    if chosen == "gemini" and not _key_is_configured(settings.GEMINI_API_KEY):
+        return AITestResult(
+            provider="gemini",
+            status="not_configured",
+            message="GEMINI_API_KEY is missing or is still a placeholder in .env (free at aistudio.google.com)",
         )
 
     response = await call_ai(

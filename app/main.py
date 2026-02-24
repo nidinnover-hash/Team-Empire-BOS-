@@ -671,42 +671,27 @@ async def dashboard(
         from app.services.sync_scheduler import trigger_sync_for_org
         asyncio.create_task(trigger_sync_for_org(org_id))
 
-    commands = await command_service.list_commands(db, limit=10, organization_id=org_id)
-    tasks = await task_service.list_tasks(db, limit=20, is_done=False, organization_id=org_id)
-    notes = await note_service.list_notes(db, limit=10, organization_id=org_id)
-    projects = await project_service.list_projects(db, limit=10, organization_id=org_id)
-    goals = await goal_service.list_goals(db, limit=10, organization_id=org_id)
-    contacts = await contact_service.list_contacts(db, limit=8, organization_id=org_id)
-    finance = await finance_service.get_summary(db, organization_id=org_id)
-    finance_efficiency = await finance_service.get_expenditure_efficiency(
-        db,
-        organization_id=org_id,
-        window_days=30,
-    )
-    marketing_layer = await layers_service.get_marketing_layer(
-        db,
-        organization_id=org_id,
-        window_days=30,
-    )
-    study_layer = await layers_service.get_study_layer(
-        db,
-        organization_id=org_id,
-        window_days=30,
-    )
-    training_layer = await layers_service.get_training_layer(
-        db,
-        organization_id=org_id,
-        window_days=30,
-    )
-    executive = await briefing_service.get_executive_briefing(db, org_id=org_id)
-    intelligence_summary = await intelligence_service.build_executive_summary(
-        db=db,
-        organization_id=org_id,
-        window_days=7,
-    )
-    intelligence_diff = await intelligence_service.build_change_since_yesterday(
-        db=db,
-        organization_id=org_id,
+    # Parallel fetch — all queries are independent reads on the same org
+    (
+        commands, tasks, notes, projects, goals, contacts,
+        finance, finance_efficiency,
+        marketing_layer, study_layer, training_layer,
+        executive, intelligence_summary, intelligence_diff,
+    ) = await asyncio.gather(
+        command_service.list_commands(db, limit=10, organization_id=org_id),
+        task_service.list_tasks(db, limit=20, is_done=False, organization_id=org_id),
+        note_service.list_notes(db, limit=10, organization_id=org_id),
+        project_service.list_projects(db, limit=10, organization_id=org_id),
+        goal_service.list_goals(db, limit=10, organization_id=org_id),
+        contact_service.list_contacts(db, limit=8, organization_id=org_id),
+        finance_service.get_summary(db, organization_id=org_id),
+        finance_service.get_expenditure_efficiency(db, organization_id=org_id, window_days=30),
+        layers_service.get_marketing_layer(db, organization_id=org_id, window_days=30),
+        layers_service.get_study_layer(db, organization_id=org_id, window_days=30),
+        layers_service.get_training_layer(db, organization_id=org_id, window_days=30),
+        briefing_service.get_executive_briefing(db, org_id=org_id),
+        intelligence_service.build_executive_summary(db=db, organization_id=org_id, window_days=7),
+        intelligence_service.build_change_since_yesterday(db=db, organization_id=org_id),
     )
 
     return templates.TemplateResponse(

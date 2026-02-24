@@ -95,13 +95,13 @@ def _key_ok(key: str | None) -> bool:
 
 def _fallback_order(primary: str) -> list[str]:
     """Return providers to try after primary fails, in preference order."""
-    all_providers = ["groq", "openai", "anthropic"]
+    all_providers = ["groq", "openai", "anthropic", "gemini"]
     return [p for p in all_providers if p != primary]
 
 
 def _configured_providers() -> list[str]:
     """Return configured providers in preferred order."""
-    ordered = ["groq", "openai", "anthropic"]
+    ordered = ["groq", "openai", "anthropic", "gemini"]
     return [p for p in ordered if _key_ok(_get_key(p))]
 
 
@@ -126,7 +126,7 @@ async def call_ai(
         Returns a safe, human-readable error message on failure - never raises.
     """
     requested = (provider or settings.DEFAULT_AI_PROVIDER or "").strip().lower()
-    if requested not in {"openai", "anthropic", "groq"}:
+    if requested not in {"openai", "anthropic", "groq", "gemini"}:
         requested = "groq"
 
     configured = _configured_providers()
@@ -223,6 +223,8 @@ def _get_model(provider: str) -> str:
         return settings.AGENT_MODEL_ANTHROPIC or "claude-3-sonnet"
     if provider == "groq":
         return settings.AGENT_MODEL_GROQ or "llama3-8b-8192"
+    if provider == "gemini":
+        return settings.AGENT_MODEL_GEMINI or "gemini-2.0-flash"
     return "unknown"
 
 
@@ -233,6 +235,8 @@ def _get_key(provider: str) -> str | None:
         return cast(str | None, settings.ANTHROPIC_API_KEY)
     if provider == "groq":
         return cast(str | None, settings.GROQ_API_KEY)
+    if provider == "gemini":
+        return cast(str | None, settings.GEMINI_API_KEY)
     return None
 
 
@@ -248,6 +252,8 @@ async def _call_provider(
         return await _call_anthropic(system_prompt, user_message, max_tokens, conversation_history)
     if provider == "groq":
         return await _call_groq(system_prompt, user_message, max_tokens, conversation_history)
+    if provider == "gemini":
+        return await _call_gemini(system_prompt, user_message, max_tokens, conversation_history)
     return await _call_openai(system_prompt, user_message, max_tokens, conversation_history)
 
 
@@ -381,3 +387,55 @@ def _groq_error_message(error_type: str) -> str:
     if error_type == "APIConnectionError":
         return "Cannot reach Groq API. Check your internet connection."
     return f"Groq error ({error_type}). Check your API key and network."
+
+
+async def _call_gemini(
+    system_prompt: str,
+    user_message: str,
+    max_tokens: int,
+    conversation_history: list[dict] | None = None,
+) -> tuple[str, bool]:
+    key = settings.GEMINI_API_KEY
+    if not _key_ok(key):
+        return "Error: Gemini not configured. Add GEMINI_API_KEY to your .env file (free at aistudio.google.com).", False
+    try:
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=key)
+        contents = []
+        for msg in (conversation_history or []):
+            role = "user" if msg.get("role") == "user" else "model"
+            contents.append(types.Content(role=role, parts=[types.Part(text=msg.get("content", ""))]))
+        contents.append(types.Content(role="user", parts=[types.Part(text=user_message)]))
+
+        response = await client.aio.models.generate_content(
+            model=settings.AGENT_MODEL_GEMINI,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                max_output_tokens=max_tokens,
+                temperature=0.7,
+            ),
+        )
+        text = response.text or ""
+        if not text:
+            return "No response from Gemini.", True
+        return text, False
+    except Exception as e:
+        error_type = type(e).__name__
+        is_transient = error_type not in _NO_FALLBACK_ERRORS
+        logger.warning("Gemini call failed (%s): %s", error_type, e)
+        return f"Error: {_gemini_error_message(error_type)}", is_transient
+
+
+def _gemini_error_message(error_type: str) -> str:
+    if error_type == "ClientError":
+        return "Gemini API key is invalid or request rejected. Check GEMINI_API_KEY in your .env file."
+    if error_type == "APIError":
+        return "Gemini API error. Check your key at aistudio.google.com."
+    if error_type in ("TimeoutError", "APITimeoutError"):
+        return "Gemini request timed out. Check your network and retry."
+    if error_type == "APIConnectionError":
+        return "Cannot reach Gemini API. Check your internet connection."
+    return f"Gemini error ({error_type}). Check your API key and network."

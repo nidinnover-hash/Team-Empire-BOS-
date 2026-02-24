@@ -42,5 +42,8 @@ class Task(Base):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    depends_on_task_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
+    )
     external_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
     external_source: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)

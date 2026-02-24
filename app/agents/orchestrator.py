@@ -132,7 +132,7 @@ async def extract_proposed_actions(
             for item in items
             if isinstance(item, dict) and "action_type" in item
         ]
-    except Exception:
+    except (json.JSONDecodeError, TypeError, ValueError):
         return []
 
 

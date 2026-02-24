@@ -92,6 +92,22 @@ async def test_google_calendar_get_callback_invalid_state(client, monkeypatch):
     assert resp.status_code == 400
 
 
+async def test_google_calendar_auth_url_derives_redirect_from_google_redirect_uri(client, monkeypatch):
+    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_ID", "cid")
+    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_SECRET", "csecret")
+    monkeypatch.setattr(
+        integrations_endpoint.settings,
+        "GOOGLE_REDIRECT_URI",
+        "https://example.com/api/v1/email/callback",
+    )
+    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CALENDAR_REDIRECT_URI", None)
+
+    headers = _auth_headers(1, "ceo@org.com", "CEO", 1)
+    auth_url = await client.get("/api/v1/integrations/google-calendar/auth-url", headers=headers)
+    assert auth_url.status_code == 200
+    assert "redirect_uri=https%3A%2F%2Fexample.com%2Fapi%2Fv1%2Fintegrations%2Fgoogle-calendar%2Foauth%2Fcallback" in auth_url.json()["auth_url"]
+
+
 async def test_google_integration_test_provider_ping_success(client, monkeypatch):
     async def fake_list_events_for_day(access_token: str, day, calendar_id: str = "primary"):
         return []

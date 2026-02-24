@@ -16,6 +16,7 @@ from typing import cast
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.logs.audit import record_action
 from app.models.approval import Approval
 from app.models.email import Email
@@ -53,6 +54,9 @@ def _classify_gmail_error(error_text: str) -> str:
 def _get_tokens(integration) -> tuple[str, str | None, str | None]:
     """Extract access_token, refresh_token, expires_at from integration config."""
     cfg = integration.config_json or {}
+    invalid = cfg.get("__invalid_token_fields")
+    if isinstance(invalid, list) and invalid:
+        return ("", None, cfg.get("expires_at"))
     return (
         cfg.get("access_token", ""),
         cfg.get("refresh_token"),
@@ -137,6 +141,19 @@ async def sync_emails(
         return 0
 
     access_token, refresh_token, expires_at = _get_tokens(integration)
+    if not access_token:
+        # Stored token payload is unusable (missing/corrupted/old encryption key).
+        # Mark integration disconnected so UI reflects the real state.
+        if integration.status != "disconnected":
+            integration.status = "disconnected"
+            await db.commit()
+        raise EmailSyncError(
+            code="gmail_reconnect_required",
+            message=(
+                "Gmail tokens are missing or corrupted (possibly encrypted with an old key). "
+                "Reconnect Gmail on the Integrations page."
+            ),
+        )
     try:
         raw_emails, refreshed_tokens = await asyncio.to_thread(
             gmail_tool.fetch_recent_emails,
@@ -314,7 +331,7 @@ async def summarize_email(
             f"Subject: {email.subject or '(no subject)'}\n\n"
             f"{email.body_text}"
         ),
-        provider="openai",
+        provider=settings.EMAIL_AI_PROVIDER or settings.DEFAULT_AI_PROVIDER,
         organization_id=org_id,
     )
 
@@ -371,7 +388,7 @@ async def draft_reply(
             "sign off as Nidin. Keep it short and direct."
         ),
         user_message=user_prompt,
-        provider="openai",
+        provider=settings.EMAIL_AI_PROVIDER or settings.DEFAULT_AI_PROVIDER,
         max_tokens=600,
         organization_id=org_id,
     )
@@ -472,7 +489,7 @@ async def strategize_email(
             f"Subject: {email.subject or '(no subject)'}\n\n"
             f"{email.body_text}"
         ),
-        provider="openai",
+        provider=settings.EMAIL_AI_PROVIDER or settings.DEFAULT_AI_PROVIDER,
         max_tokens=700,
         organization_id=org_id,
     )
@@ -518,7 +535,7 @@ async def compose_email(
             f"Subject: {subject}\n\n"
             f"Instructions: {instruction}"
         ),
-        provider="openai",
+        provider=settings.EMAIL_AI_PROVIDER or settings.DEFAULT_AI_PROVIDER,
         max_tokens=600,
         organization_id=org_id,
     )

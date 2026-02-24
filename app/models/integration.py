@@ -23,6 +23,7 @@ class Integration(Base):
     config_json: Mapped[dict] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String(30), default="connected", index=True)
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sync_status: Mapped[str | None] = mapped_column(String(30), nullable=True)  # ok | error
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

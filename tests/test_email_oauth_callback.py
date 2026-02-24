@@ -39,8 +39,12 @@ async def test_gmail_callback_keeps_existing_refresh_token_when_missing(client, 
     monkeypatch.setattr(email_endpoint, "exchange_code_for_tokens", fake_exchange_code_for_tokens)
 
     state = email_endpoint._sign_email_state(1)
-    callback = await client.get(f"/api/v1/email/callback?code=fake-code&state={state}")
-    assert callback.status_code == 200
+    callback = await client.get(
+        f"/api/v1/email/callback?code=fake-code&state={state}",
+        follow_redirects=False,
+    )
+    assert callback.status_code == 302
+    assert "/web/integrations?gmail=connected" in callback.headers["location"]
 
     override = fastapi_app.dependency_overrides[get_db]
     agen = override()

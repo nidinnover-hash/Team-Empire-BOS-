@@ -8,9 +8,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 PLACEHOLDER_OPENAI_KEYS = {"", "sk-your-key-here", "sk-xxxxxxxxxxxxxxxxxxxxxxxx"}
 PLACEHOLDER_ANTHROPIC_KEYS = {"", "your-anthropic-key-here"}
 PLACEHOLDER_GROQ_KEYS = {"", "gsk_your-key-here", "gsk_your_groq_key_here"}
-PLACEHOLDER_AI_KEYS = PLACEHOLDER_OPENAI_KEYS | PLACEHOLDER_ANTHROPIC_KEYS | PLACEHOLDER_GROQ_KEYS
+PLACEHOLDER_GEMINI_KEYS = {"", "your-gemini-key-here"}
+PLACEHOLDER_AI_KEYS = PLACEHOLDER_OPENAI_KEYS | PLACEHOLDER_ANTHROPIC_KEYS | PLACEHOLDER_GROQ_KEYS | PLACEHOLDER_GEMINI_KEYS
 _PLACEHOLDER_GOOGLE_VALUES = {"", "replace-me", "your-google-client-id", "your-google-client-secret"}
-AIProvider = Literal["openai", "anthropic", "groq"]
+AIProvider = Literal["openai", "anthropic", "groq", "gemini"]
 IdempotencyBackend = Literal["auto", "memory", "redis"]
 AppMode = Literal["NIDIN_AI", "EMPIREO_AI"]
 RateLimitBackend = Literal["auto", "memory", "redis"]
@@ -32,10 +33,13 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
     GROQ_API_KEY: str | None = None
+    GEMINI_API_KEY: str | None = None
     DEFAULT_AI_PROVIDER: AIProvider = "openai"
+    EMAIL_AI_PROVIDER: AIProvider | None = None  # Override AI provider for email; falls back to DEFAULT_AI_PROVIDER
     AGENT_MODEL_OPENAI: str = "gpt-4o-mini"
     AGENT_MODEL_ANTHROPIC: str = "claude-haiku-4-5-20251001"
     AGENT_MODEL_GROQ: str = "llama-3.3-70b-versatile"
+    AGENT_MODEL_GEMINI: str = "gemini-2.0-flash"
     GOOGLE_CLIENT_ID: str | None = None
     GOOGLE_CLIENT_SECRET: str | None = None
     GOOGLE_REDIRECT_URI: str | None = None
@@ -59,7 +63,7 @@ class Settings(BaseSettings):
     IDEMPOTENCY_MAX_ITEMS: int = 5_000
 
     # App
-    APP_NAME: str = "Personal Clone"
+    APP_NAME: str = "Nidin Nover"
     APP_MODE: AppMode = "NIDIN_AI"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
@@ -180,6 +184,10 @@ def validate_startup_settings(s: Settings) -> list[str]:
         key = (s.GROQ_API_KEY or "").strip()
         if key in PLACEHOLDER_GROQ_KEYS:
             issues.append("GROQ_API_KEY is missing or placeholder while DEFAULT_AI_PROVIDER=groq")
+    elif provider == "gemini":
+        key = (s.GEMINI_API_KEY or "").strip()
+        if key in PLACEHOLDER_GEMINI_KEYS:
+            issues.append("GEMINI_API_KEY is missing or placeholder while DEFAULT_AI_PROVIDER=gemini")
     google_id = (s.GOOGLE_CLIENT_ID or "").strip()
     google_secret = (s.GOOGLE_CLIENT_SECRET or "").strip()
     google_redirect = (s.GOOGLE_REDIRECT_URI or "").strip()

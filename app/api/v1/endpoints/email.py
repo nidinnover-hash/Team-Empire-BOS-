@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import Header
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -104,13 +105,19 @@ async def gmail_callback(
     code: str,
     state: str,
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> RedirectResponse:
     """
     Handle Gmail OAuth callback. Exchange code for tokens and save to DB.
     Google redirects here after the user grants permission.
     """
     org_id = _verify_email_state(state)
-    tokens = await asyncio.to_thread(exchange_code_for_tokens, code)
+    try:
+        tokens = await asyncio.wait_for(
+            asyncio.to_thread(exchange_code_for_tokens, code),
+            timeout=15.0,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Google token exchange timed out. Try again.")
     if "error" in tokens:
         error_code = str(tokens.get("error") or "unknown")
         raise HTTPException(status_code=400, detail=_oauth_error_detail(error_code))
@@ -131,7 +138,8 @@ async def gmail_callback(
         },
     )
 
-    return {"status": "connected", "message": "Gmail connected successfully"}
+    # Redirect browser back to integrations page with success indicator
+    return RedirectResponse(url="/web/integrations?gmail=connected", status_code=302)
 
 
 @router.post("/sync", response_model=SyncResult)

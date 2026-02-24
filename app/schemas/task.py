@@ -13,6 +13,7 @@ class TaskCreate(BaseModel):
     category: TaskCategory = "personal"
     project_id: int | None = None
     due_date: date | None = None
+    depends_on_task_id: int | None = None
 
 
 class TaskUpdate(BaseModel):
@@ -27,6 +28,7 @@ class TaskRead(BaseModel):
     category: str
     project_id: int | None
     due_date: date | None
+    depends_on_task_id: int | None = None
     is_done: bool
     created_at: datetime
     completed_at: datetime | None

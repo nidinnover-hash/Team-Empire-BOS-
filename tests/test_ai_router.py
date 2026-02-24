@@ -163,3 +163,49 @@ async def test_call_ai_logs_org_and_request_correlation(monkeypatch):
     latest = ai_router.get_recent_calls()[before]
     assert latest["organization_id"] == 42
     assert latest["request_id"] == "req-123"
+
+
+# ── Gemini provider ─────────────────────────────────────────────────────────
+
+async def test_call_ai_uses_gemini(monkeypatch):
+    async def _fake_call(provider, system, user, max_tokens, history):
+        assert provider == "gemini"
+        return "Gemini response", False
+
+    monkeypatch.setattr(ai_router, "_call_provider", _fake_call)
+    monkeypatch.setattr(ai_router, "_configured_providers", lambda: ["gemini"])
+
+    result = await ai_router.call_ai(
+        system_prompt="You are helpful.", user_message="Hello", provider="gemini"
+    )
+    assert result == "Gemini response"
+
+
+async def test_call_ai_falls_back_to_gemini(monkeypatch):
+    calls = []
+
+    async def _fake_call(provider, system, user, max_tokens, history):
+        calls.append(provider)
+        if provider == "openai":
+            return "Error: OpenAI quota exceeded.", True
+        return "Gemini fallback", False
+
+    monkeypatch.setattr(ai_router, "_call_provider", _fake_call)
+    monkeypatch.setattr(ai_router, "_configured_providers", lambda: ["openai", "gemini"])
+
+    result = await ai_router.call_ai(system_prompt="sys", user_message="msg", provider="openai")
+    assert result == "Gemini fallback"
+    assert "openai" in calls
+    assert "gemini" in calls
+
+
+async def test_gemini_in_configured_providers(monkeypatch):
+    monkeypatch.setattr(ai_router.settings, "GEMINI_API_KEY", "real-key-123")
+    configured = ai_router._configured_providers()
+    assert "gemini" in configured
+
+
+async def test_gemini_not_in_configured_when_no_key(monkeypatch):
+    monkeypatch.setattr(ai_router.settings, "GEMINI_API_KEY", None)
+    configured = ai_router._configured_providers()
+    assert "gemini" not in configured

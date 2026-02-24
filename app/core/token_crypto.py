@@ -25,6 +25,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from app.core.config import settings
 
 _TOKEN_FIELDS = ("access_token", "refresh_token", "api_token")
+_INVALID_FIELDS_KEY = "__invalid_token_fields"
 logger = logging.getLogger(__name__)
 
 
@@ -69,6 +70,8 @@ def encrypt_config(config_json: dict) -> dict:
     Other fields are left untouched.
     """
     result = dict(config_json)
+    # Internal diagnostics only; never persist this helper field.
+    result.pop(_INVALID_FIELDS_KEY, None)
     for field in _TOKEN_FIELDS:
         value = result.get(field)
         if not value or not isinstance(value, str):
@@ -94,6 +97,7 @@ def decrypt_config(config_json: dict) -> dict:
     Silently skips fields that are already plaintext (pre-migration rows).
     """
     result = dict(config_json)
+    invalid_fields: list[str] = []
     for field in _TOKEN_FIELDS:
         if result.get(field):
             try:
@@ -107,4 +111,7 @@ def decrypt_config(config_json: dict) -> dict:
                         field,
                     )
                     result[field] = ""
+                    invalid_fields.append(field)
+    if invalid_fields:
+        result[_INVALID_FIELDS_KEY] = invalid_fields
     return result

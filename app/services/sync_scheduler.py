@@ -27,8 +27,9 @@ _last_synced: dict[int, datetime] = {}
 def _throttle_minutes() -> int:
     try:
         from app.core.config import settings
-        return settings.SYNC_THROTTLE_MINUTES
-    except Exception:
+        value = int(settings.SYNC_THROTTLE_MINUTES)
+        return max(value, 0)
+    except (ImportError, AttributeError, TypeError, ValueError):
         return 15
 
 
@@ -59,6 +60,8 @@ _scheduler_task: asyncio.Task | None = None
 
 async def _run_integrations(db: AsyncSession, org_id: int) -> None:
     """Sync all connected integrations for org_id. Logs but never raises."""
+    from sqlalchemy import select, update
+    from app.models.integration import Integration
     from app.services import clickup_service, github_service, slack_service
     from app.services.calendar_service import sync_calendar_events
 
@@ -70,15 +73,37 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
         try:
             result = await fn(db, org_id)
             logger.debug("Sync %s org=%d → %s", name, org_id, result)
+            await db.execute(
+                update(Integration)
+                .where(Integration.organization_id == org_id, Integration.type == name)
+                .values(last_sync_status="ok")
+            )
         except Exception as exc:
             logger.warning("Background %s sync failed org=%d: %s", name, org_id, type(exc).__name__)
+            await db.execute(
+                update(Integration)
+                .where(Integration.organization_id == org_id, Integration.type == name)
+                .values(last_sync_status="error")
+            )
 
     # Google Calendar sync — stored as DailyContext, auto-included in memory
     try:
         result = await sync_calendar_events(db, organization_id=org_id)
         logger.debug("Sync calendar org=%d → %s", org_id, result)
+        await db.execute(
+            update(Integration)
+            .where(Integration.organization_id == org_id, Integration.type == "google_calendar")
+            .values(last_sync_status="ok")
+        )
     except Exception as exc:
         logger.warning("Background calendar sync failed org=%d: %s", org_id, type(exc).__name__)
+        await db.execute(
+            update(Integration)
+            .where(Integration.organization_id == org_id, Integration.type == "google_calendar")
+            .values(last_sync_status="error")
+        )
+
+    await db.commit()
 
 
 # ── On-demand (throttled) trigger ────────────────────────────────────────────

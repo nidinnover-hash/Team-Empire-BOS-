@@ -8,14 +8,20 @@ async def test_create_command_returns_201(client):
     assert response.status_code == 201
 
 
-async def test_create_command_returns_correct_fields(client):
+async def test_create_command_returns_correct_fields(client, monkeypatch):
+    async def _fake_call_ai(text, org_id):
+        return "Mocked AI response", "test-model"
+
+    from app.services import command as command_mod
+    monkeypatch.setattr(command_mod, "_call_ai", _fake_call_ai)
+
     response = await client.post(
         "/api/v1/commands",
         json={"command_text": "Hello clone"},
     )
     body = response.json()
     assert body["command_text"] == "Hello clone"
-    assert body["ai_response"] is None   # no AI call yet in v1
+    assert body["ai_response"] == "Mocked AI response"
     assert "id" in body
     assert "created_at" in body
 

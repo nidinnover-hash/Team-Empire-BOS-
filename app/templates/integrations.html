@@ -3,147 +3,83 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Personal Clone - Integrations</title>
+  <title>Nidin Nover - Integrations</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
-    :root {
-      --bg-0: #fafafa;
-      --bg-1: #f5f5f5;
-      --bg-2: #ffffff;
-      --card: rgba(255, 255, 255, 0.96);
-      --line: #e5e5e5;
-      --text: #111111;
-      --text-muted: #666666;
-      --text-faint: #999999;
-      --brand: #111111;
-      --ok: #22c55e;
-      --warn: #f59e0b;
-      --danger: #ef4444;
-      --accent-dim: rgba(0,0,0,0.06);
-      --radius: 14px;
-      --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: "Source Sans 3", "Segoe UI", sans-serif;
-      color: var(--text);
-      min-height: 100vh;
-      background: #fafafa;
-    }
-    header {
-      position: sticky; top: 0; z-index: 30;
-      padding: 1rem 2rem;
-      border-bottom: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.92);
-      backdrop-filter: blur(8px);
-      display: flex; justify-content: space-between; align-items: center; gap: 1rem;
-    }
-    .brand { display: flex; flex-direction: column; gap: 0.2rem; }
-    .brand-title { font-family: "Space Grotesk", sans-serif; font-size: 1rem; letter-spacing: 0.02em; }
-    .brand-sub { color: var(--text-muted); font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; }
-    .nav { display: flex; align-items: center; gap: 0.8rem; }
-    .nav a, .nav button {
-      border: 1px solid #e5e5e5; background: #ffffff; color: #111111;
-      border-radius: 8px; padding: 0.35rem 0.65rem;
-      font-size: 0.74rem; font-weight: 700; text-decoration: none; cursor: pointer;
-    }
-    .nav a:hover, .nav button:hover { background: #f5f5f5; border-color: #cccccc; }
-    .nav a.active, .nav button.active { background: #111111; color: #ffffff; border-color: #111111; }
-    main { max-width: 1260px; margin: 0 auto; padding: 1.4rem 1.5rem 2rem; }
+    /* ── Page-specific: Integrations ─────────────────────────────────────── */
     .hero {
       border: 1px solid var(--line); border-radius: var(--radius);
       padding: 1rem 1.1rem;
-      background: #ffffff;
-      box-shadow: var(--shadow); margin-bottom: 1rem;
+      background: var(--surface);
+      box-shadow: var(--shadow-sm); margin-bottom: 1rem;
+      position: relative; overflow: hidden;
     }
-    .hero h1 { font-family: "Space Grotesk", sans-serif; font-size: 1.05rem; margin-bottom: 0.25rem; }
+    .hero::after {
+      content:""; position:absolute; top:0; left:0; right:0; height:1px;
+      background: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.05) 45%, transparent 100%);
+    }
+    .hero h1 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.25rem; }
     .hero p { color: var(--text-muted); font-size: 0.84rem; }
     .layout {
       display: grid; grid-template-columns: 1.35fr 1fr; gap: 1rem;
     }
-    .card {
-      border: 1px solid var(--line); border-radius: var(--radius);
-      background: #ffffff;
-      box-shadow: var(--shadow); overflow: hidden;
-    }
-    .card-head {
-      padding: 0.75rem 0.95rem; border-bottom: 1px solid #eeeeee;
-      display: flex; justify-content: space-between; align-items: center;
-    }
     .card-title {
-      font-family: "Space Grotesk", sans-serif; font-size: 0.7rem;
+      font-size: 0.7rem;
       text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-faint);
     }
-    .card-body { padding: 0.9rem; }
     .status { font-size: 0.72rem; color: var(--text-muted); min-height: 1rem; }
     .status.ok { color: var(--ok); }
     .status.err { color: var(--danger); }
     .status.warn { color: var(--warn); }
-    .btn {
-      border: 1px solid #111111; background: #111111; color: #ffffff;
-      border-radius: 8px; padding: 0.38rem 0.7rem;
-      font-size: 0.72rem; font-weight: 700; cursor: pointer;
-    }
-    .btn:hover { background: #333333; }
-    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-    .btn.subtle { background: #f5f5f5; color: #666666; border-color: #e5e5e5; }
-    .btn.danger { background: #fff5f5; color: #ef4444; border: 1px solid #fecaca; }
-    .btn.success { background: #f0fdf4; color: #22c55e; border: 1px solid #bbf7d0; }
-    .btn.sync { background: #f5f5f5; color: #666666; border: 1px solid #e5e5e5; }
+    .btn.subtle { background: var(--surface-alt); color: var(--text-muted); border-color: var(--line); }
+    .btn.sync { background: var(--surface-alt); color: var(--text-muted); border-color: var(--line); }
+    .btn.sync:hover { border-color: #d4d4d8; }
     .row {
       display: flex; flex-wrap: wrap; gap: 0.55rem;
       align-items: center; margin-bottom: 0.6rem;
     }
-    .input, .select, .textarea {
-      width: 100%; border: 1px solid #e5e5e5; border-radius: 8px;
-      background: #ffffff; color: var(--text);
-      font-family: inherit; font-size: 0.8rem; padding: 0.45rem 0.6rem; outline: none;
-    }
     .textarea { min-height: 90px; resize: vertical; }
-    .input:focus, .select:focus, .textarea:focus { border-color: #999999; box-shadow: 0 0 0 3px rgba(0,0,0,0.06); }
     .help { margin-top: 0.4rem; color: var(--text-faint); font-size: 0.72rem; line-height: 1.4; }
     .table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
     .table th, .table td {
-      text-align: left; border-bottom: 1px solid #eeeeee;
+      text-align: left; border-bottom: 1px solid var(--line-soft);
       padding: 0.5rem 0.4rem; vertical-align: middle;
     }
-    .table th { color: var(--text-faint); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; background: #f5f5f5; }
+    .table th { color: var(--text-faint); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; background: var(--surface-alt); }
     .pill {
       display: inline-block; border-radius: 999px; padding: 0.12rem 0.5rem;
       font-size: 0.64rem; font-weight: 700; text-transform: uppercase;
       letter-spacing: 0.06em; border: 1px solid transparent;
     }
-    .pill.connected { background: rgba(34,197,94,0.08); color: #22c55e; border-color: rgba(34,197,94,0.25); }
-    .pill.disconnected { background: rgba(239,68,68,0.08); color: #ef4444; border-color: rgba(239,68,68,0.25); }
+    .pill.connected { background: rgba(34,197,94,0.08); color: var(--ok); border-color: rgba(34,197,94,0.25); }
+    .pill.disconnected { background: rgba(239,68,68,0.08); color: var(--danger); border-color: rgba(239,68,68,0.25); }
     .muted { color: var(--text-muted); }
-    .empty { color: #999999; font-size: 0.8rem; padding: 0.6rem 0.2rem; }
     .ai-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.55rem; }
     .ai-card {
-      border: 1px solid var(--line); border-radius: 10px;
-      padding: 0.65rem; background: #ffffff;
+      border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 0.65rem; background: var(--surface);
     }
     .ai-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; }
-    .ai-name { font-family: "Space Grotesk", sans-serif; font-size: 0.8rem; color: var(--text); text-transform: capitalize; }
+    .ai-name { font-size: 0.8rem; color: var(--text); text-transform: capitalize; }
     .small { font-size: 0.72rem; color: var(--text-faint); }
     /* Quick-connect grid */
     .qc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.85rem; margin-top: 1rem; }
     .qc-card {
       border: 1px solid var(--line); border-radius: var(--radius);
-      background: #ffffff;
-      box-shadow: var(--shadow); overflow: hidden;
+      background: var(--surface);
+      box-shadow: var(--shadow-sm); overflow: hidden;
     }
-    .qc-card:hover { border-color: #cccccc; }
+    .qc-card:hover { border-color: #d4d4d8; }
     .qc-head {
-      padding: 0.65rem 0.9rem; border-bottom: 1px solid #eeeeee;
+      padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--line-soft);
       display: flex; align-items: center; gap: 0.55rem;
     }
     .qc-icon { font-size: 1.15rem; }
-    .qc-name { font-family: "Space Grotesk", sans-serif; font-size: 0.82rem; color: var(--text); }
+    .qc-name { font-size: 0.82rem; color: var(--text); }
     .qc-badge {
       margin-left: auto; font-size: 0.62rem; font-weight: 700;
       padding: 0.1rem 0.45rem; border-radius: 999px;
-      border: 1px solid rgba(34,197,94,0.25); background: rgba(34,197,94,0.08); color: #22c55e;
+      border: 1px solid rgba(34,197,94,0.25); background: rgba(34,197,94,0.08); color: var(--ok);
     }
     .qc-badge.none { border-color: var(--line); background: transparent; color: var(--text-faint); }
     .qc-body { padding: 0.75rem 0.9rem; }
@@ -163,136 +99,46 @@
     }
     .modal-overlay.open { display: flex; }
     .modal {
-      background: #ffffff; border: 1px solid var(--line); border-radius: 16px;
-      padding: 1.4rem; width: 460px; max-width: 96vw; box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+      background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+      padding: 1.4rem; width: 460px; max-width: 96vw; box-shadow: var(--shadow-lg);
     }
-    .modal h2 { font-family: "Space Grotesk", sans-serif; font-size: 0.95rem; margin-bottom: 0.9rem; color: var(--text); }
+    .modal h2 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.9rem; color: var(--text); }
     .modal label { font-size: 0.74rem; color: var(--text-faint); display: block; margin-bottom: 0.3rem; margin-top: 0.65rem; }
     .modal-actions { display: flex; gap: 0.55rem; margin-top: 1rem; justify-content: flex-end; }
-    /* ── Unified professional light theme ─────────────────────────────────── */
-    body {
-      background: #fafafa !important;
+    .health-alert {
+      margin-top: 0.65rem;
+      padding: 0.6rem 0.7rem;
+      border-radius: 10px;
+      border: 1px solid #fecaca;
+      background: #fef2f2;
+      color: #991b1b;
+      font-size: 0.72rem;
+      line-height: 1.4;
     }
-    .hero {
-      border-color: var(--line) !important;
-      background: #ffffff !important;
-      position: relative; overflow: hidden;
+    .health-alert.ok {
+      border-color: #bbf7d0;
+      background: #f0fdf4;
+      color: #166534;
     }
-    .hero::after {
-      content:""; position:absolute; top:0; left:0; right:0; height:1px;
-      background: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.05) 45%, transparent 100%);
+    /* ── Toast (page-level IDs) ─────────────────────────────────────────── */
+    #toast-container {
+      position: fixed; top: 1.1rem; right: 1.2rem; z-index: 9999;
+      display: flex; flex-direction: column; gap: 0.55rem; pointer-events: none;
     }
-    .hero h1 { color: var(--text) !important; }
-    .hero p  { color: var(--text-muted) !important; }
-    .card, .qc-card { background: #ffffff !important; border-color: var(--line) !important; }
-    .card-head, .qc-head { border-bottom-color: #eeeeee !important; }
-    .card-title { color: var(--text-faint) !important; }
-    .help, .small, .muted, .table th, .qc-desc { color: var(--text-faint) !important; }
-    .qc-name, .ai-name { color: var(--text) !important; }
-    .table td { color: var(--text-muted) !important; }
-    .table th, .table td { border-bottom-color: #eeeeee !important; }
-    /* Buttons */
-    .btn {
-      border-color: #111111 !important; background: #111111 !important; color: #ffffff !important;
-    }
-    .btn:hover { background: #333333 !important; border-color: #333333 !important; color: #ffffff !important; }
-    .btn.success { background: #f0fdf4 !important; color: var(--ok) !important; border-color: #bbf7d0 !important; }
-    .btn.success:hover { border-color: var(--ok) !important; }
-    .btn.danger  { background: #fff5f5 !important; color: var(--danger) !important; border-color: #fecaca !important; }
-    .btn.sync    { background: #f5f5f5 !important; color: #666666 !important; border-color: #e5e5e5 !important; }
-    .btn.sync:hover  { border-color: #cccccc !important; }
-    .btn.subtle  { background: #f5f5f5 !important; color: #666666 !important; border-color: #e5e5e5 !important; }
-    /* Inputs */
-    .input, .select, .textarea {
-      border-color: #e5e5e5 !important; background: #ffffff !important; color: var(--text) !important;
-    }
-    .input:focus, .select:focus, .textarea:focus { border-color: #999999 !important; box-shadow: 0 0 0 3px rgba(0,0,0,0.06) !important; }
-    /* AI cards */
-    .ai-card { border-color: var(--line) !important; background: #ffffff !important; }
-    /* Status text - semantic */
-    .status.ok   { color: var(--ok) !important; }
-    .status.err  { color: var(--danger) !important; }
-    .status.warn { color: var(--warn) !important; }
-    .qc-status.ok   { color: var(--ok) !important; }
-    .qc-status.err  { color: var(--danger) !important; }
-    .qc-status.info { color: var(--brand) !important; }
-    /* Pills - semantic colors preserved */
-    .pill.connected    { background: rgba(34,197,94,0.08) !important; color: var(--ok) !important; border-color: rgba(34,197,94,0.25) !important; }
-    .pill.disconnected { background: rgba(239,68,68,0.08) !important; color: var(--danger) !important; border-color: rgba(239,68,68,0.25) !important; }
-    .qc-badge      { background: rgba(34,197,94,0.08) !important; color: var(--ok) !important; border-color: rgba(34,197,94,0.25) !important; }
-    .qc-badge.none { background: transparent !important; color: var(--text-faint) !important; border-color: var(--line) !important; }
-    /* Modal */
-    .modal { background: #ffffff !important; border-color: var(--line) !important; }
-    .modal h2 { color: var(--text) !important; }
-    .modal label { color: var(--text-faint) !important; }
+    .toast-success { background: var(--ok-soft); border-color: var(--ok-border); color: #166534; }
+    .toast-error   { background: var(--danger-soft); border-color: var(--danger-border); color: #991b1b; }
+    .toast-warn    { background: var(--warn-soft); border-color: var(--warn-border); color: #92400e; }
+    .toast-info    { background: var(--surface-alt); border-color: var(--line); color: var(--text-muted); }
+    .toast span    { flex: 1; }
+    .toast button  { background: none; border: none; color: inherit; opacity: .55; cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 0 0 0.3rem; }
+    .toast button:hover { opacity: 1; }
     @media (max-width: 980px) {
       .layout { grid-template-columns: 1fr; }
       .ai-grid { grid-template-columns: 1fr; }
       .qc-grid { grid-template-columns: 1fr; }
     }
-
-    /* ── Sidebar ────────────────────────────────────────────────────────────── */
-    .sidebar {
-      position: fixed; left: 0; top: 0; bottom: 0; width: 220px; z-index: 60;
-      background: rgba(250, 250, 250, 0.98);
-      border-right: 1px solid #e5e5e5;
-      display: flex; flex-direction: column;
-      overflow-y: auto;
-    }
-    .sb-brand {
-      display: flex; align-items: center; gap: 0.75rem;
-      padding: 1.1rem 1rem 1rem; border-bottom: 1px solid #e5e5e5;
-    }
-    .sb-pulse {
-      width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
-      background: #111111; box-shadow: 0 0 0 0 rgba(0,0,0,.4);
-      animation: pulse-sb 2.2s infinite;
-    }
-    @keyframes pulse-sb { 70% { box-shadow: 0 0 0 10px rgba(0,0,0,0); } 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); } }
-    .sb-name { font-family: "Space Grotesk", sans-serif; font-size: 0.9rem; font-weight: 700; color: #111111; }
-    .sb-sub  { font-size: 0.65rem; color: #999999; margin-top: 1px; }
-    .sb-nav  { flex: 1; padding: 0.75rem 0.5rem; display: flex; flex-direction: column; gap: 0.15rem; }
-    .sb-item {
-      display: flex; align-items: center; gap: 0.65rem;
-      padding: 0.55rem 0.75rem; border-radius: 9px;
-      color: #666666; text-decoration: none;
-      font-size: 0.82rem; font-weight: 500;
-      transition: background .15s ease, color .15s ease;
-      cursor: pointer; border: none; background: transparent; width: 100%; text-align: left;
-    }
-    .sb-item:hover { background: rgba(0,0,0,0.04); color: #333333; }
-    .sb-item.active { background: rgba(0,0,0,0.06); color: #111111; font-weight: 600; }
-    .sb-item svg { width: 16px; height: 16px; flex-shrink: 0; }
-    .sb-divider { height: 1px; background: #e5e5e5; margin: 0.4rem 0.75rem; }
-    .sb-footer { padding: 0.6rem 0.5rem 1rem; border-top: 1px solid #e5e5e5; }
-    .sb-user { font-size: 0.7rem; color: #999999; padding: 0.4rem 0.75rem 0.3rem; word-break: break-all; }
-    main { margin-left: 220px; }
-    header { display: none; }
-
-    /* ── Toast notifications ────────────────────────────────────────────────── */
-    #toast-container {
-      position: fixed; top: 1.1rem; right: 1.2rem; z-index: 9999;
-      display: flex; flex-direction: column; gap: 0.55rem; pointer-events: none;
-    }
-    .toast {
-      display: flex; align-items: flex-start; gap: 0.6rem;
-      padding: 0.72rem 0.9rem; border-radius: 10px; min-width: 260px; max-width: 360px;
-      font-size: 0.82rem; line-height: 1.4; font-family: "Source Sans 3", sans-serif;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04); border: 1px solid transparent;
-      pointer-events: all; animation: toast-in 0.22s ease;
-      transition: opacity 0.35s ease, transform 0.35s ease;
-    }
-    .toast-hide { opacity: 0; transform: translateX(30px); }
-    @keyframes toast-in { from { opacity:0; transform:translateX(30px); } to { opacity:1; transform:none; } }
-    .toast-success { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
-    .toast-error   { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
-    .toast-warn    { background: #fffbeb; border-color: #fde68a; color: #92400e; }
-    .toast-info    { background: #f5f5f5; border-color: #e5e5e5; color: #666666; }
-    .toast span    { flex: 1; }
-    .toast button  { background: none; border: none; color: inherit; opacity: .55; cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 0 0 0.3rem; }
-    .toast button:hover { opacity: 1; }
     @media (max-width: 768px) {
-      main { padding: 1rem 0.75rem; padding-top: 3.5rem; }
+      .main-wrap { padding: 1rem 0.75rem; padding-top: 3.5rem; }
       .qc-grid { grid-template-columns: 1fr; }
     }
   </style>
@@ -303,52 +149,27 @@
   <div class="sb-brand">
     <div class="sb-pulse"></div>
     <div>
-      <div class="sb-name">Personal Clone</div>
-      <div class="sb-sub">Command Center</div>
+      <div class="sb-name">Nidin Nover</div>
+      <div class="sb-sub">AI Command Center</div>
     </div>
   </div>
   <div class="sb-nav">
-    <a href="/" class="sb-item">
-      <i data-lucide="layout-dashboard"></i> Dashboard
-    </a>
-    <a href="/web/talk" class="sb-item">
-      <i data-lucide="message-circle"></i> Talk Mode
-    </a>
-    <a href="/web/integrations" class="sb-item active">
-      <i data-lucide="plug"></i> Integrations
-    </a>
-    <a href="/web/data-hub" class="sb-item">
-      <i data-lucide="database"></i> Data Hub
-    </a>
-    <a href="/web/observe" class="sb-item">
-      <i data-lucide="activity"></i> Observe
-    </a>
-    <a href="/web/ops-intel" class="sb-item">
-      <i data-lucide="bar-chart-3"></i> Ops Intel
-    </a>
-    <a href="/web/tasks" class="sb-item">
-      <i data-lucide="check-square"></i> Tasks
-    </a>
+    <a href="/" class="sb-item"><i data-lucide="layout-dashboard"></i> Dashboard</a>
+    <a href="/web/talk" class="sb-item"><i data-lucide="message-circle"></i> Talk Mode</a>
+    <a href="/web/integrations" class="sb-item active"><i data-lucide="plug"></i> Integrations</a>
+    <a href="/web/data-hub" class="sb-item"><i data-lucide="database"></i> Data Hub</a>
+    <a href="/web/observe" class="sb-item"><i data-lucide="activity"></i> Observe</a>
+    <a href="/web/ops-intel" class="sb-item"><i data-lucide="bar-chart-3"></i> Ops Intel</a>
+    <a href="/web/tasks" class="sb-item"><i data-lucide="check-square"></i> Tasks</a>
     <div class="sb-divider"></div>
-    <a href="/docs" class="sb-item">
-      <i data-lucide="book-open"></i> API Docs
-    </a>
+    <a href="/docs" class="sb-item" target="_blank"><i data-lucide="book-open"></i> API Docs</a>
   </div>
   <div class="sb-footer">
-    {% if session_user %}
-    <div class="sb-user">{{ session_user.email }}</div>
-    <button class="sb-item" id="logout-btn" type="button">
-      <i data-lucide="log-out"></i> Sign out
-    </button>
-    {% else %}
-    <a href="/web/login" class="sb-item">
-      <i data-lucide="log-in"></i> Sign in
-    </a>
-    {% endif %}
+    <button class="sb-item" id="logout-btn" type="button"><i data-lucide="log-out"></i> Sign out</button>
   </div>
 </nav>
 
-<main>
+<div class="main-wrap">
   <section class="hero">
     <h1>Integration Control Center</h1>
     <p>Connect and sync ClickUp, GitHub, Slack, Gmail, Google Calendar, and WhatsApp. All tokens are encrypted at rest.</p>
@@ -380,6 +201,7 @@
           <button class="btn" id="gcal-auth-btn" type="button">Connect Google Calendar</button>
         </div>
         <div class="help">Starts Google sign-in and stores tokens in your integration vault.</div>
+        <div id="gmail-health-alert" class="health-alert" style="display:none"></div>
         <hr style="border:0;border-top:1px solid #eeeeee;margin:0.8rem 0">
         <div class="small" style="color:var(--text-faint);margin-bottom:0.55rem">Sync connected integrations:</div>
         <div class="row" style="gap:0.4rem">
@@ -472,7 +294,7 @@
       </div>
     </div>
   </section>
-</main>
+</div><!-- /main-wrap -->
 
 <!-- Add New Integration modal -->
 <div class="modal-overlay" id="add-modal">
@@ -501,10 +323,78 @@
   </div>
 </div>
 
+<script src="/static/js/api-client.js"></script>
 <script>
 (async function () {
   var token = null;
   var integrations = [];
+  var gmailHealth = null;
+  function byId(id) { return document.getElementById(id); }
+  function bindClick(id, handler) {
+    var el = byId(id);
+    if (!el) return false;
+    el.addEventListener("click", handler);
+    return true;
+  }
+  async function apiJson(path, options) {
+    if (window.PCAPI && window.PCAPI.safeFetchJson) {
+      return window.PCAPI.safeFetchJson(path, {
+        method: (options && options.method) || "GET",
+        headers: (options && options.headers) || {},
+        body: options && options.body,
+        auth: true,
+        token: token,
+      });
+    }
+    var opts = options || {};
+    var headers = opts.headers || {};
+    if (!headers.Authorization && token) {
+      headers.Authorization = "Bearer " + token;
+    }
+    opts.headers = headers;
+    var r = await fetch(path, opts);
+    var body = await r.json().catch(function(){ return {}; });
+    if (!r.ok) {
+      var err = new Error(body.detail || ("Request failed (" + r.status + ")"));
+      err.status = r.status;
+      throw err;
+    }
+    return body;
+  }
+  function renderHealthAlert() {
+    var el = byId("gmail-health-alert");
+    if (!el) return;
+    var integration = integrations.find(function(i){ return i.type === "gmail"; });
+    if (!integration) {
+      el.style.display = "none";
+      return;
+    }
+    if (!gmailHealth || gmailHealth.status === "ok") {
+      el.className = "health-alert ok";
+      el.textContent = "Gmail connection healthy.";
+      el.style.display = "block";
+      return;
+    }
+    var message = "Gmail requires reconnect. Click 'Connect Gmail OAuth' and complete consent again.";
+    if (gmailHealth.code === "gmail_reconnect_required") {
+      message = "Gmail token expired or invalid. Reconnect Gmail OAuth now.";
+    }
+    if (integration.status === "disconnected") {
+      message = "Gmail is disconnected due to token issues. Reconnect Gmail OAuth to enable sync.";
+    }
+    el.className = "health-alert";
+    el.textContent = message;
+    el.style.display = "block";
+  }
+
+  async function fetchGmailHealth() {
+    try {
+      gmailHealth = await apiJson("/api/v1/email/health");
+    } catch (_err) {
+      gmailHealth = { status: "error", code: "health_unavailable" };
+    }
+    renderHealthAlert();
+  }
 
   // ── config templates per type ──────────────────────────────────────────────
   var CONFIG_TEMPLATES = {
@@ -539,12 +429,18 @@
     el.className = "qc-status" + (klass ? " " + klass : "");
   }
   function setModalStatus(text, klass) {
-    var el = document.getElementById("modal-status");
+    var el = byId("modal-status");
+    if (!el) return;
     el.textContent = text || "";
     el.className = "status" + (klass ? " " + klass : "");
   }
 
   async function bootToken() {
+    if (window.PCAPI && window.PCAPI.getApiToken) {
+      token = await window.PCAPI.getApiToken();
+      if (!token) throw new Error("session_expired");
+      return;
+    }
     var r = await fetch("/web/api-token");
     if (!r.ok) throw new Error("session_expired");
     token = (await r.json()).token;
@@ -553,11 +449,10 @@
   // ── Connected integrations table ──────────────────────────────────────────
   async function fetchIntegrations() {
     setStatus("integrations-status", "Refreshing...");
-    var list = document.getElementById("integrations-list");
+    var list = byId("integrations-list");
+    if (!list) return;
     try {
-      var r = await fetch("/api/v1/integrations", { headers: { Authorization: "Bearer " + token } });
-      if (!r.ok) throw new Error("Could not load integrations");
-      integrations = await r.json();
+      integrations = await apiJson("/api/v1/integrations");
       if (!integrations.length) {
         list.innerHTML = '<div class="empty">No integrations connected yet.</div>';
         setStatus("integrations-status", "No integrations found.", "warn");
@@ -569,17 +464,33 @@
           '<th>Type</th><th>Status</th><th>Last Sync</th><th>Actions</th>' +
         '</tr></thead><tbody>' +
         integrations.map(function(i) {
+          var isConnected = i.status === "connected";
           var hasSyncBtn = ["clickup","github","slack","google_calendar"].includes(i.type);
+          var isOAuth = ["gmail","google_calendar"].includes(i.type);
+          var bs = 'style="padding:0.28rem 0.5rem" type="button"';
+          var actions = '';
+          if (isConnected) {
+            if (hasSyncBtn) {
+              var syncCall = i.type === 'google_calendar' ? 'window.syncCalendar()' : 'window.syncIntegration(\'' + esc(i.type) + '\')';
+              actions += '<button class="btn sync" ' + bs + ' onclick="' + syncCall + '">Sync</button>';
+            }
+            actions += '<button class="btn subtle" ' + bs + ' onclick="window.integrationTest(' + i.id + ')">Test</button>';
+            actions += '<button class="btn danger" ' + bs + ' onclick="window.integrationDisconnect(' + i.id + ')">Disconnect</button>';
+          } else {
+            if (isOAuth) {
+              var oauthClick = i.type === 'gmail' ? 'document.getElementById(\'gmail-auth-btn\').click()' : 'document.getElementById(\'gcal-auth-btn\').click()';
+              actions += '<button class="btn sync" ' + bs + ' onclick="' + oauthClick + '">Reconnect</button>';
+            } else {
+              actions += '<button class="btn sync" ' + bs + ' onclick="window.reconnectToken(\'' + esc(i.type) + '\')">Connect</button>';
+            }
+            actions += '<button class="btn danger" ' + bs + ' onclick="window.integrationDisconnect(' + i.id + ')">Remove</button>';
+          }
           return (
             '<tr>' +
               '<td><strong>' + esc(i.type) + '</strong></td>' +
-              '<td><span class="pill ' + (i.status==="connected"?"connected":"disconnected") + '">' + esc(i.status) + '</span></td>' +
-              '<td class="muted">' + esc(fmtDate(i.last_sync_at)) + '</td>' +
-              '<td style="display:flex;gap:0.35rem;flex-wrap:wrap;padding:0.35rem 0.4rem">' +
-                (hasSyncBtn ? '<button class="btn sync" style="padding:0.28rem 0.5rem" type="button" onclick="' + (i.type==='google_calendar' ? 'window.syncCalendar()' : 'window.syncIntegration(\'' + esc(i.type) + '\')') + '">Sync</button>' : '') +
-                '<button class="btn subtle" style="padding:0.28rem 0.5rem" type="button" onclick="window.integrationTest(' + i.id + ')">Test</button>' +
-                '<button class="btn danger" style="padding:0.28rem 0.5rem" type="button" onclick="window.integrationDisconnect(' + i.id + ')">Disconnect</button>' +
-              '</td>' +
+              '<td><span class="pill ' + (isConnected?"connected":"disconnected") + '">' + esc(i.status) + '</span></td>' +
+              '<td class="muted">' + esc(fmtDate(i.last_sync_at)) + (i.last_sync_status === "error" ? ' <span style="color:var(--danger);font-size:.7rem">FAILED</span>' : '') + '</td>' +
+              '<td style="display:flex;gap:0.35rem;flex-wrap:wrap;padding:0.35rem 0.4rem">' + actions + '</td>' +
             '</tr>'
           );
         }).join("") +
@@ -587,6 +498,7 @@
       );
       setStatus("integrations-status", "Integration status is up to date.", "ok");
       updateQcBadges(integrations);
+      renderHealthAlert();
     } catch (err) {
       list.innerHTML = '<div class="empty">Failed to load integrations.</div>';
       setStatus("integrations-status", "Failed to load integrations.", "err");
@@ -610,11 +522,9 @@
   window.integrationTest = async function(id) {
     setStatus("integrations-status", "Running connection test...");
     try {
-      var r = await fetch("/api/v1/integrations/" + id + "/test", {
-        method: "POST", headers: { Authorization: "Bearer " + token }
+      var body = await apiJson("/api/v1/integrations/" + id + "/test", {
+        method: "POST",
       });
-      var body = await r.json().catch(function(){ return {}; });
-      if (!r.ok) throw new Error(body.detail || "Test failed");
       setStatus("integrations-status", body.message || "Connection test passed.", body.status==="ok"?"ok":"warn");
       await fetchIntegrations();
     } catch (err) {
@@ -626,15 +536,27 @@
     if (!window.confirm("Disconnect this integration?")) return;
     setStatus("integrations-status", "Disconnecting...");
     try {
-      var r = await fetch("/api/v1/integrations/" + id + "/disconnect", {
-        method: "POST", headers: { Authorization: "Bearer " + token }
-      });
-      var body = await r.json().catch(function(){ return {}; });
-      if (!r.ok) throw new Error(body.detail || "Disconnect failed");
+      await apiJson("/api/v1/integrations/" + id + "/disconnect", { method: "POST" });
       setStatus("integrations-status", "Integration disconnected.", "ok");
       await fetchIntegrations();
     } catch (err) {
       setStatus("integrations-status", String(err.message || err), "err");
+    }
+  };
+
+  // ── Reconnect (token-based integrations) ─────────────────────────────────
+  window.reconnectToken = function(type) {
+    // Scroll to the matching quick-connect card and focus its input
+    var inputId = type + "-token";
+    var el = document.getElementById(inputId);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.focus();
+      setQcStatus(type + "-status", "Paste your new token and click Connect.", "info");
+    } else {
+      // Fallback: open the generic Add New modal
+      var addModal = document.getElementById("add-modal");
+      if (addModal) addModal.classList.add("open");
     }
   };
 
@@ -652,11 +574,7 @@
     setStatus(sid, "Syncing " + name + "...", "info");
     setQcStatus(name + "-status", "Syncing...", "info");
     try {
-      var r = await fetch(ep, {
-        method: "POST", headers: { Authorization: "Bearer " + token }
-      });
-      var body = await r.json().catch(function(){ return {}; });
-      if (!r.ok) throw new Error(body.detail || "Sync failed");
+      var body = await apiJson(ep, { method: "POST" });
       var msg = name + " synced.";
       if (body.synced !== undefined)       msg = name + ": " + body.synced + " tasks synced.";
       if (body.channels_synced !== undefined) msg = "Slack: " + body.channels_synced + " channels, " + (body.messages_read||0) + " messages.";
@@ -671,18 +589,16 @@
   };
 
   // ── Quick Connect: ClickUp ─────────────────────────────────────────────────
-  document.getElementById("clickup-connect-btn").addEventListener("click", async function() {
+  bindClick("clickup-connect-btn", async function() {
     var apiToken = document.getElementById("clickup-token").value.trim();
     if (!apiToken) { setQcStatus("clickup-status","Enter your ClickUp Personal API Token first.","err"); return; }
     setQcStatus("clickup-status","Connecting to ClickUp...","info");
     try {
-      var r = await fetch("/api/v1/integrations/clickup/connect", {
+      await apiJson("/api/v1/integrations/clickup/connect", {
         method: "POST",
-        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ api_token: apiToken })
       });
-      var body = await r.json().catch(function(){ return {}; });
-      if (!r.ok) throw new Error(body.detail || "Connect failed");
       setQcStatus("clickup-status","Connected! Syncing tasks now...","ok");
       document.getElementById("clickup-token").value = "";
       await fetchIntegrations();
@@ -691,23 +607,21 @@
       setQcStatus("clickup-status", String(err.message||err), "err");
     }
   });
-  document.getElementById("clickup-sync-btn").addEventListener("click", function() {
+  bindClick("clickup-sync-btn", function() {
     window.syncIntegration("clickup","sync-status");
   });
 
   // ── Quick Connect: GitHub ─────────────────────────────────────────────────
-  document.getElementById("github-connect-btn").addEventListener("click", async function() {
+  bindClick("github-connect-btn", async function() {
     var pat = document.getElementById("github-token").value.trim();
     if (!pat) { setQcStatus("github-status","Enter your GitHub Personal Access Token first.","err"); return; }
     setQcStatus("github-status","Connecting to GitHub...","info");
     try {
-      var r = await fetch("/api/v1/integrations/github/connect", {
+      await apiJson("/api/v1/integrations/github/connect", {
         method: "POST",
-        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ api_token: pat })
       });
-      var body = await r.json().catch(function(){ return {}; });
-      if (!r.ok) throw new Error(body.detail || "Connect failed");
       setQcStatus("github-status","Connected! Syncing repos now...","ok");
       document.getElementById("github-token").value = "";
       await fetchIntegrations();
@@ -716,23 +630,21 @@
       setQcStatus("github-status", String(err.message||err), "err");
     }
   });
-  document.getElementById("github-sync-btn").addEventListener("click", function() {
+  bindClick("github-sync-btn", function() {
     window.syncIntegration("github","sync-status");
   });
 
   // ── Quick Connect: Slack ──────────────────────────────────────────────────
-  document.getElementById("slack-connect-btn").addEventListener("click", async function() {
+  bindClick("slack-connect-btn", async function() {
     var botToken = document.getElementById("slack-token").value.trim();
     if (!botToken) { setQcStatus("slack-status","Enter your Slack Bot Token first.","err"); return; }
     setQcStatus("slack-status","Connecting to Slack...","info");
     try {
-      var r = await fetch("/api/v1/integrations/slack/connect", {
+      await apiJson("/api/v1/integrations/slack/connect", {
         method: "POST",
-        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bot_token: botToken })
       });
-      var body = await r.json().catch(function(){ return {}; });
-      if (!r.ok) throw new Error(body.detail || "Connect failed");
       setQcStatus("slack-status","Connected! Syncing channels now...","ok");
       document.getElementById("slack-token").value = "";
       await fetchIntegrations();
@@ -741,34 +653,40 @@
       setQcStatus("slack-status", String(err.message||err), "err");
     }
   });
-  document.getElementById("slack-sync-btn").addEventListener("click", function() {
+  bindClick("slack-sync-btn", function() {
     window.syncIntegration("slack","sync-status");
   });
 
   // ── Gmail OAuth ────────────────────────────────────────────────────────────
-  document.getElementById("gmail-auth-btn").addEventListener("click", async function() {
+  bindClick("gmail-auth-btn", async function() {
     setStatus("connect-status","Requesting Gmail OAuth URL...","info");
+    // Open immediately to avoid popup blockers, then update location once URL arrives.
+    var popup = window.open("about:blank", "_blank", "noopener,noreferrer");
     try {
-      var r = await fetch("/api/v1/email/auth-url", { headers: { Authorization: "Bearer " + token } });
-      var body = await r.json().catch(function(){ return {}; });
-      if (!r.ok || !body.auth_url) throw new Error(body.detail || "Could not get OAuth URL");
+      var body = await apiJson("/api/v1/email/auth-url");
+      if (!body.auth_url) throw new Error("Could not get OAuth URL");
       setStatus("connect-status","Opening Gmail OAuth in a new tab.","ok");
-      window.open(body.auth_url,"_blank","noopener,noreferrer");
+      if (popup) popup.location.href = body.auth_url;
+      else window.location.href = body.auth_url;
     } catch (err) {
+      if (popup) popup.close();
       setStatus("connect-status", String(err.message||err), "err");
     }
   });
 
   // ── Google Calendar OAuth ─────────────────────────────────────────────────
-  document.getElementById("gcal-auth-btn").addEventListener("click", async function() {
+  bindClick("gcal-auth-btn", async function() {
     setStatus("connect-status","Requesting Google Calendar OAuth URL...","info");
+    // Open immediately to avoid popup blockers, then update location once URL arrives.
+    var popup = window.open("about:blank", "_blank", "noopener,noreferrer");
     try {
-      var r = await fetch("/api/v1/integrations/google-calendar/auth-url", { headers: { Authorization: "Bearer " + token } });
-      var body = await r.json().catch(function(){ return {}; });
-      if (!r.ok || !body.auth_url) throw new Error(body.detail || "Could not get OAuth URL");
+      var body = await apiJson("/api/v1/integrations/google-calendar/auth-url");
+      if (!body.auth_url) throw new Error("Could not get OAuth URL");
       setStatus("connect-status","Opening Google Calendar OAuth in a new tab.","ok");
-      window.open(body.auth_url,"_blank","noopener,noreferrer");
+      if (popup) popup.location.href = body.auth_url;
+      else window.location.href = body.auth_url;
     } catch (err) {
+      if (popup) popup.close();
       setStatus("connect-status", String(err.message||err), "err");
     }
   });
@@ -777,11 +695,7 @@
   window.syncCalendar = async function() {
     setStatus("sync-status","Syncing Google Calendar...","info");
     try {
-      var r = await fetch("/api/v1/integrations/google-calendar/sync", {
-        method: "POST", headers: { Authorization: "Bearer " + token }
-      });
-      var body = await r.json().catch(function(){ return {}; });
-      if (!r.ok) throw new Error(body.detail || "Calendar sync failed");
+      var body = await apiJson("/api/v1/integrations/google-calendar/sync", { method: "POST" });
       setStatus("sync-status","Calendar: " + (body.synced||0) + " events synced for " + (body.date||"today") + ".", "ok");
       await fetchIntegrations();
     } catch (err) {
@@ -794,20 +708,24 @@
   var modalType = document.getElementById("modal-type");
   var modalConfig = document.getElementById("modal-config");
 
-  document.getElementById("add-integration-btn").addEventListener("click", function() {
+  bindClick("add-integration-btn", function() {
     addModal.classList.add("open");
     setModalStatus("","");
   });
-  document.getElementById("modal-cancel-btn").addEventListener("click", function() {
+  bindClick("modal-cancel-btn", function() {
     addModal.classList.remove("open");
   });
-  addModal.addEventListener("click", function(e) {
-    if (e.target === addModal) addModal.classList.remove("open");
-  });
-  modalType.addEventListener("change", function() {
-    modalConfig.value = CONFIG_TEMPLATES[modalType.value] || '{\n  "access_token": ""\n}';
-  });
-  document.getElementById("modal-save-btn").addEventListener("click", async function() {
+  if (addModal) {
+    addModal.addEventListener("click", function(e) {
+      if (e.target === addModal) addModal.classList.remove("open");
+    });
+  }
+  if (modalType && modalConfig) {
+    modalType.addEventListener("change", function() {
+      modalConfig.value = CONFIG_TEMPLATES[modalType.value] || '{\n  "access_token": ""\n}';
+    });
+  }
+  bindClick("modal-save-btn", async function() {
     var type = modalType.value;
     var rawConfig = modalConfig.value.trim();
     var config = {};
@@ -815,13 +733,11 @@
     try { config = rawConfig ? JSON.parse(rawConfig) : {}; }
     catch (err) { setModalStatus("Invalid JSON in config_json.", "err"); return; }
     try {
-      var r = await fetch("/api/v1/integrations/connect", {
+      await apiJson("/api/v1/integrations/connect", {
         method: "POST",
-        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: type, config_json: config })
       });
-      var body = await r.json().catch(function(){ return {}; });
-      if (!r.ok) throw new Error(body.detail || "Failed to save integration");
       setModalStatus("Saved: " + type, "ok");
       await fetchIntegrations();
       setTimeout(function(){ addModal.classList.remove("open"); }, 900);
@@ -835,15 +751,17 @@
     var list = document.getElementById("ai-list");
     setStatus("ai-status","Refreshing AI provider status...");
     try {
-      var r = await fetch("/api/v1/integrations/ai/status", { headers: { Authorization: "Bearer " + token } });
-      if (!r.ok) throw new Error("Could not load AI status");
-      var data = await r.json();
+      var data = await apiJson("/api/v1/integrations/ai/status");
       list.innerHTML = data.map(function(p) {
+        var roles = [];
+        if (p.active) roles.push("default");
+        if (p.email_active) roles.push("email");
+        var roleTag = roles.length ? ' <span style="color:var(--brand);font-size:.65rem;font-weight:600">' + roles.join(" + ").toUpperCase() + '</span>' : '';
         return (
           '<div class="ai-card">' +
             '<div class="ai-head">' +
-              '<div class="ai-name">' + esc(p.provider) + '</div>' +
-              '<span class="pill ' + (p.active?"connected":"disconnected") + '">' + (p.active?"active":"idle") + '</span>' +
+              '<div class="ai-name">' + esc(p.provider) + roleTag + '</div>' +
+              '<span class="pill ' + (p.active||p.email_active?"connected":"disconnected") + '">' + (p.active?"active":"idle") + '</span>' +
             '</div>' +
             '<div class="small">Configured: ' + (p.configured?"Yes":"No") + '</div>' +
             '<div class="small">Model: ' + esc(p.model||"-") + '</div>' +
@@ -863,26 +781,33 @@
   window.testAI = async function(provider) {
     setStatus("ai-status","Testing " + provider + "...");
     try {
-      var r = await fetch("/api/v1/integrations/ai/test?provider=" + encodeURIComponent(provider), {
-        method: "POST", headers: { Authorization: "Bearer " + token }
+      var body = await apiJson("/api/v1/integrations/ai/test?provider=" + encodeURIComponent(provider), {
+        method: "POST",
       });
-      var body = await r.json().catch(function(){ return {}; });
-      if (!r.ok) throw new Error(body.detail || "Provider test failed");
       setStatus("ai-status", body.message || "Provider test complete.", body.status==="ok"?"ok":"warn");
     } catch (err) {
       setStatus("ai-status", String(err.message||err), "err");
     }
   };
 
-  document.getElementById("refresh-integrations-btn").addEventListener("click", fetchIntegrations);
-  document.getElementById("refresh-ai-btn").addEventListener("click", fetchAiStatus);
+  bindClick("refresh-integrations-btn", fetchIntegrations);
+  bindClick("refresh-ai-btn", fetchAiStatus);
 
-  var logoutBtn = document.getElementById("logout-btn");
+  var logoutBtn = byId("logout-btn");
   if (logoutBtn) {
     logoutBtn.addEventListener("click", async function() {
       try {
-        var r = await fetch("/web/logout", { method: "POST" });
-        if (!r.ok) throw new Error("Logout failed");
+        if (window.PCAPI && window.PCAPI.safeFetchJson) {
+          await window.PCAPI.safeFetchJson("/web/logout", { method: "POST", csrf: true });
+        } else {
+          var csrfPair = document.cookie.split("; ").find(function(c){ return c.startsWith("pc_csrf="); });
+          var csrf = csrfPair ? decodeURIComponent(csrfPair.split("=")[1]) : "";
+          var r = await fetch("/web/logout", {
+            method: "POST",
+            headers: csrf ? { "X-CSRF-Token": csrf } : {}
+          });
+          if (!r.ok) throw new Error("Logout failed");
+        }
         window.location.href = "/web/login";
       } catch (e) {
         setStatus("integrations-status", String(e.message || e), "err");
@@ -894,7 +819,14 @@
   try {
     await bootToken();
     await fetchIntegrations();
+    await fetchGmailHealth();
     await fetchAiStatus();
+    // Show success toast if redirected from Gmail OAuth callback
+    var params = new URLSearchParams(window.location.search);
+    if (params.get("gmail") === "connected") {
+      setStatus("connect-status", "Gmail connected successfully. You can now sync emails.", "ok");
+      history.replaceState(null, "", window.location.pathname);
+    }
   } catch (err) {
     setStatus("integrations-status","Your web session expired. Sign in again.","err");
     setStatus("ai-status","Sign in again to load provider status.","warn");

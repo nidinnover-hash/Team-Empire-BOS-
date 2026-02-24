@@ -23,7 +23,7 @@ async def test_dashboard_returns_html(client):
 async def test_dashboard_contains_brand_name(client):
     _set_dashboard_session(client)
     response = await client.get("/")
-    assert "Personal Clone" in response.text
+    assert "Nidin Nover" in response.text
     assert "Executive Briefing" in response.text
     assert "Generate Daily Run (Draft Only)" in response.text
     assert "/web/integrations" in response.text

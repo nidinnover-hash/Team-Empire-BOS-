@@ -1,42 +1,33 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.models.command import Command
 from app.schemas.command import CommandCreate
 
-# These are placeholder keys — skip the OpenAI call for them
-_PLACEHOLDER_KEYS = {"sk-your-key-here", "sk-xxxxxxxxxxxxxxxxxxxxxxxx", ""}
 
+async def _call_ai(text: str, organization_id: int) -> tuple[str | None, str | None]:
+    """
+    Route through the central AI router (supports all providers + fallback).
+    Returns (response_text, model_name).
+    """
+    from app.services.ai_router import call_ai, _get_model
+    from app.core.config import settings
 
-async def _call_openai(text: str) -> tuple[str | None, str | None]:
-    """
-    Call GPT-4o-mini and return (response_text, model_name).
-    Returns (None, None) when no real key is set or on any error.
-    """
-    key = settings.OPENAI_API_KEY
-    if not key or key in _PLACEHOLDER_KEYS:
-        return None, None
     try:
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI(api_key=key)
-        result = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a Personal Clone — Nidin's sharp, efficient AI assistant. "
-                        "Be concise, practical, and direct. Help manage business, "
-                        "personal life, and long-term goals."
-                    ),
-                },
-                {"role": "user", "content": text},
-            ],
+        response = await call_ai(
+            system_prompt=(
+                "You are Nidin Nover — Nidin's sharp, efficient AI assistant. "
+                "Be concise, practical, and direct. Help manage business, "
+                "personal life, and long-term goals."
+            ),
+            user_message=text,
             max_tokens=600,
-            timeout=15.0,
+            organization_id=organization_id,
         )
-        return result.choices[0].message.content, "gpt-4o-mini"
+        if response and not response.startswith("Error:"):
+            provider = settings.DEFAULT_AI_PROVIDER
+            return response, _get_model(provider)
+        return None, None
     except Exception:
         return None, None
 
@@ -47,9 +38,9 @@ async def create_command(
     ai_response = data.ai_response
     model_used = None
 
-    # Auto-call OpenAI only when no manual response was provided
+    # Auto-call AI only when no manual response was provided
     if ai_response is None:
-        ai_response, model_used = await _call_openai(data.command_text)
+        ai_response, model_used = await _call_ai(data.command_text, organization_id)
 
     command = Command(
         organization_id=organization_id,

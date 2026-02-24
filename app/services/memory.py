@@ -32,9 +32,13 @@ from app.memory.retrieval import (
 async def get_profile_memory(
     db: AsyncSession, organization_id: int
 ) -> list[ProfileMemory]:
+    now = datetime.now(timezone.utc)
     result = await db.execute(
         select(ProfileMemory)
-        .where(ProfileMemory.organization_id == organization_id)
+        .where(
+            ProfileMemory.organization_id == organization_id,
+            (ProfileMemory.expires_at.is_(None)) | (ProfileMemory.expires_at > now),
+        )
         .order_by(ProfileMemory.category, ProfileMemory.key)
     )
     return list(result.scalars().all())

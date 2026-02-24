@@ -24,6 +24,7 @@ class ProfileMemory(Base):
     key: Mapped[str] = mapped_column(String(100), nullable=False)
     value: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    expires_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: dt.datetime.now(dt.timezone.utc),

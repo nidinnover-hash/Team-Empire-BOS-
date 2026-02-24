@@ -15,6 +15,7 @@ class IntegrationRead(BaseModel):
     config_json: dict
     status: str
     last_sync_at: datetime | None
+    last_sync_status: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -54,6 +55,7 @@ class AIProviderStatus(BaseModel):
     provider: str
     configured: bool
     active: bool
+    email_active: bool = False
     model: str
 
 
