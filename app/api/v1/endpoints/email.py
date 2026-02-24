@@ -18,6 +18,7 @@ from app.core.idempotency import (
 from app.core.oauth_state import sign_oauth_state, verify_oauth_state
 from app.core.deps import get_db
 from app.core.rbac import require_roles
+from app.core.config import settings
 from app.schemas.email import (
     ComposeRequest,
     DraftReplyRequest,
@@ -40,30 +41,31 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/email", tags=["Email"])
 
-# Per-org compose rate limit: max N composes per rolling window
+# Per-org compose rate limit (configurable via settings)
 _compose_counts: dict[int, _deque[float]] = {}
-_COMPOSE_MAX_PER_HOUR = 20
-_COMPOSE_WINDOW = 3600  # 1 hour
 _COMPOSE_MAX_ORGS = 500  # cap to prevent memory leak
+_COMPOSE_MAX_PER_HOUR = settings.COMPOSE_MAX_PER_HOUR
+_COMPOSE_WINDOW_SECONDS = settings.COMPOSE_WINDOW_SECONDS
 
 
 def _check_compose_rate(org_id: int) -> None:
     """Raise 429 if the org has exceeded the compose rate limit."""
+    max_per_hour = _COMPOSE_MAX_PER_HOUR
+    window = _COMPOSE_WINDOW_SECONDS
     now = time()
+    # Proactively evict stale orgs on every call (O(n) over small dict)
+    stale = [k for k, v in _compose_counts.items() if not v or now - v[-1] > window]
+    for k in stale:
+        del _compose_counts[k]
     if org_id not in _compose_counts:
-        # Evict stale orgs if dict exceeds cap
-        if len(_compose_counts) >= _COMPOSE_MAX_ORGS:
-            stale = [k for k, v in _compose_counts.items() if not v or now - v[-1] > _COMPOSE_WINDOW]
-            for k in stale:
-                del _compose_counts[k]
         _compose_counts[org_id] = _deque()
     bucket = _compose_counts[org_id]
-    while bucket and now - bucket[0] > _COMPOSE_WINDOW:
+    while bucket and now - bucket[0] > window:
         bucket.popleft()
-    if len(bucket) >= _COMPOSE_MAX_PER_HOUR:
+    if len(bucket) >= max_per_hour:
         raise HTTPException(
             status_code=429,
-            detail=f"Compose rate limit: max {_COMPOSE_MAX_PER_HOUR} per hour.",
+            detail=f"Compose rate limit: max {max_per_hour} per hour.",
         )
     bucket.append(now)
 

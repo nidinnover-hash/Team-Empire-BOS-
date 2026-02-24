@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
@@ -21,8 +21,9 @@ async def create_command(
 
 @router.get("", response_model=list[CommandRead])
 async def list_commands(
+    limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> list[CommandRead]:
-    """Return the 50 most recent commands, newest first."""
-    return await command_service.list_commands(db, organization_id=actor["org_id"])
+    """Return recent commands, newest first."""
+    return await command_service.list_commands(db, limit=limit, organization_id=actor["org_id"])

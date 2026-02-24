@@ -88,6 +88,11 @@ if settings.ADMIN_PASSWORD in _UNSAFE_PASSWORDS or len(settings.ADMIN_PASSWORD) 
     raise RuntimeError(
         "ADMIN_PASSWORD is insecure. Set a strong password (8+ chars) in .env."
     )
+if settings.TOKEN_ENCRYPTION_KEY and settings.TOKEN_ENCRYPTION_KEY == settings.SECRET_KEY:
+    raise RuntimeError(
+        "TOKEN_ENCRYPTION_KEY must differ from SECRET_KEY for proper key separation. "
+        "Generate a new one: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
 if settings.ENFORCE_STARTUP_VALIDATION or not settings.DEBUG:
     startup_issues = validate_startup_settings(settings)
     if startup_issues:

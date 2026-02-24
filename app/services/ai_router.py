@@ -320,7 +320,7 @@ async def _call_anthropic(
         return "Error: Anthropic not configured. Add ANTHROPIC_API_KEY to your .env file.", False
     try:
         import anthropic
-        client = anthropic.AsyncAnthropic(api_key=key)
+        client = anthropic.AsyncAnthropic(api_key=key, timeout=20.0)
         result = await client.messages.create(
             model=settings.AGENT_MODEL_ANTHROPIC,
             max_tokens=max_tokens,

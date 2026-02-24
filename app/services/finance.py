@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import date, timedelta
@@ -47,12 +49,12 @@ async def get_summary(db: AsyncSession, organization_id: int = 1) -> FinanceSumm
             FinanceEntry.organization_id == organization_id,
         )
     )
-    total_income = float(income_result.scalar() or 0)
-    total_expense = float(expense_result.scalar() or 0)
+    total_income = Decimal(str(income_result.scalar() or 0))
+    total_expense = Decimal(str(expense_result.scalar() or 0))
     return FinanceSummary(
-        total_income=total_income,
-        total_expense=total_expense,
-        balance=total_income - total_expense,
+        total_income=float(total_income),
+        total_expense=float(total_expense),
+        balance=float(total_income - total_expense),
     )
 
 
@@ -113,12 +115,12 @@ async def get_expenditure_efficiency(
         )
     )
     rows = list(result.scalars().all())
-    income = float(sum(x.amount for x in rows if x.type == "income"))
+    income = sum((Decimal(str(x.amount)) for x in rows if x.type == "income"), Decimal("0"))
     expenses = [x for x in rows if x.type == "expense"]
-    total_expense = float(sum(x.amount for x in expenses))
+    total_expense = sum((Decimal(str(x.amount)) for x in expenses), Decimal("0"))
     digital_expenses = [x for x in expenses if _is_digital_entry(x)]
-    digital_total = float(sum(x.amount for x in digital_expenses))
-    ratio = (digital_total / income) if income > 0 else (1.0 if digital_total > 0 else 0.0)
+    digital_total = sum((Decimal(str(x.amount)) for x in digital_expenses), Decimal("0"))
+    ratio = float(digital_total / income) if income > 0 else (1.0 if digital_total > 0 else 0.0)
 
     score = 100
     findings: list[FinanceEfficiencyFinding] = []
@@ -162,8 +164,8 @@ async def get_expenditure_efficiency(
         )
 
     if digital_total > 0:
-        max_single = float(max(x.amount for x in digital_expenses))
-        concentration = max_single / digital_total
+        max_single = max(Decimal(str(x.amount)) for x in digital_expenses)
+        concentration = float(max_single / digital_total)
         if concentration >= 0.45:
             score -= 15
             findings.append(
@@ -193,7 +195,7 @@ async def get_expenditure_efficiency(
 
     score = max(0, min(100, score))
     if ratio >= 0.20:
-        potential = round(digital_total * 0.12, 2)
+        potential = float(round(digital_total * Decimal("0.12"), 2))
         recommendations.append(
             FinanceEfficiencyRecommendation(
                 title="Run subscription and seat audit",
@@ -206,7 +208,7 @@ async def get_expenditure_efficiency(
             FinanceEfficiencyRecommendation(
                 title="Convert monthly tools to annual only after ROI proof",
                 action="Keep monthly plans during validation; switch to annual only for proven high-ROI tools.",
-                estimated_monthly_savings=round(digital_total * 0.04, 2),
+                estimated_monthly_savings=float(round(digital_total * Decimal("0.04"), 2)),
             )
         )
     if not recommendations:
@@ -220,9 +222,9 @@ async def get_expenditure_efficiency(
 
     return FinanceEfficiencyReport(
         window_days=window_days,
-        income_in_window=income,
-        total_expense_in_window=total_expense,
-        digital_expense_in_window=digital_total,
+        income_in_window=float(income),
+        total_expense_in_window=float(total_expense),
+        digital_expense_in_window=float(digital_total),
         digital_expense_ratio=round(ratio, 4),
         efficiency_score=score,
         findings=findings,

@@ -28,6 +28,15 @@ from app.tools import gmail as gmail_tool
 
 logger = logging.getLogger(__name__)
 
+# Per-org lock to serialize concurrent OAuth token refreshes
+_refresh_locks: dict[int, asyncio.Lock] = {}
+
+
+def _get_refresh_lock(org_id: int) -> asyncio.Lock:
+    if org_id not in _refresh_locks:
+        _refresh_locks[org_id] = asyncio.Lock()
+    return _refresh_locks[org_id]
+
 # Prefixes that indicate call_ai() returned an error string instead of content
 _AI_ERROR_PREFIXES = ("Error:", "error:", "I'm sorry", "I cannot", "I'm unable")
 
@@ -182,9 +191,10 @@ async def sync_emails(
         }
         raise EmailSyncError(code=code, message=message_by_code[code]) from exc
 
-    # Persist refreshed tokens if auto-refresh occurred
+    # Persist refreshed tokens if auto-refresh occurred (serialized per-org)
     if refreshed_tokens:
-        await _persist_refreshed_tokens(db, org_id, integration, refreshed_tokens, refresh_token)
+        async with _get_refresh_lock(org_id):
+            await _persist_refreshed_tokens(db, org_id, integration, refreshed_tokens, refresh_token)
 
     # Batch dedup: single query for all gmail_ids
     incoming_ids = [raw["gmail_id"] for raw in raw_emails if raw.get("gmail_id")]
@@ -278,7 +288,8 @@ async def check_gmail_health(
         return {"status": "error", "code": _classify_gmail_error(str(exc))}
 
     if refreshed_tokens:
-        await _persist_refreshed_tokens(db, org_id, integration, refreshed_tokens, refresh_token)
+        async with _get_refresh_lock(org_id):
+            await _persist_refreshed_tokens(db, org_id, integration, refreshed_tokens, refresh_token)
 
     return {
         "status": "ok",

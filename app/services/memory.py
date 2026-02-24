@@ -97,7 +97,9 @@ async def upsert_profile_memory(
                 ProfileMemory.key == key,
             )
         )
-        existing = cast(ProfileMemory, retry.scalar_one())
+        existing = cast(ProfileMemory | None, retry.scalar_one_or_none())
+        if existing is None:
+            raise  # re-raise IntegrityError if the winning row vanished
         existing.value = value
         existing.category = category
         existing.updated_at = datetime.now(timezone.utc)

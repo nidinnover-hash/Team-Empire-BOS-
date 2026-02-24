@@ -45,5 +45,10 @@ class Task(Base):
     depends_on_task_id: Mapped[int | None] = mapped_column(
         ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
     external_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
     external_source: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)

@@ -290,8 +290,8 @@ def record_login_failure(ip: str) -> None:
             return
     now = time.monotonic()
     with _login_lock:
-        # Evict stale IPs if dict exceeds cap to prevent memory leak
-        if len(_login_failures) >= _LOGIN_MAX_IPS:
+        # Proactively evict stale IPs to prevent memory leak
+        if len(_login_failures) > 100:
             stale = [
                 k for k, v in _login_failures.items()
                 if not v or now - v[-1] > LOGIN_FAIL_WINDOW

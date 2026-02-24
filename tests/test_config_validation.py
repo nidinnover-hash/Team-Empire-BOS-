@@ -11,6 +11,7 @@ def _base_settings(**overrides) -> Settings:
         "TOKEN_ENCRYPTION_KEY": "x" * 32,
         "SECRET_KEY": "y" * 64,
         "ADMIN_PASSWORD": "StrongTestPass2026!",
+        "ACCESS_TOKEN_EXPIRE_MINUTES": 60,
         "WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS": 300,
         "WHATSAPP_WEBHOOK_VERIFY_TOKEN": None,
         "WHATSAPP_APP_SECRET": None,

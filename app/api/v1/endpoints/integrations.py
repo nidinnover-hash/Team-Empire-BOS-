@@ -56,6 +56,8 @@ from app.api.v1.endpoints import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
+# NOTE: In-memory replay cache — sufficient for single-worker deployment.
+# For multi-worker, migrate to Redis with TTL-based expiry.
 _whatsapp_webhook_seen_signatures: dict[str, float] = {}
 _WHATSAPP_REPLAY_CACHE_MAX = 5000
 

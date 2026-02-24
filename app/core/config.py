@@ -121,6 +121,15 @@ class Settings(BaseSettings):
     WORK_EMAIL_DOMAINS: str = ""  # Comma-separated: "empire.com,empireo.ai"
     GMAIL_LABEL_ALLOWLIST: str = ""  # Comma-separated: "INBOX,work"
 
+    # Database connection pool (PostgreSQL only; ignored for SQLite)
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_TIMEOUT: int = 30
+
+    # Compose rate limiting
+    COMPOSE_MAX_PER_HOUR: int = 20
+    COMPOSE_WINDOW_SECONDS: int = 3600
+
     # Background sync scheduler
     SYNC_ENABLED: bool = True
     SYNC_INTERVAL_MINUTES: int = 30   # how often the scheduler fires

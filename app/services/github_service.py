@@ -294,7 +294,7 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 desc = f"Author: @{author}\n{url}"
                 is_draft = pr.get("draft", False)
                 prio = 2 if is_draft else 3
-                upsert_batch.append({"external_id": ext_id, "source": "github_pr", "title": title, "description": desc, "priority": prio})
+                upsert_batch.append({"external_id": ext_id, "source": "github_pr", "title": title, "description": desc, "priority": prio, "updated_at_raw": pr.get("updated_at")})
 
             # Sync open bug/critical issues
             try:
@@ -315,7 +315,7 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 url = issue.get("html_url", "")
                 desc = f"Labels: {', '.join(labels)}\n{url}"
                 prio = 4 if "critical" in labels or "urgent" in labels else 3
-                upsert_batch.append({"external_id": ext_id, "source": "github_issue", "title": title, "description": desc, "priority": prio})
+                upsert_batch.append({"external_id": ext_id, "source": "github_issue", "title": title, "description": desc, "priority": prio, "updated_at_raw": issue.get("updated_at")})
 
         # Batch-load all existing tasks for this org + sources to avoid N+1
         ext_ids = [item["external_id"] for item in upsert_batch]
@@ -337,6 +337,16 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 key = (upsert_item["source"], upsert_item["external_id"])
                 existing = existing_map.get(key)
                 if existing:
+                    # Skip overwrite if local task was edited after remote update
+                    raw_ts = upsert_item.get("updated_at_raw")
+                    updated_remote = None
+                    if raw_ts:
+                        try:
+                            updated_remote = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
+                        except Exception:
+                            pass
+                    if updated_remote and getattr(existing, "updated_at", None) and existing.updated_at > updated_remote:
+                        continue
                     existing.title = upsert_item["title"]
                     existing.description = upsert_item["description"]
                     existing.priority = upsert_item["priority"]

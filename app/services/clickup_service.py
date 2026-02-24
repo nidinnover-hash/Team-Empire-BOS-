@@ -231,6 +231,17 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
             try:
                 existing = existing_map.get(p["external_id"])
                 if existing:
+                    # Skip overwrite if local task was edited after remote update
+                    raw_item = p["raw"]
+                    updated_ms = raw_item.get("date_updated")
+                    updated_remote = None
+                    if updated_ms:
+                        try:
+                            updated_remote = datetime.fromtimestamp(int(updated_ms) / 1000, tz=timezone.utc)
+                        except Exception:
+                            pass
+                    if updated_remote and getattr(existing, "updated_at", None) and existing.updated_at > updated_remote:
+                        continue
                     existing.title = p["title"]
                     existing.description = p["description"]
                     existing.priority = p["priority"]
