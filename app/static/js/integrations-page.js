@@ -607,14 +607,16 @@
 window.showToast = function(msg, type) {
     var t = type || "info";
     var el = document.createElement("div");
-    el.className = "toast toast-" + t;
+    el.className = "toast " + t;
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
     el.innerHTML = "<span>" + String(msg).replace(/</g,"&lt;") + "</span>" +
-      "<button onclick=\"this.parentNode.remove()\">\u00d7</button>";
+      '<button aria-label="Dismiss" onclick="this.parentNode.classList.add(\'removing\');setTimeout(function(){this.parentNode.remove()}.bind(this),250)">\u00d7</button>';
     var c = document.getElementById("toast-container");
     if (c) c.appendChild(el);
     setTimeout(function() {
-      el.classList.add("toast-hide");
-      setTimeout(function() { el.remove(); }, 400);
+      el.classList.add("removing");
+      setTimeout(function() { el.remove(); }, 250);
     }, 4000);
   };
   if (typeof lucide !== "undefined") lucide.createIcons();

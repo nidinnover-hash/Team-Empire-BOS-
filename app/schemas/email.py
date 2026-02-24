@@ -80,3 +80,44 @@ class EmailComposeResponse(BaseModel):
     draft: str
     status: str
     message: str
+
+
+class ManagerReportTemplateRead(BaseModel):
+    subject_prefix: str
+    required_fields: list[str]
+    markdown_template: str
+
+
+class EmailControlItem(BaseModel):
+    email_id: int
+    classification: str
+    confidence: float
+    task_id: int | None = None
+    approval_id: int | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class EmailControlRunResponse(BaseModel):
+    scanned: int
+    processed: int
+    tasks_created: int
+    approvals_created: int
+    drafts_created: int
+    escalations_flagged: int
+    items: list[EmailControlItem]
+
+
+class PendingActionsDigestRead(BaseModel):
+    org_id: int
+    generated_at: str
+    total_open_tasks: int
+    total_pending_approvals: int
+    lines: list[str]
+
+
+class PendingActionsDigestDraftRead(BaseModel):
+    ok: bool
+    approval_id: int
+    to: str
+    subject: str
+    preview: str

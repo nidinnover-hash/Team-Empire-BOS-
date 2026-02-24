@@ -20,6 +20,11 @@ from app.schemas.daily_run import DailyRunRead
 from app.schemas.event import EventRead
 from app.schemas.intelligence import DecisionTraceCreate
 from app.schemas.ops import (
+    CloneDispatchItemRead,
+    CloneDispatchRequest,
+    CloneScoreRead,
+    CloneSummaryRead,
+    CloneTrainingRunRead,
     DecisionLogCreate,
     DecisionLogRead,
     EmployeeCreate,
@@ -31,6 +36,7 @@ from app.schemas.ops import (
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectStatusUpdate
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
 from app.services import briefing as briefing_service
+from app.services import clone_brain
 from app.services import daily_run as daily_run_service
 from app.services import employee as employee_service
 from app.services import email_service
@@ -710,3 +716,74 @@ async def activate_policy(
         payload_json={"title": policy.title},
     )
     return policy
+
+
+# ---- Clone Brain (data-driven training) ----
+
+
+@router.post("/clones/train", response_model=CloneTrainingRunRead)
+async def train_clone_brain(
+    week_start: date = Query(...),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> CloneTrainingRunRead:
+    org_id = int(user["org_id"])
+    result = await clone_brain.train_weekly_clone_scores(
+        db,
+        organization_id=org_id,
+        week_start_date=week_start,
+    )
+    await record_action(
+        db,
+        event_type="clone_brain_trained",
+        actor_user_id=user["id"],
+        organization_id=org_id,
+        entity_type="clone_performance_weekly",
+        entity_id=None,
+        payload_json={"week_start": str(week_start), "employees_scored": result["employees_scored"]},
+    )
+    return CloneTrainingRunRead(**result)
+
+
+@router.get("/clones/scores", response_model=list[CloneScoreRead])
+async def list_clone_scores(
+    week_start: date | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> list[CloneScoreRead]:
+    rows = await clone_brain.list_clone_scores(
+        db,
+        organization_id=int(user["org_id"]),
+        week_start_date=week_start,
+    )
+    return rows
+
+
+@router.get("/clones/summary", response_model=CloneSummaryRead)
+async def clone_score_summary(
+    week_start: date | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> CloneSummaryRead:
+    summary = await clone_brain.clone_org_summary(
+        db,
+        organization_id=int(user["org_id"]),
+        week_start_date=week_start,
+    )
+    return CloneSummaryRead(**summary)
+
+
+@router.post("/clones/dispatch-plan", response_model=list[CloneDispatchItemRead])
+async def clone_dispatch_plan(
+    data: CloneDispatchRequest,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> list[CloneDispatchItemRead]:
+    rows = await clone_brain.build_dispatch_plan(
+        db,
+        organization_id=int(user["org_id"]),
+        challenge=data.challenge,
+        week_start_date=data.week_start_date,
+        top_n=data.top_n,
+    )
+    return [CloneDispatchItemRead(**r) for r in rows]

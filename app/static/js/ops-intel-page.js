@@ -181,8 +181,8 @@ window.__bootPromise = fetch('/web/api-token')
 
     // Employee modal
     const modalEmp = document.getElementById('modal-emp');
-    document.getElementById('btn-add-emp').addEventListener('click', () => { modalEmp.style.display = 'flex'; });
-    document.getElementById('emp-cancel').addEventListener('click', () => { modalEmp.style.display = 'none'; });
+    document.getElementById('btn-add-emp').addEventListener('click', () => { modalEmp.classList.add('open'); });
+    document.getElementById('emp-cancel').addEventListener('click', () => { modalEmp.classList.remove('open'); });
     document.getElementById('emp-save').addEventListener('click', async () => {
       const body = {
         name: document.getElementById('emp-name').value,
@@ -196,7 +196,7 @@ window.__bootPromise = fetch('/web/api-token')
       if (cu) body.clickup_user_id = cu;
       try {
         await api('POST', '/api/v1/ops/employees', body);
-        modalEmp.style.display = 'none';
+        modalEmp.classList.remove('open');
         ['emp-name','emp-email','emp-role','emp-github','emp-clickup'].forEach(id => document.getElementById(id).value = '');
         await loadEmployees();
         notify("Employee saved.", "success");
@@ -207,8 +207,8 @@ window.__bootPromise = fetch('/web/api-token')
 
     // Decision modal
     const modalDec = document.getElementById('modal-decision');
-    document.getElementById('btn-add-decision').addEventListener('click', () => { modalDec.style.display = 'flex'; });
-    document.getElementById('dec-cancel').addEventListener('click', () => { modalDec.style.display = 'none'; });
+    document.getElementById('btn-add-decision').addEventListener('click', () => { modalDec.classList.add('open'); });
+    document.getElementById('dec-cancel').addEventListener('click', () => { modalDec.classList.remove('open'); });
     document.getElementById('dec-save').addEventListener('click', async () => {
       const body = {
         decision_type: document.getElementById('dec-type').value,
@@ -220,7 +220,7 @@ window.__bootPromise = fetch('/web/api-token')
       if (risk) body.risk = risk;
       try {
         await api('POST', '/api/v1/ops/decision-log', body);
-        modalDec.style.display = 'none';
+        modalDec.classList.remove('open');
         ['dec-context','dec-objective','dec-reason','dec-risk'].forEach(id => document.getElementById(id).value = '');
         await loadDecisions();
         notify("Decision logged.", "success");

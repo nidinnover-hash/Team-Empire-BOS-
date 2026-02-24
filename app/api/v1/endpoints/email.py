@@ -22,6 +22,7 @@ from app.core.config import settings
 from app.schemas.email import (
     ComposeRequest,
     DraftReplyRequest,
+    EmailControlRunResponse,
     EmailComposeResponse,
     EmailDraftResponse,
     EmailRead,
@@ -30,9 +31,12 @@ from app.schemas.email import (
     EmailSummaryResponse,
     GmailAuthUrlRead,
     GmailHealthRead,
+    ManagerReportTemplateRead,
+    PendingActionsDigestDraftRead,
+    PendingActionsDigestRead,
     SyncResult,
 )
-from app.services import email_service
+from app.services import email_control, email_service
 from app.services.email_service import EmailSyncError
 from app.tools.gmail import exchange_code_for_tokens, get_gmail_auth_url
 from app.services.integration import connect_integration, get_integration_by_type
@@ -46,6 +50,50 @@ _compose_counts: dict[int, _deque[float]] = {}
 _COMPOSE_MAX_ORGS = 500  # cap to prevent memory leak
 _COMPOSE_MAX_PER_HOUR = settings.COMPOSE_MAX_PER_HOUR
 _COMPOSE_WINDOW_SECONDS = settings.COMPOSE_WINDOW_SECONDS
+
+
+@router.get("/control/report-template", response_model=ManagerReportTemplateRead)
+async def report_template(
+    _user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> ManagerReportTemplateRead:
+    return ManagerReportTemplateRead(**email_control.manager_report_template())
+
+
+@router.post("/control/process", response_model=EmailControlRunResponse)
+async def process_email_control(
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> EmailControlRunResponse:
+    result = await email_control.process_inbox_controls(
+        db,
+        org_id=int(user["org_id"]),
+        actor_user_id=int(user["id"]),
+        limit=limit,
+    )
+    return EmailControlRunResponse(**result)
+
+
+@router.get("/control/pending-digest", response_model=PendingActionsDigestRead)
+async def pending_actions_digest(
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> PendingActionsDigestRead:
+    digest = await email_control.build_pending_actions_digest(db, org_id=int(user["org_id"]))
+    return PendingActionsDigestRead(**digest)
+
+
+@router.post("/control/pending-digest/draft", response_model=PendingActionsDigestDraftRead)
+async def draft_pending_actions_digest(
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> PendingActionsDigestDraftRead:
+    drafted = await email_control.draft_pending_actions_digest_email(
+        db,
+        org_id=int(user["org_id"]),
+        actor_user_id=int(user["id"]),
+    )
+    return PendingActionsDigestDraftRead(**drafted)
 
 
 def _check_compose_rate(org_id: int) -> None:

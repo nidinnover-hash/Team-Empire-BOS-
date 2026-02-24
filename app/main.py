@@ -75,6 +75,7 @@ from app.models import policy_rule as _model_policy_rule  # noqa: F401
 from app.models import weekly_report as _model_weekly_report  # noqa: F401
 from app.models import org_membership as _model_org_membership  # noqa: F401
 from app.models import org_role_permission as _model_org_role_permission  # noqa: F401
+from app.models import clone_performance as _model_clone_performance  # noqa: F401
 
 # Startup safety guard
 _UNSAFE_SECRET_KEYS = {"change_me_in_env", "changeme", "secret", "change-me", ""}
@@ -498,12 +499,20 @@ async def health_check():
             await asyncio.wait_for(conn.execute(text("SELECT 1")), timeout=3.0)
     except Exception:
         db_ok = False
+
+    # Scheduler status
+    from app.services.sync_scheduler import _scheduler_task
+    scheduler_running = (
+        _scheduler_task is not None and not _scheduler_task.done()
+    ) if _scheduler_task is not None else False
+
     uptime = round(time.time() - _server_start_time, 1) if _server_start_time else 0
     payload = {
         "status": "ok" if db_ok else "degraded",
         "version": settings.APP_VERSION,
         "uptime_seconds": uptime,
         "database": "ok" if db_ok else "error",
+        "scheduler": "running" if scheduler_running else "stopped",
     }
     return _JSONResponse(content=payload, status_code=200 if db_ok else 503)
 
@@ -555,16 +564,24 @@ async def web_talk_bootstrap(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     org_id = int(user["org_id"])
-    tasks = await task_service.list_tasks(
-        db,
-        limit=5,
-        is_done=False,
-        organization_id=org_id,
-    )
-    projects = await project_service.list_projects(db, limit=5, organization_id=org_id)
-    notes = await note_service.list_notes(db, limit=3, organization_id=org_id)
-    profile_memory = await memory_service.get_profile_memory(db, organization_id=org_id)
-    executive = await briefing_service.get_executive_briefing(db, org_id=org_id)
+    try:
+        tasks, projects, notes, profile_memory, executive = await asyncio.wait_for(
+            asyncio.gather(
+                task_service.list_tasks(
+                    db,
+                    limit=5,
+                    is_done=False,
+                    organization_id=org_id,
+                ),
+                project_service.list_projects(db, limit=5, organization_id=org_id),
+                note_service.list_notes(db, limit=3, organization_id=org_id),
+                memory_service.get_profile_memory(db, organization_id=org_id),
+                briefing_service.get_executive_briefing(db, org_id=org_id),
+            ),
+            timeout=10.0,
+        )
+    except asyncio.TimeoutError:
+        tasks, projects, notes, profile_memory, executive = [], [], [], [], {}
     summary = executive.get("team_summary", {})
     open_tasks = len(tasks)
     pending_approvals = int(summary.get("pending_approvals", 0) or 0)

@@ -43,6 +43,7 @@ async def _db_session_with_retry(max_retries: int = 3, base_delay: float = 2.0):
 # Default 15 — overridden by settings.SYNC_THROTTLE_MINUTES at runtime.
 _last_synced: dict[int, datetime] = {}
 _last_ceo_summary_date_by_org: dict[int, str] = {}
+_last_pending_digest_date_by_org: dict[int, str] = {}
 
 
 def get_last_synced_for_org(org_id: int) -> datetime | None:
@@ -259,8 +260,9 @@ async def _maybe_send_daily_ceo_slack_summary(
 async def _run_integrations(db: AsyncSession, org_id: int) -> None:
     """Sync all connected integrations for org_id. Logs but never raises."""
     from sqlalchemy import update
+    from app.core.config import settings
     from app.models.integration import Integration
-    from app.services import clickup_service, do_service, github_service, slack_service
+    from app.services import clickup_service, do_service, email_control, email_service, github_service, slack_service
     from app.services import compliance_engine
     from app.services.calendar_service import sync_calendar_events
     from app.core.resilience import run_with_retry
@@ -312,6 +314,47 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
                 finished_at=datetime.now(timezone.utc),
                 error=f"{type(exc).__name__}: {str(exc)[:500]}",
             )
+
+    # Email sync + control classification loop (best effort)
+    started = datetime.now(timezone.utc)
+    try:
+        if getattr(settings, "FEATURE_EMAIL_SYNC", True):
+            try:
+                await email_service.sync_emails(db, org_id=org_id, actor_user_id=1)
+            except Exception:
+                pass
+            control_result = await email_control.process_inbox_controls(
+                db,
+                org_id=org_id,
+                actor_user_id=1,
+                limit=100,
+            )
+            processed = control_result.get("processed", 0)
+            tasks_created = control_result.get("tasks_created", 0)
+            approvals_created = control_result.get("approvals_created", 0)
+            await _record_job_run(
+                db,
+                org_id=org_id,
+                job_name="email_control_loop",
+                status="ok",
+                started_at=started,
+                finished_at=datetime.now(timezone.utc),
+                details={
+                    "processed": processed if isinstance(processed, int) else 0,
+                    "tasks_created": tasks_created if isinstance(tasks_created, int) else 0,
+                    "approvals_created": approvals_created if isinstance(approvals_created, int) else 0,
+                },
+            )
+    except Exception as exc:
+        await _record_job_run(
+            db,
+            org_id=org_id,
+            job_name="email_control_loop",
+            status="error",
+            started_at=started,
+            finished_at=datetime.now(timezone.utc),
+            error=f"{type(exc).__name__}: {str(exc)[:500]}",
+        )
 
     # Google Calendar sync - stored as DailyContext, auto-included in memory
     started = datetime.now(timezone.utc)
@@ -560,6 +603,32 @@ async def _maybe_generate_daily_ceo_summary(db: AsyncSession, org_id: int) -> No
     )
 
 
+async def _maybe_generate_daily_pending_digest(db: AsyncSession, org_id: int) -> None:
+    from app.core.config import settings
+    from app.services import email_control
+
+    if not settings.EMAIL_CONTROL_DIGEST_ENABLED:
+        return
+    tz = ZoneInfo("Asia/Kolkata")
+    local_now = datetime.now(timezone.utc).astimezone(tz)
+    if local_now.hour < settings.EMAIL_CONTROL_DIGEST_HOUR_IST:
+        return
+    if (
+        local_now.hour == settings.EMAIL_CONTROL_DIGEST_HOUR_IST
+        and local_now.minute < settings.EMAIL_CONTROL_DIGEST_MINUTE_IST
+    ):
+        return
+    day_key = local_now.strftime("%Y-%m-%d")
+    if _last_pending_digest_date_by_org.get(org_id) == day_key:
+        return
+    await email_control.draft_pending_actions_digest_email(
+        db=db,
+        org_id=org_id,
+        actor_user_id=1,
+    )
+    _last_pending_digest_date_by_org[org_id] = day_key
+
+
 async def _cleanup_old_chat_messages(db: AsyncSession, org_id: int) -> None:
     """Delete chat messages older than CHAT_HISTORY_RETENTION_DAYS."""
     from datetime import timedelta
@@ -598,6 +667,7 @@ async def _scheduler_loop(interval_minutes: int) -> None:
                         await _run_integrations(db, org.id)
                         await _check_morning_briefing(db, org.id)
                         await _maybe_generate_daily_ceo_summary(db, org.id)
+                        await _maybe_generate_daily_pending_digest(db, org.id)
                         await _cleanup_old_chat_messages(db, org.id)
                         _last_synced[org.id] = datetime.now(timezone.utc)
                 except Exception as exc:

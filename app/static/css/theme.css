@@ -521,6 +521,57 @@ label {
 .modal-actions {
   display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1.25rem;
 }
+.modal-form {
+  display: flex; flex-direction: column; gap: .6rem;
+}
+
+/* ── Loading spinner ──────────────────────────────────────────────────── */
+.spinner {
+  display: inline-block; width: 18px; height: 18px;
+  border: 2px solid var(--line);
+  border-top-color: var(--text-muted);
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+}
+.spinner.lg { width: 28px; height: 28px; border-width: 3px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-center {
+  display: flex; align-items: center; justify-content: center;
+  gap: .5rem; padding: 2rem; color: var(--text-faint); font-size: .82rem;
+}
+
+/* ── Toast exit animation ─────────────────────────────────────────────── */
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-8px); }
+}
+.toast.removing {
+  animation: toast-out .25s ease forwards;
+}
+
+/* ── Form validation states ───────────────────────────────────────────── */
+.input-error,
+input.input-error,
+select.input-error,
+textarea.input-error {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 3px rgba(239,68,68,0.08);
+}
+.field-error {
+  font-size: .7rem; color: var(--danger); margin-top: .15rem;
+}
+
+/* ── Compose form area ────────────────────────────────────────────────── */
+.compose-area {
+  display: none; padding: .8rem 1.1rem; border-bottom: 1px solid var(--line-soft);
+}
+.compose-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-bottom: .6rem;
+}
+.compose-footer {
+  display: flex; justify-content: space-between; align-items: center; margin-top: .6rem;
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MOBILE NAVIGATION

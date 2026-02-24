@@ -139,3 +139,49 @@ class CommsMetricRead(BaseModel):
     escalation_count: int
 
     model_config = {"from_attributes": True}
+
+
+class CloneScoreRead(BaseModel):
+    id: int
+    organization_id: int
+    employee_id: int
+    week_start_date: date
+    productivity_score: float
+    quality_score: float
+    collaboration_score: float
+    learning_score: float
+    overall_score: float
+    readiness_level: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CloneTrainingRunRead(BaseModel):
+    week_start_date: str
+    employees_scored: int
+
+
+class CloneSummaryRead(BaseModel):
+    count: int
+    avg_score: float
+    elite: int
+    strong: int
+    developing: int
+    needs_support: int
+
+
+class CloneDispatchRequest(BaseModel):
+    challenge: str = Field(..., min_length=4, max_length=2000)
+    week_start_date: date | None = None
+    top_n: int = Field(default=3, ge=1, le=10)
+
+
+class CloneDispatchItemRead(BaseModel):
+    employee_id: int
+    employee_name: str
+    role: str | None
+    overall_score: float
+    readiness_level: str
+    fit_reason: str

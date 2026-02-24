@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nidin Nover - Command Center</title>
+  <meta name="description" content="AI Command Center — Personal Clone by Nidin Nover" />
+  <meta name="theme-color" content="#18181b" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Command Center — Nidin Nover</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
   <link rel="stylesheet" href="/static/css/dashboard.css" />
   
@@ -136,17 +139,17 @@
         <button id="inbox-compose-btn" class="btn-run" type="button">+ Compose</button>
       </div>
     </div>
-    <div id="inbox-compose-form" style="display:none;padding:.8rem 1.1rem;border-bottom:1px solid var(--line-soft)">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.6rem">
-        <input id="compose-to" type="email" placeholder="To: email@example.com" style="background:#ffffff;border:1px solid #e5e5e5;border-radius:6px;color:#111111;padding:.45rem .7rem;font-size:.82rem;outline:none">
-        <input id="compose-subject" type="text" placeholder="Subject" style="background:#ffffff;border:1px solid #e5e5e5;border-radius:6px;color:#111111;padding:.45rem .7rem;font-size:.82rem;outline:none">
+    <div id="inbox-compose-form" class="compose-area">
+      <div class="compose-grid">
+        <input id="compose-to" type="email" placeholder="To: email@example.com" aria-label="Recipient email" />
+        <input id="compose-subject" type="text" placeholder="Subject" aria-label="Email subject" />
       </div>
-      <textarea id="compose-instruction" placeholder="Instructions for ChatGPT: e.g. 'Follow up on the overseas education proposal, be professional but warm'" style="width:100%;background:#ffffff;border:1px solid #e5e5e5;border-radius:6px;color:#111111;padding:.45rem .7rem;font-size:.82rem;min-height:70px;resize:vertical;outline:none;font-family:inherit"></textarea>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.6rem">
+      <textarea id="compose-instruction" placeholder="Instructions for ChatGPT: e.g. 'Follow up on the overseas education proposal, be professional but warm'" style="min-height:70px;resize:vertical" aria-label="Compose instructions"></textarea>
+      <div class="compose-footer">
         <span id="compose-status" class="run-status"></span>
-        <div style="display:flex;gap:.5rem">
-          <button id="compose-cancel-btn" class="btn-run" type="button" style="background:#fef2f2;border-color:#fecaca;color:var(--danger)">Cancel</button>
-          <button id="compose-send-btn" class="btn-run" type="button" style="background:#111111;border-color:#111111;color:#ffffff">Draft with ChatGPT</button>
+        <div class="flex gap-2">
+          <button id="compose-cancel-btn" class="btn danger" type="button">Cancel</button>
+          <button id="compose-send-btn" class="btn primary" type="button">Draft with ChatGPT</button>
         </div>
       </div>
     </div>

@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nidin Nover - Ops Intelligence</title>
+  <meta name="description" content="AI Command Center — Personal Clone by Nidin Nover" />
+  <meta name="theme-color" content="#18181b" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Ops Intelligence — Nidin Nover</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
   <link rel="stylesheet" href="/static/css/ops_intel.css" />
   <script nonce="{{ csp_nonce }}" src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
@@ -143,16 +146,16 @@
   </div>
 
   <!-- Add Employee Modal -->
-  <div id="modal-emp" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.3);display:none;align-items:center;justify-content:center">
-    <div style="background:#fff;border-radius:12px;padding:1.5rem;width:420px;max-width:90vw;box-shadow:0 8px 30px rgba(0,0,0,.15)">
-      <h3 style="font-size:.9rem;margin-bottom:1rem">Add Employee</h3>
-      <div style="display:flex;flex-direction:column;gap:.6rem">
-        <input id="emp-name" placeholder="Name" style="padding:.4rem .6rem;border:1px solid #e5e5e5;border-radius:6px;font-size:.8rem" />
-        <input id="emp-email" placeholder="Email" style="padding:.4rem .6rem;border:1px solid #e5e5e5;border-radius:6px;font-size:.8rem" />
-        <input id="emp-role" placeholder="Role (optional)" style="padding:.4rem .6rem;border:1px solid #e5e5e5;border-radius:6px;font-size:.8rem" />
-        <input id="emp-github" placeholder="GitHub Username (optional)" style="padding:.4rem .6rem;border:1px solid #e5e5e5;border-radius:6px;font-size:.8rem" />
-        <input id="emp-clickup" placeholder="ClickUp User ID (optional)" style="padding:.4rem .6rem;border:1px solid #e5e5e5;border-radius:6px;font-size:.8rem" />
-        <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem">
+  <div id="modal-emp" class="modal-mask">
+    <div class="modal" style="max-width:420px">
+      <h3 class="modal-title">Add Employee</h3>
+      <div class="modal-form">
+        <input id="emp-name" placeholder="Name" aria-label="Employee name" />
+        <input id="emp-email" type="email" placeholder="Email" aria-label="Employee email" />
+        <input id="emp-role" placeholder="Role (optional)" aria-label="Employee role" />
+        <input id="emp-github" placeholder="GitHub Username (optional)" aria-label="GitHub username" />
+        <input id="emp-clickup" placeholder="ClickUp User ID (optional)" aria-label="ClickUp user ID" />
+        <div class="modal-actions">
           <button class="btn" id="emp-cancel">Cancel</button>
           <button class="btn primary" id="emp-save">Save</button>
         </div>
@@ -161,21 +164,21 @@
   </div>
 
   <!-- Add Decision Modal -->
-  <div id="modal-decision" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.3);align-items:center;justify-content:center">
-    <div style="background:#fff;border-radius:12px;padding:1.5rem;width:480px;max-width:90vw;box-shadow:0 8px 30px rgba(0,0,0,.15)">
-      <h3 style="font-size:.9rem;margin-bottom:1rem">Log Decision</h3>
-      <div style="display:flex;flex-direction:column;gap:.6rem">
-        <select id="dec-type" style="padding:.4rem .6rem;border:1px solid #e5e5e5;border-radius:6px;font-size:.8rem">
+  <div id="modal-decision" class="modal-mask">
+    <div class="modal" style="max-width:480px">
+      <h3 class="modal-title">Log Decision</h3>
+      <div class="modal-form">
+        <select id="dec-type" aria-label="Decision type">
           <option value="approve">Approve</option>
           <option value="reject">Reject</option>
           <option value="defer">Defer</option>
           <option value="escalate">Escalate</option>
         </select>
-        <input id="dec-context" placeholder="Context" style="padding:.4rem .6rem;border:1px solid #e5e5e5;border-radius:6px;font-size:.8rem" />
-        <input id="dec-objective" placeholder="Objective" style="padding:.4rem .6rem;border:1px solid #e5e5e5;border-radius:6px;font-size:.8rem" />
-        <input id="dec-reason" placeholder="Reason" style="padding:.4rem .6rem;border:1px solid #e5e5e5;border-radius:6px;font-size:.8rem" />
-        <input id="dec-risk" placeholder="Risk (optional)" style="padding:.4rem .6rem;border:1px solid #e5e5e5;border-radius:6px;font-size:.8rem" />
-        <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem">
+        <input id="dec-context" placeholder="Context" aria-label="Decision context" />
+        <input id="dec-objective" placeholder="Objective" aria-label="Decision objective" />
+        <input id="dec-reason" placeholder="Reason" aria-label="Decision reason" />
+        <input id="dec-risk" placeholder="Risk (optional)" aria-label="Decision risk" />
+        <div class="modal-actions">
           <button class="btn" id="dec-cancel">Cancel</button>
           <button class="btn primary" id="dec-save">Save</button>
         </div>
