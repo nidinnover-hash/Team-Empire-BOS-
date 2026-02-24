@@ -13,6 +13,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 import json
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,8 +22,15 @@ from contextlib import asynccontextmanager
 
 from app.db.session import AsyncSessionLocal  # noqa: E402 - imported here so tests can patch it
 from app.models.ceo_control import SchedulerJobRun
+from app.core.resilience import IntegrationSyncError, RetryPolicy, error_details, run_with_retry
 
 logger = logging.getLogger(__name__)
+_SYNC_RETRY_POLICY = RetryPolicy(
+    attempts=2,
+    timeout_seconds=30.0,
+    backoff_seconds=1.0,
+    retry_exceptions=(IntegrationSyncError, TimeoutError, ConnectionError),
+)
 
 @asynccontextmanager
 async def _db_session_with_retry(max_retries: int = 3, base_delay: float = 2.0):
@@ -265,8 +273,6 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
     from app.services import clickup_service, do_service, email_control, email_service, github_service, slack_service
     from app.services import compliance_engine
     from app.services.calendar_service import sync_calendar_events
-    from app.core.resilience import run_with_retry
-
     async def _mark_status(int_type: str, status: str) -> None:
         try:
             await db.execute(
@@ -277,6 +283,17 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
         except Exception:
             pass  # best-effort status tracking
 
+    async def _run_sync_operation(name: str, fn: Any) -> dict[str, object]:
+        result = await fn(db, org_id)
+        if isinstance(result, dict) and result.get("error"):
+            raise IntegrationSyncError(
+                provider=name,
+                code="sync_error",
+                message=str(result.get("error")),
+                retryable=True,
+            )
+        return result if isinstance(result, dict) else {"ok": True}
+
     for name, fn in [
         ("clickup", clickup_service.sync_clickup_tasks),
         ("github", github_service.sync_github),
@@ -285,11 +302,15 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
     ]:
         started = datetime.now(timezone.utc)
         try:
+            async def _op(_name: str = name, _fn: Any = fn) -> dict[str, object]:
+                return await _run_sync_operation(_name, _fn)
+
             result = await run_with_retry(
-                lambda _fn=fn: _fn(db, org_id),  # type: ignore[misc]
-                attempts=2,
-                timeout_seconds=30.0,
-                backoff_seconds=1.0,
+                _op,
+                attempts=_SYNC_RETRY_POLICY.attempts,
+                timeout_seconds=_SYNC_RETRY_POLICY.timeout_seconds,
+                backoff_seconds=_SYNC_RETRY_POLICY.backoff_seconds,
+                retry_exceptions=_SYNC_RETRY_POLICY.retry_exceptions,
             )
             logger.debug("Sync %s org=%d -> %s", name, org_id, result)
             await _mark_status(name, "ok")
@@ -305,6 +326,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
         except Exception as exc:
             logger.warning("Background %s sync failed org=%d: %s: %s", name, org_id, type(exc).__name__, str(exc)[:500])
             await _mark_status(name, "error")
+            details = error_details(exc)
             await _record_job_run(
                 db,
                 org_id=org_id,
@@ -312,6 +334,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
                 status="error",
                 started_at=started,
                 finished_at=datetime.now(timezone.utc),
+                details=details,
                 error=f"{type(exc).__name__}: {str(exc)[:500]}",
             )
 
@@ -361,9 +384,10 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
     try:
         result = await run_with_retry(
             lambda: sync_calendar_events(db, organization_id=org_id),
-            attempts=2,
-            timeout_seconds=30.0,
-            backoff_seconds=1.0,
+            attempts=_SYNC_RETRY_POLICY.attempts,
+            timeout_seconds=_SYNC_RETRY_POLICY.timeout_seconds,
+            backoff_seconds=_SYNC_RETRY_POLICY.backoff_seconds,
+            retry_exceptions=_SYNC_RETRY_POLICY.retry_exceptions,
         )
         logger.debug("Sync calendar org=%d -> %s", org_id, result)
         await _mark_status("google_calendar", "ok")
@@ -379,6 +403,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
     except Exception as exc:
         logger.warning("Background calendar sync failed org=%d: %s: %s", org_id, type(exc).__name__, str(exc)[:500])
         await _mark_status("google_calendar", "error")
+        details = error_details(exc)
         await _record_job_run(
             db,
             org_id=org_id,
@@ -386,6 +411,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             status="error",
             started_at=started,
             finished_at=datetime.now(timezone.utc),
+            details=details,
             error=f"{type(exc).__name__}: {str(exc)[:500]}",
         )
 
@@ -405,6 +431,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
         if hasattr(db, "commit"):
             await db.commit()
     except Exception as exc:
+        details = error_details(exc)
         await _record_job_run(
             db,
             org_id=org_id,
@@ -412,6 +439,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             status="error",
             started_at=started,
             finished_at=datetime.now(timezone.utc),
+            details=details,
             error=f"{type(exc).__name__}: {str(exc)[:500]}",
         )
         if hasattr(db, "commit"):

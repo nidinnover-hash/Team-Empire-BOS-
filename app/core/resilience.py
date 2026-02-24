@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from typing import Awaitable, Callable, TypeVar
 
 T = TypeVar("T")
@@ -9,6 +10,24 @@ _retry_stats: dict[str, int] = {
     "retries": 0,
     "failures": 0,
 }
+
+
+class IntegrationSyncError(Exception):
+    """Typed integration sync error with provider/code metadata."""
+
+    def __init__(self, provider: str, code: str, message: str, *, retryable: bool = True) -> None:
+        super().__init__(message)
+        self.provider = provider
+        self.code = code
+        self.retryable = retryable
+
+
+@dataclass(frozen=True, slots=True)
+class RetryPolicy:
+    attempts: int = 3
+    timeout_seconds: float = 10.0
+    backoff_seconds: float = 0.3
+    retry_exceptions: tuple[type[Exception], ...] = (Exception,)
 
 
 def get_retry_stats() -> dict[str, int]:
@@ -39,3 +58,15 @@ async def run_with_retry(
             await asyncio.sleep(backoff_seconds * (2**i))
     assert last_exc is not None
     raise last_exc
+
+
+def error_details(exc: Exception) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "error_type": type(exc).__name__,
+        "message": str(exc)[:500],
+    }
+    if isinstance(exc, IntegrationSyncError):
+        payload["provider"] = exc.provider
+        payload["code"] = exc.code
+        payload["retryable"] = exc.retryable
+    return payload

@@ -196,4 +196,3 @@ async def send_to_slack(
     require_org_id(org_id)
     result = await run_with_retry(lambda: post_message(token, channel_id, text))
     return {"ok": True, "ts": result.get("ts")}
-    require_org_id(org_id)

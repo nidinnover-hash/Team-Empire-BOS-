@@ -310,4 +310,3 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
 
     await integration_service.mark_sync_time(db, item)
     return {"synced": synced, "critical_synced": critical_synced, "error": None}
-    require_org_id(org_id)

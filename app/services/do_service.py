@@ -11,6 +11,7 @@ from app.models.ceo_control import (
     DigitalOceanDropletSnapshot,
     DigitalOceanTeamSnapshot,
 )
+from app.core.tenant import require_org_id
 from app.services import integration as integration_service
 from app.tools import digitalocean as do_tool
 
@@ -18,6 +19,7 @@ _TYPE = "digitalocean"
 
 
 async def connect_digitalocean(db: AsyncSession, org_id: int, api_token: str) -> dict[str, Any]:
+    require_org_id(org_id)
     account = await do_tool.get_account(api_token)
     item = await integration_service.connect_integration(
         db=db,
@@ -88,7 +90,7 @@ async def sync_digitalocean(db: AsyncSession, org_id: int) -> dict[str, Any]:
     else:
         try:
             amount = float(str(raw_amount))
-        except Exception:
+        except (TypeError, ValueError):
             amount = None
     db.add(
         DigitalOceanCostSnapshot(
