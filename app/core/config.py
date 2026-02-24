@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     COMPLIANCE_TECH_LEAD_EMAIL: str = "sharon@empireoe.com"
     COMPLIANCE_OPS_MANAGER_EMAIL: str = "mano@empireoe.com"
     COMPLIANCE_DEV_EMAILS: str = "dev1@empireoe.com,dev2@empireoe.com,dev3@empireoe.com,dev4@empireoe.com"
+    COMPLIANCE_COMPANY_DOMAIN: str = "empireoe.com"
+    PERSONAL_ORG_ID: int | None = None
     CLICKUP_CRITICAL_FOLDER_NAME: str = "🔴 Critical Systems"
     CLICKUP_CEO_PRIORITY_TAG: str = "CEO-PRIORITY"
     DIGITALOCEAN_BASE_URL: str = "https://api.digitalocean.com/v2"
@@ -90,8 +92,9 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: str = "demo@ai.com"
     ADMIN_PASSWORD: str = "demo"  # Override in .env — never leave 'demo' in production
     ADMIN_NAME: str = "Nidin Nover"
-    ALGORITHM: str = "HS256"
+    ALGORITHM: Literal["HS256"] = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
+    CHAT_HISTORY_RETENTION_DAYS: int = 90
     # Separate key for Fernet token encryption (Integration.config_json).
     # If not set, falls back to a SHA-256 derivative of SECRET_KEY (legacy behaviour).
     # Set this to a different random 32-byte hex value to achieve key separation.
@@ -118,6 +121,8 @@ class Settings(BaseSettings):
     SYNC_INTERVAL_MINUTES: int = 30   # how often the scheduler fires
     SYNC_THROTTLE_MINUTES: int = 15   # min gap for on-demand (login/dashboard) syncs
     CEO_SUMMARY_TIMEZONE: str = "Asia/Kolkata"
+    CEO_ALERTS_SLACK_CHANNEL_ID: str | None = None
+    SYNC_STALE_HOURS: int = 24
 
     # Feature flags — disable expensive features without redeploying
     FEATURE_AI_COMMANDS: bool = True     # AI responses in command input
@@ -177,6 +182,10 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("SYNC_INTERVAL_MINUTES must be <= 1440 (24 hours)")
     if s.SYNC_THROTTLE_MINUTES < 0:
         issues.append("SYNC_THROTTLE_MINUTES must be >= 0")
+    if s.SYNC_STALE_HOURS < 1:
+        issues.append("SYNC_STALE_HOURS must be >= 1")
+    if s.SYNC_STALE_HOURS > 168:
+        issues.append("SYNC_STALE_HOURS must be <= 168 (7 days)")
     if not (s.GITHUB_ORG or "").strip() and (s.GITHUB_APP_ID or s.GITHUB_PRIVATE_KEY_PEM):
         issues.append("GITHUB_ORG must be set when GitHub App auth is configured")
 

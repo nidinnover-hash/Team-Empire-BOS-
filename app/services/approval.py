@@ -38,12 +38,17 @@ async def get_approval(
 
 
 async def list_approvals(
-    db: AsyncSession, organization_id: int, status: str | None = None
+    db: AsyncSession,
+    organization_id: int,
+    status: str | None = None,
+    limit: int = 200,
+    offset: int = 0,
 ) -> list[Approval]:
     query = select(Approval).order_by(Approval.created_at.desc())
     query = query.where(Approval.organization_id == organization_id)
     if status is not None:
         query = query.where(Approval.status == status)
+    query = query.limit(limit).offset(offset)
     result = await db.execute(query)
     return list(result.scalars().all())
 

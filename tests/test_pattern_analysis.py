@@ -205,7 +205,8 @@ async def test_patterns_injected_into_memory_context(client):
         ))
         await session.commit()
 
-        from app.services.memory import build_memory_context
+        from app.services.memory import build_memory_context, invalidate_memory_cache
+        invalidate_memory_cache(1)
         ctx = await build_memory_context(session, organization_id=1)
         assert "[WORK PATTERNS" in ctx
         assert "Dave" in ctx

@@ -41,7 +41,7 @@ async def daily_briefing(
     AI-generated morning briefing for Nidin.
     Covers team status, urgent actions, and today's focus.
     """
-    org_id = int(current_user.get("org_id", 1))
+    org_id = int(current_user.get("org_id"))
     payload = await get_daily_briefing(
         db=db,
         org_id=org_id,
@@ -61,7 +61,7 @@ async def team_dashboard(
     Live team dashboard — all members, their plans, tasks done vs pending.
     No AI call, always fast.
     """
-    org_id = int(_user.get("org_id", 1))
+    org_id = int(_user.get("org_id"))
     payload = await get_team_dashboard(db=db, org_id=org_id)
     return cast(TeamDashboardResponse, TeamDashboardResponse.model_validate(payload))
 
@@ -75,7 +75,7 @@ async def executive_briefing(
     Executive dashboard snapshot: team, approvals, inbox, and today's priorities.
     Non-AI and safe to call frequently.
     """
-    org_id = int(_user.get("org_id", 1))
+    org_id = int(_user.get("org_id"))
     payload = await get_executive_briefing(db=db, org_id=org_id)
     return cast(ExecutiveBriefingResponse, ExecutiveBriefingResponse.model_validate(payload))
 
@@ -94,7 +94,7 @@ async def draft_plans(
     Plans are created as drafts — nothing is sent until approved.
     Filter by team name (tech, sales, ops) or leave empty for all.
     """
-    org_id = int(current_user.get("org_id", 1))
+    org_id = int(current_user.get("org_id"))
     plans = await draft_team_plans(
         db=db,
         org_id=org_id,
@@ -120,7 +120,7 @@ async def list_plans(
     List all task plans for today (or a specific date).
     Filter by status: draft, approved, sent.
     """
-    org_id = int(_user.get("org_id", 1))
+    org_id = int(_user.get("org_id"))
     plans = await get_team_plans(db=db, org_id=org_id, plan_date=plan_date, status=status)
     return [TeamPlanRead.model_validate(item) for item in plans]
 
@@ -135,7 +135,7 @@ async def approve_task_plan(
     Approve a drafted task plan. CEO/ADMIN only.
     After approval the plan is locked and ready to be communicated to the team member.
     """
-    org_id = int(current_user.get("org_id", 1))
+    org_id = int(current_user.get("org_id"))
     plan = await approve_plan(
         db=db,
         plan_id=plan_id,
@@ -159,7 +159,7 @@ async def complete_task(
     _user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> CompleteTaskResponse:
     """Mark a specific task in a plan as done. Zero-indexed."""
-    org_id = int(_user.get("org_id", 1))
+    org_id = int(_user.get("org_id"))
     plan = await mark_task_done(db=db, plan_id=plan_id, task_index=task_index, org_id=org_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan or task not found")

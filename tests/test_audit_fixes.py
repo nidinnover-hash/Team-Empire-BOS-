@@ -23,7 +23,7 @@ async def test_compose_rate_limit_blocks_after_threshold(client):
     original_max = email_mod._COMPOSE_MAX_PER_HOUR
     email_mod._COMPOSE_MAX_PER_HOUR = 2  # Lower for test
 
-    fake_compose = AsyncMock(return_value={"approval_id": 1, "status": "pending_approval"})
+    fake_compose = AsyncMock(return_value="Dear colleague, this is a test draft.")
 
     try:
         with patch.object(email_mod, "email_service") as mock_svc:

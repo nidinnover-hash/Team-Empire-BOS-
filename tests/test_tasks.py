@@ -94,10 +94,11 @@ async def test_update_task_not_found_returns_404(client):
     assert response.status_code == 404
 
 
-async def test_update_task_missing_body_returns_422(client):
+async def test_update_task_empty_body_is_noop(client):
     task_id = (
         await client.post("/api/v1/tasks", json={"title": "Some task"})
     ).json()["id"]
 
     response = await client.patch(f"/api/v1/tasks/{task_id}", json={})
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert response.json()["title"] == "Some task"  # unchanged

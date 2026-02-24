@@ -28,7 +28,7 @@ async def global_search(
     Search across all data types. Returns up to 5 results per type.
     Uses LIKE matching (case-insensitive for SQLite, depends on collation for PG).
     """
-    org_id = int(actor.get("org_id", 1))
+    org_id = int(actor.get("org_id"))
     pattern = f"%{q}%"
 
     from sqlalchemy import select

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from zoneinfo import ZoneInfo
 
@@ -68,6 +68,133 @@ def _task_error_handler(task: asyncio.Task) -> None:
     exc = task.exception()
     if exc:
         logger.error("Background task failed: %s: %s", type(exc).__name__, exc)
+
+
+def _severity_rank(value: object) -> int:
+    text = str(value or "").strip().upper()
+    return {"CRITICAL": 0, "HIGH": 1, "MED": 2, "LOW": 3}.get(text, 4)
+
+
+def _extract_top_risks(report: dict[str, object], limit: int = 5) -> list[dict[str, object]]:
+    rows = report.get("violations")
+    if not isinstance(rows, list):
+        return []
+
+    parsed: list[dict[str, object]] = [item for item in rows if isinstance(item, dict)]
+    parsed.sort(
+        key=lambda row: (
+            _severity_rank(row.get("severity")),
+            str(row.get("created_at") or ""),
+        ),
+        reverse=False,
+    )
+    return parsed[: max(limit, 0)]
+
+
+def _format_ceo_risk_digest(
+    org_id: int,
+    top_risks: list[dict[str, object]],
+    stale_integrations: list[dict[str, object]],
+    generated_at: str,
+) -> str:
+    lines = [
+        f"CEO Daily Risk Digest (org {org_id})",
+        f"Generated: {generated_at}",
+        "",
+        "Top Risks:",
+    ]
+    if not top_risks:
+        lines.append("- No open high-priority violations.")
+    else:
+        for item in top_risks:
+            lines.append(
+                f"- [{item.get('severity', 'MED')}] {item.get('title', 'Policy issue')} ({item.get('platform', 'unknown')})"
+            )
+    lines.append("")
+    lines.append("Integration SLA Alerts:")
+    if not stale_integrations:
+        lines.append("- All connected integrations are within SLA.")
+    else:
+        for row in stale_integrations:
+            age_hours = row.get("age_hours")
+            suffix = f"{age_hours}h stale" if age_hours is not None else "never synced"
+            status = row.get("last_sync_status") or "unknown"
+            lines.append(f"- {row.get('type', 'integration')}: {suffix} (status={status})")
+    lines.append("")
+    lines.append("Mode: suggest_only (no auto-blocking actions)")
+    return "\n".join(lines)
+
+
+async def _collect_stale_integrations(
+    db: AsyncSession,
+    org_id: int,
+) -> list[dict[str, object]]:
+    from sqlalchemy import select
+    from app.core.config import settings
+    from app.models.integration import Integration
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=int(settings.SYNC_STALE_HOURS))
+    rows = (
+        await db.execute(
+            select(Integration).where(
+                Integration.organization_id == org_id,
+                Integration.status == "connected",
+            )
+        )
+    ).scalars().all()
+
+    alerts: list[dict[str, object]] = []
+    now = datetime.now(timezone.utc)
+    for item in rows:
+        if item.last_sync_status == "error":
+            alerts.append(
+                {
+                    "type": item.type,
+                    "age_hours": (
+                        round((now - item.last_sync_at).total_seconds() / 3600, 1)
+                        if item.last_sync_at else None
+                    ),
+                    "last_sync_status": item.last_sync_status,
+                }
+            )
+            continue
+        if item.last_sync_at is None or item.last_sync_at < cutoff:
+            alerts.append(
+                {
+                    "type": item.type,
+                    "age_hours": (
+                        round((now - item.last_sync_at).total_seconds() / 3600, 1)
+                        if item.last_sync_at else None
+                    ),
+                    "last_sync_status": item.last_sync_status,
+                }
+            )
+    return alerts
+
+
+async def _maybe_send_daily_ceo_slack_summary(
+    db: AsyncSession,
+    org_id: int,
+    top_risks: list[dict[str, object]],
+    stale_integrations: list[dict[str, object]],
+    generated_at: str,
+) -> None:
+    from app.core.config import settings
+    from app.services import slack_service
+
+    channel_id = (settings.CEO_ALERTS_SLACK_CHANNEL_ID or "").strip()
+    if not channel_id:
+        return
+    message = _format_ceo_risk_digest(
+        org_id=org_id,
+        top_risks=top_risks,
+        stale_integrations=stale_integrations,
+        generated_at=generated_at,
+    )
+    try:
+        await slack_service.send_to_slack(db, org_id=org_id, channel_id=channel_id, text=message)
+    except Exception as exc:
+        logger.warning("Daily CEO Slack digest failed for org=%d: %s", org_id, type(exc).__name__)
 
 
 # ── Core sync runner ──────────────────────────────────────────────────────────
@@ -153,7 +280,6 @@ async def trigger_sync_for_org(org_id: int) -> None:
 
 async def _check_morning_briefing(db: AsyncSession, org_id: int) -> None:
     """Generate daily briefing at 8-9am IST if not already created today."""
-    from datetime import date
     from sqlalchemy import select
     from app.models.memory import DailyContext
 
@@ -162,11 +288,13 @@ async def _check_morning_briefing(db: AsyncSession, org_id: int) -> None:
     if local_now.hour < 8 or local_now.hour >= 9:
         return
 
-    # Check if auto briefing already exists for today
+    today_ist = local_now.date()
+
+    # Check if auto briefing already exists for today (IST date, not server-local)
     result = await db.execute(
         select(DailyContext).where(
             DailyContext.organization_id == org_id,
-            DailyContext.date == date.today(),
+            DailyContext.date == today_ist,
             DailyContext.context_type == "auto_briefing",
         ).limit(1)
     )
@@ -186,7 +314,7 @@ async def _check_morning_briefing(db: AsyncSession, org_id: int) -> None:
             db=db,
             organization_id=org_id,
             data=DailyContextCreate(
-                date=date.today(),
+                date=today_ist,
                 context_type="auto_briefing",
                 content=f"Morning auto-briefing:\n{summary_text}",
                 related_to="scheduler",
@@ -200,8 +328,9 @@ async def _check_morning_briefing(db: AsyncSession, org_id: int) -> None:
 async def _maybe_generate_daily_ceo_summary(db: AsyncSession, org_id: int) -> None:
     from app.models.ceo_control import CEOSummary
     from app.services import compliance_engine
+    from app.core.config import settings
 
-    tz = ZoneInfo("Asia/Kolkata")
+    tz = ZoneInfo(settings.CEO_SUMMARY_TIMEZONE)
     local_now = datetime.now(timezone.utc).astimezone(tz)
     if local_now.hour != 9:
         return
@@ -209,14 +338,18 @@ async def _maybe_generate_daily_ceo_summary(db: AsyncSession, org_id: int) -> No
     if _last_ceo_summary_date_by_org.get(org_id) == day_key:
         return
     report = await compliance_engine.latest_report(db, org_id)
+    top_risks = _extract_top_risks(report, limit=5)
+    stale_integrations = await _collect_stale_integrations(db, org_id)
+    generated_at = datetime.now(timezone.utc).isoformat()
     db.add(
         CEOSummary(
             organization_id=org_id,
             summary_json=json.dumps(
                 {
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "generated_at": generated_at,
                     "report_count": report.get("count", 0),
-                    "top_violations": report.get("violations", [])[:10],
+                    "top_violations": top_risks,
+                    "stale_integrations": stale_integrations,
                 }
             ),
             created_at=datetime.now(timezone.utc),
@@ -224,6 +357,35 @@ async def _maybe_generate_daily_ceo_summary(db: AsyncSession, org_id: int) -> No
     )
     _last_ceo_summary_date_by_org[org_id] = day_key
     await db.commit()
+    await _maybe_send_daily_ceo_slack_summary(
+        db=db,
+        org_id=org_id,
+        top_risks=top_risks,
+        stale_integrations=stale_integrations,
+        generated_at=generated_at,
+    )
+
+
+async def _cleanup_old_chat_messages(db: AsyncSession, org_id: int) -> None:
+    """Delete chat messages older than CHAT_HISTORY_RETENTION_DAYS."""
+    from datetime import timedelta
+    from sqlalchemy import delete
+    from app.core.config import settings
+    from app.models.chat_message import ChatMessage
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=settings.CHAT_HISTORY_RETENTION_DAYS)
+    try:
+        result = await db.execute(
+            delete(ChatMessage).where(
+                ChatMessage.organization_id == org_id,
+                ChatMessage.created_at < cutoff,
+            )
+        )
+        if result.rowcount:
+            logger.info("Cleaned up %d old chat messages for org=%d", result.rowcount, org_id)
+            await db.commit()
+    except Exception as exc:
+        logger.debug("Chat cleanup failed for org=%d: %s", org_id, exc)
 
 
 async def _scheduler_loop(interval_minutes: int) -> None:
@@ -236,11 +398,16 @@ async def _scheduler_loop(interval_minutes: int) -> None:
         try:
             async with AsyncSessionLocal() as db:
                 orgs = await list_organizations(db)
-                for org in orgs:
-                    await _run_integrations(db, org.id)
-                    await _check_morning_briefing(db, org.id)
-                    await _maybe_generate_daily_ceo_summary(db, org.id)
-                    _last_synced[org.id] = datetime.now(timezone.utc)
+            for org in orgs:
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await _run_integrations(db, org.id)
+                        await _check_morning_briefing(db, org.id)
+                        await _maybe_generate_daily_ceo_summary(db, org.id)
+                        await _cleanup_old_chat_messages(db, org.id)
+                        _last_synced[org.id] = datetime.now(timezone.utc)
+                except Exception as exc:
+                    logger.warning("Sync failed for org=%d: %s", org.id, exc)
             logger.info("Scheduled sync complete (%d org(s))", len(orgs))
         except asyncio.CancelledError:
             raise

@@ -167,14 +167,10 @@ async def run_agent(
     )
 
     requires_approval = any(t in request.message.lower() for t in _RISKY_TOKENS)
-    proposed_actions = await extract_proposed_actions(
-        request.message,
-        organization_id=organization_id,
-    )
 
     return AgentChatResponse(
         role=role,
         response=response_text,
         requires_approval=requires_approval,
-        proposed_actions=proposed_actions,
+        proposed_actions=[],
     )

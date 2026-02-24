@@ -17,7 +17,13 @@ class TaskCreate(BaseModel):
 
 
 class TaskUpdate(BaseModel):
-    is_done: bool
+    is_done: bool | None = None
+    title: str | None = Field(None, min_length=1, max_length=500)
+    description: str | None = None
+    priority: int | None = Field(None, ge=1, le=4)
+    category: TaskCategory | None = None
+    project_id: int | None = None
+    due_date: date | None = None
 
 
 class TaskRead(BaseModel):

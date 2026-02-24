@@ -236,6 +236,16 @@ async def add_daily_context(
     return entry
 
 
+# ── Memory Context Cache ─────────────────────────────────────────────────────
+_memory_context_cache: dict[int, tuple[float, str]] = {}
+_MEMORY_CACHE_TTL_SECONDS = 300  # 5 minutes
+
+
+def invalidate_memory_cache(organization_id: int) -> None:
+    """Clear cached memory context for an org (call after memory writes)."""
+    _memory_context_cache.pop(organization_id, None)
+
+
 # ── Memory Context Builder ────────────────────────────────────────────────────
 
 async def build_memory_context(
@@ -254,6 +264,14 @@ async def build_memory_context(
     This is what makes the clone feel like Nidin — it knows who he is,
     who his team is, and what's happening today.
     """
+    import time as _time
+    # Return cached context if fresh (5 min TTL)
+    cached = _memory_context_cache.get(organization_id)
+    if cached and categories is None:
+        ts, ctx = cached
+        if _time.time() - ts < _MEMORY_CACHE_TTL_SECONDS:
+            return ctx
+
     import asyncio as _asyncio
     from sqlalchemy import select as _select
     from app.models.task import Task as _Task
@@ -350,5 +368,9 @@ async def build_memory_context(
                 base_context = base_context + "\n\n" + patterns_block[:remaining]
     except Exception:
         pass  # Graceful degradation — patterns are supplementary
+
+    # Cache the result for subsequent requests (skip if category-filtered)
+    if categories is None:
+        _memory_context_cache[organization_id] = (_time.time(), base_context)
 
     return base_context

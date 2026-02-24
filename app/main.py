@@ -211,17 +211,14 @@ async def unhandled_exception_handler(request: Request, _exc: Exception) -> JSON
     )
 
 
-@app.post("/token")
-async def login(
-    request: Request,
-    username: str = Form(...),
-    password: str = Form(...),
-    db: AsyncSession = Depends(get_db),
+async def _authenticate_user(
+    db: AsyncSession, username: str, password: str, client_ip: str, endpoint: str,
 ):
+    """Shared authentication logic for /token and /web/login."""
     from app.logs.audit import record_action
     import logging
     _log = logging.getLogger(__name__)
-    client_ip = request.client.host if request.client else "unknown"
+
     if not check_login_allowed(client_ip):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -230,32 +227,43 @@ async def login(
     user = await user_service.get_user_by_email(db, username)
     if user is None or not user.is_active or not verify_password(password, user.password_hash):
         record_login_failure(client_ip)
-        _log.warning("Failed API login for '%s' from %s", username, client_ip)
-        await record_action(
-            db,
-            event_type="login_failed",
-            actor_user_id=None,
-            organization_id=user.organization_id if user else 1,
-            entity_type="user",
-            entity_id=user.id if user else None,
-            payload_json={"username": username[:200], "ip": client_ip, "endpoint": "/token"},
-        )
+        _log.warning("Failed login for '%s' from %s on %s", username, client_ip, endpoint)
+        audit_kwargs: dict = {
+            "event_type": "login_failed",
+            "actor_user_id": user.id if user else None,
+            "entity_type": "user",
+            "entity_id": user.id if user else None,
+            "payload_json": {"username": username[:200], "ip": client_ip, "endpoint": endpoint},
+        }
+        if user:
+            audit_kwargs["organization_id"] = user.organization_id
+        await record_action(db, **audit_kwargs)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username/password",
         )
+    clear_login_failures(client_ip)
+    return user
 
-    access_token = create_access_token(
-        {
-            "id": user.id,
-            "email": user.email,
-            "role": user.role,
-            "org_id": user.organization_id,
-        },
+
+def _create_jwt(user) -> str:
+    """Create a JWT token for the authenticated user."""
+    return create_access_token(
+        {"id": user.id, "email": user.email, "role": user.role, "org_id": user.organization_id},
         expires_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
     )
-    clear_login_failures(client_ip)
-    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.post("/token")
+async def login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    client_ip = request.client.host if request.client else "unknown"
+    user = await _authenticate_user(db, username, password, client_ip, "/token")
+    return {"access_token": _create_jwt(user), "token_type": "bearer"}
 
 
 @app.get("/web/login", response_class=HTMLResponse, include_in_schema=False)
@@ -271,42 +279,9 @@ async def web_login(
     password: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    from app.logs.audit import record_action
-    import logging
-    _log = logging.getLogger(__name__)
     client_ip = request.client.host if request.client else "unknown"
-    if not check_login_allowed(client_ip):
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many failed login attempts. Try again later.",
-        )
-    user = await user_service.get_user_by_email(db, username)
-    if user is None or not user.is_active or not verify_password(password, user.password_hash):
-        record_login_failure(client_ip)
-        _log.warning("Failed web login for '%s' from %s", username, client_ip)
-        await record_action(
-            db,
-            event_type="login_failed",
-            actor_user_id=None,
-            organization_id=user.organization_id if user else 1,
-            entity_type="user",
-            entity_id=user.id if user else None,
-            payload_json={"username": username[:200], "ip": client_ip, "endpoint": "/web/login"},
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username/password",
-        )
-    access_token = create_access_token(
-        {
-            "id": user.id,
-            "email": user.email,
-            "role": user.role,
-            "org_id": user.organization_id,
-        },
-        expires_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
-    )
-    clear_login_failures(client_ip)
+    user = await _authenticate_user(db, username, password, client_ip, "/web/login")
+    access_token = _create_jwt(user)
     csrf_token = secrets.token_urlsafe(32)
     max_age = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     response.set_cookie(

@@ -9,7 +9,7 @@ from app.schemas.task import TaskCreate, TaskUpdate
 
 
 async def create_task(
-    db: AsyncSession, data: TaskCreate, organization_id: int = 1
+    db: AsyncSession, data: TaskCreate, organization_id: int,
 ) -> Task:
     task = Task(**data.model_dump(), organization_id=organization_id)
     db.add(task)
@@ -56,9 +56,39 @@ async def update_task(
     if task is None:
         return None
 
-    task.is_done = data.is_done
-    task.completed_at = datetime.now(timezone.utc) if data.is_done else None
+    # Apply all non-None fields from the update payload
+    if data.is_done is not None:
+        task.is_done = data.is_done
+        task.completed_at = datetime.now(timezone.utc) if data.is_done else None
+    if data.title is not None:
+        task.title = data.title
+    if data.description is not None:
+        task.description = data.description
+    if data.priority is not None:
+        task.priority = data.priority
+    if data.category is not None:
+        task.category = data.category
+    if data.project_id is not None:
+        task.project_id = data.project_id
+    if data.due_date is not None:
+        task.due_date = data.due_date
 
     await db.commit()
     await db.refresh(task)
     return task
+
+
+async def delete_task(
+    db: AsyncSession,
+    task_id: int,
+    organization_id: int,
+) -> bool:
+    """Delete a task. Returns True if deleted, False if not found."""
+    query = select(Task).where(Task.id == task_id, Task.organization_id == organization_id)
+    result = await db.execute(query)
+    task = result.scalar_one_or_none()
+    if task is None:
+        return False
+    await db.delete(task)
+    await db.commit()
+    return True

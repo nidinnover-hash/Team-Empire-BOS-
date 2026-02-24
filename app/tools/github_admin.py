@@ -284,6 +284,23 @@ async def list_org_members(
         return [m for m in data if isinstance(m, dict)] if isinstance(data, list) else []
 
 
+async def list_org_invitations(
+    token: str,
+    org: str,
+    per_page: int = 100,
+) -> list[dict[str, Any]]:
+    """List pending organization invitations."""
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        resp = await client.get(
+            f"{_BASE}/orgs/{org}/invitations",
+            headers=_headers(token),
+            params={"per_page": per_page},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return [inv for inv in data if isinstance(inv, dict)] if isinstance(data, list) else []
+
+
 async def get_pr_reviews(
     token: str,
     repo_full_name: str,

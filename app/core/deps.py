@@ -1,3 +1,4 @@
+import hmac
 from collections.abc import AsyncGenerator
 
 from fastapi import Cookie, Depends, Header, HTTPException, status
@@ -39,5 +40,5 @@ def verify_csrf(
     csrf_cookie: str | None = Cookie(default=None, alias="pc_csrf"),
     csrf_header: str | None = Header(default=None, alias="X-CSRF-Token"),
 ) -> None:
-    if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+    if not csrf_cookie or not csrf_header or not hmac.compare_digest(csrf_cookie, csrf_header):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")

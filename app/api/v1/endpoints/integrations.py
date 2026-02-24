@@ -29,13 +29,13 @@ from app.schemas.integration import (
     ClickUpConnectRequest,
     ClickUpStatusRead,
     ClickUpSyncResult,
+    DigitalOceanConnectRequest,
+    DigitalOceanStatusRead,
+    DigitalOceanSyncResult,
     GitHubConnectRequest,
     GitHubInstallationDiscoveryResult,
     GitHubStatusRead,
     GitHubSyncResult,
-    DigitalOceanConnectRequest,
-    DigitalOceanStatusRead,
-    DigitalOceanSyncResult,
     GoogleAuthUrlRead,
     GoogleOAuthCallbackRequest,
     IntegrationConnectRequest,
@@ -48,13 +48,9 @@ from app.schemas.integration import (
     WhatsAppSendRequest,
     WhatsAppSendResult,
 )
+from app.services import clickup_service, do_service, github_service, slack_service
 from app.services import integration as integration_service
 from app.services import whatsapp_service
-from app.services import clickup_service
-from app.services import do_service
-from app.services import github_service
-from app.services import github_app_auth
-from app.services import slack_service
 from app.services.calendar_service import (
     get_calendar_events_from_context,
     sync_calendar_events,
@@ -66,6 +62,12 @@ from app.tools.google_calendar import (
     refresh_access_token,
 )
 from app.tools.whatsapp_business import get_phone_number_details, send_text_message
+from app.api.v1.endpoints import (
+    integrations_clickup,
+    integrations_digitalocean,
+    integrations_github,
+    integrations_slack,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations", tags=["Integrations"])

@@ -41,6 +41,7 @@ async def _log_ai_call(
     prompt_type: str | None = None,
     organization_id: int | None = None,
     request_id: str | None = None,
+    db: "AsyncSession | None" = None,
 ) -> None:
     """Persist AI call metrics to DB and in-memory buffer."""
     entry = {
@@ -61,23 +62,28 @@ async def _log_ai_call(
 
     # Best-effort DB persistence — failures must never break the AI call path
     try:
-        from app.db.session import AsyncSessionLocal
         from app.models.ai_call_log import AiCallLog
-        async with AsyncSessionLocal() as db:
-            db.add(AiCallLog(
-                organization_id=organization_id,
-                provider=provider,
-                model_name=model_name,
-                request_id=request_id,
-                latency_ms=latency_ms,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                used_fallback=used_fallback,
-                fallback_from=fallback_from,
-                error_type=error_type,
-                prompt_type=prompt_type,
-            ))
-            await db.commit()
+        log_entry = AiCallLog(
+            organization_id=organization_id,
+            provider=provider,
+            model_name=model_name,
+            request_id=request_id,
+            latency_ms=latency_ms,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            used_fallback=used_fallback,
+            fallback_from=fallback_from,
+            error_type=error_type,
+            prompt_type=prompt_type,
+        )
+        if db is not None:
+            db.add(log_entry)
+            await db.flush()
+        else:
+            from app.db.session import AsyncSessionLocal
+            async with AsyncSessionLocal() as _db:
+                _db.add(log_entry)
+                await _db.commit()
     except Exception:
         logger.debug("Failed to persist AI call log to DB", exc_info=True)
 
@@ -112,6 +118,7 @@ async def call_ai(
     conversation_history: list[dict] | None = None,
     organization_id: int | None = None,
     request_id: str | None = None,
+    db: "AsyncSession | None" = None,
 ) -> str:
     """
     Route to OpenAI, Anthropic, or Groq based on config.
@@ -185,6 +192,7 @@ async def call_ai(
             latency_ms=latency,
             organization_id=organization_id,
             request_id=effective_request_id,
+            db=db,
         )
         return result
 
@@ -202,6 +210,7 @@ async def call_ai(
                     provider=fallback, model_name=_get_model(fallback),
                     latency_ms=fb_latency, used_fallback=True, fallback_from=chosen,
                     organization_id=organization_id, request_id=effective_request_id,
+                    db=db,
                 )
                 return fb_result
 
@@ -210,6 +219,7 @@ async def call_ai(
         provider=chosen, model_name=_get_model(chosen),
         latency_ms=latency, error_type=result[:80],
         organization_id=organization_id, request_id=effective_request_id,
+        db=db,
     )
     return result  # Return the original error if all fail
 

@@ -149,6 +149,7 @@ async def test_build_memory_context_appends_integration_block(monkeypatch) -> No
     monkeypatch.setattr(memory_service, "get_daily_context", _empty_daily)
     monkeypatch.setattr("app.services.integration.list_integrations", _integration_status)
 
+    memory_service.invalidate_memory_cache(1)
     context = await memory_service.build_memory_context(
         db=_FakeDB(),
         organization_id=1,

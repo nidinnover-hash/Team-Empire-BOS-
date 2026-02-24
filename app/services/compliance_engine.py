@@ -18,6 +18,8 @@ from app.models.ceo_control import (
     OrgPerson,
     PolicyViolation,
 )
+from app.services import integration as integration_service
+from app.tools import github_admin
 
 
 def _owner_emails() -> set[str]:
@@ -26,6 +28,24 @@ def _owner_emails() -> set[str]:
 
 def _dev_emails() -> set[str]:
     return {e.strip().lower() for e in settings.COMPLIANCE_DEV_EMAILS.split(",") if e.strip()}
+
+
+def _company_domain() -> str:
+    return (settings.COMPLIANCE_COMPANY_DOMAIN or "").strip().lower()
+
+
+def _is_company_email(email: str | None) -> bool:
+    if not email:
+        return False
+    domain = _company_domain()
+    if not domain:
+        return False
+    value = email.strip().lower()
+    return value.endswith(f"@{domain}")
+
+
+def _is_personal_org(org_id: int) -> bool:
+    return settings.PERSONAL_ORG_ID is not None and org_id == settings.PERSONAL_ORG_ID
 
 
 def _now() -> datetime:
@@ -83,7 +103,9 @@ async def _latest_synced_at(db: AsyncSession, org_id: int, model: type[Any]) -> 
 
 
 async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
-    await ensure_company_directory(db, org_id)
+    personal_org = _is_personal_org(org_id)
+    if not personal_org:
+        await ensure_company_directory(db, org_id)
 
     # Mark existing OPEN violations as stale; will be refreshed below
     from sqlalchemy import update
@@ -99,6 +121,7 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
     login_to_email = {row.github_login.lower(): row.company_email.lower() for row in identity_rows}
 
     violations: list[PolicyViolation] = []
+    github_personal_identity_seen: set[tuple[str, str]] = set()
     now = _now()
     gh_role_time = await _latest_synced_at(db, org_id, GitHubRoleSnapshot)
     gh_repo_time = await _latest_synced_at(db, org_id, GitHubRepoSnapshot)
@@ -117,7 +140,28 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
         ).scalars().all()
         for r in roles:
             email = login_to_email.get((r.github_login or "").lower())
-            if (r.org_role or "").lower() == "owner" and email not in _owner_emails():
+            if not personal_org and email and not _is_company_email(email):
+                key = ((r.github_login or "").lower(), email)
+                if key not in github_personal_identity_seen:
+                    github_personal_identity_seen.add(key)
+                    violations.append(
+                        PolicyViolation(
+                            organization_id=org_id,
+                            platform="github",
+                            severity="MED",
+                            title="Personal email mapped to company GitHub identity",
+                            details_json=json.dumps(
+                                {"github_login": r.github_login, "mapped_email": email}
+                            ),
+                            status="OPEN",
+                            created_at=now,
+                        )
+                    )
+            if (
+                not personal_org
+                and (r.org_role or "").lower() == "owner"
+                and email not in _owner_emails()
+            ):
                 violations.append(
                     PolicyViolation(
                         organization_id=org_id,
@@ -129,7 +173,11 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                         created_at=now,
                     )
                 )
-            if email in _dev_emails() and (r.repo_permission or "").lower() in {"admin", "maintain"}:
+            if (
+                not personal_org
+                and email in _dev_emails()
+                and (r.repo_permission or "").lower() in {"admin", "maintain"}
+            ):
                 violations.append(
                     PolicyViolation(
                         organization_id=org_id,
@@ -141,6 +189,50 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                                 "github_login": r.github_login,
                                 "repo_name": r.repo_name,
                                 "repo_permission": r.repo_permission,
+                            }
+                        ),
+                        status="OPEN",
+                        created_at=now,
+                    )
+                )
+
+    if not personal_org and (settings.GITHUB_ORG or "").strip():
+        github_integration = await integration_service.get_integration_by_type(db, org_id, "github")
+        github_token = ((github_integration.config_json or {}).get("access_token") if github_integration else None)
+        if isinstance(github_token, str) and github_token.strip():
+            try:
+                invitations = await github_admin.list_org_invitations(
+                    github_token,
+                    (settings.GITHUB_ORG or "").strip(),
+                )
+            except Exception:
+                invitations = []
+            seen_owner_invites: set[tuple[str, str, str]] = set()
+            for invite in invitations:
+                role = str(invite.get("role") or "").strip().lower()
+                if role not in {"admin", "owner"}:
+                    continue
+                inviter_login = str((invite.get("inviter") or {}).get("login") or "").strip().lower()
+                invitee_email = str(invite.get("email") or "").strip().lower()
+                inviter_email = login_to_email.get(inviter_login, "")
+                if inviter_email in _owner_emails():
+                    continue
+                dedupe_key = (inviter_login, invitee_email, role)
+                if dedupe_key in seen_owner_invites:
+                    continue
+                seen_owner_invites.add(dedupe_key)
+                violations.append(
+                    PolicyViolation(
+                        organization_id=org_id,
+                        platform="github",
+                        severity="HIGH",
+                        title="GitHub owner invitation created by non-owner",
+                        details_json=json.dumps(
+                            {
+                                "inviter_login": inviter_login,
+                                "inviter_mapped_email": inviter_email or None,
+                                "invitee_email": invitee_email or None,
+                                "invitation_role": role,
                             }
                         ),
                         status="OPEN",
@@ -241,7 +333,20 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
             )
         ).scalars().all()
         for m in members:
-            if (m.role or "").lower() == "owner" and m.email.lower() not in _owner_emails():
+            normalized_email = (m.email or "").strip().lower()
+            if not personal_org and normalized_email and not _is_company_email(normalized_email):
+                violations.append(
+                    PolicyViolation(
+                        organization_id=org_id,
+                        platform="digitalocean",
+                        severity="MED",
+                        title="Personal email present in company infra access",
+                        details_json=json.dumps({"email": normalized_email, "role": m.role}),
+                        status="OPEN",
+                        created_at=now,
+                    )
+                )
+            if not personal_org and (m.role or "").lower() == "owner" and normalized_email not in _owner_emails():
                 violations.append(
                     PolicyViolation(
                         organization_id=org_id,

@@ -43,8 +43,20 @@ async def update_task(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> TaskRead:
-    """Mark a task done or reopen it."""
+    """Update a task — edit fields, mark done, or reopen."""
     task = await task_service.update_task(db, task_id, data, organization_id=actor["org_id"])
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
     return task
+
+
+@router.delete("/{task_id}", status_code=204)
+async def delete_task(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+):
+    """Delete a task. CEO/ADMIN only."""
+    deleted = await task_service.delete_task(db, task_id, organization_id=actor["org_id"])
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")

@@ -165,7 +165,7 @@ _rate_buckets: dict[str, deque] = defaultdict(deque)
 _rate_limit_lock = Lock()
 
 # Paths exempt from rate limiting (health checks, docs)
-_EXEMPT_PREFIXES = ("/health", "/docs", "/redoc", "/openapi.json", "/web/login", "/web/session", "/static/")
+_EXEMPT_PREFIXES = ("/health", "/docs", "/redoc", "/openapi.json", "/web/session", "/static/")
 
 # -- Login Failure Tracker -----------------------------------------------------
 # Sliding window per IP; resets on server restart (acceptable for a personal tool).

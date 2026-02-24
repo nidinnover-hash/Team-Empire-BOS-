@@ -36,3 +36,47 @@ class ComposeRequest(BaseModel):
     to: str = Field(max_length=500)
     subject: str = Field(max_length=500)
     instruction: str = Field(max_length=2000)
+
+
+class GmailAuthUrlRead(BaseModel):
+    auth_url: str
+    state: str
+
+
+class GmailHealthRead(BaseModel):
+    status: str
+    code: str | None = None
+    email_address: str | None = None
+    messages_total: int | None = None
+    threads_total: int | None = None
+
+
+class EmailSummaryResponse(BaseModel):
+    email_id: int
+    summary: str
+
+
+class EmailDraftResponse(BaseModel):
+    email_id: int
+    draft: str
+    status: str
+    message: str
+
+
+class EmailSendResponse(BaseModel):
+    email_id: int
+    status: str
+    message: str
+
+
+class EmailStrategyResponse(BaseModel):
+    email_id: int
+    strategy: str
+
+
+class EmailComposeResponse(BaseModel):
+    to: str
+    subject: str
+    draft: str
+    status: str
+    message: str

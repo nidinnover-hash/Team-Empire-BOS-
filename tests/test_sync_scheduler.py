@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 from app.services import sync_scheduler
 
@@ -16,6 +17,7 @@ from app.services import sync_scheduler
 
 def _reset_state():
     sync_scheduler._last_synced.clear()
+    sync_scheduler._last_ceo_summary_date_by_org.clear()
 
 
 # ── throttle logic ────────────────────────────────────────────────────────────
@@ -162,3 +164,59 @@ async def test_start_stop_scheduler():
     # Give the event loop a tick to process the cancellation
     await asyncio.sleep(0)
     assert sync_scheduler._scheduler_task is None
+
+
+def test_extract_top_risks_sorts_by_severity_and_limits():
+    report = {
+        "violations": [
+            {"title": "A", "severity": "LOW", "platform": "github"},
+            {"title": "B", "severity": "CRITICAL", "platform": "digitalocean"},
+            {"title": "C", "severity": "HIGH", "platform": "clickup"},
+            {"title": "D", "severity": "MED", "platform": "github"},
+            {"title": "E", "severity": "CRITICAL", "platform": "clickup"},
+            {"title": "F", "severity": "LOW", "platform": "slack"},
+        ]
+    }
+    top = sync_scheduler._extract_top_risks(report, limit=5)
+    assert len(top) == 5
+    assert [str(x["title"]) for x in top[:2]] == ["B", "E"]
+
+
+def test_format_ceo_risk_digest_includes_sections():
+    text = sync_scheduler._format_ceo_risk_digest(
+        org_id=1,
+        generated_at="2026-02-24T09:00:00+00:00",
+        top_risks=[{"severity": "HIGH", "title": "Risk A", "platform": "github"}],
+        stale_integrations=[{"type": "github", "age_hours": 26.0, "last_sync_status": "ok"}],
+    )
+    assert "Top Risks:" in text
+    assert "Integration SLA Alerts:" in text
+    assert "Risk A" in text
+    assert "github: 26.0h stale" in text
+
+
+async def test_maybe_send_daily_ceo_slack_summary_respects_channel_config(monkeypatch):
+    from app.core.config import settings
+
+    previous_channel = settings.CEO_ALERTS_SLACK_CHANNEL_ID
+    settings.CEO_ALERTS_SLACK_CHANNEL_ID = "C123CEO"
+    calls: list[dict[str, str]] = []
+
+    async def _fake_send_to_slack(_db, org_id: int, channel_id: str, text: str):
+        calls.append({"org_id": str(org_id), "channel_id": channel_id, "text": text})
+        return {"ok": True, "ts": "1.2"}
+
+    monkeypatch.setattr("app.services.slack_service.send_to_slack", _fake_send_to_slack)
+    try:
+        await sync_scheduler._maybe_send_daily_ceo_slack_summary(
+            db=SimpleNamespace(),
+            org_id=7,
+            top_risks=[],
+            stale_integrations=[],
+            generated_at="2026-02-24T09:00:00+00:00",
+        )
+    finally:
+        settings.CEO_ALERTS_SLACK_CHANNEL_ID = previous_channel
+
+    assert len(calls) == 1
+    assert calls[0]["channel_id"] == "C123CEO"

@@ -66,12 +66,15 @@ async def list_approvals(
 @router.get("/timeline", response_model=ApprovalTimelineResponse)
 async def approval_timeline(
     limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> ApprovalTimelineResponse:
     items = await approval_service.list_approvals(
         db,
         organization_id=actor["org_id"],
+        limit=limit,
+        offset=offset,
     )
     timeline_items = [
         ApprovalTimelineItem(
@@ -85,7 +88,7 @@ async def approval_timeline(
             is_risky=a.approval_type in RISKY_APPROVAL_TYPES,
             requires_yes_execute=a.approval_type in RISKY_APPROVAL_TYPES,
         )
-        for a in items[:limit]
+        for a in items
     ]
 
     counts_result = await db.execute(
