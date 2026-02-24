@@ -126,6 +126,8 @@ class Settings(BaseSettings):
     SYNC_INTERVAL_MINUTES: int = 30   # how often the scheduler fires
     SYNC_THROTTLE_MINUTES: int = 15   # min gap for on-demand (login/dashboard) syncs
     SHUTDOWN_GRACE_SECONDS: int = 15  # max wait for in-flight syncs on shutdown
+    LOG_FORMAT: Literal["json", "text"] = "text"
+    LOG_LEVEL: str = "INFO"
     CEO_SUMMARY_TIMEZONE: str = "Asia/Kolkata"
     CEO_ALERTS_SLACK_CHANNEL_ID: str | None = None
     SYNC_STALE_HOURS: int = 24

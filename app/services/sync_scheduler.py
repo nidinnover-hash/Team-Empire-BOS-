@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal  # noqa: E402 - imported here so tests can patch it
+from app.models.ceo_control import SchedulerJobRun
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,11 @@ logger = logging.getLogger(__name__)
 # Default 15 — overridden by settings.SYNC_THROTTLE_MINUTES at runtime.
 _last_synced: dict[int, datetime] = {}
 _last_ceo_summary_date_by_org: dict[int, str] = {}
+
+
+def get_last_synced_for_org(org_id: int) -> datetime | None:
+    """Return the last sync timestamp for an org, or None if never synced."""
+    return _last_synced.get(org_id)
 
 
 def _throttle_minutes() -> int:
@@ -172,6 +178,38 @@ async def _collect_stale_integrations(
     return alerts
 
 
+async def _record_job_run(
+    db: AsyncSession,
+    *,
+    org_id: int,
+    job_name: str,
+    status: str,
+    started_at: datetime,
+    finished_at: datetime,
+    details: dict[str, object] | None = None,
+    error: str | None = None,
+) -> None:
+    details_json = "{}"
+    if details:
+        try:
+            details_json = json.dumps(details)
+        except Exception:
+            details_json = "{}"
+    duration_ms = max(0, int((finished_at - started_at).total_seconds() * 1000))
+    db.add(
+        SchedulerJobRun(
+            organization_id=org_id,
+            job_name=job_name,
+            status=status,
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_ms=duration_ms,
+            details_json=details_json,
+            error=(error or None),
+        )
+    )
+
+
 async def _maybe_send_daily_ceo_slack_summary(
     db: AsyncSession,
     org_id: int,
@@ -206,6 +244,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
     from app.services import clickup_service, do_service, github_service, slack_service
     from app.services import compliance_engine
     from app.services.calendar_service import sync_calendar_events
+    from app.core.resilience import run_with_retry
 
     async def _mark_status(int_type: str, status: str) -> None:
         try:
@@ -224,7 +263,12 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
         ("slack", slack_service.sync_slack_messages),
     ]:
         try:
-            result = await fn(db, org_id)
+            result = await run_with_retry(
+                lambda _fn=fn: _fn(db, org_id),
+                attempts=2,
+                timeout_seconds=30.0,
+                backoff_seconds=1.0,
+            )
             logger.debug("Sync %s org=%d → %s", name, org_id, result)
             await _mark_status(name, "ok")
         except Exception as exc:
@@ -233,7 +277,12 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
 
     # Google Calendar sync — stored as DailyContext, auto-included in memory
     try:
-        result = await sync_calendar_events(db, organization_id=org_id)
+        result = await run_with_retry(
+            lambda: sync_calendar_events(db, organization_id=org_id),
+            attempts=2,
+            timeout_seconds=30.0,
+            backoff_seconds=1.0,
+        )
         logger.debug("Sync calendar org=%d → %s", org_id, result)
         await _mark_status("google_calendar", "ok")
     except Exception as exc:

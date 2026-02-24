@@ -255,14 +255,25 @@ async def _call_provider(
     max_tokens: int,
     conversation_history: list[dict] | None = None,
 ) -> tuple[str, bool]:
-    """Call a specific provider. Returns (response_text, is_transient_error)."""
-    if provider == "anthropic":
-        return await _call_anthropic(system_prompt, user_message, max_tokens, conversation_history)
-    if provider == "groq":
-        return await _call_groq(system_prompt, user_message, max_tokens, conversation_history)
-    if provider == "gemini":
-        return await _call_gemini(system_prompt, user_message, max_tokens, conversation_history)
-    return await _call_openai(system_prompt, user_message, max_tokens, conversation_history)
+    """Call a specific provider with one retry for transient errors."""
+    import asyncio as _aio
+
+    async def _single_call() -> tuple[str, bool]:
+        if provider == "anthropic":
+            return await _call_anthropic(system_prompt, user_message, max_tokens, conversation_history)
+        if provider == "groq":
+            return await _call_groq(system_prompt, user_message, max_tokens, conversation_history)
+        if provider == "gemini":
+            return await _call_gemini(system_prompt, user_message, max_tokens, conversation_history)
+        return await _call_openai(system_prompt, user_message, max_tokens, conversation_history)
+
+    result, is_transient = await _single_call()
+    if not result.startswith("Error:") or not is_transient:
+        return result, is_transient
+    # One retry with 2s delay for transient errors before giving up
+    logger.info("Retrying %s after transient error", provider)
+    await _aio.sleep(2.0)
+    return await _single_call()
 
 
 async def _call_openai(

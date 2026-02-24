@@ -17,6 +17,11 @@
     <div>
       <div class="sb-name">Nidin Nover</div>
       <div class="sb-sub">Command Center</div>
+      {% if last_synced_at %}
+      <div class="sb-sub" style="font-size:.65rem;opacity:.6" title="{{ last_synced_at.isoformat() }}">
+        Synced {{ last_synced_at.strftime('%H:%M') }}
+      </div>
+      {% endif %}
     </div>
   </div>
   <div class="sb-nav">

@@ -98,6 +98,9 @@ templates = Jinja2Templates(directory="app/templates")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    from app.core.logging_config import configure_logging
+    configure_logging(log_format=settings.LOG_FORMAT, log_level=settings.LOG_LEVEL)
+
     import time as _time
     global _server_start_time
     _server_start_time = _time.time()
@@ -602,6 +605,9 @@ async def dashboard(
         from app.services.sync_scheduler import trigger_sync_for_org
         await trigger_sync_for_org(org_id)
 
+    from app.services.sync_scheduler import get_last_synced_for_org
+    last_synced_at = get_last_synced_for_org(org_id)
+
     # Parallel fetch — all queries are independent reads on the same org.
     # Timeout prevents dashboard from hanging if any single query stalls.
     _DASHBOARD_DEFAULTS = (
@@ -665,6 +671,7 @@ async def dashboard(
             "intelligence_summary": intelligence_summary,
             "intelligence_diff": intelligence_diff,
             "session_user": user,
+            "last_synced_at": last_synced_at,
             "csp_nonce": getattr(request.state, "csp_nonce", ""),
         },
     )
