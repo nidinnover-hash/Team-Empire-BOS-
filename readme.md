@@ -1,5 +1,8 @@
 # Frontend Quality Checks
 
+## Project Customization Guide
+- See [`CUSTOMIZATION_GUIDE.md`](CUSTOMIZATION_GUIDE.md) for a full map of what to edit for config, APIs, layers, compliance, clone training, UI, and DB migrations.
+
 ## Shared UI utilities
 - `app/static/js/ui-utils.js` centralizes:
   - API error mapping (`PCUI.mapApiError`)
