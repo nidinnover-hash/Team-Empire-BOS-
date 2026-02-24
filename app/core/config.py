@@ -134,6 +134,8 @@ class Settings(BaseSettings):
     EMAIL_CONTROL_DIGEST_TO: str | None = None
     EMAIL_CONTROL_DIGEST_HOUR_IST: int = 18
     EMAIL_CONTROL_DIGEST_MINUTE_IST: int = 0
+    MANAGER_REPORT_CUTOFF_HOUR_IST: int = 19
+    APPROVAL_SLA_HOURS: int = 24
 
     # Background sync scheduler
     SYNC_ENABLED: bool = True
@@ -212,6 +214,10 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("EMAIL_CONTROL_DIGEST_HOUR_IST must be between 0 and 23")
     if not (0 <= s.EMAIL_CONTROL_DIGEST_MINUTE_IST <= 59):
         issues.append("EMAIL_CONTROL_DIGEST_MINUTE_IST must be between 0 and 59")
+    if not (0 <= s.MANAGER_REPORT_CUTOFF_HOUR_IST <= 23):
+        issues.append("MANAGER_REPORT_CUTOFF_HOUR_IST must be between 0 and 23")
+    if s.APPROVAL_SLA_HOURS < 1:
+        issues.append("APPROVAL_SLA_HOURS must be >= 1")
     if not (s.GITHUB_ORG or "").strip() and (s.GITHUB_APP_ID or s.GITHUB_PRIVATE_KEY_PEM):
         issues.append("GITHUB_ORG must be set when GitHub App auth is configured")
     owner_emails = [x.strip().lower() for x in (s.COMPLIANCE_OWNER_EMAILS or "").split(",") if x.strip()]

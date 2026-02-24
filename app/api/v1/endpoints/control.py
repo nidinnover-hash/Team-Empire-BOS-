@@ -29,20 +29,29 @@ from app.schemas.control import (
     CEOStatusRead,
     ComplianceReportRead,
     ComplianceRunRead,
+    DataQualityRead,
+    ExecutePlanRead,
+    ExecutePlanRequest,
     GitHubIdentityMapListRead,
     GitHubIdentityMapUpsertRead,
     GitHubIdentityMapUpsertRequest,
     HealthSummaryRead,
     IntegrationHealthRead,
+    ManagerSLARead,
     MessageDraftRead,
     MessageDraftRequest,
+    MultiOrgCockpitRead,
+    MultiOrgCockpitOrgRead,
     SchedulerJobRunListRead,
     SchedulerReplayRead,
     SchedulerReplayRequest,
+    ScenarioSimulationRead,
+    ScenarioSimulationRequest,
     SystemHealthDependency,
     SystemHealthRead,
+    WeeklyBoardPacketRead,
 )
-from app.services import compliance_engine
+from app.services import clone_brain, clone_control, compliance_engine, email_control, organization as organization_service
 from app.services import sync_scheduler
 
 router = APIRouter(prefix="/control", tags=["CEO Control"])
@@ -570,3 +579,160 @@ async def scheduler_job_replay(
         result=result.get("result") if isinstance(result.get("result"), dict) else None,
         error=str(result.get("error")) if result.get("error") else None,
     )
+
+
+@router.post("/execute-plan", response_model=ExecutePlanRead)
+async def execute_plan(
+    payload: ExecutePlanRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> ExecutePlanRead:
+    org_id = int(actor["org_id"])
+    sync_result = await sync_scheduler.replay_job_for_org(db, org_id, "full_sync")
+    email_result = await email_control.process_inbox_controls(
+        db,
+        org_id=org_id,
+        actor_user_id=int(actor["id"]),
+        limit=100,
+    )
+    compliance = await compliance_engine.run_compliance(db, org_id)
+    challenge = (payload.challenge or "Complex execution dispatch").strip()
+    dispatch = await clone_brain.build_dispatch_plan(
+        db,
+        organization_id=org_id,
+        challenge=challenge,
+        week_start_date=(payload.week_start_date.date() if payload.week_start_date else None),
+        top_n=3,
+    )
+    quality = await clone_control.data_quality_snapshot(db, organization_id=org_id)
+    return ExecutePlanRead(
+        ok=True,
+        sync=sync_result,
+        email_control=email_result,
+        compliance={"score": compliance.get("compliance_score"), "violations": len(compliance.get("violations", []))},
+        dispatch_plan=dispatch,
+        data_quality={
+            "missing_identity_count": quality["missing_identity_count"],
+            "stale_metrics_count": quality["stale_metrics_count"],
+            "duplicate_identity_conflicts": quality["duplicate_identity_conflicts"],
+            "orphan_approval_count": quality["orphan_approval_count"],
+        },
+    )
+
+
+@router.get("/data-quality", response_model=DataQualityRead)
+async def data_quality(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> DataQualityRead:
+    data = await clone_control.data_quality_snapshot(db, organization_id=int(actor["org_id"]))
+    return DataQualityRead(**data)
+
+
+@router.get("/sla/manager", response_model=ManagerSLARead)
+async def manager_sla(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> ManagerSLARead:
+    data = await clone_control.manager_sla_snapshot(db, organization_id=int(actor["org_id"]))
+    return ManagerSLARead(**data)
+
+
+@router.post("/scenario/simulate", response_model=ScenarioSimulationRead)
+async def scenario_simulate(
+    payload: ScenarioSimulationRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> ScenarioSimulationRead:
+    org_id = int(actor["org_id"])
+    summary = await clone_brain.clone_org_summary(
+        db,
+        organization_id=org_id,
+        week_start_date=None,
+    )
+    avg_score_raw = summary.get("avg_score", 0.0)
+    avg_score = float(avg_score_raw) if isinstance(avg_score_raw, (int, float)) else 0.0
+    dispatch = await clone_brain.build_dispatch_plan(
+        db,
+        organization_id=org_id,
+        challenge=payload.challenge,
+        week_start_date=None,
+        top_n=payload.top_n,
+    )
+    baseline = max(5.0, min(95.0, 100.0 - avg_score))
+    dispatch_avg = 0.0
+    if dispatch:
+        dispatch_avg = sum(float(item.get("overall_score", 0.0)) for item in dispatch) / len(dispatch)
+    projected = max(1.0, baseline - ((dispatch_avg / 100.0) * payload.blockers_count * 2.5))
+    drop_pct = round(((baseline - projected) / baseline) * 100.0, 2) if baseline > 0 else 0.0
+    return ScenarioSimulationRead(
+        challenge=payload.challenge,
+        blockers_count=payload.blockers_count,
+        baseline_risk_score=round(baseline, 2),
+        projected_risk_score=round(projected, 2),
+        projected_risk_drop_percent=drop_pct,
+        recommended_dispatch=dispatch,
+    )
+
+
+@router.get("/weekly-board-packet", response_model=WeeklyBoardPacketRead)
+async def weekly_board_packet(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> WeeklyBoardPacketRead:
+    org_id = int(actor["org_id"])
+    now = datetime.now(timezone.utc)
+    week_start = (now.date().isoformat())
+    compliance = await compliance_engine.latest_report(db, org_id)
+    clone_summary = await clone_brain.clone_org_summary(db, organization_id=org_id, week_start_date=None)
+    sla = await clone_control.manager_sla_snapshot(db, organization_id=org_id)
+    quality = await clone_control.data_quality_snapshot(db, organization_id=org_id)
+    top_actions = [
+        "Close HIGH/CRITICAL violations first.",
+        "Resolve missing identity mappings for active employees.",
+        "Clear pending approval SLA breaches.",
+    ]
+    return WeeklyBoardPacketRead(
+        generated_at=now,
+        week_start=week_start,
+        compliance={"open_violations": int(compliance.get("count", 0))},
+        clone_summary=clone_summary,
+        sla={
+            "missing_reports": sla["missing_reports"],
+            "pending_approvals_breached": sla["pending_approvals_breached"],
+            "status": sla["status"],
+        },
+        data_quality={
+            "missing_identity_count": quality["missing_identity_count"],
+            "stale_metrics_count": quality["stale_metrics_count"],
+            "duplicate_identity_conflicts": quality["duplicate_identity_conflicts"],
+            "orphan_approval_count": quality["orphan_approval_count"],
+        },
+        top_actions=top_actions,
+    )
+
+
+@router.get("/cockpit/multi-org", response_model=MultiOrgCockpitRead)
+async def multi_org_cockpit(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> MultiOrgCockpitRead:
+    orgs = await organization_service.list_organizations(db)
+    items: list[MultiOrgCockpitOrgRead] = []
+    for org in orgs[:200]:
+        clone_summary = await clone_brain.clone_org_summary(db, organization_id=org.id, week_start_date=None)
+        compliance = await compliance_engine.latest_report(db, org.id)
+        quality = await clone_control.data_quality_snapshot(db, organization_id=org.id)
+        items.append(
+            MultiOrgCockpitOrgRead(
+                org_id=org.id,
+                org_name=org.name,
+                clone_summary=clone_summary,
+                compliance_open_count=int(compliance.get("count", 0)),
+                data_quality={
+                    "missing_identity_count": quality["missing_identity_count"],
+                    "stale_metrics_count": quality["stale_metrics_count"],
+                },
+            )
+        )
+    return MultiOrgCockpitRead(generated_at=datetime.now(timezone.utc), organizations=items)

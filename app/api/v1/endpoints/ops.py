@@ -22,21 +22,29 @@ from app.schemas.intelligence import DecisionTraceCreate
 from app.schemas.ops import (
     CloneDispatchItemRead,
     CloneDispatchRequest,
+    CloneFeedbackCreate,
+    CloneProfileRead,
+    CloneProfileUpsert,
     CloneScoreRead,
     CloneSummaryRead,
     CloneTrainingRunRead,
     DecisionLogCreate,
     DecisionLogRead,
     EmployeeCreate,
+    EmployeeIdentityMapRead,
+    EmployeeIdentityMapUpsert,
     EmployeeRead,
     EmployeeUpdate,
     PolicyRuleRead,
+    RoleTrainingPlanRead,
+    RoleTrainingPlanStatusUpdate,
     WeeklyReportRead,
 )
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectStatusUpdate
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
 from app.services import briefing as briefing_service
 from app.services import clone_brain
+from app.services import clone_control
 from app.services import daily_run as daily_run_service
 from app.services import employee as employee_service
 from app.services import email_service
@@ -787,3 +795,126 @@ async def clone_dispatch_plan(
         top_n=data.top_n,
     )
     return [CloneDispatchItemRead(**r) for r in rows]
+
+
+@router.post("/clones/identity-map", response_model=EmployeeIdentityMapRead)
+async def upsert_clone_identity_map(
+    data: EmployeeIdentityMapUpsert,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> EmployeeIdentityMapRead:
+    row = await clone_control.upsert_identity_map(
+        db,
+        organization_id=int(user["org_id"]),
+        employee_id=data.employee_id,
+        work_email=data.work_email,
+        github_login=data.github_login,
+        clickup_user_id=data.clickup_user_id,
+        slack_user_id=data.slack_user_id,
+    )
+    return row
+
+
+@router.get("/clones/identity-map", response_model=list[EmployeeIdentityMapRead])
+async def list_clone_identity_maps(
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> list[EmployeeIdentityMapRead]:
+    return await clone_control.list_identity_maps(db, organization_id=int(user["org_id"]))
+
+
+@router.post("/clones/profile", response_model=CloneProfileRead)
+async def upsert_clone_profile(
+    data: CloneProfileUpsert,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> CloneProfileRead:
+    row = await clone_control.upsert_clone_profile(
+        db,
+        organization_id=int(user["org_id"]),
+        employee_id=data.employee_id,
+        strengths=data.strengths,
+        weak_zones=data.weak_zones,
+        preferred_task_types=data.preferred_task_types,
+    )
+    return CloneProfileRead(**clone_control.profile_to_payload(row))
+
+
+@router.get("/clones/profile/{employee_id}", response_model=CloneProfileRead)
+async def get_clone_profile(
+    employee_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> CloneProfileRead:
+    row = await clone_control.get_clone_profile(
+        db,
+        organization_id=int(user["org_id"]),
+        employee_id=employee_id,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Clone profile not found")
+    return CloneProfileRead(**clone_control.profile_to_payload(row))
+
+
+@router.post("/clones/feedback", response_model=dict)
+async def record_clone_feedback(
+    data: CloneFeedbackCreate,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> dict:
+    row = await clone_control.record_feedback(
+        db,
+        organization_id=int(user["org_id"]),
+        employee_id=data.employee_id,
+        source_type=data.source_type,
+        source_id=data.source_id,
+        outcome_score=data.outcome_score,
+        notes=data.notes,
+        created_by=int(user["id"]),
+    )
+    return {"ok": True, "feedback_id": row.id}
+
+
+@router.post("/clones/training-plan/generate", response_model=dict)
+async def generate_clone_training_plans(
+    week_start: date = Query(...),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> dict:
+    result = await clone_control.generate_role_training_plans(
+        db,
+        organization_id=int(user["org_id"]),
+        week_start_date=week_start,
+    )
+    return {"ok": True, **result}
+
+
+@router.get("/clones/training-plan", response_model=list[RoleTrainingPlanRead])
+async def list_clone_training_plans(
+    week_start: date | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> list[RoleTrainingPlanRead]:
+    return await clone_control.list_role_training_plans(
+        db,
+        organization_id=int(user["org_id"]),
+        week_start_date=week_start,
+    )
+
+
+@router.patch("/clones/training-plan/{plan_id}", response_model=RoleTrainingPlanRead)
+async def update_clone_training_plan_status(
+    plan_id: int,
+    data: RoleTrainingPlanStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> RoleTrainingPlanRead:
+    row = await clone_control.update_role_training_plan_status(
+        db,
+        organization_id=int(user["org_id"]),
+        plan_id=plan_id,
+        status=data.status,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Training plan not found")
+    return row

@@ -180,3 +180,72 @@ class SystemHealthRead(BaseModel):
     overall_status: Literal["ok", "degraded", "down"]
     dependencies: list[SystemHealthDependency]
     integrations: IntegrationHealthRead
+
+
+class ExecutePlanRequest(BaseModel):
+    challenge: str | None = None
+    week_start_date: datetime | None = None
+
+
+class ExecutePlanRead(BaseModel):
+    ok: bool
+    sync: dict
+    email_control: dict
+    compliance: dict
+    dispatch_plan: list[dict]
+    data_quality: dict
+
+
+class DataQualityRead(BaseModel):
+    generated_at: datetime
+    missing_identity_count: int
+    stale_metrics_count: int
+    duplicate_identity_conflicts: int
+    orphan_approval_count: int
+    details: dict
+
+
+class ManagerSLARead(BaseModel):
+    generated_at: datetime
+    missing_reports: int
+    pending_approvals_breached: int
+    status: str
+    details: dict
+
+
+class ScenarioSimulationRequest(BaseModel):
+    challenge: str = Field(..., min_length=4, max_length=2000)
+    blockers_count: int = Field(..., ge=1, le=200)
+    top_n: int = Field(default=3, ge=1, le=10)
+
+
+class ScenarioSimulationRead(BaseModel):
+    challenge: str
+    blockers_count: int
+    baseline_risk_score: float
+    projected_risk_score: float
+    projected_risk_drop_percent: float
+    recommended_dispatch: list[dict]
+
+
+class WeeklyBoardPacketRead(BaseModel):
+    generated_at: datetime
+    week_start: str
+    compliance: dict
+    clone_summary: dict
+    sla: dict
+    data_quality: dict
+    top_actions: list[str]
+
+
+class MultiOrgCockpitOrgRead(BaseModel):
+    org_id: int
+    org_name: str
+    clone_summary: dict
+    compliance_open_count: int
+    data_quality: dict
+
+
+class MultiOrgCockpitRead(BaseModel):
+    generated_at: datetime
+    organizations: list[MultiOrgCockpitOrgRead]

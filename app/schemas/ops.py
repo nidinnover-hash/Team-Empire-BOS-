@@ -185,3 +185,66 @@ class CloneDispatchItemRead(BaseModel):
     overall_score: float
     readiness_level: str
     fit_reason: str
+
+
+class EmployeeIdentityMapUpsert(BaseModel):
+    employee_id: int = Field(..., ge=1)
+    work_email: str | None = None
+    github_login: str | None = None
+    clickup_user_id: str | None = None
+    slack_user_id: str | None = None
+
+
+class EmployeeIdentityMapRead(BaseModel):
+    id: int
+    organization_id: int
+    employee_id: int
+    work_email: str | None
+    github_login: str | None
+    clickup_user_id: str | None
+    slack_user_id: str | None
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CloneProfileUpsert(BaseModel):
+    employee_id: int = Field(..., ge=1)
+    strengths: list[str] = Field(default_factory=list)
+    weak_zones: list[str] = Field(default_factory=list)
+    preferred_task_types: list[str] = Field(default_factory=list)
+
+
+class CloneProfileRead(BaseModel):
+    id: int
+    organization_id: int
+    employee_id: int
+    strengths: list[str]
+    weak_zones: list[str]
+    preferred_task_types: list[str]
+    updated_at: datetime
+
+
+class CloneFeedbackCreate(BaseModel):
+    employee_id: int = Field(..., ge=1)
+    source_type: Literal["task", "approval", "email"]
+    source_id: int | None = None
+    outcome_score: float = Field(..., ge=0.0, le=1.0)
+    notes: str | None = Field(None, max_length=2000)
+
+
+class RoleTrainingPlanRead(BaseModel):
+    id: int
+    organization_id: int
+    employee_id: int
+    week_start_date: date
+    role_focus: str
+    plan_markdown: str
+    status: str
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RoleTrainingPlanStatusUpdate(BaseModel):
+    status: Literal["OPEN", "DONE"]

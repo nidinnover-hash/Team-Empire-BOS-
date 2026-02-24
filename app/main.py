@@ -76,6 +76,7 @@ from app.models import weekly_report as _model_weekly_report  # noqa: F401
 from app.models import org_membership as _model_org_membership  # noqa: F401
 from app.models import org_role_permission as _model_org_role_permission  # noqa: F401
 from app.models import clone_performance as _model_clone_performance  # noqa: F401
+from app.models import clone_control as _model_clone_control  # noqa: F401
 
 # Startup safety guard
 _UNSAFE_SECRET_KEYS = {"change_me_in_env", "changeme", "secret", "change-me", ""}

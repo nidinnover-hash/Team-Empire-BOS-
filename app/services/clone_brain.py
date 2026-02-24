@@ -7,8 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.clone_performance import ClonePerformanceWeekly
+from app.models.clone_control import EmployeeCloneProfile
 from app.models.employee import Employee
 from app.models.ops_metrics import CodeMetricWeekly, CommsMetricWeekly, TaskMetricWeekly
+from app.services import clone_control
 
 
 class CloneDispatchItem(TypedDict):
@@ -106,6 +108,13 @@ async def train_weekly_clone_scores(
             + (learning * 0.15),
             2,
         )
+        feedback_adj = await clone_control.feedback_adjustment_for_employee(
+            db,
+            organization_id=organization_id,
+            employee_id=emp.id,
+            lookback_days=30,
+        )
+        overall = round(max(0.0, min(100.0, overall + feedback_adj)), 2)
         readiness = _readiness(overall)
 
         existing = (
@@ -197,11 +206,26 @@ async def build_dispatch_plan(
         if not emp:
             continue
         reason = "High overall clone readiness for complex execution."
+        profile = (
+            await db.execute(
+                select(EmployeeCloneProfile).where(
+                    EmployeeCloneProfile.organization_id == organization_id,
+                    EmployeeCloneProfile.employee_id == emp.id,
+                )
+            )
+        ).scalar_one_or_none()
+        preferred = []
+        if profile is not None:
+            import json
+
+            preferred = [str(x).lower() for x in json.loads(profile.preferred_task_types_json or "[]")]
         role_text = (emp.role or "").lower()
         if "tech" in challenge_text and ("developer" in role_text or "engineer" in role_text):
             reason = "Strong technical fit based on role and performance score."
         elif "sales" in challenge_text and ("sales" in role_text or "counsellor" in role_text):
             reason = "Strong client-facing fit based on role and performance score."
+        elif any(token in challenge_text for token in preferred):
+            reason = "Strong fit from preferred task types and historical outcomes."
         picks.append(
             {
                 "employee_id": emp.id,
