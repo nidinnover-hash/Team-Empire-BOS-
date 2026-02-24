@@ -100,6 +100,18 @@ async def test_control_integrations_health_endpoint(client):
     assert "items" in body
     assert "stale_count" in body
     assert "failing_count" in body
+    if body["items"]:
+        assert body["items"][0]["state"] in {"healthy", "degraded", "stale", "down"}
+
+
+async def test_control_system_health_endpoint(client):
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    resp = await client.get("/api/v1/control/system-health", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["overall_status"] in {"ok", "degraded", "down"}
+    assert isinstance(body["dependencies"], list)
+    assert "integrations" in body
 
 
 async def test_control_scheduler_jobs_endpoints(client):

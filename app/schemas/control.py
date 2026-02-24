@@ -153,6 +153,7 @@ class SchedulerReplayRead(BaseModel):
 class IntegrationHealthItem(BaseModel):
     type: str
     connected: bool
+    state: Literal["healthy", "degraded", "stale", "down"]
     last_sync_status: str | None = None
     last_sync_at: datetime | None = None
     stale: bool
@@ -166,3 +167,16 @@ class IntegrationHealthRead(BaseModel):
     failing_count: int
     stale_count: int
     items: list[IntegrationHealthItem]
+
+
+class SystemHealthDependency(BaseModel):
+    name: str
+    status: Literal["ok", "degraded", "down", "not_configured"]
+    detail: str
+
+
+class SystemHealthRead(BaseModel):
+    generated_at: datetime
+    overall_status: Literal["ok", "degraded", "down"]
+    dependencies: list[SystemHealthDependency]
+    integrations: IntegrationHealthRead

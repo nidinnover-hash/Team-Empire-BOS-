@@ -73,6 +73,8 @@ from app.models import ops_metrics as _model_ops_metrics  # noqa: F401
 from app.models import decision_log as _model_decision_log  # noqa: F401
 from app.models import policy_rule as _model_policy_rule  # noqa: F401
 from app.models import weekly_report as _model_weekly_report  # noqa: F401
+from app.models import org_membership as _model_org_membership  # noqa: F401
+from app.models import org_role_permission as _model_org_role_permission  # noqa: F401
 
 # Startup safety guard
 _UNSAFE_SECRET_KEYS = {"change_me_in_env", "changeme", "secret", "change-me", ""}

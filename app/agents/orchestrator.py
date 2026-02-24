@@ -13,6 +13,7 @@ import json
 from pydantic import BaseModel, Field
 
 from app.services.ai_router import call_ai
+from app.services.confidence import assess_agent_confidence
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -32,6 +33,10 @@ class AgentChatResponse(BaseModel):
     response: str
     requires_approval: bool
     proposed_actions: list[ProposedAction] = []
+    confidence_score: int = 0
+    confidence_level: str = "low"
+    confidence_reasons: list[str] = []
+    needs_human_review: bool = True
 
 
 # ── Role System Prompts ───────────────────────────────────────────────────────
@@ -167,10 +172,21 @@ async def run_agent(
     )
 
     requires_approval = any(t in request.message.lower() for t in _RISKY_TOKENS)
+    confidence = assess_agent_confidence(
+        user_message=request.message,
+        ai_response=response_text,
+        requires_approval=requires_approval,
+        memory_context=memory_context,
+        proposed_actions_count=0,
+    )
 
     return AgentChatResponse(
         role=role,
         response=response_text,
         requires_approval=requires_approval,
         proposed_actions=[],
+        confidence_score=confidence.score,
+        confidence_level=confidence.level,
+        confidence_reasons=confidence.reasons,
+        needs_human_review=confidence.needs_human_review,
     )

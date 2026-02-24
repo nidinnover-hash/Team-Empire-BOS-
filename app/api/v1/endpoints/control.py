@@ -5,12 +5,14 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.deps import get_db
+from app.core.request_context import get_current_request_id
 from app.core.rbac import require_roles
+from app.logs.audit import record_action
 from app.models.approval import Approval
 from app.models.ceo_control import (
     ClickUpTaskSnapshot,
@@ -37,11 +39,33 @@ from app.schemas.control import (
     SchedulerJobRunListRead,
     SchedulerReplayRead,
     SchedulerReplayRequest,
+    SystemHealthDependency,
+    SystemHealthRead,
 )
 from app.services import compliance_engine
 from app.services import sync_scheduler
 
 router = APIRouter(prefix="/control", tags=["CEO Control"])
+
+
+def _integration_state(
+    *,
+    connected: bool,
+    last_sync_status: str | None,
+    last_sync_at: datetime | None,
+    now: datetime,
+    stale_hours: int,
+) -> str:
+    if not connected:
+        return "down"
+    if last_sync_status == "error":
+        return "degraded"
+    if last_sync_at is None:
+        return "degraded"
+    age_hours = (now - last_sync_at).total_seconds() / 3600
+    if age_hours >= stale_hours:
+        return "stale"
+    return "healthy"
 
 
 @router.get("/health-summary", response_model=HealthSummaryRead)
@@ -217,7 +241,8 @@ async def integrations_health(
 ) -> IntegrationHealthRead:
     org_id = int(actor["org_id"])
     now = datetime.now(timezone.utc)
-    cutoff = now.timestamp() - (settings.SYNC_STALE_HOURS * 3600)
+    stale_hours = int(settings.SYNC_STALE_HOURS)
+    cutoff = now.timestamp() - (stale_hours * 3600)
     rows = (
         await db.execute(
             select(Integration).where(
@@ -232,10 +257,18 @@ async def integrations_health(
         if row.last_sync_at:
             age_hours = round((now - row.last_sync_at).total_seconds() / 3600, 2)
         stale = bool(row.last_sync_at is None or row.last_sync_at.timestamp() < cutoff or row.last_sync_status == "error")
+        state = _integration_state(
+            connected=(row.status == "connected"),
+            last_sync_status=row.last_sync_status,
+            last_sync_at=row.last_sync_at,
+            now=now,
+            stale_hours=stale_hours,
+        )
         items.append(
             {
                 "type": row.type,
                 "connected": row.status == "connected",
+                "state": state,
                 "last_sync_status": row.last_sync_status,
                 "last_sync_at": row.last_sync_at,
                 "stale": stale,
@@ -244,11 +277,100 @@ async def integrations_health(
         )
     return IntegrationHealthRead(
         generated_at=now,
-        stale_hours_threshold=int(settings.SYNC_STALE_HOURS),
+        stale_hours_threshold=stale_hours,
         total_connected=len(items),
         failing_count=sum(1 for x in items if x.get("last_sync_status") == "error"),
         stale_count=sum(1 for x in items if x.get("stale")),
         items=items,
+    )
+
+
+@router.get("/system-health", response_model=SystemHealthRead)
+async def system_health(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> SystemHealthRead:
+    now = datetime.now(timezone.utc)
+    dependencies: list[SystemHealthDependency] = []
+
+    # Database probe
+    try:
+        await db.execute(text("SELECT 1"))
+        dependencies.append(SystemHealthDependency(name="database", status="ok", detail="reachable"))
+    except Exception as exc:
+        dependencies.append(
+            SystemHealthDependency(name="database", status="down", detail=f"probe failed: {type(exc).__name__}")
+        )
+
+    # Redis (optional)
+    redis_url = (settings.RATE_LIMIT_REDIS_URL or settings.IDEMPOTENCY_REDIS_URL or "").strip()
+    if not redis_url:
+        dependencies.append(
+            SystemHealthDependency(name="redis", status="not_configured", detail="RATE_LIMIT_REDIS_URL/IDEMPOTENCY_REDIS_URL not set")
+        )
+    else:
+        try:
+            import redis.asyncio as redis  # type: ignore[import-untyped]
+
+            client = redis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+            pong = await client.ping()
+            await client.aclose()
+            dependencies.append(
+                SystemHealthDependency(
+                    name="redis",
+                    status="ok" if pong else "degraded",
+                    detail="ping ok" if pong else "ping returned falsy",
+                )
+            )
+        except Exception as exc:
+            dependencies.append(
+                SystemHealthDependency(name="redis", status="down", detail=f"probe failed: {type(exc).__name__}")
+            )
+
+    # Vector store (this project uses DB-backed storage by default)
+    dependencies.append(
+        SystemHealthDependency(name="vector_store", status="ok", detail="database-backed")
+    )
+
+    # AI key readiness
+    if (settings.OPENAI_API_KEY or "").strip():
+        dependencies.append(SystemHealthDependency(name="openai", status="ok", detail="api key configured"))
+    else:
+        dependencies.append(SystemHealthDependency(name="openai", status="degraded", detail="OPENAI_API_KEY missing"))
+
+    integration_health = await integrations_health(db=db, actor=actor)
+    if any(item.state == "degraded" for item in integration_health.items):
+        dependencies.append(SystemHealthDependency(name="integrations", status="degraded", detail="one or more sync failures"))
+    elif any(item.state in {"stale", "down"} for item in integration_health.items):
+        dependencies.append(SystemHealthDependency(name="integrations", status="degraded", detail="one or more integrations stale/down"))
+    else:
+        dependencies.append(SystemHealthDependency(name="integrations", status="ok", detail="all connected integrations healthy"))
+
+    status_values = [d.status for d in dependencies]
+    if "down" in status_values:
+        overall_status = "down"
+    elif "degraded" in status_values:
+        overall_status = "degraded"
+    else:
+        overall_status = "ok"
+    await record_action(
+        db,
+        event_type="system_health_checked",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="control",
+        entity_id=None,
+        payload_json={
+            "request_id": get_current_request_id(),
+            "overall_status": overall_status,
+            "dependency_count": len(dependencies),
+        },
+    )
+    return SystemHealthRead(
+        generated_at=now,
+        overall_status=overall_status,
+        dependencies=dependencies,
+        integrations=integration_health,
     )
 
 
@@ -258,8 +380,39 @@ async def compliance_run(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> ComplianceRunRead:
     org_id = int(actor["org_id"])
-    result = await compliance_engine.run_compliance(db, org_id)
-    return ComplianceRunRead(ok=True, compliance_score=int(result["compliance_score"]), violations=result["violations"], mode="suggest_only")
+    request_id = get_current_request_id()
+    try:
+        result = await compliance_engine.run_compliance(db, org_id)
+        await record_action(
+            db,
+            event_type="compliance_run",
+            actor_user_id=actor["id"],
+            organization_id=actor["org_id"],
+            entity_type="control",
+            entity_id=None,
+            payload_json={
+                "request_id": request_id,
+                "status": "ok",
+                "violation_count": len(result["violations"]),
+                "compliance_score": int(result["compliance_score"]),
+            },
+        )
+        return ComplianceRunRead(ok=True, compliance_score=int(result["compliance_score"]), violations=result["violations"], mode="suggest_only")
+    except Exception as exc:
+        await record_action(
+            db,
+            event_type="compliance_run",
+            actor_user_id=actor["id"],
+            organization_id=actor["org_id"],
+            entity_type="control",
+            entity_id=None,
+            payload_json={
+                "request_id": request_id,
+                "status": "error",
+                "error_type": type(exc).__name__,
+            },
+        )
+        raise
 
 
 @router.get("/compliance/report", response_model=ComplianceReportRead)

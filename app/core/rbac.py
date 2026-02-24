@@ -4,7 +4,17 @@ from fastapi import Depends, HTTPException, status
 
 from app.core.security import get_current_user
 
-Role = Literal["CEO", "ADMIN", "MANAGER", "STAFF"]
+Role = Literal[
+    "CEO",
+    "ADMIN",
+    "MANAGER",
+    "STAFF",
+    "OWNER",
+    "TECH_LEAD",
+    "OPS_MANAGER",
+    "DEVELOPER",
+    "VIEWER",
+]
 
 
 def require_roles(*allowed_roles: Role):

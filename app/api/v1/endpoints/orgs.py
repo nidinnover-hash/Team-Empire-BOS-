@@ -4,7 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
+from app.schemas.org_membership import OrganizationMembershipCreate, OrganizationMembershipRead
 from app.schemas.organization import OrganizationCreate, OrganizationRead, OrganizationUpdate
+from app.services import org_membership as membership_service
 from app.services import organization as organization_service
 
 router = APIRouter(prefix="/orgs", tags=["Organizations"])
@@ -65,3 +67,37 @@ async def update_org(
         payload_json={"name": org.name, "slug": org.slug},
     )
     return org
+
+
+@router.get("/{org_id}/members", response_model=list[OrganizationMembershipRead])
+async def list_org_members(
+    org_id: int,
+    db: AsyncSession = Depends(get_db),
+    _actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> list[OrganizationMembershipRead]:
+    return await membership_service.list_memberships(db, organization_id=org_id)
+
+
+@router.post("/{org_id}/members", response_model=OrganizationMembershipRead, status_code=201)
+async def upsert_org_member(
+    org_id: int,
+    data: OrganizationMembershipCreate,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> OrganizationMembershipRead:
+    membership = await membership_service.upsert_membership(
+        db,
+        organization_id=org_id,
+        user_id=data.user_id,
+        role=data.role,
+    )
+    await record_action(
+        db,
+        event_type="organization_member_upserted",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="organization_membership",
+        entity_id=membership.id,
+        payload_json={"target_org_id": org_id, "user_id": data.user_id, "role": data.role},
+    )
+    return membership

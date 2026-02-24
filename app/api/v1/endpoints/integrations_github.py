@@ -11,6 +11,7 @@ from app.core.idempotency import (
     store_response,
 )
 from app.core.rbac import require_roles
+from app.core.request_context import get_current_request_id
 from app.logs.audit import record_action
 from app.schemas.integration import (
     GitHubConnectRequest,
@@ -30,6 +31,7 @@ async def github_connect(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> GitHubStatusRead:
+    request_id = get_current_request_id()
     try:
         info = await github_service.connect_github(
             db, org_id=int(actor["org_id"]), api_token=data.api_token
@@ -46,6 +48,20 @@ async def github_connect(
                 status_hint = " Token missing 'repo' or 'read:user' scope."
             else:
                 status_hint = f" GitHub returned HTTP {code}."
+        await record_action(
+            db,
+            event_type="integration_connected",
+            actor_user_id=actor["id"],
+            organization_id=actor["org_id"],
+            entity_type="integration",
+            entity_id=None,
+            payload_json={
+                "type": "github",
+                "request_id": request_id,
+                "status": "error",
+                "error_type": type(exc).__name__,
+            },
+        )
         raise HTTPException(
             status_code=400,
             detail=f"GitHub connection failed.{status_hint} ({type(exc).__name__}). Check your token and scopes.",
@@ -58,7 +74,7 @@ async def github_connect(
         organization_id=actor["org_id"],
         entity_type="integration",
         entity_id=info["id"],
-        payload_json={"type": "github", "login": info.get("login")},
+        payload_json={"type": "github", "login": info.get("login"), "request_id": request_id, "status": "ok"},
     )
     return GitHubStatusRead(connected=True, login=info.get("login"), repos_tracked=0)
 
@@ -98,6 +114,7 @@ async def github_sync(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> GitHubSyncResult:
     org_id = int(actor["org_id"])
+    request_id = get_current_request_id()
     scope = f"github_sync:{org_id}"
     fingerprint = build_fingerprint({"org_id": org_id, "action": "github_sync"})
     if idempotency_key:
@@ -109,6 +126,15 @@ async def github_sync(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
     result = await github_service.sync_github(db, org_id=org_id)
     if result["error"]:
+        await record_action(
+            db,
+            event_type="github_synced",
+            actor_user_id=actor["id"],
+            organization_id=actor["org_id"],
+            entity_type="integration",
+            entity_id=None,
+            payload_json={"request_id": request_id, "status": "error", "error": result["error"]},
+        )
         raise HTTPException(status_code=400, detail=result["error"])
 
     await record_action(
@@ -119,6 +145,8 @@ async def github_sync(
         entity_type="integration",
         entity_id=None,
         payload_json={
+            "request_id": request_id,
+            "status": "ok",
             "prs_synced": result["prs_synced"],
             "issues_synced": result["issues_synced"],
         },

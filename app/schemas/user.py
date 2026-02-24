@@ -9,7 +9,17 @@ class UserCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    role: Literal["CEO", "ADMIN", "MANAGER", "STAFF"] = "STAFF"
+    role: Literal[
+        "CEO",
+        "ADMIN",
+        "MANAGER",
+        "STAFF",
+        "OWNER",
+        "TECH_LEAD",
+        "OPS_MANAGER",
+        "DEVELOPER",
+        "VIEWER",
+    ] = "STAFF"
 
 
 class UserRead(BaseModel):

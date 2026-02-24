@@ -11,6 +11,7 @@ from app.core.idempotency import (
     store_response,
 )
 from app.core.rbac import require_roles
+from app.core.request_context import get_current_request_id
 from app.logs.audit import record_action
 from app.schemas.integration import ClickUpConnectRequest, ClickUpStatusRead, ClickUpSyncResult
 from app.services import clickup_service
@@ -28,11 +29,26 @@ async def clickup_connect(
     Verify a ClickUp personal API token and store it encrypted in the Integration table.
     Get your token at: https://app.clickup.com/settings/apps (Personal API Token section).
     """
+    request_id = get_current_request_id()
     try:
         info = await clickup_service.connect_clickup(
             db, org_id=int(actor["org_id"]), api_token=data.api_token
         )
     except Exception as exc:
+        await record_action(
+            db,
+            event_type="integration_connected",
+            actor_user_id=actor["id"],
+            organization_id=actor["org_id"],
+            entity_type="integration",
+            entity_id=None,
+            payload_json={
+                "type": "clickup",
+                "request_id": request_id,
+                "status": "error",
+                "error_type": type(exc).__name__,
+            },
+        )
         raise HTTPException(
             status_code=400,
             detail=f"ClickUp connection failed ({type(exc).__name__}). Check your API token.",
@@ -45,7 +61,7 @@ async def clickup_connect(
         organization_id=actor["org_id"],
         entity_type="integration",
         entity_id=info["id"],
-        payload_json={"type": "clickup", "username": info.get("username")},
+        payload_json={"type": "clickup", "username": info.get("username"), "request_id": request_id, "status": "ok"},
     )
     return ClickUpStatusRead(
         connected=True,
@@ -70,6 +86,7 @@ async def clickup_sync(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> ClickUpSyncResult:
+    request_id = get_current_request_id()
     scope = f"clickup_sync:{actor['org_id']}"
     fingerprint = build_fingerprint({"org_id": int(actor["org_id"]), "action": "clickup_sync"})
     if idempotency_key:
@@ -81,6 +98,15 @@ async def clickup_sync(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
     result = await clickup_service.sync_clickup_tasks(db, org_id=int(actor["org_id"]))
     if result["error"]:
+        await record_action(
+            db,
+            event_type="clickup_synced",
+            actor_user_id=actor["id"],
+            organization_id=actor["org_id"],
+            entity_type="integration",
+            entity_id=None,
+            payload_json={"request_id": request_id, "status": "error", "error": result["error"]},
+        )
         raise HTTPException(status_code=400, detail=result["error"])
 
     await record_action(
@@ -90,7 +116,7 @@ async def clickup_sync(
         organization_id=actor["org_id"],
         entity_type="integration",
         entity_id=None,
-        payload_json={"synced": result["synced"]},
+        payload_json={"request_id": request_id, "status": "ok", "synced": result["synced"]},
     )
 
     status = await clickup_service.get_clickup_status(db, org_id=int(actor["org_id"]))
