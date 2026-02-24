@@ -853,6 +853,8 @@ async def get_clone_training_layer(
     organization_id: int,
     window_days: int = 30,
 ) -> CloneTrainingLayerReport:
+    today = date.today()
+    since = today - timedelta(days=max(window_days - 1, 0))
     employees_result = await db.execute(
         select(Employee).where(
             Employee.organization_id == organization_id,
@@ -889,12 +891,17 @@ async def get_clone_training_layer(
     )
     plans = list(plan_result.scalars().all())
     latest_plan_by_emp: dict[int, RoleTrainingPlan] = {}
-    open_training_plans = 0
     for row in sorted(plans, key=lambda x: x.week_start_date, reverse=True):
-        if row.status == "OPEN":
-            open_training_plans += 1
         if row.employee_id not in latest_plan_by_emp:
             latest_plan_by_emp[row.employee_id] = row
+    # Count active open plans based on each employee's latest plan in the selected window.
+    open_training_plans = len(
+        [
+            row
+            for row in latest_plan_by_emp.values()
+            if row.status == "OPEN" and row.week_start_date >= since
+        ]
+    )
 
     members: list[CloneTrainingMember] = []
     clone_ready_employees = 0
@@ -1089,11 +1096,18 @@ async def get_opportunity_association_layer(
     organization_id: int,
     window_days: int = 30,
 ) -> OpportunityAssociationLayerReport:
+    today = date.today()
+    since = today - timedelta(days=max(window_days - 1, 0))
     contacts_result = await db.execute(
         select(Contact).where(Contact.organization_id == organization_id)
     )
     contacts = list(contacts_result.scalars().all())
-    business_contacts = [c for c in contacts if (c.relationship or "").lower() == "business"]
+    business_contacts = [
+        c for c in contacts
+        if (c.relationship or "").lower() == "business"
+        and c.created_at is not None
+        and c.created_at.date() >= since
+    ]
 
     employees_result = await db.execute(
         select(Employee).where(
