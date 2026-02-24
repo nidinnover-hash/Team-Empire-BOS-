@@ -12,6 +12,7 @@ These helpers let callers:
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from collections.abc import Mapping
 from typing import TypedDict
 
@@ -25,6 +26,9 @@ class ContextLayer(TypedDict, total=False):
     priority: int        # 1=critical … 5=background
     content: str         # the actual text block
     char_count: int
+    score: float
+    explain: list[str]
+    created_at: str
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -39,6 +43,79 @@ MEMORY_CATEGORIES = {
     "goal",        # current goals
     "rule",        # business rules / constraints
 }
+
+CRITICAL_SOURCES = {"priority", "blocker", "risk", "incident"}
+
+
+def _parse_iso_utc(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def rank_context_layers(
+    layers: list[ContextLayer],
+    now: datetime | None = None,
+    debug: bool = False,
+) -> list[ContextLayer]:
+    """
+    Score and deterministically sort layers.
+
+    Goals:
+    - critical and fresher layers should rank higher
+    - ties are stable and deterministic
+    - optional debug explanations make ranking transparent
+    """
+    current = now or datetime.now(timezone.utc)
+    ranked: list[ContextLayer] = []
+    for layer in layers:
+        reasons: list[str] = []
+        priority = int(layer.get("priority", 5))
+        score = 100.0 - (priority * 10.0)
+        reasons.append(f"priority_base={score:.1f}")
+
+        layer_type = str(layer.get("layer_type", "")).lower()
+        source = str(layer.get("source", "")).lower()
+        if layer_type == "daily":
+            score += 12.0
+            reasons.append("daily_boost=+12")
+        if source in CRITICAL_SOURCES:
+            score += 15.0
+            reasons.append("critical_source_boost=+15")
+
+        created_at = _parse_iso_utc(str(layer.get("created_at") or ""))
+        if created_at is not None:
+            age_hours = max(0.0, (current - created_at).total_seconds() / 3600.0)
+            if age_hours > 0:
+                decay = min(30.0, age_hours * 0.75)
+                score -= decay
+                reasons.append(f"age_decay=-{decay:.1f}")
+
+        if layer_type == "integration":
+            content = str(layer.get("content", "")).lower()
+            if "disconnected" in content or "failed" in content:
+                score += 6.0
+                reasons.append("integration_risk_boost=+6")
+
+        scored = ContextLayer(**layer)
+        scored["score"] = round(score, 2)
+        if debug:
+            scored["explain"] = reasons
+        ranked.append(scored)
+
+    ranked.sort(
+        key=lambda item: (
+            -float(item.get("score", 0.0)),
+            int(item.get("priority", 5)),
+            str(item.get("layer_type", "")),
+            str(item.get("source", "")),
+            str(item.get("content", "")),
+        )
+    )
+    return ranked
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -156,6 +233,7 @@ def build_typed_context(
     integration_statuses: list[Mapping[str, object]] | None = None,
     categories: list[str] | None = None,
     char_limit: int = DEFAULT_CONTEXT_CHAR_LIMIT,
+    debug: bool = False,
 ) -> list[ContextLayer]:
     """
     Build typed context layers — structured alternative to build_focused_context().
@@ -192,7 +270,9 @@ def build_typed_context(
         content = "\n".join(f"  {c}" for c in contents)
         layers.append(ContextLayer(
             layer_type="daily", source=ctype, priority=3,
-            content=f"[{ctype.upper()}]:\n{content}", char_count=len(content),
+            content=f"[{ctype.upper()}]:\n{content}",
+            char_count=len(content),
+            created_at=max((ctx.created_at for ctx in daily_contexts if ctx.context_type == ctype), default=None).isoformat() if any(ctx.context_type == ctype and ctx.created_at for ctx in daily_contexts) else "",
         ))
 
     # Integration layer
@@ -210,8 +290,8 @@ def build_typed_context(
             content=f"INTEGRATIONS:\n{content}", char_count=len(content),
         ))
 
-    # Sort by priority, then trim total to char_limit
-    layers.sort(key=lambda layer: layer.get("priority", 5))
+    # Score/sort, then trim total to char_limit
+    layers = rank_context_layers(layers, debug=debug)
     total = 0
     kept: list[ContextLayer] = []
     for layer in layers:

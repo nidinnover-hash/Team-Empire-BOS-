@@ -158,7 +158,7 @@ async def test_start_stop_scheduler():
     assert task is not None
     assert not task.done()
 
-    sync_scheduler.stop_scheduler()
+    await sync_scheduler.stop_scheduler()
     # Give the event loop a tick to process the cancellation
     await asyncio.sleep(0)
     assert sync_scheduler._scheduler_task is None

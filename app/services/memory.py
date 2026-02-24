@@ -254,19 +254,17 @@ async def build_memory_context(
     This is what makes the clone feel like Nidin — it knows who he is,
     who his team is, and what's happening today.
     """
+    import asyncio as _asyncio
     from sqlalchemy import select as _select
     from app.models.task import Task as _Task
-
-    profile = await get_profile_memory(db, organization_id=organization_id)
-    members = await get_team_members(db, organization_id=organization_id, active_only=True)
-    today_context = await get_daily_context(
-        db,
-        organization_id=organization_id,
-        for_date=date.today(),
-    )
     from app.services.integration import list_integrations as _list_integrations
 
-    integrations = await _list_integrations(db, organization_id=organization_id)
+    profile, members, today_context, integrations = await _asyncio.gather(
+        get_profile_memory(db, organization_id=organization_id),
+        get_team_members(db, organization_id=organization_id, active_only=True),
+        get_daily_context(db, organization_id=organization_id, for_date=date.today()),
+        _list_integrations(db, organization_id=organization_id),
+    )
     integration_statuses: list[Mapping[str, object]] = [
         {
             "type": item.type,

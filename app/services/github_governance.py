@@ -61,6 +61,8 @@ class GovernancePolicy:
 def build_empireoe_policy() -> GovernancePolicy:
     """Build the governance policy for empireoe-ai."""
     org = (settings.GITHUB_ORG or "empireoe-ai").strip()
+    tech_leads = [u.strip() for u in settings.GITHUB_TECH_LEADS.split(",") if u.strip()]
+    developers = [u.strip() for u in settings.GITHUB_DEVELOPERS.split(",") if u.strip()]
 
     return GovernancePolicy(
         org=org,
@@ -69,14 +71,14 @@ def build_empireoe_policy() -> GovernancePolicy:
                 name="tech-leads",
                 slug="tech-leads",
                 description="Technical leads — admin access on all repos",
-                members=["sharonempire"],
+                members=tech_leads,
                 repo_permission="admin",
             ),
             TeamPolicy(
                 name="developers",
                 slug="developers",
                 description="Development team — write access on all repos",
-                members=["akshayempireoe", "sanjayempire"],
+                members=developers,
                 repo_permission="push",
             ),
         ],

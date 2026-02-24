@@ -57,6 +57,17 @@ def _format_briefing_summary(summary: object) -> str:
 
 # Background task handle (stored so we can cancel on shutdown)
 _scheduler_task: asyncio.Task | None = None
+_inflight_tasks: set[asyncio.Task] = set()
+
+
+def _task_error_handler(task: asyncio.Task) -> None:
+    """Log unhandled exceptions from fire-and-forget tasks."""
+    _inflight_tasks.discard(task)
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc:
+        logger.error("Background task failed: %s: %s", type(exc).__name__, exc)
 
 
 # ── Core sync runner ──────────────────────────────────────────────────────────
@@ -133,20 +144,22 @@ async def trigger_sync_for_org(org_id: int) -> None:
         except Exception as exc:
             logger.error("On-demand sync error org=%d: %s", org_id, exc)
 
-    asyncio.create_task(_do())
+    task = asyncio.create_task(_do())
+    _inflight_tasks.add(task)
+    task.add_done_callback(_task_error_handler)
 
 
 # ── Periodic scheduler loop ───────────────────────────────────────────────────
 
 async def _check_morning_briefing(db: AsyncSession, org_id: int) -> None:
-    """Generate daily briefing at 8-9am if not already created today."""
+    """Generate daily briefing at 8-9am IST if not already created today."""
     from datetime import date
     from sqlalchemy import select
     from app.models.memory import DailyContext
 
-    now = datetime.now(timezone.utc)
-    hour = now.hour
-    if hour < 8 or hour >= 9:
+    tz = ZoneInfo("Asia/Kolkata")
+    local_now = datetime.now(timezone.utc).astimezone(tz)
+    if local_now.hour < 8 or local_now.hour >= 9:
         return
 
     # Check if auto briefing already exists for today
@@ -245,9 +258,20 @@ def start_scheduler(interval_minutes: int = 30) -> asyncio.Task:
     return _scheduler_task
 
 
-def stop_scheduler() -> None:
-    """Cancel the background task on shutdown."""
+async def stop_scheduler() -> None:
+    """Cancel the scheduler and await in-flight sync tasks on shutdown."""
     global _scheduler_task
     if _scheduler_task and not _scheduler_task.done():
         _scheduler_task.cancel()
+        try:
+            await _scheduler_task
+        except asyncio.CancelledError:
+            pass
         _scheduler_task = None
+    # Wait for any in-flight on-demand syncs to finish (5s max)
+    if _inflight_tasks:
+        logger.info("Awaiting %d in-flight sync tasks…", len(_inflight_tasks))
+        done, pending = await asyncio.wait(_inflight_tasks, timeout=5.0)
+        for t in pending:
+            t.cancel()
+        _inflight_tasks.clear()

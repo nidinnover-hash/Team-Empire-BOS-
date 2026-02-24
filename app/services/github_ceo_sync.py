@@ -420,9 +420,30 @@ async def get_ceo_summary(
     )
     pr_throughput = [{"author": r.author, "merged_prs": r.count} for r in merged_q]
 
-    # Average PR review time (time from created to first review)
-    merged_prs = await db.execute(
-        select(GitHubPullRequest)
+    # Average PR review time (time from created to first review) — single query
+    first_review_subq = (
+        select(
+            GitHubReview.repo_full_name,
+            GitHubReview.pr_number,
+            func.min(GitHubReview.submitted_at).label("first_review_at"),
+        )
+        .where(
+            GitHubReview.organization_id == org_id,
+            GitHubReview.submitted_at.isnot(None),
+        )
+        .group_by(GitHubReview.repo_full_name, GitHubReview.pr_number)
+        .subquery()
+    )
+    review_time_q = await db.execute(
+        select(
+            GitHubPullRequest.created_at_remote,
+            first_review_subq.c.first_review_at,
+        )
+        .join(
+            first_review_subq,
+            (GitHubPullRequest.repo_full_name == first_review_subq.c.repo_full_name)
+            & (GitHubPullRequest.pr_number == first_review_subq.c.pr_number),
+        )
         .where(
             GitHubPullRequest.organization_id == org_id,
             GitHubPullRequest.state == "merged",
@@ -431,21 +452,9 @@ async def get_ceo_summary(
         )
     )
     review_times = []
-    for pr in merged_prs.scalars().all():
-        first_review = await db.execute(
-            select(GitHubReview.submitted_at)
-            .where(
-                GitHubReview.organization_id == org_id,
-                GitHubReview.repo_full_name == pr.repo_full_name,
-                GitHubReview.pr_number == pr.pr_number,
-                GitHubReview.submitted_at.isnot(None),
-            )
-            .order_by(GitHubReview.submitted_at.asc())
-            .limit(1)
-        )
-        fr = first_review.scalar_one_or_none()
-        if fr and pr.created_at_remote:
-            hours = (fr - pr.created_at_remote).total_seconds() / 3600
+    for row in review_time_q:
+        if row.created_at_remote and row.first_review_at:
+            hours = (row.first_review_at - row.created_at_remote).total_seconds() / 3600
             review_times.append(hours)
 
     avg_review_hours = round(sum(review_times) / len(review_times), 1) if review_times else None
@@ -564,23 +573,35 @@ async def get_risks(
 
     risks: list[dict[str, Any]] = []
 
-    # 1. Open PRs with no reviews
-    open_prs = await db.execute(
-        select(GitHubPullRequest)
+    # 1. Open PRs with no reviews — single LEFT JOIN query
+    review_count_subq = (
+        select(
+            GitHubReview.repo_full_name,
+            GitHubReview.pr_number,
+            func.count(GitHubReview.id).label("review_count"),
+        )
+        .where(GitHubReview.organization_id == org_id)
+        .group_by(GitHubReview.repo_full_name, GitHubReview.pr_number)
+        .subquery()
+    )
+    open_prs_q = await db.execute(
+        select(
+            GitHubPullRequest,
+            review_count_subq.c.review_count,
+        )
+        .outerjoin(
+            review_count_subq,
+            (GitHubPullRequest.repo_full_name == review_count_subq.c.repo_full_name)
+            & (GitHubPullRequest.pr_number == review_count_subq.c.pr_number),
+        )
         .where(
             GitHubPullRequest.organization_id == org_id,
             GitHubPullRequest.state == "open",
         )
     )
-    for pr in open_prs.scalars().all():
-        review_count_q = await db.execute(
-            select(func.count(GitHubReview.id)).where(
-                GitHubReview.organization_id == org_id,
-                GitHubReview.repo_full_name == pr.repo_full_name,
-                GitHubReview.pr_number == pr.pr_number,
-            )
-        )
-        review_count = review_count_q.scalar() or 0
+    for row in open_prs_q:
+        pr = row[0]
+        review_count = row[1] or 0
         if review_count == 0:
             age_hours = (now - pr.created_at_remote).total_seconds() / 3600 if pr.created_at_remote else 0
             if age_hours > 24:

@@ -1,6 +1,5 @@
-import logging
-import secrets
 import hmac
+import logging
 from datetime import date, datetime, timezone
 from hashlib import sha256
 from time import time
@@ -17,7 +16,7 @@ from app.core.idempotency import (
     get_cached_response,
     store_response,
 )
-from app.core.oauth_nonce import consume_oauth_nonce_once
+from app.core.oauth_state import sign_oauth_state, verify_oauth_state
 from app.core.privacy import sanitize_response_payload
 from app.core.deps import get_db
 from app.core.rbac import require_roles
@@ -79,40 +78,11 @@ def _safe_provider_error(prefix: str) -> str:
 
 
 def _sign_google_calendar_state(org_id: int) -> str:
-    ts = int(time())
-    nonce = secrets.token_urlsafe(16)
-    payload = f"{org_id}:{ts}:{nonce}"
-    sig = hmac.new(
-        settings.SECRET_KEY.encode("utf-8"),
-        payload.encode("utf-8"),
-        sha256,
-    ).hexdigest()
-    return f"{payload}:{sig}"
+    return sign_oauth_state(org_id)
 
 
 def _verify_google_calendar_state(state: str, expected_org_id: int, max_age_seconds: int = 600) -> None:
-    try:
-        parts = state.split(":", 3)
-        if len(parts) != 4:
-            raise ValueError("Invalid state format")
-        org_id_str, ts_str, nonce, sig = parts
-        payload = f"{org_id_str}:{ts_str}:{nonce}"
-        expected_sig = hmac.new(
-            settings.SECRET_KEY.encode("utf-8"),
-            payload.encode("utf-8"),
-            sha256,
-        ).hexdigest()
-        if not hmac.compare_digest(sig, expected_sig):
-            raise ValueError("Invalid state signature")
-        if int(org_id_str) != expected_org_id:
-            raise ValueError("State organization mismatch")
-        ts = int(ts_str)
-        if int(time()) - ts > max_age_seconds:
-            raise ValueError("State expired")
-        if not consume_oauth_nonce_once("gcal_oauth", nonce, max_age_seconds=max_age_seconds):
-            raise ValueError("State replayed")
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
+    verify_oauth_state(state, namespace="gcal_oauth", max_age_seconds=max_age_seconds, expected_org_id=expected_org_id)
 
 
 def _redact_integration(item: IntegrationRead | object) -> IntegrationRead:

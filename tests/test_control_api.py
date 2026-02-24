@@ -31,3 +31,35 @@ async def test_control_message_draft(client):
     assert "message" in body
     assert body["checklist"]
 
+
+async def test_control_health_summary_counts(client):
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+
+    # one open task
+    task_resp = await client.post("/api/v1/tasks", json={"title": "Health summary task"}, headers=headers)
+    assert task_resp.status_code == 201
+
+    # one pending approval
+    approval_resp = await client.post(
+        "/api/v1/approvals/request",
+        json={"organization_id": 1, "approval_type": "send_message", "payload_json": {}},
+        headers=headers,
+    )
+    assert approval_resp.status_code == 201
+
+    # one connected integration
+    integration_resp = await client.post(
+        "/api/v1/integrations/connect",
+        json={"type": "slack", "config_json": {"access_token": "xoxb-demo-token"}},
+        headers=headers,
+    )
+    assert integration_resp.status_code == 201
+
+    summary = await client.get("/api/v1/control/health-summary", headers=headers)
+    assert summary.status_code == 200
+    body = summary.json()
+    assert body["open_tasks"] >= 1
+    assert body["pending_approvals"] >= 1
+    assert body["connected_integrations"] >= 1
+    assert body["failing_integrations"] >= 0
+    assert "generated_at" in body

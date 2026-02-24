@@ -7,6 +7,7 @@ All operations are read-only (observer mode) — no writes to external services.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -343,7 +344,8 @@ async def ingest_gmail_signals(db: AsyncSession, org_id: int) -> dict[str, Any]:
     emp_maps = await _employee_map(db, org_id)
 
     try:
-        emails, _refreshed = gmail_tool.fetch_recent_emails(
+        emails, _refreshed = await asyncio.to_thread(
+            gmail_tool.fetch_recent_emails,
             access_token=access_token,
             refresh_token=refresh_token,
             expires_at=expires_at,

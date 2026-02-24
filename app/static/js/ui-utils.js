@@ -35,10 +35,61 @@
     return window.confirm(text);
   }
 
+  async function requestJson(path, options) {
+    var opts = options || {};
+    var method = opts.method || "GET";
+    var headers = opts.headers || {};
+    var body = opts.body;
+    var timeoutMs = typeof opts.timeoutMs === "number" ? opts.timeoutMs : 15000;
+
+    if (window.PCAPI && window.PCAPI.safeFetchJson) {
+      return window.PCAPI.safeFetchJson(path, {
+        method: method,
+        headers: headers,
+        body: body,
+        signal: opts.signal,
+        auth: opts.auth === true,
+        csrf: opts.csrf === true,
+        token: opts.token,
+        retries: typeof opts.retries === "number" ? opts.retries : 1,
+        timeoutMs: timeoutMs,
+      });
+    }
+
+    var controller = new AbortController();
+    var onAbort = null;
+    if (opts.signal) {
+      if (opts.signal.aborted) controller.abort();
+      else {
+        onAbort = function () { controller.abort(); };
+        opts.signal.addEventListener("abort", onAbort, { once: true });
+      }
+    }
+    var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+    try {
+      var response = await fetch(path, {
+        method: method,
+        headers: headers,
+        body: body,
+        signal: controller.signal,
+      });
+      var payload = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        var err = new Error(payload.detail || ("Request failed (" + response.status + ")"));
+        err.status = response.status;
+        throw err;
+      }
+      return payload;
+    } finally {
+      clearTimeout(timer);
+      if (opts.signal && onAbort) opts.signal.removeEventListener("abort", onAbort);
+    }
+  }
+
   window.PCUI = {
     mapApiError: mapApiError,
     setButtonLoading: setButtonLoading,
     confirmDanger: confirmDanger,
+    requestJson: requestJson,
   };
 })();
-

@@ -5,15 +5,66 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles
+from app.models.approval import Approval
 from app.models.ceo_control import ClickUpTaskSnapshot, GitHubPRSnapshot, GitHubRepoSnapshot
+from app.models.integration import Integration
+from app.models.task import Task
 from app.services import compliance_engine
 
 router = APIRouter(prefix="/control", tags=["CEO Control"])
+
+
+@router.get("/health-summary")
+async def health_summary(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> dict[str, Any]:
+    org_id = int(actor["org_id"])
+    open_tasks = (
+        await db.execute(
+            select(func.count(Task.id)).where(
+                Task.organization_id == org_id,
+                Task.is_done.is_(False),
+            )
+        )
+    ).scalar_one()
+    pending_approvals = (
+        await db.execute(
+            select(func.count(Approval.id)).where(
+                Approval.organization_id == org_id,
+                Approval.status == "pending",
+            )
+        )
+    ).scalar_one()
+    connected_integrations = (
+        await db.execute(
+            select(func.count(Integration.id)).where(
+                Integration.organization_id == org_id,
+                Integration.status == "connected",
+            )
+        )
+    ).scalar_one()
+    failing_integrations = (
+        await db.execute(
+            select(func.count(Integration.id)).where(
+                Integration.organization_id == org_id,
+                Integration.status == "connected",
+                Integration.last_sync_status == "error",
+            )
+        )
+    ).scalar_one()
+    return {
+        "open_tasks": int(open_tasks or 0),
+        "pending_approvals": int(pending_approvals or 0),
+        "connected_integrations": int(connected_integrations or 0),
+        "failing_integrations": int(failing_integrations or 0),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def _top_prs_waiting_sharon(prs: list[GitHubPRSnapshot]) -> list[dict[str, Any]]:

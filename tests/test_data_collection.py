@@ -21,6 +21,8 @@ async def test_data_hub_page_loads_for_session(client):
     assert r.status_code == 200
     assert "Data Hub + Clone Playbook" in r.text
     assert "How to Use Clone Layer" in r.text
+    assert "/static/css/data_hub.css" in r.text
+    assert "/static/js/data-hub-page.js" in r.text
 
 
 async def test_collect_data_into_daily_context(client):

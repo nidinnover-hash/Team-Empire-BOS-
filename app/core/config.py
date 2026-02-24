@@ -49,6 +49,14 @@ class Settings(BaseSettings):
     GITHUB_PRIVATE_KEY_PEM: str | None = None
     GITHUB_ORG: str | None = None
     CRITICAL_GITHUB_REPOS: str = ""
+    # Governance team members (comma-separated GitHub usernames)
+    GITHUB_TECH_LEADS: str = "sharonempire"
+    GITHUB_DEVELOPERS: str = "akshayempireoe,sanjayempire"
+    # Compliance engine company emails (comma-separated)
+    COMPLIANCE_OWNER_EMAILS: str = "nidin@empireoe.com,admin@empireoe.com"
+    COMPLIANCE_TECH_LEAD_EMAIL: str = "sharon@empireoe.com"
+    COMPLIANCE_OPS_MANAGER_EMAIL: str = "mano@empireoe.com"
+    COMPLIANCE_DEV_EMAILS: str = "dev1@empireoe.com,dev2@empireoe.com,dev3@empireoe.com,dev4@empireoe.com"
     CLICKUP_CRITICAL_FOLDER_NAME: str = "🔴 Critical Systems"
     CLICKUP_CEO_PRIORITY_TAG: str = "CEO-PRIORITY"
     DIGITALOCEAN_BASE_URL: str = "https://api.digitalocean.com/v2"
@@ -88,6 +96,9 @@ class Settings(BaseSettings):
     # If not set, falls back to a SHA-256 derivative of SECRET_KEY (legacy behaviour).
     # Set this to a different random 32-byte hex value to achieve key separation.
     TOKEN_ENCRYPTION_KEY: str | None = None
+    # Separate key for OAuth state HMAC signing.
+    # Falls back to SECRET_KEY if not set — set a distinct value to avoid key coupling.
+    OAUTH_STATE_KEY: str | None = None
     PRIVACY_REDACTION_ENABLED: bool = True
     PRIVACY_MASK_PII: bool = True
     PRIVACY_RESPONSE_SANITIZATION_ENABLED: bool = True

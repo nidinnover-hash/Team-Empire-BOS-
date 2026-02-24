@@ -1,7 +1,4 @@
 import asyncio
-import hmac
-import secrets
-from hashlib import sha256
 from time import time
 from typing import Any, cast
 
@@ -17,7 +14,7 @@ from app.core.idempotency import (
     get_cached_response,
     store_response,
 )
-from app.core.oauth_nonce import consume_oauth_nonce_once
+from app.core.oauth_state import sign_oauth_state, verify_oauth_state
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.schemas.email import ComposeRequest, DraftReplyRequest, EmailRead, SyncResult
@@ -29,22 +26,32 @@ from app.services.integration import connect_integration, get_integration_by_typ
 router = APIRouter(prefix="/email", tags=["Email"])
 
 # Per-org compose rate limit: max N composes per rolling window
-_compose_counts: dict[int, list[float]] = {}
+from collections import deque as _deque
+_compose_counts: dict[int, _deque[float]] = {}
 _COMPOSE_MAX_PER_HOUR = 20
 _COMPOSE_WINDOW = 3600  # 1 hour
+_COMPOSE_MAX_ORGS = 500  # cap to prevent memory leak
 
 
 def _check_compose_rate(org_id: int) -> None:
     """Raise 429 if the org has exceeded the compose rate limit."""
     now = time()
-    bucket = _compose_counts.setdefault(org_id, [])
-    _compose_counts[org_id] = [t for t in bucket if now - t < _COMPOSE_WINDOW]
-    if len(_compose_counts[org_id]) >= _COMPOSE_MAX_PER_HOUR:
+    if org_id not in _compose_counts:
+        # Evict stale orgs if dict exceeds cap
+        if len(_compose_counts) >= _COMPOSE_MAX_ORGS:
+            stale = [k for k, v in _compose_counts.items() if not v or now - v[-1] > _COMPOSE_WINDOW]
+            for k in stale:
+                del _compose_counts[k]
+        _compose_counts[org_id] = _deque()
+    bucket = _compose_counts[org_id]
+    while bucket and now - bucket[0] > _COMPOSE_WINDOW:
+        bucket.popleft()
+    if len(bucket) >= _COMPOSE_MAX_PER_HOUR:
         raise HTTPException(
             status_code=429,
             detail=f"Compose rate limit: max {_COMPOSE_MAX_PER_HOUR} per hour.",
         )
-    _compose_counts[org_id].append(now)
+    bucket.append(now)
 
 
 def _oauth_error_detail(error_code: str) -> str:
@@ -54,39 +61,11 @@ def _oauth_error_detail(error_code: str) -> str:
 
 
 def _sign_email_state(org_id: int) -> str:
-    ts = int(time())
-    nonce = secrets.token_urlsafe(16)
-    payload = f"{org_id}:{ts}:{nonce}"
-    sig = hmac.new(
-        settings.SECRET_KEY.encode("utf-8"),
-        payload.encode("utf-8"),
-        sha256,
-    ).hexdigest()
-    return f"{payload}:{sig}"
+    return sign_oauth_state(org_id)
 
 
 def _verify_email_state(state: str, max_age_seconds: int = 600) -> int:
-    try:
-        parts = state.split(":", 3)
-        if len(parts) != 4:
-            raise ValueError("Invalid state format")
-        org_id_str, ts_str, nonce, sig = parts
-        payload = f"{org_id_str}:{ts_str}:{nonce}"
-        expected = hmac.new(
-            settings.SECRET_KEY.encode("utf-8"),
-            payload.encode("utf-8"),
-            sha256,
-        ).hexdigest()
-        if not hmac.compare_digest(sig, expected):
-            raise ValueError("Invalid state signature")
-        ts = int(ts_str)
-        if int(time()) - ts > max_age_seconds:
-            raise ValueError("State expired")
-        if not consume_oauth_nonce_once("gmail_oauth", nonce, max_age_seconds=max_age_seconds):
-            raise ValueError("State replayed")
-        return int(org_id_str)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
+    return verify_oauth_state(state, namespace="gmail_oauth", max_age_seconds=max_age_seconds)
 
 
 @router.get("/auth-url")

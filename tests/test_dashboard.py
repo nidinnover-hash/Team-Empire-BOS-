@@ -33,6 +33,8 @@ async def test_dashboard_contains_brand_name(client):
     assert "Study Like A Pro" in response.text
     assert "Train Like A Pro" in response.text
     assert "Morning Brief - Executive Diff Engine" in response.text
+    assert "/static/css/dashboard.css" in response.text
+    assert "/static/js/dashboard-page.js" in response.text
 
 
 async def test_dashboard_shows_empty_states(client):

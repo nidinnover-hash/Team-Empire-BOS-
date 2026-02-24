@@ -46,6 +46,13 @@ async def test_web_login_sets_session_and_session_endpoint(client):
     assert session_info.json()["logged_in"] is True
 
 
+async def test_web_login_page_uses_static_assets(client):
+    page = await client.get("/web/login")
+    assert page.status_code == 200
+    assert "/static/css/login.css" in page.text
+    assert "/static/js/login-page.js" in page.text
+
+
 async def test_web_daily_run_requires_csrf(client):
     await _seed_web_user()
     login = await client.post(

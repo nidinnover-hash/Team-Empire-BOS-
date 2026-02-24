@@ -66,6 +66,13 @@ from app.models import chat_message as _model_chat_message  # noqa: F401
 from app.models import ai_call_log as _model_ai_call_log  # noqa: F401
 from app.models import ceo_control as _model_ceo_control  # noqa: F401
 from app.models import github as _model_github  # noqa: F401
+from app.models import daily_plan as _model_daily_plan  # noqa: F401
+from app.models import employee as _model_employee  # noqa: F401
+from app.models import integration_signal as _model_integration_signal  # noqa: F401
+from app.models import ops_metrics as _model_ops_metrics  # noqa: F401
+from app.models import decision_log as _model_decision_log  # noqa: F401
+from app.models import policy_rule as _model_policy_rule  # noqa: F401
+from app.models import weekly_report as _model_weekly_report  # noqa: F401
 
 # Startup safety guard
 _UNSAFE_SECRET_KEYS = {"change_me_in_env", "changeme", "secret", "change-me", ""}
@@ -111,12 +118,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # run the scheduler as a separate systemd service (see deploy/scheduler.service).
     from app.services.sync_scheduler import start_scheduler, stop_scheduler
     import os
-    run_scheduler = os.environ.get("RUN_SCHEDULER", "true").lower() in ("1", "true", "yes")
+    run_scheduler = os.environ.get("RUN_SCHEDULER", "false").lower() in ("1", "true", "yes")
     if settings.SYNC_ENABLED and run_scheduler:
         start_scheduler(interval_minutes=settings.SYNC_INTERVAL_MINUTES)
     yield
     if settings.SYNC_ENABLED and run_scheduler:
-        stop_scheduler()
+        await stop_scheduler()
     await engine.dispose()
 
 app = FastAPI(
@@ -323,7 +330,7 @@ async def web_login(
     # Kick off a background integration sync (throttled, fire-and-forget)
     if settings.SYNC_ENABLED:
         from app.services.sync_scheduler import trigger_sync_for_org
-        asyncio.create_task(trigger_sync_for_org(user.organization_id))
+        await trigger_sync_for_org(user.organization_id)
     return {"status": "ok", "email": user.email, "role": user.role}
 
 
@@ -494,16 +501,6 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         "version": settings.APP_VERSION,
         "uptime_seconds": uptime,
         "database": "ok" if db_ok else "error",
-        "ai_provider": settings.DEFAULT_AI_PROVIDER,
-        "email_ai_provider": settings.EMAIL_AI_PROVIDER or settings.DEFAULT_AI_PROVIDER,
-        "sync_enabled": settings.SYNC_ENABLED,
-        "features": {
-            "ai_commands": settings.FEATURE_AI_COMMANDS,
-            "email_sync": settings.FEATURE_EMAIL_SYNC,
-            "talk_mode": settings.FEATURE_TALK_MODE,
-            "ops_intel": settings.FEATURE_OPS_INTEL,
-            "daily_run": settings.FEATURE_DAILY_RUN,
-        },
     }
 
 
@@ -517,115 +514,34 @@ else:
     raise RuntimeError(f"Unsupported APP_MODE: {settings.APP_MODE!r}")
 
 
-@app.get("/web/integrations", response_class=HTMLResponse, include_in_schema=False)
-async def web_integrations(request: Request) -> HTMLResponse:
+def _get_web_user_or_none(request: Request) -> dict | None:
+    """Extract user from session cookie. Returns None if not logged in."""
     token = request.cookies.get("pc_session")
-    user = None
-    if token:
-        try:
-            user = decode_access_token(token)
-        except ValueError:
-            user = None
-    if user is None:
-        return RedirectResponse(url="/web/login", status_code=302)
-    return templates.TemplateResponse(
-        request,
-        "integrations.html",
-        {
-            "request": request,
-            "session_user": user,
-        },
-    )
+    if not token:
+        return None
+    try:
+        return decode_access_token(token)
+    except ValueError:
+        return None
 
 
-@app.get("/web/talk", response_class=HTMLResponse, include_in_schema=False)
-async def web_talk(request: Request) -> HTMLResponse:
-    token = request.cookies.get("pc_session")
-    user = None
-    if token:
-        try:
-            user = decode_access_token(token)
-        except ValueError:
-            user = None
-    if user is None:
-        return RedirectResponse(url="/web/login", status_code=302)
-    return templates.TemplateResponse(
-        request,
-        "talk.html",
-        {
-            "request": request,
-            "session_user": user,
-        },
-    )
+def _web_page(template_name: str):
+    """Factory for simple authenticated web page endpoints."""
+    async def handler(request: Request) -> HTMLResponse:
+        user = _get_web_user_or_none(request)
+        if user is None:
+            return RedirectResponse(url="/web/login", status_code=302)
+        return templates.TemplateResponse(
+            request, template_name, {"request": request, "session_user": user},
+        )
+    return handler
 
-
-@app.get("/web/data-hub", response_class=HTMLResponse, include_in_schema=False)
-async def web_data_hub(request: Request) -> HTMLResponse:
-    token = request.cookies.get("pc_session")
-    user = None
-    if token:
-        try:
-            user = decode_access_token(token)
-        except ValueError:
-            user = None
-    if user is None:
-        return RedirectResponse(url="/web/login", status_code=302)
-    return templates.TemplateResponse(
-        request,
-        "data_hub.html",
-        {
-            "request": request,
-            "session_user": user,
-        },
-    )
-
-
-@app.get("/web/observe", response_class=HTMLResponse, include_in_schema=False)
-async def web_observe(request: Request) -> HTMLResponse:
-    token = request.cookies.get("pc_session")
-    user = None
-    if token:
-        try:
-            user = decode_access_token(token)
-        except ValueError:
-            user = None
-    if user is None:
-        return RedirectResponse(url="/web/login", status_code=302)
-    return templates.TemplateResponse(
-        request, "observe.html", {"request": request, "session_user": user},
-    )
-
-
-@app.get("/web/ops-intel", response_class=HTMLResponse, include_in_schema=False)
-async def web_ops_intel(request: Request) -> HTMLResponse:
-    token = request.cookies.get("pc_session")
-    user = None
-    if token:
-        try:
-            user = decode_access_token(token)
-        except ValueError:
-            user = None
-    if user is None:
-        return RedirectResponse(url="/web/login", status_code=302)
-    return templates.TemplateResponse(
-        request, "ops_intel.html", {"request": request, "session_user": user},
-    )
-
-
-@app.get("/web/tasks", response_class=HTMLResponse, include_in_schema=False)
-async def web_tasks(request: Request) -> HTMLResponse:
-    token = request.cookies.get("pc_session")
-    user = None
-    if token:
-        try:
-            user = decode_access_token(token)
-        except ValueError:
-            user = None
-    if user is None:
-        return RedirectResponse(url="/web/login", status_code=302)
-    return templates.TemplateResponse(
-        request, "tasks.html", {"request": request, "session_user": user},
-    )
+app.get("/web/integrations", response_class=HTMLResponse, include_in_schema=False)(_web_page("integrations.html"))
+app.get("/web/talk", response_class=HTMLResponse, include_in_schema=False)(_web_page("talk.html"))
+app.get("/web/data-hub", response_class=HTMLResponse, include_in_schema=False)(_web_page("data_hub.html"))
+app.get("/web/observe", response_class=HTMLResponse, include_in_schema=False)(_web_page("observe.html"))
+app.get("/web/ops-intel", response_class=HTMLResponse, include_in_schema=False)(_web_page("ops_intel.html"))
+app.get("/web/tasks", response_class=HTMLResponse, include_in_schema=False)(_web_page("tasks.html"))
 
 
 @app.get("/web/talk/bootstrap", include_in_schema=False)
@@ -704,7 +620,7 @@ async def dashboard(
     # Kick off a background integration sync (throttled, fire-and-forget)
     if settings.SYNC_ENABLED:
         from app.services.sync_scheduler import trigger_sync_for_org
-        asyncio.create_task(trigger_sync_for_org(org_id))
+        await trigger_sync_for_org(org_id)
 
     # Parallel fetch — all queries are independent reads on the same org
     (

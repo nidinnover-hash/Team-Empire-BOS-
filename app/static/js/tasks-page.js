@@ -14,10 +14,10 @@ const mapUiError = (err) => {
       try {
         const token = await window.__bootPromise;
         if (!token) throw new Error('Session expired');
-        const h = {'Authorization': 'Bearer ' + token};
-        const res = await fetch('/api/v1/tasks?limit=100&is_done=false', {headers:h});
-        if (!res.ok) throw new Error('Failed to load tasks');
-        allTasks = await res.json();
+        allTasks = await window.PCUI.requestJson('/api/v1/tasks?limit=100&is_done=false', {
+          auth: true,
+          token: token,
+        });
         updateKPIs();
         renderTasks();
       } catch (e) {
@@ -73,8 +73,10 @@ const mapUiError = (err) => {
       const csrf = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('pc_csrf='));
       const csrfVal = csrf ? csrf.split('=')[1] : '';
       try {
-        const r = await fetch('/web/logout', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':csrfVal}});
-        if (!r.ok) throw new Error('Logout failed');
+        await window.PCUI.requestJson('/web/logout', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json','X-CSRF-Token':csrfVal},
+        });
         window.location.href = '/web/login';
       } catch (e) {
         alert(mapUiError(e));

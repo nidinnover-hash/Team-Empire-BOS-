@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.ceo_control import (
     ClickUpTaskSnapshot,
     DigitalOceanDropletSnapshot,
@@ -18,15 +19,13 @@ from app.models.ceo_control import (
     PolicyViolation,
 )
 
-OWNER_EMAILS = {"nidin@empireoe.com", "admin@empireoe.com"}
-TECH_LEAD_EMAIL = "sharon@empireoe.com"
-OPS_MANAGER_EMAIL = "mano@empireoe.com"
-DEV_EMAILS = {
-    "dev1@empireoe.com",
-    "dev2@empireoe.com",
-    "dev3@empireoe.com",
-    "dev4@empireoe.com",
-}
+
+def _owner_emails() -> set[str]:
+    return {e.strip().lower() for e in settings.COMPLIANCE_OWNER_EMAILS.split(",") if e.strip()}
+
+
+def _dev_emails() -> set[str]:
+    return {e.strip().lower() for e in settings.COMPLIANCE_DEV_EMAILS.split(",") if e.strip()}
 
 
 def _now() -> datetime:
@@ -86,8 +85,12 @@ async def _latest_synced_at(db: AsyncSession, org_id: int, model: type[Any]) -> 
 async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
     await ensure_company_directory(db, org_id)
 
+    # Mark existing OPEN violations as stale; will be refreshed below
+    from sqlalchemy import update
     await db.execute(
-        delete(PolicyViolation).where(PolicyViolation.organization_id == org_id, PolicyViolation.status == "OPEN")
+        update(PolicyViolation)
+        .where(PolicyViolation.organization_id == org_id, PolicyViolation.status == "OPEN")
+        .values(status="STALE")
     )
 
     identity_rows = (
@@ -114,7 +117,7 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
         ).scalars().all()
         for r in roles:
             email = login_to_email.get((r.github_login or "").lower())
-            if (r.org_role or "").lower() == "owner" and email not in OWNER_EMAILS:
+            if (r.org_role or "").lower() == "owner" and email not in _owner_emails():
                 violations.append(
                     PolicyViolation(
                         organization_id=org_id,
@@ -126,7 +129,7 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                         created_at=now,
                     )
                 )
-            if email in DEV_EMAILS and (r.repo_permission or "").lower() in {"admin", "maintain"}:
+            if email in _dev_emails() and (r.repo_permission or "").lower() in {"admin", "maintain"}:
                 violations.append(
                     PolicyViolation(
                         organization_id=org_id,
@@ -199,7 +202,10 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
             tags = {x.strip().lower() for x in json.loads(t.tags or "[]")}
             if "ceo-priority" not in tags and "critical systems" not in (t.name or "").lower():
                 continue
-            if t.due_date and (now - t.due_date) > timedelta(days=7) and (t.status or "").lower() not in {"done", "complete", "closed"}:
+            due = t.due_date
+            if due and due.tzinfo is None:
+                due = due.replace(tzinfo=timezone.utc)
+            if due and (now - due) > timedelta(days=7) and (t.status or "").lower() not in {"done", "complete", "closed"}:
                 violations.append(
                     PolicyViolation(
                         organization_id=org_id,
@@ -235,7 +241,7 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
             )
         ).scalars().all()
         for m in members:
-            if (m.role or "").lower() == "owner" and m.email.lower() not in OWNER_EMAILS:
+            if (m.role or "").lower() == "owner" and m.email.lower() not in _owner_emails():
                 violations.append(
                     PolicyViolation(
                         organization_id=org_id,
@@ -273,6 +279,10 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
 
     for v in violations:
         db.add(v)
+    # Clean up violations that weren't re-created (resolved on their own)
+    await db.execute(
+        delete(PolicyViolation).where(PolicyViolation.organization_id == org_id, PolicyViolation.status == "STALE")
+    )
     await db.commit()
 
     score = max(0, 100 - sum(_severity_weight(v.severity) for v in violations))

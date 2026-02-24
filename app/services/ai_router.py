@@ -14,6 +14,7 @@ Fallback behaviour:
 
 import logging
 import time
+from collections import deque
 from typing import cast
 
 from app.core.config import PLACEHOLDER_AI_KEYS, settings
@@ -25,8 +26,7 @@ logger = logging.getLogger(__name__)
 _NO_FALLBACK_ERRORS = ("AuthenticationError", "PermissionDeniedError", "NotFoundError")
 
 # In-memory ring buffer for recent AI calls (last 200) — avoids DB dependency in hot path
-_recent_calls: list[dict] = []
-_MAX_RECENT = 200
+_recent_calls: deque[dict] = deque(maxlen=200)
 
 
 async def _log_ai_call(
@@ -58,8 +58,6 @@ async def _log_ai_call(
         "ts": time.time(),
     }
     _recent_calls.append(entry)
-    if len(_recent_calls) > _MAX_RECENT:
-        _recent_calls.pop(0)
 
     # Best-effort DB persistence — failures must never break the AI call path
     try:

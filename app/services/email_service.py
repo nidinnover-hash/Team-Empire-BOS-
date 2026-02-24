@@ -186,17 +186,23 @@ async def sync_emails(
     if refreshed_tokens:
         await _persist_refreshed_tokens(db, org_id, integration, refreshed_tokens, refresh_token)
 
+    # Batch dedup: single query for all gmail_ids
+    incoming_ids = [raw["gmail_id"] for raw in raw_emails if raw.get("gmail_id")]
+    existing_ids: set[str] = set()
+    if incoming_ids:
+        existing_q = await db.execute(
+            select(Email.gmail_id).where(
+                Email.gmail_id.in_(incoming_ids),
+                Email.organization_id == org_id,
+            )
+        )
+        existing_ids = {row.gmail_id for row in existing_q}
+
     new_count = 0
     for raw in raw_emails:
         try:
-            # Deduplicate by (gmail_id, organization_id) - not just gmail_id
-            exists = await db.execute(
-                select(Email).where(
-                    Email.gmail_id == raw["gmail_id"],
-                    Email.organization_id == org_id,
-                )
-            )
-            if exists.scalar_one_or_none():
+            gmail_id = raw.get("gmail_id")
+            if not gmail_id or gmail_id in existing_ids:
                 continue
 
             received_at = None
@@ -208,7 +214,7 @@ async def sync_emails(
 
             email = Email(
                 organization_id=org_id,
-                gmail_id=raw["gmail_id"],
+                gmail_id=gmail_id,
                 thread_id=raw.get("thread_id"),
                 from_address=raw.get("from_address"),
                 to_address=raw.get("to_address"),
@@ -218,6 +224,7 @@ async def sync_emails(
                 created_at=datetime.now(timezone.utc),
             )
             db.add(email)
+            existing_ids.add(gmail_id)
             new_count += 1
         except Exception as exc:
             logger.warning(
