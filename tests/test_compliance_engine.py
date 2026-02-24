@@ -194,3 +194,33 @@ async def test_compliance_flags_owner_invite_created_by_non_owner(monkeypatch):
             assert "GitHub owner invitation created by non-owner" in titles
     finally:
         settings.GITHUB_ORG = previous_org
+
+
+async def test_compliance_allows_configured_personal_owner_exception():
+    await _ensure_tables()
+    prev_personal_org = settings.PERSONAL_ORG_ID
+    prev_allowed = settings.COMPLIANCE_ALLOWED_PERSONAL_EMAILS
+    prev_allow_owner = settings.COMPLIANCE_ALLOW_PERSONAL_OWNER_EXCEPTIONS
+    settings.PERSONAL_ORG_ID = 99
+    settings.COMPLIANCE_ALLOWED_PERSONAL_EMAILS = "nidinnover@gmail.com"
+    settings.COMPLIANCE_ALLOW_PERSONAL_OWNER_EXCEPTIONS = True
+    try:
+        async with AsyncSessionLocal() as db:
+            now = datetime.now(timezone.utc)
+            db.add(
+                DigitalOceanTeamSnapshot(
+                    organization_id=1,
+                    email="nidinnover@gmail.com",
+                    role="owner",
+                    synced_at=now,
+                )
+            )
+            await db.commit()
+            result = await compliance_engine.run_compliance(db, 1)
+            titles = {v["title"] for v in result["violations"]}
+            assert "Unauthorized DigitalOcean owner" not in titles
+            assert "Personal email present in company infra access" not in titles
+    finally:
+        settings.PERSONAL_ORG_ID = prev_personal_org
+        settings.COMPLIANCE_ALLOWED_PERSONAL_EMAILS = prev_allowed
+        settings.COMPLIANCE_ALLOW_PERSONAL_OWNER_EXCEPTIONS = prev_allow_owner

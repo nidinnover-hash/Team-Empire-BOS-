@@ -268,7 +268,8 @@ async def login(
 
 @app.get("/web/login", response_class=HTMLResponse, include_in_schema=False)
 async def web_login_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "login.html", {"request": request, "error": None})
+    nonce = getattr(request.state, "csp_nonce", "")
+    return templates.TemplateResponse(request, "login.html", {"request": request, "error": None, "csp_nonce": nonce})
 
 
 @app.post("/web/login")
@@ -461,22 +462,25 @@ def me(user=Depends(get_current_user)):
 _server_start_time: float | None = None
 
 @app.get("/health")
-async def health_check(db: AsyncSession = Depends(get_db)):
+async def health_check():
     import time
     from sqlalchemy import text
-    # DB check
+    from fastapi.responses import JSONResponse as _JSONResponse
+    # DB check — uses raw engine connection, independent of the DI pool
     db_ok = True
     try:
-        await db.execute(text("SELECT 1"))
+        async with engine.connect() as conn:
+            await asyncio.wait_for(conn.execute(text("SELECT 1")), timeout=3.0)
     except Exception:
         db_ok = False
     uptime = round(time.time() - _server_start_time, 1) if _server_start_time else 0
-    return {
+    payload = {
         "status": "ok" if db_ok else "degraded",
         "version": settings.APP_VERSION,
         "uptime_seconds": uptime,
         "database": "ok" if db_ok else "error",
     }
+    return _JSONResponse(content=payload, status_code=200 if db_ok else 503)
 
 
 if settings.app_mode_normalized == "NIDIN_AI":
@@ -506,8 +510,9 @@ def _web_page(template_name: str):
         user = _get_web_user_or_none(request)
         if user is None:
             return RedirectResponse(url="/web/login", status_code=302)
+        nonce = getattr(request.state, "csp_nonce", "")
         return templates.TemplateResponse(
-            request, template_name, {"request": request, "session_user": user},
+            request, template_name, {"request": request, "session_user": user, "csp_nonce": nonce},
         )
     return handler
 
@@ -597,28 +602,48 @@ async def dashboard(
         from app.services.sync_scheduler import trigger_sync_for_org
         await trigger_sync_for_org(org_id)
 
-    # Parallel fetch — all queries are independent reads on the same org
-    (
-        commands, tasks, notes, projects, goals, contacts,
-        finance, finance_efficiency,
-        marketing_layer, study_layer, training_layer,
-        executive, intelligence_summary, intelligence_diff,
-    ) = await asyncio.gather(
-        command_service.list_commands(db, limit=10, organization_id=org_id),
-        task_service.list_tasks(db, limit=20, is_done=False, organization_id=org_id),
-        note_service.list_notes(db, limit=10, organization_id=org_id),
-        project_service.list_projects(db, limit=10, organization_id=org_id),
-        goal_service.list_goals(db, limit=10, organization_id=org_id),
-        contact_service.list_contacts(db, limit=8, organization_id=org_id),
-        finance_service.get_summary(db, organization_id=org_id),
-        finance_service.get_expenditure_efficiency(db, organization_id=org_id, window_days=30),
-        layers_service.get_marketing_layer(db, organization_id=org_id, window_days=30),
-        layers_service.get_study_layer(db, organization_id=org_id, window_days=30),
-        layers_service.get_training_layer(db, organization_id=org_id, window_days=30),
-        briefing_service.get_executive_briefing(db, org_id=org_id),
-        intelligence_service.build_executive_summary(db=db, organization_id=org_id, window_days=7),
-        intelligence_service.build_change_since_yesterday(db=db, organization_id=org_id),
+    # Parallel fetch — all queries are independent reads on the same org.
+    # Timeout prevents dashboard from hanging if any single query stalls.
+    _DASHBOARD_DEFAULTS = (
+        [], [], [], [], [], [],  # commands, tasks, notes, projects, goals, contacts
+        {"total_income": 0, "total_expense": 0, "balance": 0},  # finance
+        None, {}, {}, {},  # finance_efficiency, marketing, study, training
+        {}, None, None,  # executive, intelligence_summary, intelligence_diff
     )
+    try:
+        (
+            commands, tasks, notes, projects, goals, contacts,
+            finance, finance_efficiency,
+            marketing_layer, study_layer, training_layer,
+            executive, intelligence_summary, intelligence_diff,
+        ) = await asyncio.wait_for(
+            asyncio.gather(
+                command_service.list_commands(db, limit=10, organization_id=org_id),
+                task_service.list_tasks(db, limit=20, is_done=False, organization_id=org_id),
+                note_service.list_notes(db, limit=10, organization_id=org_id),
+                project_service.list_projects(db, limit=10, organization_id=org_id),
+                goal_service.list_goals(db, limit=10, organization_id=org_id),
+                contact_service.list_contacts(db, limit=8, organization_id=org_id),
+                finance_service.get_summary(db, organization_id=org_id),
+                finance_service.get_expenditure_efficiency(db, organization_id=org_id, window_days=30),
+                layers_service.get_marketing_layer(db, organization_id=org_id, window_days=30),
+                layers_service.get_study_layer(db, organization_id=org_id, window_days=30),
+                layers_service.get_training_layer(db, organization_id=org_id, window_days=30),
+                briefing_service.get_executive_briefing(db, org_id=org_id),
+                intelligence_service.build_executive_summary(db=db, organization_id=org_id, window_days=7),
+                intelligence_service.build_change_since_yesterday(db=db, organization_id=org_id),
+            ),
+            timeout=15.0,
+        )
+    except asyncio.TimeoutError:
+        import logging as _logging
+        _logging.getLogger(__name__).warning("Dashboard gather timed out for org=%d", org_id)
+        (
+            commands, tasks, notes, projects, goals, contacts,
+            finance, finance_efficiency,
+            marketing_layer, study_layer, training_layer,
+            executive, intelligence_summary, intelligence_diff,
+        ) = _DASHBOARD_DEFAULTS
 
     return templates.TemplateResponse(
         request,
@@ -640,5 +665,6 @@ async def dashboard(
             "intelligence_summary": intelligence_summary,
             "intelligence_diff": intelligence_diff,
             "session_user": user,
+            "csp_nonce": getattr(request.state, "csp_nonce", ""),
         },
     )

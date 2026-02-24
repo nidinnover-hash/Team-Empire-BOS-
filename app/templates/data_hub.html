@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/static/css/theme.css" />
   <link rel="stylesheet" href="/static/css/data_hub.css" />
   
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script nonce="{{ csp_nonce }}" src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 </head>
 <body>
 <nav class="sidebar">
@@ -130,9 +130,9 @@
 
 <div id="toast-container"></div>
 
-<script src="/static/js/mobile-nav.js"></script>
-<script src="/static/js/theme-toggle.js"></script>
-<script src="/static/js/search-palette.js"></script>
-<script src="/static/js/data-hub-page.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/data-hub-page.js"></script>
 </body>
 </html>

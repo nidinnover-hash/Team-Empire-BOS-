@@ -63,3 +63,30 @@ async def test_control_health_summary_counts(client):
     assert body["connected_integrations"] >= 1
     assert body["failing_integrations"] >= 0
     assert "generated_at" in body
+
+
+async def test_control_ceo_status_contains_risk_buckets(client):
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    resp = await client.get("/api/v1/control/ceo/status", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "infra_risks" in body
+    assert "cost_alerts" in body
+    assert body["mode"] == "suggest_only"
+
+
+async def test_control_github_identity_map_upsert_and_list(client):
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    upsert = await client.post(
+        "/api/v1/control/github-identity-map/upsert",
+        json={"company_email": "sharon@empireoe.com", "github_login": "sharonempire"},
+        headers=headers,
+    )
+    assert upsert.status_code == 200
+    assert upsert.json()["ok"] is True
+
+    listing = await client.get("/api/v1/control/github-identity-map", headers=headers)
+    assert listing.status_code == 200
+    payload = listing.json()
+    assert payload["count"] >= 1
+    assert any(item["company_email"] == "sharon@empireoe.com" for item in payload["items"])

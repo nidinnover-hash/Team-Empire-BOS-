@@ -11,6 +11,8 @@ This layer is **suggest-only**. It never blocks deployment, deletes resources, o
 - `CLICKUP_CRITICAL_FOLDER_NAME` (default: `🔴 Critical Systems`)
 - `CLICKUP_CEO_PRIORITY_TAG` (default: `CEO-PRIORITY`)
 - `DIGITALOCEAN_BASE_URL` (default: `https://api.digitalocean.com/v2`)
+- `COMPLIANCE_ALLOWED_PERSONAL_EMAILS` (comma-separated exceptions, default empty)
+- `COMPLIANCE_ALLOW_PERSONAL_OWNER_EXCEPTIONS` (`true|false`, default `false`)
 
 ## New APIs
 
@@ -22,6 +24,8 @@ This layer is **suggest-only**. It never blocks deployment, deletes resources, o
 - `POST /api/v1/control/compliance/run`
 - `GET /api/v1/control/compliance/report`
 - `POST /api/v1/control/message-draft`
+- `GET /api/v1/control/github-identity-map`
+- `POST /api/v1/control/github-identity-map/upsert`
 
 ## Scheduler
 
@@ -36,3 +40,6 @@ This layer is **suggest-only**. It never blocks deployment, deletes resources, o
    - `POST /api/v1/control/compliance/run`
 3. Fetch latest report:
    - `GET /api/v1/control/compliance/report`
+4. Manage GitHub login mapping for accurate compliance:
+   - `POST /api/v1/control/github-identity-map/upsert` with
+     `{ "company_email": "sharon@empireoe.com", "github_login": "sharonempire" }`

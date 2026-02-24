@@ -1,5 +1,7 @@
 (function () {
   var tokenPromise = null;
+  var tokenFetchedAt = 0;
+  var TOKEN_TTL_MS = 7 * 60 * 60 * 1000; // 7 hours (server token lasts 8h)
 
   function getCsrfToken() {
     var pair = document.cookie.split("; ").find(function (c) {
@@ -8,21 +10,33 @@
     return pair ? decodeURIComponent(pair.split("=")[1]) : "";
   }
 
+  function _clearToken() {
+    tokenPromise = null;
+    tokenFetchedAt = 0;
+  }
+
   async function getApiToken() {
-    if (!tokenPromise) {
-      tokenPromise = fetch("/web/api-token")
-        .then(function (r) {
-          if (!r.ok) throw new Error("session_expired");
-          return r.json();
-        })
-        .then(function (d) {
-          return d.token || null;
-        })
-        .catch(function (err) {
-          tokenPromise = null;
-          throw err;
-        });
+    var now = Date.now();
+    if (tokenPromise && (now - tokenFetchedAt) < TOKEN_TTL_MS) {
+      return tokenPromise;
     }
+    _clearToken();
+    tokenFetchedAt = now;
+    tokenPromise = fetch("/web/api-token")
+      .then(function (r) {
+        if (!r.ok) {
+          if (r.status === 401) window.location.href = "/web/login";
+          throw new Error("session_expired");
+        }
+        return r.json();
+      })
+      .then(function (d) {
+        return d.token || null;
+      })
+      .catch(function (err) {
+        _clearToken();
+        throw err;
+      });
     return tokenPromise;
   }
 
@@ -87,6 +101,10 @@
       return {};
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        _clearToken();
+        window.location.href = "/web/login";
+      }
       var detail = body && body.detail ? body.detail : ("Request failed (" + response.status + ")");
       var err = new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
       err.status = response.status;

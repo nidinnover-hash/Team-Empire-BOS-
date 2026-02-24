@@ -34,6 +34,14 @@ def _company_domain() -> str:
     return (settings.COMPLIANCE_COMPANY_DOMAIN or "").strip().lower()
 
 
+def _allowed_personal_emails() -> set[str]:
+    return {
+        e.strip().lower()
+        for e in (settings.COMPLIANCE_ALLOWED_PERSONAL_EMAILS or "").split(",")
+        if e.strip()
+    }
+
+
 def _is_company_email(email: str | None) -> bool:
     if not email:
         return False
@@ -46,6 +54,18 @@ def _is_company_email(email: str | None) -> bool:
 
 def _is_personal_org(org_id: int) -> bool:
     return settings.PERSONAL_ORG_ID is not None and org_id == settings.PERSONAL_ORG_ID
+
+
+def _is_authorized_owner_email(email: str | None) -> bool:
+    normalized = (email or "").strip().lower()
+    if not normalized:
+        return False
+    if normalized in _owner_emails():
+        return True
+    return bool(
+        settings.COMPLIANCE_ALLOW_PERSONAL_OWNER_EXCEPTIONS
+        and normalized in _allowed_personal_emails()
+    )
 
 
 def _now() -> datetime:
@@ -119,6 +139,7 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
         await db.execute(select(GitHubIdentityMap).where(GitHubIdentityMap.organization_id == org_id))
     ).scalars().all()
     login_to_email = {row.github_login.lower(): row.company_email.lower() for row in identity_rows}
+    allowed_personal = _allowed_personal_emails()
 
     violations: list[PolicyViolation] = []
     github_personal_identity_seen: set[tuple[str, str]] = set()
@@ -140,7 +161,12 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
         ).scalars().all()
         for r in roles:
             email = login_to_email.get((r.github_login or "").lower())
-            if not personal_org and email and not _is_company_email(email):
+            if (
+                not personal_org
+                and email
+                and not _is_company_email(email)
+                and email not in allowed_personal
+            ):
                 key = ((r.github_login or "").lower(), email)
                 if key not in github_personal_identity_seen:
                     github_personal_identity_seen.add(key)
@@ -160,7 +186,7 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
             if (
                 not personal_org
                 and (r.org_role or "").lower() == "owner"
-                and email not in _owner_emails()
+                and not _is_authorized_owner_email(email)
             ):
                 violations.append(
                     PolicyViolation(
@@ -215,7 +241,7 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 inviter_login = str((invite.get("inviter") or {}).get("login") or "").strip().lower()
                 invitee_email = str(invite.get("email") or "").strip().lower()
                 inviter_email = login_to_email.get(inviter_login, "")
-                if inviter_email in _owner_emails():
+                if _is_authorized_owner_email(inviter_email):
                     continue
                 dedupe_key = (inviter_login, invitee_email, role)
                 if dedupe_key in seen_owner_invites:
@@ -334,7 +360,12 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
         ).scalars().all()
         for m in members:
             normalized_email = (m.email or "").strip().lower()
-            if not personal_org and normalized_email and not _is_company_email(normalized_email):
+            if (
+                not personal_org
+                and normalized_email
+                and not _is_company_email(normalized_email)
+                and normalized_email not in allowed_personal
+            ):
                 violations.append(
                     PolicyViolation(
                         organization_id=org_id,
@@ -346,7 +377,11 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                         created_at=now,
                     )
                 )
-            if not personal_org and (m.role or "").lower() == "owner" and normalized_email not in _owner_emails():
+            if (
+                not personal_org
+                and (m.role or "").lower() == "owner"
+                and not _is_authorized_owner_email(normalized_email)
+            ):
                 violations.append(
                     PolicyViolation(
                         organization_id=org_id,

@@ -7,9 +7,9 @@ GoalStatus = Literal["active", "completed", "paused", "abandoned"]
 
 
 class GoalCreate(BaseModel):
-    title: str
-    description: str | None = None
-    category: str = "personal"  # personal | business | health | finance | learning | other
+    title: str = Field(..., min_length=1, max_length=255)
+    description: str | None = Field(None, max_length=2000)
+    category: str = Field("personal", max_length=50)  # personal | business | health | finance | learning | other
     target_date: date | None = None
 
 

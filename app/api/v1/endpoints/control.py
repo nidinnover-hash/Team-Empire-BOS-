@@ -5,18 +5,31 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.models.approval import Approval
-from app.models.ceo_control import ClickUpTaskSnapshot, GitHubPRSnapshot, GitHubRepoSnapshot
+from app.models.ceo_control import (
+    ClickUpTaskSnapshot,
+    DigitalOceanCostSnapshot,
+    DigitalOceanDropletSnapshot,
+    GitHubIdentityMap,
+    GitHubPRSnapshot,
+    GitHubRepoSnapshot,
+)
 from app.models.integration import Integration
 from app.models.task import Task
 from app.services import compliance_engine
 
 router = APIRouter(prefix="/control", tags=["CEO Control"])
+
+
+class GitHubIdentityMapUpsert(BaseModel):
+    company_email: str = Field(..., min_length=5, max_length=320)
+    github_login: str = Field(..., min_length=1, max_length=255)
 
 
 @router.get("/health-summary")
@@ -129,15 +142,58 @@ async def ceo_status(
             "required_checks_enabled": r.required_checks_enabled,
         }
         for r in repos
-        if (not r.is_protected) or (not r.requires_reviews)
+        if (not r.is_protected) or (not r.requires_reviews) or (not r.required_checks_enabled)
     ][:20]
+    droplets = (
+        await db.execute(
+            select(DigitalOceanDropletSnapshot)
+            .where(DigitalOceanDropletSnapshot.organization_id == org_id)
+            .order_by(DigitalOceanDropletSnapshot.synced_at.desc())
+            .limit(200)
+        )
+    ).scalars().all()
+    infra_risks = [
+        {
+            "droplet_id": d.droplet_id,
+            "name": d.name,
+            "status": d.status,
+            "backups_enabled": d.backups_enabled,
+        }
+        for d in droplets
+        if d.status == "active" and d.backups_enabled is False
+    ][:20]
+
+    costs = (
+        await db.execute(
+            select(DigitalOceanCostSnapshot)
+            .where(DigitalOceanCostSnapshot.organization_id == org_id)
+            .order_by(DigitalOceanCostSnapshot.synced_at.desc())
+            .limit(2)
+        )
+    ).scalars().all()
+    cost_alerts: list[dict[str, Any]] = []
+    if len(costs) >= 2 and costs[0].amount_usd is not None and costs[1].amount_usd:
+        latest = float(costs[0].amount_usd)
+        previous = float(costs[1].amount_usd)
+        if previous > 0:
+            delta_pct = ((latest - previous) / previous) * 100.0
+            if delta_pct > 30:
+                cost_alerts.append(
+                    {
+                        "platform": "digitalocean",
+                        "latest_amount_usd": round(latest, 2),
+                        "previous_amount_usd": round(previous, 2),
+                        "delta_percent": round(delta_pct, 1),
+                        "title": "Cost spike > 30% vs previous snapshot",
+                    }
+                )
 
     return {
         "top_overdue_critical_tasks": overdue[:10],
         "prs_waiting_sharon_review": _top_prs_waiting_sharon(prs),
         "branch_protection_issues": branch_issues,
-        "infra_risks": [],
-        "cost_alerts": [],
+        "infra_risks": infra_risks,
+        "cost_alerts": cost_alerts,
         "mode": "suggest_only",
     }
 
@@ -198,3 +254,65 @@ async def message_draft(
         ]
     )
     return {"to": to, "message": text, "checklist": checklist}
+
+
+@router.get("/github-identity-map")
+async def github_identity_map_list(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> dict[str, Any]:
+    org_id = int(actor["org_id"])
+    rows = (
+        await db.execute(
+            select(GitHubIdentityMap)
+            .where(GitHubIdentityMap.organization_id == org_id)
+            .order_by(GitHubIdentityMap.company_email.asc())
+        )
+    ).scalars().all()
+    return {
+        "count": len(rows),
+        "items": [
+            {
+                "company_email": row.company_email,
+                "github_login": row.github_login,
+                "updated_at": row.updated_at.isoformat(),
+            }
+            for row in rows
+        ],
+    }
+
+
+@router.post("/github-identity-map/upsert")
+async def github_identity_map_upsert(
+    payload: GitHubIdentityMapUpsert,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict[str, Any]:
+    org_id = int(actor["org_id"])
+    company_email = payload.company_email.strip().lower()
+    github_login = payload.github_login.strip().lower()
+    now = datetime.now(timezone.utc)
+
+    existing = (
+        await db.execute(
+            select(GitHubIdentityMap).where(
+                GitHubIdentityMap.organization_id == org_id,
+                GitHubIdentityMap.company_email == company_email,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing:
+        existing.github_login = github_login
+        existing.updated_at = now
+    else:
+        db.add(
+            GitHubIdentityMap(
+                organization_id=org_id,
+                company_email=company_email,
+                github_login=github_login,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    await db.commit()
+    return {"ok": True, "company_email": company_email, "github_login": github_login}

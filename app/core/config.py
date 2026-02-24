@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     COMPLIANCE_OPS_MANAGER_EMAIL: str = "mano@empireoe.com"
     COMPLIANCE_DEV_EMAILS: str = "dev1@empireoe.com,dev2@empireoe.com,dev3@empireoe.com,dev4@empireoe.com"
     COMPLIANCE_COMPANY_DOMAIN: str = "empireoe.com"
+    # Optional exceptions for personal identities (comma-separated emails).
+    # Keep empty for strict company-only mode.
+    COMPLIANCE_ALLOWED_PERSONAL_EMAILS: str = ""
+    # If true, emails in COMPLIANCE_ALLOWED_PERSONAL_EMAILS can hold owner roles.
+    COMPLIANCE_ALLOW_PERSONAL_OWNER_EXCEPTIONS: bool = False
     PERSONAL_ORG_ID: int | None = None
     CLICKUP_CRITICAL_FOLDER_NAME: str = "🔴 Critical Systems"
     CLICKUP_CEO_PRIORITY_TAG: str = "CEO-PRIORITY"
@@ -120,6 +125,7 @@ class Settings(BaseSettings):
     SYNC_ENABLED: bool = True
     SYNC_INTERVAL_MINUTES: int = 30   # how often the scheduler fires
     SYNC_THROTTLE_MINUTES: int = 15   # min gap for on-demand (login/dashboard) syncs
+    SHUTDOWN_GRACE_SECONDS: int = 15  # max wait for in-flight syncs on shutdown
     CEO_SUMMARY_TIMEZONE: str = "Asia/Kolkata"
     CEO_ALERTS_SLACK_CHANNEL_ID: str | None = None
     SYNC_STALE_HOURS: int = 24

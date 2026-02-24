@@ -332,7 +332,8 @@ async def _maybe_generate_daily_ceo_summary(db: AsyncSession, org_id: int) -> No
 
     tz = ZoneInfo(settings.CEO_SUMMARY_TIMEZONE)
     local_now = datetime.now(timezone.utc).astimezone(tz)
-    if local_now.hour != 9:
+    # Run once per local day after 09:00 in the configured timezone.
+    if local_now.hour < 9:
         return
     day_key = local_now.strftime("%Y-%m-%d")
     if _last_ceo_summary_date_by_org.get(org_id) == day_key:
@@ -435,10 +436,12 @@ async def stop_scheduler() -> None:
         except asyncio.CancelledError:
             pass
         _scheduler_task = None
-    # Wait for any in-flight on-demand syncs to finish (5s max)
+    # Wait for any in-flight on-demand syncs to finish
     if _inflight_tasks:
-        logger.info("Awaiting %d in-flight sync tasks…", len(_inflight_tasks))
-        done, pending = await asyncio.wait(_inflight_tasks, timeout=5.0)
+        from app.core.config import settings
+        grace = settings.SHUTDOWN_GRACE_SECONDS
+        logger.info("Awaiting %d in-flight sync tasks (grace=%ds)…", len(_inflight_tasks), grace)
+        done, pending = await asyncio.wait(_inflight_tasks, timeout=float(grace))
         for t in pending:
             t.cancel()
         _inflight_tasks.clear()
