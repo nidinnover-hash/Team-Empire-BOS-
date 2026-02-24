@@ -24,7 +24,4 @@ async def test_integrations_console_returns_200_and_branding(client):
     assert "gmail-health-alert" in response.text
     assert "/static/js/api-client.js" in response.text
     assert "/static/js/ui-utils.js" in response.text
-    assert "startAbortableRequest" in response.text
-    assert "confirmDanger" in response.text
-    assert "health-badge" in response.text
-    assert "stale 24h+" in response.text
+    assert "/static/js/integrations-page.js" in response.text

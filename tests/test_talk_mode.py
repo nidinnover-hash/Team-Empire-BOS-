@@ -22,7 +22,7 @@ async def test_talk_mode_page_loads_for_logged_user(client):
     assert "Talk to Clone" in response.text
     assert "Continuous work conversation mode" in response.text
     assert "/static/js/ui-utils.js" in response.text
-    assert "setButtonLoading" in response.text
+    assert "/static/js/talk-page.js" in response.text
 
 
 async def test_talk_mode_bootstrap_returns_work_snapshot(client):

@@ -19,5 +19,4 @@ async def test_tasks_page_wires_shared_ui_utilities(client):
     response = await client.get("/web/tasks")
     assert response.status_code == 200
     assert "/static/js/ui-utils.js" in response.text
-    assert "mapUiError" in response.text
-    assert "setButtonLoading" in response.text
+    assert "/static/js/tasks-page.js" in response.text
