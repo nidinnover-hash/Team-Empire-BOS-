@@ -182,6 +182,19 @@ class SystemHealthRead(BaseModel):
     integrations: IntegrationHealthRead
 
 
+class SecurityPostureRead(BaseModel):
+    generated_at: datetime
+    status: Literal["ok", "needs_attention"]
+    premium_mode: bool
+    privacy_profile: str
+    legal_terms_version: str | None = None
+    account_mfa_required: bool
+    account_sso_required: bool
+    account_session_max_hours: int
+    marketing_export_pii_allowed: bool
+    open_issues: list[str]
+
+
 class ExecutePlanRequest(BaseModel):
     challenge: str | None = None
     week_start_date: datetime | None = None
@@ -249,3 +262,14 @@ class MultiOrgCockpitOrgRead(BaseModel):
 class MultiOrgCockpitRead(BaseModel):
     generated_at: datetime
     organizations: list[MultiOrgCockpitOrgRead]
+
+
+class FounderPlaybookRead(BaseModel):
+    generated_at: datetime
+    core_values: list[str]
+    north_star: str
+    today_focus: list[str]
+    people_growth_actions: list[str]
+    strategic_growth_actions: list[str]
+    evening_reflection: list[str]
+    coaching_prompts: list[str]

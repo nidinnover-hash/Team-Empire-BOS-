@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.core.config import settings, validate_startup_settings
 from app.core.deps import get_db
 from app.core.request_context import get_current_request_id
 from app.core.rbac import require_roles
@@ -32,6 +32,7 @@ from app.schemas.control import (
     DataQualityRead,
     ExecutePlanRead,
     ExecutePlanRequest,
+    FounderPlaybookRead,
     GitHubIdentityMapListRead,
     GitHubIdentityMapUpsertRead,
     GitHubIdentityMapUpsertRequest,
@@ -47,6 +48,7 @@ from app.schemas.control import (
     SchedulerReplayRequest,
     ScenarioSimulationRead,
     ScenarioSimulationRequest,
+    SecurityPostureRead,
     SystemHealthDependency,
     SystemHealthRead,
     WeeklyBoardPacketRead,
@@ -380,6 +382,27 @@ async def system_health(
         overall_status=overall_status,
         dependencies=dependencies,
         integrations=integration_health,
+    )
+
+
+@router.get("/security/posture", response_model=SecurityPostureRead)
+async def security_posture(
+    _db: AsyncSession = Depends(get_db),
+    _actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> SecurityPostureRead:
+    now = datetime.now(timezone.utc)
+    issues = validate_startup_settings(settings)
+    return SecurityPostureRead(
+        generated_at=now,
+        status="ok" if not issues else "needs_attention",
+        premium_mode=bool(settings.SECURITY_PREMIUM_MODE),
+        privacy_profile=settings.PRIVACY_POLICY_PROFILE,
+        legal_terms_version=(settings.LEGAL_TERMS_VERSION or None),
+        account_mfa_required=bool(settings.ACCOUNT_MFA_REQUIRED),
+        account_sso_required=bool(settings.ACCOUNT_SSO_REQUIRED),
+        account_session_max_hours=int(settings.ACCOUNT_SESSION_MAX_HOURS),
+        marketing_export_pii_allowed=bool(settings.MARKETING_EXPORT_PII_ALLOWED),
+        open_issues=issues,
     )
 
 
@@ -736,3 +759,68 @@ async def multi_org_cockpit(
             )
         )
     return MultiOrgCockpitRead(generated_at=datetime.now(timezone.utc), organizations=items)
+
+
+@router.get("/founder-playbook/today", response_model=FounderPlaybookRead)
+async def founder_playbook_today(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> FounderPlaybookRead:
+    org_id = int(actor["org_id"])
+    now = datetime.now(timezone.utc)
+    compliance = await compliance_engine.latest_report(db, org_id)
+    clone_summary = await clone_brain.clone_org_summary(db, organization_id=org_id, week_start_date=None)
+    sla = await clone_control.manager_sla_snapshot(db, organization_id=org_id)
+    data_quality = await clone_control.data_quality_snapshot(db, organization_id=org_id)
+    pending = await email_control.build_pending_actions_digest(db, org_id=org_id)
+
+    open_violations = int(compliance.get("count", 0))
+    avg_clone_score_raw = clone_summary.get("avg_score", 0.0)
+    avg_clone_score = float(avg_clone_score_raw) if isinstance(avg_clone_score_raw, (int, float)) else 0.0
+    missing_identity_raw = data_quality.get("missing_identity_count", 0)
+    pending_breached_raw = sla.get("pending_approvals_breached", 0)
+    missing_identity = int(missing_identity_raw) if isinstance(missing_identity_raw, int) else 0
+    pending_breached = int(pending_breached_raw) if isinstance(pending_breached_raw, int) else 0
+    total_open_tasks = int(pending.get("total_open_tasks", 0))
+
+    today_focus = [
+        f"Resolve top {min(open_violations, 5)} policy/compliance risks first.",
+        f"Reduce open-task load from {total_open_tasks} with owner-level execution blocks.",
+        f"Lift clone readiness above current average score {avg_clone_score:.1f}.",
+    ]
+    people_growth_actions = [
+        "Run 15-minute coaching with each manager on blockers and delegation quality.",
+        "Close identity gaps so every active employee has mapped work systems.",
+        "Mark one weekly training plan DONE per employee before day-end.",
+    ]
+    strategic_growth_actions = [
+        "Reallocate complex work to top readiness clones for faster delivery.",
+        "Prioritize tasks with clear 30/90-day leverage and measurable outcomes.",
+        "Convert pending high-impact decisions into approved execution plans.",
+    ]
+    evening_reflection = [
+        "What actions increased trust and team capability today?",
+        "Which decision created the highest growth leverage?",
+        "What should be stopped tomorrow to protect focus?",
+    ]
+    coaching_prompts = [
+        "Act as my Love + Growth strategist: protect people and increase capability.",
+        "Convert today into: immediate action, growth action, strategic action.",
+        "For each decision: Why now -> Owner -> KPI -> Risk -> Next checkpoint.",
+    ]
+
+    if missing_identity > 0:
+        people_growth_actions.insert(0, f"Fix {missing_identity} unmapped employee identity records.")
+    if pending_breached > 0:
+        today_focus.insert(0, f"Clear {pending_breached} approval SLA breaches immediately.")
+
+    return FounderPlaybookRead(
+        generated_at=now,
+        core_values=["Love", "Growth", "Strategic Execution"],
+        north_star="Build people and systems that grow sustainably with trust.",
+        today_focus=today_focus[:5],
+        people_growth_actions=people_growth_actions[:5],
+        strategic_growth_actions=strategic_growth_actions[:5],
+        evening_reflection=evening_reflection,
+        coaching_prompts=coaching_prompts,
+    )

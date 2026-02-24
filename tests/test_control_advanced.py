@@ -38,3 +38,15 @@ async def test_control_advanced_endpoints(client):
     cockpit = await client.get("/api/v1/control/cockpit/multi-org", headers=headers)
     assert cockpit.status_code == 200
     assert "organizations" in cockpit.json()
+
+    playbook = await client.get("/api/v1/control/founder-playbook/today", headers=headers)
+    assert playbook.status_code == 200
+    pb = playbook.json()
+    assert pb["core_values"] == ["Love", "Growth", "Strategic Execution"]
+    assert "today_focus" in pb
+
+    posture = await client.get("/api/v1/control/security/posture", headers=headers)
+    assert posture.status_code == 200
+    ps = posture.json()
+    assert "status" in ps
+    assert "open_issues" in ps

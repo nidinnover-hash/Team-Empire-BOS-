@@ -113,6 +113,14 @@ class Settings(BaseSettings):
     PRIVACY_POLICY_PROFILE: PrivacyPolicyProfile = "balanced"
     PRIVACY_AUDIT_MAX_VALUE_CHARS: int = 200
     CLONE_AUTO_LEARN_FROM_CHAT: bool = True
+    SECURITY_PREMIUM_MODE: bool = True
+    LEGAL_TERMS_VERSION: str = "2026-02-24"
+    LEGAL_DPA_REQUIRED: bool = True
+    LEGAL_MARKETING_CONSENT_REQUIRED: bool = True
+    ACCOUNT_SSO_REQUIRED: bool = False
+    ACCOUNT_MFA_REQUIRED: bool = True
+    ACCOUNT_SESSION_MAX_HOURS: int = 12
+    MARKETING_EXPORT_PII_ALLOWED: bool = False
 
     # CORS
     CORS_ALLOWED_ORIGINS: str = ""  # Comma-separated, e.g. "http://localhost:8002,https://app.nidin.ai"
@@ -297,6 +305,19 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("WHATSAPP_APP_SECRET should be set when WhatsApp webhook verify token is configured")
     if not s.DEBUG and s.PRIVACY_POLICY_PROFILE == "debug":
         issues.append("PRIVACY_POLICY_PROFILE=debug is not allowed when DEBUG=false")
+    if s.ACCOUNT_SESSION_MAX_HOURS < 1 or s.ACCOUNT_SESSION_MAX_HOURS > 24:
+        issues.append("ACCOUNT_SESSION_MAX_HOURS must be between 1 and 24")
+    if s.SECURITY_PREMIUM_MODE:
+        if s.PRIVACY_POLICY_PROFILE != "strict":
+            issues.append("PRIVACY_POLICY_PROFILE must be strict when SECURITY_PREMIUM_MODE=true")
+        if not s.ACCOUNT_MFA_REQUIRED:
+            issues.append("ACCOUNT_MFA_REQUIRED must be true when SECURITY_PREMIUM_MODE=true")
+        if not s.LEGAL_DPA_REQUIRED:
+            issues.append("LEGAL_DPA_REQUIRED must be true when SECURITY_PREMIUM_MODE=true")
+        if not (s.LEGAL_TERMS_VERSION or "").strip():
+            issues.append("LEGAL_TERMS_VERSION must be set when SECURITY_PREMIUM_MODE=true")
+        if s.MARKETING_EXPORT_PII_ALLOWED:
+            issues.append("MARKETING_EXPORT_PII_ALLOWED must be false when SECURITY_PREMIUM_MODE=true")
 
     # --- Security: reject insecure defaults ---
     _WEAK_SECRETS = {"change_me_in_env", "secret", "changeme", "your_32_plus_char_secret_here"}

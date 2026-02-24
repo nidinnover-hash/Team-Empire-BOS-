@@ -8,6 +8,7 @@ def _base_settings(**overrides) -> Settings:
         "OPENAI_API_KEY": "sk-live-valid-key-value",
         "DEBUG": False,
         "COOKIE_SECURE": True,
+        "PRIVACY_POLICY_PROFILE": "strict",
         "TOKEN_ENCRYPTION_KEY": "x" * 32,
         "SECRET_KEY": "y" * 64,
         "ADMIN_PASSWORD": "StrongTestPass2026!",
@@ -15,6 +16,12 @@ def _base_settings(**overrides) -> Settings:
         "WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS": 300,
         "WHATSAPP_WEBHOOK_VERIFY_TOKEN": None,
         "WHATSAPP_APP_SECRET": None,
+        "SECURITY_PREMIUM_MODE": True,
+        "LEGAL_TERMS_VERSION": "2026-02-24",
+        "LEGAL_DPA_REQUIRED": True,
+        "ACCOUNT_MFA_REQUIRED": True,
+        "ACCOUNT_SESSION_MAX_HOURS": 12,
+        "MARKETING_EXPORT_PII_ALLOWED": False,
     }
     data.update(overrides)
     return Settings(**data)
@@ -146,6 +153,24 @@ def test_validate_startup_rejects_debug_privacy_profile_in_production():
     s = _base_settings(DEBUG=False, PRIVACY_POLICY_PROFILE="debug")
     issues = validate_startup_settings(s)
     assert any("PRIVACY_POLICY_PROFILE=debug is not allowed" in i for i in issues)
+
+
+def test_validate_startup_premium_requires_strict_privacy_profile():
+    s = _base_settings(PRIVACY_POLICY_PROFILE="balanced")
+    issues = validate_startup_settings(s)
+    assert any("must be strict when SECURITY_PREMIUM_MODE=true" in i for i in issues)
+
+
+def test_validate_startup_premium_rejects_marketing_pii_export():
+    s = _base_settings(MARKETING_EXPORT_PII_ALLOWED=True)
+    issues = validate_startup_settings(s)
+    assert any("MARKETING_EXPORT_PII_ALLOWED must be false" in i for i in issues)
+
+
+def test_validate_startup_account_session_hours_bounds():
+    s = _base_settings(ACCOUNT_SESSION_MAX_HOURS=48)
+    issues = validate_startup_settings(s)
+    assert any("ACCOUNT_SESSION_MAX_HOURS must be between 1 and 24" in i for i in issues)
 
 
 def test_format_startup_issues_groups_by_domain():

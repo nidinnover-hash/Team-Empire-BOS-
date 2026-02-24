@@ -22,6 +22,7 @@ class ApprovalRead(BaseModel):
     status: str
     approved_by: int | None
     approved_at: datetime | None
+    executed_at: datetime | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

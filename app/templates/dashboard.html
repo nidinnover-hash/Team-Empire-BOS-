@@ -192,7 +192,7 @@
       </div>
       {% endfor %}
       <div class="item">
-        <a href="/api/v1/control/compliance/report" style="color:#999999;text-decoration:none;font-size:.72rem">Open compliance report -></a>
+        <a href="/api/v1/control/compliance/report" class="link-muted">Open compliance report -></a>
       </div>
     {% else %}
       <div class="empty">No active compliance violations.</div>
@@ -269,7 +269,7 @@
       <div id="daily-run-result" class="item" style="display:none">
         <div class="item-text" id="run-msg"></div>
         <div class="item-meta" id="run-counts"></div>
-        <div class="item-meta"><a href="/api/v1/approvals" style="color:#999999;text-decoration:none">Open approvals →</a></div>
+        <div class="item-meta"><a href="/api/v1/approvals" class="link-muted">Open approvals →</a></div>
       </div>
       {% if executive.approvals.recent %}
         {% for a in executive.approvals.recent[:5] %}
@@ -477,9 +477,9 @@
       </div>
       {% endif %}
       <div style="padding:.6rem 1.1rem">
-        <a href="/api/v1/finance" style="color:#999999;text-decoration:none;font-size:.72rem">View all entries -></a>
-        <span style="margin:0 .35rem;color:#cccccc">|</span>
-        <a href="/api/v1/finance/efficiency" style="color:#999999;text-decoration:none;font-size:.72rem">Efficiency API -></a>
+        <a href="/api/v1/finance" class="link-muted">View all entries -></a>
+        <span class="link-separator">|</span>
+        <a href="/api/v1/finance/efficiency" class="link-muted">Efficiency API -></a>
       </div>
     </div>
 
@@ -526,7 +526,7 @@
       </div>
       {% endif %}
       <div style="padding:.6rem 1.1rem">
-        <a href="/api/v1/layers/marketing" style="color:#999999;text-decoration:none;font-size:.72rem">Marketing API -></a>
+        <a href="/api/v1/layers/marketing" class="link-muted">Marketing API -></a>
       </div>
     </div>
 
@@ -555,7 +555,7 @@
       </div>
       {% endif %}
       <div style="padding:.6rem 1.1rem">
-        <a href="/api/v1/layers/study" style="color:#999999;text-decoration:none;font-size:.72rem">Study API -></a>
+        <a href="/api/v1/layers/study" class="link-muted">Study API -></a>
       </div>
     </div>
 
@@ -588,7 +588,7 @@
       </div>
       {% endif %}
       <div style="padding:.6rem 1.1rem">
-        <a href="/api/v1/layers/training" style="color:#999999;text-decoration:none;font-size:.72rem">Training API -></a>
+        <a href="/api/v1/layers/training" class="link-muted">Training API -></a>
       </div>
     </div>
   </div>

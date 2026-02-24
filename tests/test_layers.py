@@ -46,6 +46,10 @@ async def test_marketing_layer_endpoint_returns_report(client):
     assert "readiness_score" in body
     assert "open_follow_up_tasks" in body
     assert "bottlenecks" in body
+    assert "exposure_risk_level" in body
+    assert "privacy_guardrails" in body
+    assert "legal_guardrails" in body
+    assert "account_guardrails" in body
 
 
 async def test_study_layer_endpoint_returns_report(client):

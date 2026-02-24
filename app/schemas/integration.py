@@ -1,6 +1,11 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+_SENSITIVE_CONFIG_KEYS = frozenset({
+    "access_token", "refresh_token", "api_key", "bot_token",
+    "app_secret", "api_token", "private_key",
+})
 
 
 class IntegrationConnectRequest(BaseModel):
@@ -20,6 +25,15 @@ class IntegrationRead(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def _redact_tokens(self):
+        if self.config_json:
+            self.config_json = {
+                k: ("***" if k in _SENSITIVE_CONFIG_KEYS else v)
+                for k, v in self.config_json.items()
+            }
+        return self
 
 
 class IntegrationTestResult(BaseModel):

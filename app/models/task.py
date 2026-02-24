@@ -14,6 +14,10 @@ class Task(Base):
             "category IN ('personal', 'business', 'health', 'finance', 'other')",
             name="ck_task_category",
         ),
+        CheckConstraint(
+            "priority >= 1 AND priority <= 4",
+            name="ck_task_priority",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

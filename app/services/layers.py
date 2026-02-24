@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.contact import Contact
 from app.models.finance import FinanceEntry
 from app.models.memory import DailyContext, TeamMember
@@ -104,6 +105,32 @@ async def get_marketing_layer(
         next_actions.append("Maintain current marketing execution and review funnel metrics weekly.")
     score = max(0, min(100, score))
 
+    privacy_guardrails = [
+        f"Privacy profile: {settings.PRIVACY_POLICY_PROFILE}",
+        f"Response sanitization: {'enabled' if settings.PRIVACY_RESPONSE_SANITIZATION_ENABLED else 'disabled'}",
+        f"PII masking: {'enabled' if settings.PRIVACY_MASK_PII else 'disabled'}",
+    ]
+    legal_guardrails = [
+        f"Terms version: {(settings.LEGAL_TERMS_VERSION or 'unset')}",
+        f"DPA required: {'yes' if settings.LEGAL_DPA_REQUIRED else 'no'}",
+        f"Marketing consent required: {'yes' if settings.LEGAL_MARKETING_CONSENT_REQUIRED else 'no'}",
+    ]
+    account_guardrails = [
+        f"MFA required: {'yes' if settings.ACCOUNT_MFA_REQUIRED else 'no'}",
+        f"SSO required: {'yes' if settings.ACCOUNT_SSO_REQUIRED else 'no'}",
+        f"Max session hours: {settings.ACCOUNT_SESSION_MAX_HOURS}",
+    ]
+    risk_signals = 0
+    if settings.PRIVACY_POLICY_PROFILE != "strict":
+        risk_signals += 1
+    if not settings.ACCOUNT_MFA_REQUIRED:
+        risk_signals += 1
+    if settings.MARKETING_EXPORT_PII_ALLOWED:
+        risk_signals += 1
+    if not settings.LEGAL_DPA_REQUIRED or not settings.LEGAL_MARKETING_CONSENT_REQUIRED:
+        risk_signals += 1
+    exposure_risk_level = "LOW" if risk_signals == 0 else ("MEDIUM" if risk_signals <= 2 else "HIGH")
+
     return MarketingLayerReport(
         window_days=window_days,
         business_contacts_total=len(business_contacts),
@@ -113,6 +140,10 @@ async def get_marketing_layer(
         revenue_in_window=revenue,
         spend_to_revenue_ratio=round(spend_to_revenue_ratio, 4),
         readiness_score=score,
+        exposure_risk_level=exposure_risk_level,
+        privacy_guardrails=privacy_guardrails,
+        legal_guardrails=legal_guardrails,
+        account_guardrails=account_guardrails,
         bottlenecks=bottlenecks,
         next_actions=next_actions[:4],
     )

@@ -10,6 +10,10 @@ class MarketingLayerReport(BaseModel):
     revenue_in_window: float
     spend_to_revenue_ratio: float
     readiness_score: int = Field(ge=0, le=100)
+    exposure_risk_level: str
+    privacy_guardrails: list[str]
+    legal_guardrails: list[str]
+    account_guardrails: list[str]
     bottlenecks: list[str]
     next_actions: list[str]
 
