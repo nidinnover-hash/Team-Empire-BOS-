@@ -130,3 +130,24 @@ class SlackStatusRead(BaseModel):
 class SlackSendRequest(BaseModel):
     channel_id: str = Field(..., min_length=1, max_length=100)
     text: str = Field(..., min_length=1, max_length=4000)
+
+
+class GitHubInstallationDiscoveryResult(BaseModel):
+    ok: bool
+    org: str
+    installation_id: int
+
+
+class DigitalOceanConnectRequest(BaseModel):
+    api_token: str = Field(..., min_length=2, max_length=300)
+
+
+class DigitalOceanStatusRead(BaseModel):
+    connected: bool
+    last_sync_at: str | None = None
+
+
+class DigitalOceanSyncResult(BaseModel):
+    droplets: int
+    members: int
+    error: str | None = None

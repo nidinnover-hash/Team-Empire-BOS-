@@ -32,6 +32,7 @@
     var includeAuth = opts.auth === true;
     var includeCsrf = opts.csrf === true;
     var headers = opts.headers || {};
+    var externalSignal = opts.signal || null;
 
     if (includeAuth && !headers.Authorization) {
       var token = opts.token || (await getApiToken());
@@ -43,11 +44,44 @@
       if (csrf) headers["X-CSRF-Token"] = csrf;
     }
 
-    var response = await fetch(path, {
-      method: method,
-      headers: headers,
-      body: opts.body,
-    });
+    var retries = typeof opts.retries === "number" ? opts.retries : 1;
+    var timeoutMs = typeof opts.timeoutMs === "number" ? opts.timeoutMs : 15000;
+    var response = null;
+    var lastErr = null;
+    for (var attempt = 0; attempt <= retries; attempt++) {
+      var controller = new AbortController();
+      var onExternalAbort = null;
+      if (externalSignal) {
+        if (externalSignal.aborted) controller.abort();
+        else {
+          onExternalAbort = function () { controller.abort(); };
+          externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+        }
+      }
+      var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+      try {
+        response = await fetch(path, {
+          method: method,
+          headers: headers,
+          body: opts.body,
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        if (externalSignal && onExternalAbort) externalSignal.removeEventListener("abort", onExternalAbort);
+        if (response.status >= 500 && attempt < retries) {
+          await new Promise(function (r) { setTimeout(r, 250 * (attempt + 1)); });
+          continue;
+        }
+        break;
+      } catch (e) {
+        clearTimeout(timer);
+        if (externalSignal && onExternalAbort) externalSignal.removeEventListener("abort", onExternalAbort);
+        lastErr = e;
+        if (attempt >= retries) throw e;
+        await new Promise(function (r) { setTimeout(r, 250 * (attempt + 1)); });
+      }
+    }
+    if (!response && lastErr) throw lastErr;
 
     var body = await response.json().catch(function () {
       return {};
@@ -68,4 +102,3 @@
     safeFetchJson: safeFetchJson,
   };
 })();
-

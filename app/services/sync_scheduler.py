@@ -12,6 +12,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
+import json
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +24,7 @@ logger = logging.getLogger(__name__)
 # Per-org throttle: don't fire on-demand sync more than once per N minutes.
 # Default 15 — overridden by settings.SYNC_THROTTLE_MINUTES at runtime.
 _last_synced: dict[int, datetime] = {}
+_last_ceo_summary_date_by_org: dict[int, str] = {}
 
 
 def _throttle_minutes() -> int:
@@ -60,50 +63,51 @@ _scheduler_task: asyncio.Task | None = None
 
 async def _run_integrations(db: AsyncSession, org_id: int) -> None:
     """Sync all connected integrations for org_id. Logs but never raises."""
-    from sqlalchemy import select, update
+    from sqlalchemy import update
     from app.models.integration import Integration
-    from app.services import clickup_service, github_service, slack_service
+    from app.services import clickup_service, do_service, github_service, slack_service
+    from app.services import compliance_engine
     from app.services.calendar_service import sync_calendar_events
+
+    async def _mark_status(int_type: str, status: str) -> None:
+        try:
+            await db.execute(
+                update(Integration)
+                .where(Integration.organization_id == org_id, Integration.type == int_type)
+                .values(last_sync_status=status)
+            )
+        except Exception:
+            pass  # best-effort status tracking
 
     for name, fn in [
         ("clickup", clickup_service.sync_clickup_tasks),
         ("github", github_service.sync_github),
+        ("digitalocean", do_service.sync_digitalocean),
         ("slack", slack_service.sync_slack_messages),
     ]:
         try:
             result = await fn(db, org_id)
             logger.debug("Sync %s org=%d → %s", name, org_id, result)
-            await db.execute(
-                update(Integration)
-                .where(Integration.organization_id == org_id, Integration.type == name)
-                .values(last_sync_status="ok")
-            )
+            await _mark_status(name, "ok")
         except Exception as exc:
             logger.warning("Background %s sync failed org=%d: %s", name, org_id, type(exc).__name__)
-            await db.execute(
-                update(Integration)
-                .where(Integration.organization_id == org_id, Integration.type == name)
-                .values(last_sync_status="error")
-            )
+            await _mark_status(name, "error")
 
     # Google Calendar sync — stored as DailyContext, auto-included in memory
     try:
         result = await sync_calendar_events(db, organization_id=org_id)
         logger.debug("Sync calendar org=%d → %s", org_id, result)
-        await db.execute(
-            update(Integration)
-            .where(Integration.organization_id == org_id, Integration.type == "google_calendar")
-            .values(last_sync_status="ok")
-        )
+        await _mark_status("google_calendar", "ok")
     except Exception as exc:
         logger.warning("Background calendar sync failed org=%d: %s", org_id, type(exc).__name__)
-        await db.execute(
-            update(Integration)
-            .where(Integration.organization_id == org_id, Integration.type == "google_calendar")
-            .values(last_sync_status="error")
-        )
+        await _mark_status("google_calendar", "error")
 
-    await db.commit()
+    try:
+        # Suggest-only compliance scan: records violations, blocks nothing.
+        await compliance_engine.run_compliance(db, org_id)
+        await db.commit()
+    except Exception:
+        pass
 
 
 # ── On-demand (throttled) trigger ────────────────────────────────────────────
@@ -180,6 +184,35 @@ async def _check_morning_briefing(db: AsyncSession, org_id: int) -> None:
         logger.warning("Morning briefing failed for org=%d: %s", org_id, type(exc).__name__)
 
 
+async def _maybe_generate_daily_ceo_summary(db: AsyncSession, org_id: int) -> None:
+    from app.models.ceo_control import CEOSummary
+    from app.services import compliance_engine
+
+    tz = ZoneInfo("Asia/Kolkata")
+    local_now = datetime.now(timezone.utc).astimezone(tz)
+    if local_now.hour != 9:
+        return
+    day_key = local_now.strftime("%Y-%m-%d")
+    if _last_ceo_summary_date_by_org.get(org_id) == day_key:
+        return
+    report = await compliance_engine.latest_report(db, org_id)
+    db.add(
+        CEOSummary(
+            organization_id=org_id,
+            summary_json=json.dumps(
+                {
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "report_count": report.get("count", 0),
+                    "top_violations": report.get("violations", [])[:10],
+                }
+            ),
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    _last_ceo_summary_date_by_org[org_id] = day_key
+    await db.commit()
+
+
 async def _scheduler_loop(interval_minutes: int) -> None:
     """Runs forever; wakes up every interval_minutes and syncs all orgs."""
     from app.services.organization import list_organizations
@@ -193,6 +226,7 @@ async def _scheduler_loop(interval_minutes: int) -> None:
                 for org in orgs:
                     await _run_integrations(db, org.id)
                     await _check_morning_briefing(db, org.id)
+                    await _maybe_generate_daily_ceo_summary(db, org.id)
                     _last_synced[org.id] = datetime.now(timezone.utc)
             logger.info("Scheduled sync complete (%d org(s))", len(orgs))
         except asyncio.CancelledError:

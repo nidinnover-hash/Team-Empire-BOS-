@@ -365,7 +365,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 )
 
             bucket.append(now)
+            remaining = max_req - len(bucket)
             _rate_limit_stats["allowed"] += 1
         finally:
             _rate_limit_lock.release()
-        return cast(Response, await call_next(request))
+        response = cast(Response, await call_next(request))
+        response.headers["X-RateLimit-Limit"] = str(max_req)
+        response.headers["X-RateLimit-Remaining"] = str(remaining)
+        response.headers["X-RateLimit-Reset"] = str(window)
+        return response

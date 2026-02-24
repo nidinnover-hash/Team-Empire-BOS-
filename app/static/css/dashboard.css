@@ -1,0 +1,16 @@
+/* Dashboard page layer (kept separate from global theme for maintainability) */
+.stats .stat,
+.hero,
+.chat-panel .chat-textarea,
+.chat-panel .chat-send,
+#inbox-card .btn-run,
+#approvals-card .btn-run {
+  backdrop-filter: blur(6px);
+}
+
+.ap-actions button,
+.inbox-actions button,
+.chat-actions button {
+  min-height: 36px;
+}
+

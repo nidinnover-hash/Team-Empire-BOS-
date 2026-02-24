@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     GOOGLE_REDIRECT_URI: str | None = None
     GOOGLE_CALENDAR_REDIRECT_URI: str | None = None  # Separate callback for Calendar OAuth
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: str | None = None
+    GITHUB_APP_ID: str | None = None
+    GITHUB_PRIVATE_KEY_PEM: str | None = None
+    GITHUB_ORG: str | None = None
+    CRITICAL_GITHUB_REPOS: str = ""
+    CLICKUP_CRITICAL_FOLDER_NAME: str = "🔴 Critical Systems"
+    CLICKUP_CEO_PRIORITY_TAG: str = "CEO-PRIORITY"
+    DIGITALOCEAN_BASE_URL: str = "https://api.digitalocean.com/v2"
 
     # Internal API and rate limiting
     WHATSAPP_APP_SECRET: str | None = None   # Used to verify X-Hub-Signature-256 on webhook POSTs
@@ -99,6 +106,14 @@ class Settings(BaseSettings):
     SYNC_ENABLED: bool = True
     SYNC_INTERVAL_MINUTES: int = 30   # how often the scheduler fires
     SYNC_THROTTLE_MINUTES: int = 15   # min gap for on-demand (login/dashboard) syncs
+    CEO_SUMMARY_TIMEZONE: str = "Asia/Kolkata"
+
+    # Feature flags — disable expensive features without redeploying
+    FEATURE_AI_COMMANDS: bool = True     # AI responses in command input
+    FEATURE_EMAIL_SYNC: bool = True      # Gmail sync + email AI
+    FEATURE_TALK_MODE: bool = True       # Voice/chat Talk Mode page
+    FEATURE_OPS_INTEL: bool = True       # Ops Intelligence page
+    FEATURE_DAILY_RUN: bool = True       # Daily run draft generation
 
     @field_validator(
         "DEFAULT_AI_PROVIDER",
@@ -151,6 +166,8 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("SYNC_INTERVAL_MINUTES must be <= 1440 (24 hours)")
     if s.SYNC_THROTTLE_MINUTES < 0:
         issues.append("SYNC_THROTTLE_MINUTES must be >= 0")
+    if not (s.GITHUB_ORG or "").strip() and (s.GITHUB_APP_ID or s.GITHUB_PRIVATE_KEY_PEM):
+        issues.append("GITHUB_ORG must be set when GitHub App auth is configured")
 
     # --- Rate limiting / idempotency ---
     idem_backend = s.IDEMPOTENCY_BACKEND

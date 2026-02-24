@@ -1,0 +1,37 @@
+# systemd service for Personal Clone web server (Gunicorn + Uvicorn workers)
+# Place at: /etc/systemd/system/personal-clone.service
+#
+# Commands:
+#   sudo systemctl enable personal-clone
+#   sudo systemctl start personal-clone
+#   sudo systemctl status personal-clone
+#   sudo journalctl -u personal-clone -f
+
+[Unit]
+Description=Personal Clone AI (Gunicorn)
+After=network.target postgresql.service redis.service
+Wants=personal-clone-scheduler.service
+
+[Service]
+Type=notify
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/personal-clone
+Environment="PATH=/opt/personal-clone/venv/bin:/usr/local/bin:/usr/bin"
+EnvironmentFile=/opt/personal-clone/.env
+ExecStart=/opt/personal-clone/venv/bin/gunicorn -c gunicorn.conf.py app.main:app
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/personal-clone
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

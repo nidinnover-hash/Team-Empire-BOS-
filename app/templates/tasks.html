@@ -5,35 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Nidin Nover - Tasks</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/tasks.css" />
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-  <style>
-    .main-wrap{margin-left:var(--sb-width);padding:1.5rem 2rem;max-width:1000px}
-    h1{font-size:1.1rem;font-weight:700;color:#111111;margin-bottom:1rem}
-    .filters{display:flex;gap:.4rem;margin-bottom:1rem;flex-wrap:wrap}
-    .filter-btn{background:#ffffff;border:1px solid #e5e5e5;color:#666666;border-radius:999px;padding:.35rem .75rem;font-size:.72rem;cursor:pointer;transition:all .15s;touch-action:manipulation}
-    .filter-btn.active,.filter-btn:hover{background:#111111;border-color:#111111;color:#ffffff}
-    .task-list{display:flex;flex-direction:column;gap:4px}
-    .task-item{background:#ffffff;border:1px solid #e5e5e5;border-radius:8px;padding:.7rem .9rem;display:flex;align-items:flex-start;gap:.7rem;transition:background .12s;cursor:pointer;touch-action:manipulation}
-    .task-item:hover{background:#f5f5f5}
-    .p-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:6px}
-    .p-high{background:#ef4444} .p-med{background:#f59e0b} .p-low{background:#22c55e} .p-none{background:#999999}
-    .task-info{flex:1;min-width:0}
-    .task-title{font-size:.85rem;color:#111111;line-height:1.35}
-    .task-meta{font-size:.68rem;color:#999999;margin-top:.2rem}
-    .task-source{font-size:.6rem;padding:.1rem .35rem;border-radius:4px;border:1px solid #e5e5e5;color:#666666;margin-left:.4rem}
-    .task-done .task-title{text-decoration:line-through;color:#999999}
-    .empty{color:#999999;text-align:center;padding:3rem;font-size:.82rem}
-    .kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;margin-bottom:1.2rem}
-    .kpi{background:#ffffff;border:1px solid #e5e5e5;border-radius:10px;padding:.65rem .85rem}
-    .kpi .label{font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:#999999}
-    .kpi .val{font-size:1.2rem;font-weight:700;color:#111111;margin-top:.15rem}
-
-    @media (max-width: 768px) {
-      .main-wrap { padding: 1rem; padding-top: 3.5rem; }
-      .kpi-row { grid-template-columns: repeat(2, 1fr); }
-      .filter-btn { padding: .45rem .85rem; font-size: .78rem; }
-    }
-  </style>
+  
 </head>
 <body>
   <nav class="sidebar">
@@ -56,6 +30,9 @@
       <a href="/docs" class="sb-item" target="_blank"><i data-lucide="book-open"></i> API Docs</a>
     </div>
     <div class="sb-footer">
+      <button class="theme-toggle" type="button">
+        <i data-lucide="moon" class="theme-icon"></i> Toggle theme
+      </button>
       <button class="sb-item" id="logout-btn" type="button"><i data-lucide="log-out"></i> Sign out</button>
     </div>
   </nav>
@@ -78,86 +55,11 @@
     <div id="task-list" class="task-list"><div class="empty">Loading tasks...</div></div>
   </div>
 
-  <script>
-    window.__bootPromise = fetch('/web/api-token')
-      .then(r => { if (!r.ok) throw new Error('Session expired'); return r.json(); })
-      .then(d => d.token);
-    let allTasks = [];
-    let currentFilter = 'all';
-
-    async function loadTasks() {
-      const container = document.getElementById('task-list');
-      try {
-        const token = await window.__bootPromise;
-        if (!token) throw new Error('Session expired');
-        const h = {'Authorization': 'Bearer ' + token};
-        const res = await fetch('/api/v1/tasks?limit=100&is_done=false', {headers:h});
-        if (!res.ok) throw new Error('Failed to load tasks');
-        allTasks = await res.json();
-        updateKPIs();
-        renderTasks();
-      } catch (e) {
-        container.innerHTML = '<div class="empty">Could not load tasks. Refresh and sign in again.</div>';
-      }
-    }
-
-    function updateKPIs() {
-      document.getElementById('k-open').textContent = allTasks.length;
-      document.getElementById('k-high').textContent = allTasks.filter(t=>t.priority>=4).length;
-      const sources = new Set(allTasks.map(t=>t.external_source||'internal'));
-      document.getElementById('k-src').textContent = sources.size;
-    }
-
-    function renderTasks() {
-      let filtered = allTasks;
-      if (currentFilter === 'high') filtered = allTasks.filter(t=>t.priority>=4);
-      else if (currentFilter === 'internal') filtered = allTasks.filter(t=>!t.external_source);
-      else if (currentFilter !== 'all') filtered = allTasks.filter(t=>t.external_source===currentFilter);
-
-      const container = document.getElementById('task-list');
-      if (!filtered.length) { container.innerHTML = '<div class="empty">No tasks match this filter</div>'; return; }
-      container.innerHTML = filtered.map(t => {
-        const pClass = t.priority >= 4 ? 'p-high' : t.priority >= 3 ? 'p-med' : t.priority >= 2 ? 'p-low' : 'p-none';
-        const src = t.external_source ? `<span class="task-source">${escHtml(t.external_source)}</span>` : '';
-        const due = t.due_date ? ` &middot; due ${escHtml(t.due_date)}` : '';
-        return `<div class="task-item${t.is_done?' task-done':''}">
-          <div class="p-dot ${pClass}"></div>
-          <div class="task-info">
-            <div class="task-title">${escHtml(t.title)}</div>
-            <div class="task-meta">P${t.priority}${due}${src}</div>
-          </div>
-        </div>`;
-      }).join('');
-    }
-
-    function escHtml(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
-
-    document.querySelector('.filters').addEventListener('click', e => {
-      const btn = e.target.closest('.filter-btn');
-      if (!btn) return;
-      document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
-      btn.classList.add('active');
-      currentFilter = btn.dataset.filter;
-      renderTasks();
-    });
-
-    loadTasks();
-
-    const logoutBtn = document.getElementById('logout-btn');
-    if (logoutBtn) logoutBtn.addEventListener('click', async () => {
-      const csrf = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('pc_csrf='));
-      const csrfVal = csrf ? csrf.split('=')[1] : '';
-      try {
-        const r = await fetch('/web/logout', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':csrfVal}});
-        if (!r.ok) throw new Error('Logout failed');
-        window.location.href = '/web/login';
-      } catch (_e) {
-        alert('Logout failed. Please try again.');
-      }
-    });
-
-    if (typeof lucide !== "undefined") lucide.createIcons();
-  </script>
+  <script src="/static/js/ui-utils.js"></script>
+  
   <script src="/static/js/mobile-nav.js"></script>
+  <script src="/static/js/theme-toggle.js"></script>
+  <script src="/static/js/search-palette.js"></script>
+<script src="/static/js/tasks-page.js"></script>
 </body>
 </html>

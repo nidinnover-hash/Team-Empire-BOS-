@@ -15,15 +15,19 @@ iterating stale/archived repos.
 from __future__ import annotations
 
 import logging
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.resilience import run_with_retry
 from app.core.tenant import require_org_id
+from app.models.ceo_control import GitHubPRSnapshot, GitHubRepoSnapshot, GitHubRoleSnapshot
 from app.models.task import Task
+from app.services import github_app_auth
 from app.services import integration as integration_service
 from app.tools.github import (
     get_authenticated_user,
@@ -37,6 +41,144 @@ logger = logging.getLogger(__name__)
 _GITHUB_TYPE = "github"
 _MAX_REPO_AGE_DAYS = 90   # ignore repos not pushed in the last 90 days
 _MAX_REPOS = 30            # hard cap to avoid excessive API calls
+
+
+def _critical_repos() -> set[str]:
+    raw = settings.CRITICAL_GITHUB_REPOS or ""
+    return {r.strip().lower() for r in raw.split(",") if r.strip()}
+
+
+def _parse_gh_ts(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+async def _snapshot_from_installation_token(
+    db: AsyncSession, org_id: int, org: str, token: str, repos: list[dict[str, Any]]
+) -> None:
+    now = datetime.now(timezone.utc)
+    if not token or not org:
+        return
+
+    await db.execute(delete(GitHubRoleSnapshot).where(GitHubRoleSnapshot.organization_id == org_id))
+    await db.execute(delete(GitHubRepoSnapshot).where(GitHubRepoSnapshot.organization_id == org_id))
+    await db.execute(delete(GitHubPRSnapshot).where(GitHubPRSnapshot.organization_id == org_id))
+
+    members = await github_app_auth.github_get_json(f"/orgs/{org}/members", token, params={"per_page": 200})
+    if isinstance(members, list):
+        for m in members:
+            if not isinstance(m, dict):
+                continue
+            login = str(m.get("login") or "")
+            role_resp = await github_app_auth.github_get_json(f"/orgs/{org}/memberships/{login}", token)
+            role = str((role_resp or {}).get("role") or "")
+            db.add(
+                GitHubRoleSnapshot(
+                    organization_id=org_id,
+                    org_login=org,
+                    github_login=login,
+                    org_role=role,
+                    repo_name=None,
+                    repo_permission=None,
+                    synced_at=now,
+                )
+            )
+
+    critical = _critical_repos()
+    for repo in repos:
+        owner = repo.get("owner", {}).get("login", "")
+        name = repo.get("name", "")
+        full = f"{owner}/{name}".lower() if owner and name else ""
+        if critical and full not in critical and name.lower() not in critical:
+            continue
+        branch = str(repo.get("default_branch") or "main")
+        branch_info = await github_app_auth.github_get_json(
+            f"/repos/{owner}/{name}/branches/{branch}", token
+        )
+        protected = bool((branch_info or {}).get("protected"))
+        protection = {}
+        try:
+            protection = await github_app_auth.github_get_json(
+                f"/repos/{owner}/{name}/branches/{branch}/protection", token
+            )
+        except Exception:
+            protection = {}
+        required_reviews = bool((protection or {}).get("required_pull_request_reviews"))
+        required_checks = bool((protection or {}).get("required_status_checks"))
+        db.add(
+            GitHubRepoSnapshot(
+                organization_id=org_id,
+                repo_name=f"{owner}/{name}",
+                default_branch=branch,
+                is_protected=protected,
+                requires_reviews=required_reviews,
+                required_checks_enabled=required_checks,
+                synced_at=now,
+            )
+        )
+
+        collabs = await github_app_auth.github_get_json(
+            f"/repos/{owner}/{name}/collaborators", token, params={"per_page": 200}
+        )
+        if isinstance(collabs, list):
+            for c in collabs:
+                if not isinstance(c, dict):
+                    continue
+                login = str(c.get("login") or "")
+                perm = ""
+                permissions = c.get("permissions")
+                if isinstance(permissions, dict):
+                    if permissions.get("admin"):
+                        perm = "admin"
+                    elif permissions.get("maintain"):
+                        perm = "maintain"
+                    elif permissions.get("push"):
+                        perm = "write"
+                    elif permissions.get("pull"):
+                        perm = "read"
+                db.add(
+                    GitHubRoleSnapshot(
+                        organization_id=org_id,
+                        org_login=org,
+                        github_login=login,
+                        org_role=None,
+                        repo_name=f"{owner}/{name}",
+                        repo_permission=perm,
+                        synced_at=now,
+                    )
+                )
+
+        prs = await github_app_auth.github_get_json(
+            f"/repos/{owner}/{name}/pulls", token, params={"state": "open", "per_page": 50}
+        )
+        if isinstance(prs, list):
+            for pr in prs:
+                if not isinstance(pr, dict):
+                    continue
+                number = int(pr.get("number") or 0)
+                if number <= 0:
+                    continue
+                reviewers = [r.get("login") for r in (pr.get("requested_reviewers") or []) if isinstance(r, dict)]
+                checks_state = str((pr.get("head") or {}).get("ref") or "")
+                db.add(
+                    GitHubPRSnapshot(
+                        organization_id=org_id,
+                        repo_name=f"{owner}/{name}",
+                        pr_number=number,
+                        title=str(pr.get("title") or ""),
+                        author=str((pr.get("user") or {}).get("login") or ""),
+                        requested_reviewers=json.dumps([r for r in reviewers if r]),
+                        created_at_remote=_parse_gh_ts(pr.get("created_at")),
+                        updated_at_remote=_parse_gh_ts(pr.get("updated_at")),
+                        checks_state=checks_state,
+                        url=str(pr.get("html_url") or ""),
+                        synced_at=now,
+                    )
+                )
 
 
 async def get_github_status(db: AsyncSession, org_id: int) -> dict[str, Any]:
@@ -226,9 +368,18 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
         await db.rollback()
         return {"prs_synced": prs_synced, "issues_synced": issues_synced, "error": type(exc).__name__}
 
+    # Optional CEO-control snapshot via GitHub App installation token
+    try:
+        if settings.GITHUB_APP_ID and settings.GITHUB_PRIVATE_KEY_PEM and settings.GITHUB_ORG:
+            org_login, install_token, install_id = await github_app_auth.get_installation_token_for_org()
+            cfg["org_login"] = org_login
+            cfg["installation_id"] = install_id
+            await _snapshot_from_installation_token(db, org_id, org_login, install_token, repos)
+    except Exception as exc:
+        logger.warning("GitHub app snapshot skipped: %s", type(exc).__name__)
+
     # Update config with repos_tracked count + mark sync time
     cfg["repos_tracked"] = repos_tracked
     item.config_json = cfg
     await integration_service.mark_sync_time(db, item)
     return {"prs_synced": prs_synced, "issues_synced": issues_synced, "error": None}
-    require_org_id(org_id)

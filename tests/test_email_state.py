@@ -92,3 +92,10 @@ def test_verify_rejects_expired_state():
 def test_verify_rejects_completely_invalid_state():
     with pytest.raises(HTTPException):
         _verify_email_state("not-a-valid-state-at-all")
+
+
+def test_verify_rejects_replayed_state():
+    state = _sign_email_state(1)
+    assert _verify_email_state(state) == 1
+    with pytest.raises(HTTPException):
+        _verify_email_state(state)

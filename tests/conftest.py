@@ -55,6 +55,8 @@ from app.models import ops_metrics as _model_ops_metrics  # noqa: F401
 from app.models import decision_log as _model_decision_log  # noqa: F401
 from app.models import policy_rule as _model_policy_rule  # noqa: F401
 from app.models import weekly_report as _model_weekly_report  # noqa: F401
+from app.models import ceo_control as _model_ceo_control  # noqa: F401
+from app.models import github as _model_github  # noqa: F401
 
 # StaticPool + check_same_thread=False makes all connections share one
 # in-memory SQLite database — required for :memory: to work across requests.

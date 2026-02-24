@@ -78,6 +78,12 @@ async def test_google_calendar_get_callback_handles_browser_redirect(client, mon
     assert body["status"] == "connected"
     assert "Calendar" in body["message"]
 
+    replay = await client.get(
+        "/api/v1/integrations/google-calendar/oauth/callback",
+        params={"code": "auth-code-123", "state": state},
+    )
+    assert replay.status_code == 400
+
 
 async def test_google_calendar_get_callback_invalid_state(client, monkeypatch):
     """GET callback should reject tampered state."""

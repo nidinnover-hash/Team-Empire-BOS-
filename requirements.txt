@@ -14,7 +14,7 @@ google-auth>=2.27.0
 google-auth-oauthlib>=1.2.0
 google-api-python-client>=2.118.0
 redis>=5.2.1
-
-# Switch to PostgreSQL later by:
-# 1. pip install asyncpg
-# 2. Changing DATABASE_URL to: postgresql+asyncpg://user:pass@host:5432/db
+PyJWT[crypto]>=2.10.1
+asyncpg>=0.30.0
+gunicorn>=22.0.0
+uvloop>=0.21.0; sys_platform != "win32"

@@ -136,6 +136,8 @@ async def sync_emails(
     cross-tenant collision on shared gmail_id values.
     Returns count of new emails stored.
     """
+    if not settings.FEATURE_EMAIL_SYNC:
+        return 0
     integration = await get_integration_by_type(db, org_id, "gmail")
     if not integration:
         return 0

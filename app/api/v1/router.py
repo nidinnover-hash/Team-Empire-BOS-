@@ -5,6 +5,8 @@ from app.api.v1.endpoints import (
     auth,
     briefing,
     email,
+    export,
+    github,
     health,
     commands,
     tasks,
@@ -12,6 +14,7 @@ from app.api.v1.endpoints import (
     projects,
     goals,
     contacts,
+    control,
     data_collection,
     inbox,
     intelligence,
@@ -23,6 +26,7 @@ from app.api.v1.endpoints import (
     observability,
     ops,
     orgs,
+    search,
     users,
 )
 
@@ -43,6 +47,7 @@ api_router.include_router(notes.router)
 api_router.include_router(projects.router)
 api_router.include_router(goals.router)
 api_router.include_router(contacts.router)
+api_router.include_router(control.router)
 api_router.include_router(data_collection.router)
 api_router.include_router(inbox.router)
 api_router.include_router(intelligence.router)
@@ -52,3 +57,6 @@ api_router.include_router(finance.router)
 api_router.include_router(layers.router)
 api_router.include_router(observability.router)
 api_router.include_router(ops.router)
+api_router.include_router(export.router)
+api_router.include_router(search.router)
+api_router.include_router(github.router)

@@ -64,6 +64,8 @@ from app.models import user as _model_user  # noqa: F401
 from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
 from app.models import chat_message as _model_chat_message  # noqa: F401
 from app.models import ai_call_log as _model_ai_call_log  # noqa: F401
+from app.models import ceo_control as _model_ceo_control  # noqa: F401
+from app.models import github as _model_github  # noqa: F401
 
 # Startup safety guard
 _UNSAFE_SECRET_KEYS = {"change_me_in_env", "changeme", "secret", "change-me", ""}
@@ -89,6 +91,9 @@ templates = Jinja2Templates(directory="app/templates")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    import time as _time
+    global _server_start_time
+    _server_start_time = _time.time()
     # DB health probe — fail fast if database is unreachable
     from sqlalchemy import text
     async with engine.connect() as conn:
@@ -101,12 +106,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         async with AsyncSession(engine) as db:
             org = await organization_service.ensure_default_organization(db)
             await user_service.ensure_default_user(db, organization_id=org.id)
-    # Start background sync scheduler
+    # Start background sync scheduler.
+    # In production with multiple Gunicorn workers, set RUN_SCHEDULER=false and
+    # run the scheduler as a separate systemd service (see deploy/scheduler.service).
     from app.services.sync_scheduler import start_scheduler, stop_scheduler
-    if settings.SYNC_ENABLED:
+    import os
+    run_scheduler = os.environ.get("RUN_SCHEDULER", "true").lower() in ("1", "true", "yes")
+    if settings.SYNC_ENABLED and run_scheduler:
         start_scheduler(interval_minutes=settings.SYNC_INTERVAL_MINUTES)
     yield
-    if settings.SYNC_ENABLED:
+    if settings.SYNC_ENABLED and run_scheduler:
         stop_scheduler()
     await engine.dispose()
 
@@ -467,9 +476,35 @@ def me(user=Depends(get_current_user)):
     }
 
 
+_server_start_time: float | None = None
+
 @app.get("/health")
-def health_check():
-    return {"status": "ok"}
+async def health_check(db: AsyncSession = Depends(get_db)):
+    import time
+    from sqlalchemy import text
+    # DB check
+    db_ok = True
+    try:
+        await db.execute(text("SELECT 1"))
+    except Exception:
+        db_ok = False
+    uptime = round(time.time() - _server_start_time, 1) if _server_start_time else 0
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "version": settings.APP_VERSION,
+        "uptime_seconds": uptime,
+        "database": "ok" if db_ok else "error",
+        "ai_provider": settings.DEFAULT_AI_PROVIDER,
+        "email_ai_provider": settings.EMAIL_AI_PROVIDER or settings.DEFAULT_AI_PROVIDER,
+        "sync_enabled": settings.SYNC_ENABLED,
+        "features": {
+            "ai_commands": settings.FEATURE_AI_COMMANDS,
+            "email_sync": settings.FEATURE_EMAIL_SYNC,
+            "talk_mode": settings.FEATURE_TALK_MODE,
+            "ops_intel": settings.FEATURE_OPS_INTEL,
+            "daily_run": settings.FEATURE_DAILY_RUN,
+        },
+    }
 
 
 if settings.app_mode_normalized == "NIDIN_AI":

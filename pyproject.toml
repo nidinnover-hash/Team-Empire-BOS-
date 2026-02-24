@@ -35,6 +35,7 @@ module = [
   "google.*",
   "google_auth_oauthlib.*",
   "googleapiclient.*",
+  "jwt",
   "anthropic",
   "groq",
 ]

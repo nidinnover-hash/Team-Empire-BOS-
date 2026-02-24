@@ -13,6 +13,9 @@ async def _call_ai(text: str, organization_id: int) -> tuple[str | None, str | N
     from app.services.ai_router import call_ai, _get_model
     from app.core.config import settings
 
+    if not settings.FEATURE_AI_COMMANDS:
+        return None, None
+
     try:
         response = await call_ai(
             system_prompt=(

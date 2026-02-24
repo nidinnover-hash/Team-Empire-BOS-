@@ -17,6 +17,7 @@ from app.core.idempotency import (
     get_cached_response,
     store_response,
 )
+from app.core.oauth_nonce import consume_oauth_nonce_once
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.schemas.email import ComposeRequest, DraftReplyRequest, EmailRead, SyncResult
@@ -81,6 +82,8 @@ def _verify_email_state(state: str, max_age_seconds: int = 600) -> int:
         ts = int(ts_str)
         if int(time()) - ts > max_age_seconds:
             raise ValueError("State expired")
+        if not consume_oauth_nonce_once("gmail_oauth", nonce, max_age_seconds=max_age_seconds):
+            raise ValueError("State replayed")
         return int(org_id_str)
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
@@ -116,8 +119,8 @@ async def gmail_callback(
             asyncio.to_thread(exchange_code_for_tokens, code),
             timeout=15.0,
         )
-    except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Google token exchange timed out. Try again.")
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(status_code=504, detail="Google token exchange timed out. Try again.") from exc
     if "error" in tokens:
         error_code = str(tokens.get("error") or "unknown")
         raise HTTPException(status_code=400, detail=_oauth_error_detail(error_code))

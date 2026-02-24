@@ -84,6 +84,39 @@ async def get_tasks(
         return [t for t in tasks if isinstance(t, dict)]
 
 
+async def get_spaces(api_token: str, team_id: str) -> list[dict[str, Any]]:
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        resp = await client.get(f"{_BASE}/team/{team_id}/space", headers=_headers(api_token))
+        resp.raise_for_status()
+        body = cast(dict[str, Any], resp.json())
+        spaces = body.get("spaces")
+        if not isinstance(spaces, list):
+            return []
+        return [s for s in spaces if isinstance(s, dict)]
+
+
+async def get_folders(api_token: str, space_id: str) -> list[dict[str, Any]]:
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        resp = await client.get(f"{_BASE}/space/{space_id}/folder", headers=_headers(api_token))
+        resp.raise_for_status()
+        body = cast(dict[str, Any], resp.json())
+        folders = body.get("folders")
+        if not isinstance(folders, list):
+            return []
+        return [f for f in folders if isinstance(f, dict)]
+
+
+async def get_lists_for_folder(api_token: str, folder_id: str) -> list[dict[str, Any]]:
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        resp = await client.get(f"{_BASE}/folder/{folder_id}/list", headers=_headers(api_token))
+        resp.raise_for_status()
+        body = cast(dict[str, Any], resp.json())
+        lists = body.get("lists")
+        if not isinstance(lists, list):
+            return []
+        return [x for x in lists if isinstance(x, dict)]
+
+
 def parse_due_date(task: dict[str, Any]) -> str | None:
     """Extract a human-readable due date from a ClickUp task dict (millisecond epoch)."""
     raw = task.get("due_date")

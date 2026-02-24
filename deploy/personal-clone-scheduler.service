@@ -1,0 +1,32 @@
+# systemd service for background scheduler (sync integrations, morning briefing)
+# Place at: /etc/systemd/system/personal-clone-scheduler.service
+#
+# Runs as a single process — handles periodic sync for all orgs.
+# Separate from Gunicorn so multi-worker doesn't duplicate sync tasks.
+
+[Unit]
+Description=Personal Clone Scheduler
+After=network.target postgresql.service redis.service
+PartOf=personal-clone.service
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/personal-clone
+Environment="PATH=/opt/personal-clone/venv/bin:/usr/local/bin:/usr/bin"
+EnvironmentFile=/opt/personal-clone/.env
+ExecStart=/opt/personal-clone/venv/bin/python run_scheduler.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/personal-clone
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

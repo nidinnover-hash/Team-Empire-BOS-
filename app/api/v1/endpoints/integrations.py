@@ -17,6 +17,7 @@ from app.core.idempotency import (
     get_cached_response,
     store_response,
 )
+from app.core.oauth_nonce import consume_oauth_nonce_once
 from app.core.privacy import sanitize_response_payload
 from app.core.deps import get_db
 from app.core.rbac import require_roles
@@ -30,8 +31,12 @@ from app.schemas.integration import (
     ClickUpStatusRead,
     ClickUpSyncResult,
     GitHubConnectRequest,
+    GitHubInstallationDiscoveryResult,
     GitHubStatusRead,
     GitHubSyncResult,
+    DigitalOceanConnectRequest,
+    DigitalOceanStatusRead,
+    DigitalOceanSyncResult,
     GoogleAuthUrlRead,
     GoogleOAuthCallbackRequest,
     IntegrationConnectRequest,
@@ -47,7 +52,9 @@ from app.schemas.integration import (
 from app.services import integration as integration_service
 from app.services import whatsapp_service
 from app.services import clickup_service
+from app.services import do_service
 from app.services import github_service
+from app.services import github_app_auth
 from app.services import slack_service
 from app.services.calendar_service import (
     get_calendar_events_from_context,
@@ -102,6 +109,8 @@ def _verify_google_calendar_state(state: str, expected_org_id: int, max_age_seco
         ts = int(ts_str)
         if int(time()) - ts > max_age_seconds:
             raise ValueError("State expired")
+        if not consume_oauth_nonce_once("gcal_oauth", nonce, max_age_seconds=max_age_seconds):
+            raise ValueError("State replayed")
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
 
@@ -765,6 +774,28 @@ async def github_status(
     return GitHubStatusRead(**status)
 
 
+@router.post("/github/discover-installation", response_model=GitHubInstallationDiscoveryResult)
+async def github_discover_installation(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> GitHubInstallationDiscoveryResult:
+    """
+    Discover GitHub App installation for configured org and persist installation_id.
+    """
+    org_login, installation_id = await github_app_auth.discover_installation_for_org()
+    existing = await integration_service.get_integration_by_type(db, int(actor["org_id"]), "github")
+    cfg = existing.config_json if existing else {}
+    cfg["org_login"] = org_login
+    cfg["installation_id"] = installation_id
+    await integration_service.connect_integration(
+        db=db,
+        organization_id=int(actor["org_id"]),
+        integration_type="github",
+        config_json=cfg,
+    )
+    return GitHubInstallationDiscoveryResult(ok=True, org=org_login, installation_id=installation_id)
+
+
 @router.post("/github/sync", response_model=GitHubSyncResult)
 async def github_sync(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=256),
@@ -810,6 +841,35 @@ async def github_sync(
 
 
 # ── Slack ────────────────────────────────────────────────────────────────────────
+
+@router.post("/digitalocean/connect", response_model=DigitalOceanStatusRead, status_code=201)
+async def digitalocean_connect(
+    data: DigitalOceanConnectRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> DigitalOceanStatusRead:
+    await do_service.connect_digitalocean(db, org_id=int(actor["org_id"]), api_token=data.api_token)
+    status = await do_service.get_digitalocean_status(db, org_id=int(actor["org_id"]))
+    return DigitalOceanStatusRead(**status)
+
+
+@router.get("/digitalocean/status", response_model=DigitalOceanStatusRead)
+async def digitalocean_status(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> DigitalOceanStatusRead:
+    status = await do_service.get_digitalocean_status(db, org_id=int(actor["org_id"]))
+    return DigitalOceanStatusRead(**status)
+
+
+@router.post("/digitalocean/sync", response_model=DigitalOceanSyncResult)
+async def digitalocean_sync(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> DigitalOceanSyncResult:
+    result = await do_service.sync_digitalocean(db, org_id=int(actor["org_id"]))
+    return DigitalOceanSyncResult(**result)
+
 
 @router.post("/slack/connect", response_model=SlackStatusRead, status_code=201)
 async def slack_connect(

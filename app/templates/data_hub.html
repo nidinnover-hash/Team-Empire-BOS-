@@ -108,6 +108,9 @@
     <a href="/docs" class="sb-item" target="_blank"><i data-lucide="book-open"></i> API Docs</a>
   </div>
   <div class="sb-footer">
+    <button class="theme-toggle" type="button">
+      <i data-lucide="moon" class="theme-icon"></i> Toggle theme
+    </button>
     <button class="sb-item" id="logout-btn" type="button"><i data-lucide="log-out"></i> Sign out</button>
   </div>
 </nav>
@@ -115,6 +118,16 @@
 <main>
   <!-- Page title preserved for test assertions -->
   <div style="display:none">Data Hub + Clone Playbook</div>
+  <section class="card" style="grid-column:1/-1">
+    <div class="head">Data Export</div>
+    <div class="body">
+      <p class="hint">Download a full JSON backup of all your data (tasks, projects, goals, notes, contacts, commands, finance, memory).</p>
+      <div class="actions">
+        <button class="btn" id="export-btn" type="button">Export All Data (JSON)</button>
+      </div>
+      <div class="status" id="export-status"></div>
+    </div>
+  </section>
   <section class="card">
     <div class="head">Data Collection Layer</div>
     <div class="body">
@@ -305,6 +318,34 @@
     try {
       await loadApiToken();
       setStatus("Data Hub ready.");
+
+      // Export button
+      var exportBtn = document.getElementById("export-btn");
+      var exportStatus = document.getElementById("export-status");
+      if (exportBtn) {
+        exportBtn.addEventListener("click", async function () {
+          exportStatus.textContent = "Exporting...";
+          exportStatus.className = "status";
+          try {
+            var res = await fetch("/api/v1/export", {
+              headers: { Authorization: "Bearer " + apiToken },
+            });
+            if (!res.ok) throw new Error("Export failed: " + res.status);
+            var blob = await res.blob();
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement("a");
+            a.href = url;
+            a.download = "personal-clone-export.json";
+            a.click();
+            URL.revokeObjectURL(url);
+            exportStatus.textContent = "Export downloaded.";
+            exportStatus.className = "status ok";
+          } catch (err) {
+            exportStatus.textContent = String(err.message || err);
+            exportStatus.className = "status err";
+          }
+        });
+      }
     } catch (err) {
       setStatus("Session expired. Sign in again.", "err");
     }
@@ -329,5 +370,7 @@
   if (typeof lucide !== "undefined") lucide.createIcons();
 </script>
 <script src="/static/js/mobile-nav.js"></script>
+<script src="/static/js/theme-toggle.js"></script>
+<script src="/static/js/search-palette.js"></script>
 </body>
 </html>

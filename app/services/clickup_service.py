@@ -8,17 +8,29 @@ automatically encrypted/decrypted by token_crypto.encrypt_config / decrypt_confi
 from __future__ import annotations
 
 import logging
+import json
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.resilience import run_with_retry
+from app.core.config import settings
 from app.core.tenant import require_org_id
+from app.models.ceo_control import ClickUpFolder, ClickUpList, ClickUpSpace, ClickUpTaskSnapshot
 from app.models.task import Task
 from app.services import integration as integration_service
-from app.tools.clickup import get_authorized_user, get_tasks, get_teams, parse_due_date, parse_priority
+from app.tools.clickup import (
+    get_authorized_user,
+    get_folders,
+    get_lists_for_folder,
+    get_spaces,
+    get_tasks,
+    get_teams,
+    parse_due_date,
+    parse_priority,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +106,70 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
         return {"synced": 0, "error": "Missing access_token or team_id in ClickUp config"}
 
     synced = 0
+    critical_synced = 0
     page = 0
     try:
+        now = datetime.now(timezone.utc)
+        critical_folder = settings.CLICKUP_CRITICAL_FOLDER_NAME.strip().lower()
+        critical_tag = settings.CLICKUP_CEO_PRIORITY_TAG.strip().lower()
+
+        spaces = await run_with_retry(lambda: get_spaces(api_token, team_id))
+        await db.execute(delete(ClickUpSpace).where(ClickUpSpace.organization_id == org_id))
+        await db.execute(delete(ClickUpFolder).where(ClickUpFolder.organization_id == org_id))
+        await db.execute(delete(ClickUpList).where(ClickUpList.organization_id == org_id))
+        await db.execute(delete(ClickUpTaskSnapshot).where(ClickUpTaskSnapshot.organization_id == org_id))
+
+        critical_folder_ids: set[str] = set()
+        for space in spaces:
+            sid = str(space.get("id") or "")
+            if not sid:
+                continue
+            db.add(
+                ClickUpSpace(
+                    organization_id=org_id,
+                    external_id=sid,
+                    name=str(space.get("name") or sid),
+                    synced_at=now,
+                )
+            )
+            async def _load_folders(space_id: str = sid) -> list[dict[str, Any]]:
+                return await get_folders(api_token, space_id)
+
+            folders = await run_with_retry(_load_folders)
+            for folder in folders:
+                fid = str(folder.get("id") or "")
+                if not fid:
+                    continue
+                fname = str(folder.get("name") or fid)
+                if fname.lower() == critical_folder:
+                    critical_folder_ids.add(fid)
+                db.add(
+                    ClickUpFolder(
+                        organization_id=org_id,
+                        external_id=fid,
+                        space_external_id=sid,
+                        name=fname,
+                        synced_at=now,
+                    )
+                )
+                async def _load_lists(folder_ext_id: str = fid) -> list[dict[str, Any]]:
+                    return await get_lists_for_folder(api_token, folder_ext_id)
+
+                lists = await run_with_retry(_load_lists)
+                for lst in lists:
+                    lid = str(lst.get("id") or "")
+                    if not lid:
+                        continue
+                    db.add(
+                        ClickUpList(
+                            organization_id=org_id,
+                            external_id=lid,
+                            folder_external_id=fid,
+                            name=str(lst.get("name") or lid),
+                            synced_at=now,
+                        )
+                    )
+
         # Collect all ClickUp tasks first
         all_cu_tasks: list[dict[str, Any]] = []
         while True:
@@ -135,6 +209,7 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
             parsed.append({
                 "external_id": external_id, "title": title, "description": description,
                 "priority": priority, "due_date": due_date, "is_done": is_done,
+                "raw": cu_task,
             })
 
         # Batch-load all existing ClickUp tasks for this org (single query)
@@ -176,6 +251,40 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
                         external_source="clickup",
                     )
                     db.add(task)
+                raw = p["raw"]
+                assignees = [str(a.get("username") or a.get("email") or "") for a in (raw.get("assignees") or []) if isinstance(a, dict)]
+                tags = [str(t.get("name") or "") for t in (raw.get("tags") or []) if isinstance(t, dict)]
+                list_id = str((raw.get("list") or {}).get("id", "")) if isinstance(raw.get("list"), dict) else None
+                folder_id = str((raw.get("folder") or {}).get("id", "")) if isinstance(raw.get("folder"), dict) else None
+                updated_remote = None
+                updated_ms = raw.get("date_updated")
+                if updated_ms:
+                    try:
+                        updated_remote = datetime.fromtimestamp(int(updated_ms) / 1000, tz=timezone.utc)
+                    except Exception:
+                        updated_remote = None
+
+                db.add(
+                    ClickUpTaskSnapshot(
+                        organization_id=org_id,
+                        external_id=p["external_id"],
+                        name=p["title"],
+                        status=str((raw.get("status") or {}).get("status", "")) if isinstance(raw.get("status"), dict) else "",
+                        assignees=json.dumps([x for x in assignees if x]),
+                        due_date=p["due_date"] and datetime.combine(p["due_date"], datetime.min.time(), tzinfo=timezone.utc),
+                        priority=str((raw.get("priority") or {}).get("priority", "")) if isinstance(raw.get("priority"), dict) else None,
+                        tags=json.dumps([x for x in tags if x]),
+                        list_id=list_id,
+                        folder_id=folder_id,
+                        url=str(raw.get("url") or ""),
+                        updated_at_remote=updated_remote,
+                        synced_at=now,
+                    )
+                )
+
+                is_critical = (folder_id and folder_id in critical_folder_ids) or (critical_tag in {t.lower() for t in tags})
+                if is_critical:
+                    critical_synced += 1
                 synced += 1
             except Exception as exc:
                 logger.warning("ClickUp upsert skipped %s: %s", p["external_id"], exc)
@@ -189,5 +298,5 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
         return {"synced": synced, "error": str(exc)}
 
     await integration_service.mark_sync_time(db, item)
-    return {"synced": synced, "error": None}
+    return {"synced": synced, "critical_synced": critical_synced, "error": None}
     require_org_id(org_id)
