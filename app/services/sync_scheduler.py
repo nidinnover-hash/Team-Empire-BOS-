@@ -267,7 +267,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
         started = datetime.now(timezone.utc)
         try:
             result = await run_with_retry(
-                lambda _fn=fn: _fn(db, org_id),
+                lambda _fn=fn: _fn(db, org_id),  # type: ignore[misc]
                 attempts=2,
                 timeout_seconds=30.0,
                 backoff_seconds=1.0,

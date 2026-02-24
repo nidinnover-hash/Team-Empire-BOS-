@@ -1,5 +1,4 @@
 """Tests for audit fix items: compose rate limit, OAuth state, scheduler timezone, health endpoint."""
-import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -105,14 +104,10 @@ async def test_health_does_not_expose_ai_provider(client):
 
 async def test_morning_briefing_uses_ist():
     """Verify _check_morning_briefing uses IST, not UTC."""
-    from app.services import sync_scheduler
 
     # Mock datetime so UTC hour is 2 (= IST 7:30, before 8am IST window)
-    from unittest.mock import MagicMock
     from datetime import datetime, timezone
     from zoneinfo import ZoneInfo
-
-    mock_db = AsyncMock()
 
     # UTC 2:30 = IST 8:00 — should be in the briefing window
     with patch("app.services.sync_scheduler.datetime") as mock_dt:

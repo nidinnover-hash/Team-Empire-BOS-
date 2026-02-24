@@ -31,7 +31,7 @@ async def test_do_status_not_connected(client, monkeypatch):
 async def test_do_sync_returns_result(client, monkeypatch):
     monkeypatch.setattr(do_service, "sync_digitalocean", AsyncMock(return_value={
         "droplets": 2,
-        "costs": 1,
+        "members": 3,
     }))
     resp = await client.post("/api/v1/integrations/digitalocean/sync")
     assert resp.status_code == 200

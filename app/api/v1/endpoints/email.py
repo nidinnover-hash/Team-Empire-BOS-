@@ -4,8 +4,6 @@ from collections import deque as _deque
 from time import time
 from typing import Any, cast
 
-logger = logging.getLogger(__name__)
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import Header
 from fastapi.responses import RedirectResponse
@@ -37,6 +35,8 @@ from app.services import email_service
 from app.services.email_service import EmailSyncError
 from app.tools.gmail import exchange_code_for_tokens, get_gmail_auth_url
 from app.services.integration import connect_integration, get_integration_by_type
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/email", tags=["Email"])
 
@@ -93,7 +93,7 @@ async def gmail_auth_url(
     Get the Gmail OAuth URL. Visit this URL in your browser to connect Gmail.
     After login, Google redirects to your GOOGLE_REDIRECT_URI with a code.
     """
-    org_id = int(user.get("org_id"))
+    org_id = int(user["org_id"])
     state = _sign_email_state(org_id)
     url = get_gmail_auth_url(state=state)
     return GmailAuthUrlRead(auth_url=url, state=state)
@@ -148,7 +148,7 @@ async def sync_emails(
     current_user: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> SyncResult:
     """Sync recent emails from Gmail into the database."""
-    org_id = int(current_user.get("org_id"))
+    org_id = int(current_user["org_id"])
     scope = f"email_sync:{org_id}"
     fingerprint = build_fingerprint({"org_id": org_id, "action": "sync"})
     if idempotency_key:
@@ -185,7 +185,7 @@ async def gmail_health(
     current_user: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> GmailHealthRead:
     """Return Gmail integration health for the current org."""
-    org_id = int(current_user.get("org_id"))
+    org_id = int(current_user["org_id"])
     payload = cast(dict[str, Any], await email_service.check_gmail_health(db=db, org_id=org_id))
     return cast(GmailHealthRead, GmailHealthRead.model_validate(payload))
 
@@ -199,7 +199,7 @@ async def list_inbox(
     _user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> list[EmailRead]:
     """List emails from the inbox. Filter by unread if needed."""
-    org_id = int(_user.get("org_id"))
+    org_id = int(_user["org_id"])
     return cast(
         list[EmailRead],
         await email_service.list_emails(
@@ -215,7 +215,7 @@ async def summarize_email(
     current_user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> EmailSummaryResponse:
     """AI summarizes the email in 2-3 bullet points."""
-    org_id = int(current_user.get("org_id"))
+    org_id = int(current_user["org_id"])
     summary = await email_service.summarize_email(
         db=db,
         email_id=email_id,
@@ -239,7 +239,7 @@ async def draft_reply(
     AI drafts a reply to this email.
     Creates an approval request — nothing is sent until you approve.
     """
-    org_id = int(current_user.get("org_id"))
+    org_id = int(current_user["org_id"])
     scope = f"email_draft_reply:{org_id}:{email_id}"
     fingerprint = build_fingerprint(
         {"org_id": org_id, "email_id": email_id, "instruction": body.instruction or ""}
@@ -283,7 +283,7 @@ async def send_email(
     ONLY works if an approved approval exists for this email.
     CEO and ADMIN only.
     """
-    org_id = int(current_user.get("org_id"))
+    org_id = int(current_user["org_id"])
     scope = f"email_send:{org_id}:{email_id}"
     fingerprint = build_fingerprint({"org_id": org_id, "email_id": email_id, "action": "send"})
     if idempotency_key:
@@ -336,7 +336,7 @@ async def strategize_email(
     ChatGPT strategic analysis: situation, what they want, business impact,
     recommended action, and tone guide. No approval needed — read-only analysis.
     """
-    org_id = int(current_user.get("org_id"))
+    org_id = int(current_user["org_id"])
     try:
         analysis = await email_service.strategize_email(
             db=db,
@@ -362,7 +362,7 @@ async def compose_email(
     ChatGPT drafts a brand-new email from Nidin.
     Creates an approval request — nothing sends until you approve it.
     """
-    org_id = int(current_user.get("org_id"))
+    org_id = int(current_user["org_id"])
     _check_compose_rate(org_id)
     scope = f"email_compose:{org_id}"
     fingerprint = build_fingerprint(

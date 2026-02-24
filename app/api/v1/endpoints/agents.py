@@ -27,7 +27,7 @@ async def agent_chat(
     based on your message, or you can force a role with force_role.
     """
     # Build memory context from profile, team, and today's priorities
-    org_id = int(current_user.get("org_id"))
+    org_id = int(current_user["org_id"])
     memory_context = await build_memory_context(db, organization_id=org_id)
 
     result = await run_agent(

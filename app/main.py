@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 import asyncio
 import secrets
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
@@ -625,7 +625,7 @@ async def dashboard(
 
     # Parallel fetch — all queries are independent reads on the same org.
     # Timeout prevents dashboard from hanging if any single query stalls.
-    _DASHBOARD_DEFAULTS = (
+    _DASHBOARD_DEFAULTS: tuple[Any, ...] = (
         [], [], [], [], [], [],  # commands, tasks, notes, projects, goals, contacts
         {"total_income": 0, "total_expense": 0, "balance": 0},  # finance
         None, {}, {}, {},  # finance_efficiency, marketing, study, training

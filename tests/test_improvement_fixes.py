@@ -1,9 +1,5 @@
 """Tests for the 34-item improvement sweep."""
-import time
-from unittest.mock import AsyncMock, patch, MagicMock
-from datetime import datetime, timezone, timedelta
 
-import pytest
 
 from app.core.security import create_access_token
 

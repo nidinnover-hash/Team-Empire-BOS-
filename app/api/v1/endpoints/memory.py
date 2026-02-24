@@ -30,7 +30,7 @@ async def list_profile_memory(
     """List all profile memory entries. CEO only."""
     return await memory_service.get_profile_memory(
         db,
-        organization_id=int(user.get("org_id")),
+            organization_id=int(user["org_id"]),
     )
 
 
@@ -41,7 +41,7 @@ async def set_profile_memory(
     current_user: dict = Depends(require_roles("CEO")),
 ) -> ProfileMemoryRead:
     """Add or update a profile memory entry. CEO only."""
-    org_id = int(current_user.get("org_id"))
+    org_id = int(current_user["org_id"])
     entry = await memory_service.upsert_profile_memory(
         db,
         organization_id=org_id,
@@ -68,7 +68,7 @@ async def delete_profile_memory(
     current_user: dict = Depends(require_roles("CEO")),
 ) -> None:
     """Delete a profile memory entry by ID. CEO only."""
-    org_id = int(current_user.get("org_id"))
+    org_id = int(current_user["org_id"])
     deleted = await memory_service.delete_profile_memory(
         db, entry_id=entry_id, organization_id=org_id
     )
@@ -96,7 +96,7 @@ async def list_team_members(
     """List team members. Filter by team name (tech, sales, ops, admin)."""
     return await memory_service.get_team_members(
         db,
-        organization_id=int(_user.get("org_id")),
+            organization_id=int(_user["org_id"]),
         team=team,
     )
 
@@ -108,7 +108,7 @@ async def add_team_member(
     current_user: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> TeamMemberRead:
     """Add a new team member. ADMIN+ only."""
-    org_id = int(current_user.get("org_id"))
+    org_id = int(current_user["org_id"])
     member = await memory_service.create_team_member(
         db,
         data,
@@ -134,7 +134,7 @@ async def update_team_member(
     current_user: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> TeamMemberRead:
     """Update a team member's profile. ADMIN+ only."""
-    org_id = int(current_user.get("org_id"))
+    org_id = int(current_user["org_id"])
     member = await memory_service.update_team_member(
         db,
         member_id,
@@ -166,7 +166,7 @@ async def get_daily_context(
     """Get today's context entries (priorities, meetings, blockers, decisions)."""
     return await memory_service.get_daily_context(
         db,
-        organization_id=int(_user.get("org_id")),
+            organization_id=int(_user["org_id"]),
         for_date=for_date,
     )
 
@@ -178,7 +178,7 @@ async def add_daily_context(
     current_user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> DailyContextRead:
     """Add a context item for today (priority, meeting, blocker, or decision)."""
-    org_id = int(current_user.get("org_id"))
+    org_id = int(current_user["org_id"])
     entry = await memory_service.add_daily_context(
         db,
         data,

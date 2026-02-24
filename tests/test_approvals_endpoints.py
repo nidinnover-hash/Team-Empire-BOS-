@@ -1,7 +1,6 @@
 """Tests for /api/v1/approvals endpoints."""
 from datetime import datetime, timezone
 
-from app.core.security import create_access_token
 from app.models.approval import Approval
 
 from app.core.deps import get_db

@@ -256,12 +256,12 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     )
                 )
             else:
-                by_repo: dict[str, list[GitHubRoleSnapshot]] = {}
+                by_repo_ops: dict[str, list[GitHubRoleSnapshot]] = {}
                 for role in critical_repo_roles:
                     if not role.repo_name:
                         continue
-                    by_repo.setdefault(role.repo_name.lower(), []).append(role)
-                for repo_name, repo_roles in by_repo.items():
+                    by_repo_ops.setdefault(role.repo_name.lower(), []).append(role)
+                for repo_name, repo_roles in by_repo_ops.items():
                     if not any(
                         (x.github_login or "").lower() in tech_logins
                         and (x.repo_permission or "").lower() in {"maintain", "admin"}

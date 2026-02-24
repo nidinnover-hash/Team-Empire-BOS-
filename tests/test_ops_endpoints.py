@@ -1,5 +1,4 @@
 """Tests for /api/v1/ops endpoints — employees, decision-log, policies."""
-from unittest.mock import AsyncMock
 
 
 async def test_list_employees_empty(client):
@@ -39,10 +38,15 @@ async def test_decision_log_empty(client):
 async def test_create_decision_log_entry(client):
     resp = await client.post(
         "/api/v1/ops/decision-log",
-        json={"title": "Hire new dev", "context": "Growing team", "decision": "Approved"},
+        json={
+            "decision_type": "approve",
+            "context": "Growing team",
+            "objective": "Hire new dev",
+            "reason": "Team capacity",
+        },
     )
     assert resp.status_code == 201
-    assert resp.json()["title"] == "Hire new dev"
+    assert resp.json()["objective"] == "Hire new dev"
 
 
 async def test_list_policies_empty(client):

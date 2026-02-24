@@ -1,9 +1,8 @@
 """Tests for the 14-fix production hardening sweep."""
 import asyncio
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
-import pytest
 from app.core.deps import get_db
 from app.core.security import create_access_token, hash_password
 from app.main import app as fastapi_app
@@ -132,7 +131,6 @@ async def test_run_integrations_handles_clickup_error(client, monkeypatch):
     from app.services import sync_scheduler
     from app.services import clickup_service, github_service, do_service, slack_service
     from app.services import compliance_engine
-    from app.services.calendar_service import sync_calendar_events
 
     # Make ClickUp raise, others succeed
     monkeypatch.setattr(clickup_service, "sync_clickup_tasks", AsyncMock(side_effect=RuntimeError("ClickUp API down")))
@@ -142,7 +140,6 @@ async def test_run_integrations_handles_clickup_error(client, monkeypatch):
     monkeypatch.setattr(compliance_engine, "run_compliance", AsyncMock(return_value=None))
 
     # Mock calendar sync
-    import app.services.sync_scheduler as sched_mod
     monkeypatch.setattr(
         "app.services.calendar_service.sync_calendar_events",
         AsyncMock(return_value="ok"),

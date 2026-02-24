@@ -50,7 +50,7 @@ async def export_all_data(
     Export all user data as JSON. CEO-only.
     Returns tasks, projects, goals, notes, contacts, commands, finance, and memory.
     """
-    org_id = int(actor.get("org_id"))
+    org_id = int(actor["org_id"])
 
     tasks = await task_service.list_tasks(db, limit=10000, organization_id=org_id)
     projects = await project_service.list_projects(db, limit=10000, organization_id=org_id)

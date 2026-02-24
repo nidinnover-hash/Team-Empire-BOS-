@@ -167,7 +167,7 @@ async def test_start_stop_scheduler():
 
 
 def test_extract_top_risks_sorts_by_severity_and_limits():
-    report = {
+    report: dict[str, object] = {
         "violations": [
             {"title": "A", "severity": "LOW", "platform": "github"},
             {"title": "B", "severity": "CRITICAL", "platform": "digitalocean"},

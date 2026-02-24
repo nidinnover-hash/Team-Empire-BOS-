@@ -268,11 +268,15 @@ def build_typed_context(
         ctx_groups.setdefault(ctx.context_type, []).append(ctx.content)
     for ctype, contents in ctx_groups.items():
         content = "\n".join(f"  {c}" for c in contents)
+        latest_created = max(
+            (ctx.created_at for ctx in daily_contexts if ctx.context_type == ctype and ctx.created_at),
+            default=None,
+        )
         layers.append(ContextLayer(
             layer_type="daily", source=ctype, priority=3,
             content=f"[{ctype.upper()}]:\n{content}",
             char_count=len(content),
-            created_at=max((ctx.created_at for ctx in daily_contexts if ctx.context_type == ctype), default=None).isoformat() if any(ctx.context_type == ctype and ctx.created_at for ctx in daily_contexts) else "",
+            created_at=latest_created.isoformat() if latest_created else "",
         ))
 
     # Integration layer

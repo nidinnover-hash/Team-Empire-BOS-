@@ -45,8 +45,8 @@ async def test_email_sync_returns_502_on_invalid_grant(client, monkeypatch):
 
     assert response.status_code == 502
     detail = response.json()["detail"]
-    assert "gmail_reconnect_required" in detail
-    assert "Reconnect Gmail" in detail
+    # Error details are now sanitized — no internal codes exposed
+    assert "Email sync failed" in detail
 
 
 async def test_email_health_returns_not_connected_when_missing(client):

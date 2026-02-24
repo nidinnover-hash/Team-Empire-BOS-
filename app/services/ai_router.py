@@ -16,7 +16,10 @@ import logging
 import re
 import time
 from collections import deque
-from typing import cast
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import PLACEHOLDER_AI_KEYS, settings
 from app.core.request_context import get_current_request_id
