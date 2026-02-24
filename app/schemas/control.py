@@ -285,3 +285,17 @@ class CEOMorningBriefRead(BaseModel):
     priority_actions: list[str]
     risk_snapshot: dict
     mode: Literal["suggest_only"]
+
+
+class BrainTrainRequest(BaseModel):
+    challenge: str = Field(default="Increase execution quality with strict data-driven coaching.", min_length=8, max_length=2000)
+    weeks: int = Field(default=1, ge=1, le=12)
+
+
+class BrainTrainRead(BaseModel):
+    ok: bool
+    mode: Literal["suggest_only"]
+    data_collection: dict
+    metrics: dict
+    clone_training: dict
+    ceo_brain: dict

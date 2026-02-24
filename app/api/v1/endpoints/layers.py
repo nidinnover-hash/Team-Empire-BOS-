@@ -4,8 +4,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.schemas.layers import (
+    AISkillRoutingLayerReport,
+    CloneMarketingSalesLayerReport,
+    CloneTrainingLayerReport,
+    EmployeeManagementLayerReport,
     EmployeePerformanceLayerReport,
     MarketingLayerReport,
+    OpportunityAssociationLayerReport,
+    RevenueManagementLayerReport,
+    StaffProsperityLayerReport,
+    StaffTrainingLayerReport,
     StudyLayerReport,
     TrainingLayerReport,
 )
@@ -60,6 +68,110 @@ async def employee_performance_layer(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> EmployeePerformanceLayerReport:
     return await layers_service.get_employee_performance_layer(
+        db=db,
+        organization_id=int(actor["org_id"]),
+        window_days=window_days,
+    )
+
+
+@router.get("/employee-management", response_model=EmployeeManagementLayerReport)
+async def employee_management_layer(
+    window_days: int = Query(30, ge=7, le=180),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> EmployeeManagementLayerReport:
+    return await layers_service.get_employee_management_layer(
+        db=db,
+        organization_id=int(actor["org_id"]),
+        window_days=window_days,
+    )
+
+
+@router.get("/revenue-management", response_model=RevenueManagementLayerReport)
+async def revenue_management_layer(
+    window_days: int = Query(30, ge=7, le=180),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> RevenueManagementLayerReport:
+    return await layers_service.get_revenue_management_layer(
+        db=db,
+        organization_id=int(actor["org_id"]),
+        window_days=window_days,
+    )
+
+
+@router.get("/training-staff", response_model=StaffTrainingLayerReport)
+async def training_staff_layer(
+    window_days: int = Query(30, ge=7, le=180),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> StaffTrainingLayerReport:
+    return await layers_service.get_staff_training_layer(
+        db=db,
+        organization_id=int(actor["org_id"]),
+        window_days=window_days,
+    )
+
+
+@router.get("/ai-skill-routing", response_model=AISkillRoutingLayerReport)
+async def ai_skill_routing_layer(
+    window_days: int = Query(30, ge=7, le=180),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> AISkillRoutingLayerReport:
+    return await layers_service.get_ai_skill_routing_layer(
+        db=db,
+        organization_id=int(actor["org_id"]),
+        window_days=window_days,
+    )
+
+
+@router.get("/staff-prosperity", response_model=StaffProsperityLayerReport)
+async def staff_prosperity_layer(
+    window_days: int = Query(30, ge=7, le=180),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> StaffProsperityLayerReport:
+    return await layers_service.get_staff_prosperity_layer(
+        db=db,
+        organization_id=int(actor["org_id"]),
+        window_days=window_days,
+    )
+
+
+@router.get("/clone-training", response_model=CloneTrainingLayerReport)
+async def clone_training_layer(
+    window_days: int = Query(30, ge=7, le=180),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> CloneTrainingLayerReport:
+    return await layers_service.get_clone_training_layer(
+        db=db,
+        organization_id=int(actor["org_id"]),
+        window_days=window_days,
+    )
+
+
+@router.get("/clone-marketing-sales", response_model=CloneMarketingSalesLayerReport)
+async def clone_marketing_sales_layer(
+    window_days: int = Query(30, ge=7, le=180),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> CloneMarketingSalesLayerReport:
+    return await layers_service.get_clone_marketing_sales_layer(
+        db=db,
+        organization_id=int(actor["org_id"]),
+        window_days=window_days,
+    )
+
+
+@router.get("/opportunity-association", response_model=OpportunityAssociationLayerReport)
+async def opportunity_association_layer(
+    window_days: int = Query(30, ge=7, le=180),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> OpportunityAssociationLayerReport:
+    return await layers_service.get_opportunity_association_layer(
         db=db,
         organization_id=int(actor["org_id"]),
         window_days=window_days,

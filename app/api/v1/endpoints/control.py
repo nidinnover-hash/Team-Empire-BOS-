@@ -26,6 +26,8 @@ from app.models.ceo_control import (
 from app.models.integration import Integration
 from app.models.task import Task
 from app.schemas.control import (
+    BrainTrainRead,
+    BrainTrainRequest,
     CEOMorningBriefRead,
     CEOStatusRead,
     ComplianceReportRead,
@@ -55,6 +57,7 @@ from app.schemas.control import (
     WeeklyBoardPacketRead,
 )
 from app.services import clone_brain, clone_control, compliance_engine, email_control, organization as organization_service
+from app.services import metrics_service, signal_ingestion
 from app.services import sync_scheduler
 
 router = APIRouter(prefix="/control", tags=["CEO Control"])
@@ -696,6 +699,86 @@ async def execute_plan(
             "duplicate_identity_conflicts": quality["duplicate_identity_conflicts"],
             "orphan_approval_count": quality["orphan_approval_count"],
         },
+    )
+
+
+@router.post("/brain/train-data-driven", response_model=BrainTrainRead)
+async def brain_train_data_driven(
+    payload: BrainTrainRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> BrainTrainRead:
+    org_id = int(actor["org_id"])
+    data_collection: dict[str, Any] = {}
+    for name, fn in [
+        ("clickup", signal_ingestion.ingest_clickup_signals),
+        ("github", signal_ingestion.ingest_github_signals),
+        ("github_cicd", signal_ingestion.ingest_github_cicd_signals),
+        ("gmail", signal_ingestion.ingest_gmail_signals),
+    ]:
+        try:
+            data_collection[name] = await fn(db, org_id)
+        except Exception as exc:
+            data_collection[name] = {"ok": False, "error": type(exc).__name__}
+
+    metrics: dict[str, Any]
+    try:
+        metrics_result = await metrics_service.compute_weekly_metrics(db, org_id, weeks=payload.weeks)
+        metrics = metrics_result if isinstance(metrics_result, dict) else {"ok": True}
+    except Exception as exc:
+        metrics = {"ok": False, "error": type(exc).__name__}
+
+    today = datetime.now(timezone.utc).date()
+    week_start = today - timedelta(days=today.weekday())
+    clone_training = await clone_brain.train_weekly_clone_scores(
+        db,
+        organization_id=org_id,
+        week_start_date=week_start,
+    )
+    clone_summary = await clone_brain.clone_org_summary(
+        db,
+        organization_id=org_id,
+        week_start_date=week_start,
+    )
+    dispatch = await clone_brain.build_dispatch_plan(
+        db,
+        organization_id=org_id,
+        challenge=payload.challenge,
+        week_start_date=week_start,
+        top_n=5,
+    )
+    data_quality = await clone_control.data_quality_snapshot(db, organization_id=org_id)
+
+    avg_score_raw = clone_summary.get("avg_score", 0.0)
+    avg_score = float(avg_score_raw) if isinstance(avg_score_raw, (int, float)) else 0.0
+    missing_identity_raw = data_quality.get("missing_identity_count", 0)
+    missing_identity_count = int(missing_identity_raw) if isinstance(missing_identity_raw, int) else 0
+    ceo_brain = {
+        "challenge": payload.challenge,
+        "strict_data_driven_mode": True,
+        "avg_clone_score": avg_score,
+        "dispatch_top_owners": [item.get("employee_name") for item in dispatch[:3]],
+        "training_priorities": [
+            "Close missing identity maps before expanding autonomous workflows."
+            if missing_identity_count > 0
+            else "Maintain identity map coverage across all active employees.",
+            "Coach low-readiness clones with weekly measurable drills.",
+            "Review metrics weekly and only scale strategies with proven outcomes.",
+        ],
+        "confidence": max(0.0, min(1.0, round((avg_score / 100.0) + 0.15, 2))),
+    }
+
+    return BrainTrainRead(
+        ok=True,
+        mode="suggest_only",
+        data_collection=data_collection,
+        metrics=metrics,
+        clone_training={
+            **clone_training,
+            "summary": clone_summary,
+            "dispatch": dispatch,
+        },
+        ceo_brain=ceo_brain,
     )
 
 

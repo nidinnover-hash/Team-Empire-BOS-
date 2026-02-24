@@ -131,3 +131,112 @@ async def test_employee_performance_layer_endpoint_returns_report(client):
     assert body["low_ai_members"] >= 1
     assert "members" in body
     assert len(body["members"]) == 2
+
+
+async def test_employee_management_layer_endpoint_returns_report(client):
+    await client.post(
+        "/api/v1/ops/employees",
+        json={"name": "Emp One", "email": "emp1@test.com", "github_username": "emp1-gh"},
+    )
+    await client.post(
+        "/api/v1/ops/employees",
+        json={"name": "Emp Two", "email": "emp2@test.com", "is_active": False},
+    )
+    await _create_task(client, "Backlog cleanup", "business")
+
+    r = await client.get("/api/v1/layers/employee-management")
+    assert r.status_code == 200
+    body = r.json()
+    assert "management_score" in body
+    assert body["total_employees"] >= 2
+    assert "top_risks" in body
+
+
+async def test_revenue_management_layer_endpoint_returns_report(client):
+    await _create_finance(client, "income", 15000, "sales", "enterprise billing")
+    await _create_finance(client, "expense", 5000, "saas", "subscription stack")
+    r = await client.get("/api/v1/layers/revenue-management")
+    assert r.status_code == 200
+    body = r.json()
+    assert "revenue_health_score" in body
+    assert "net_in_window" in body
+    assert "next_actions" in body
+
+
+async def test_training_staff_layer_endpoint_returns_report(client):
+    await client.post(
+        "/api/v1/memory/team",
+        json={
+            "name": "Staff A",
+            "team": "ops",
+            "role_title": "Coordinator",
+            "ai_level": 2,
+        },
+    )
+    await _create_task(client, "Staff training workshop", "business", due_date=str(date.today()))
+    r = await client.get("/api/v1/layers/training-staff")
+    assert r.status_code == 200
+    body = r.json()
+    assert "training_velocity_score" in body
+    assert body["active_staff"] >= 1
+    assert "top_risks" in body
+
+
+async def test_ai_skill_routing_layer_endpoint_returns_report(client):
+    await client.post(
+        "/api/v1/memory/team",
+        json={
+            "name": "Growth Lead",
+            "team": "sales",
+            "role_title": "Sales Manager",
+            "ai_level": 3,
+            "current_project": "lead conversion automation",
+            "notes": "focus on outreach workflow",
+        },
+    )
+    r = await client.get("/api/v1/layers/ai-skill-routing")
+    assert r.status_code == 200
+    body = r.json()
+    assert "routing_score" in body
+    assert "members" in body
+
+
+async def test_staff_prosperity_layer_endpoint_returns_report(client):
+    await _create_finance(client, "income", 20000, "sales", "monthly revenue")
+    await _create_finance(client, "expense", 8000, "operations", "team costs")
+    await _create_task(client, "Resolve staff backlog", "business", due_date=str(date.today()))
+    r = await client.get("/api/v1/layers/staff-prosperity")
+    assert r.status_code == 200
+    body = r.json()
+    assert "composite_score" in body
+    assert "ceo_message" in body
+
+
+async def test_clone_training_layer_endpoint_returns_report(client):
+    await client.post("/api/v1/ops/employees", json={"name": "Clone Emp", "email": "clone.emp@test.com", "role": "Developer"})
+    r = await client.get("/api/v1/layers/clone-training")
+    assert r.status_code == 200
+    body = r.json()
+    assert "clone_training_score" in body
+    assert "members" in body
+
+
+async def test_clone_marketing_sales_layer_endpoint_returns_report(client):
+    await client.post("/api/v1/ops/employees", json={"name": "Sales Exec", "email": "sales.exec@test.com", "role": "Sales Manager"})
+    await _create_contact(client, "Lead Z", "business", role="buyer", notes="needs conversion support")
+    await _create_task(client, "Sales follow up lead z", "business")
+    r = await client.get("/api/v1/layers/clone-marketing-sales")
+    assert r.status_code == 200
+    body = r.json()
+    assert "lead_pipeline_health_score" in body
+    assert "members" in body
+
+
+async def test_opportunity_association_layer_endpoint_returns_report(client):
+    await client.post("/api/v1/ops/employees", json={"name": "Ops Owner", "email": "ops.owner@test.com", "role": "Operations Manager"})
+    await _create_contact(client, "University Partner", "business", role="admissions head", notes="student visa pipeline growth")
+    r = await client.get("/api/v1/layers/opportunity-association")
+    assert r.status_code == 200
+    body = r.json()
+    assert "association_score" in body
+    assert "top_opportunities" in body

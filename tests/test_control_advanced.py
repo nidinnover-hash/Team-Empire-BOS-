@@ -56,3 +56,14 @@ async def test_control_advanced_endpoints(client):
     mb = morning.json()
     assert mb["mode"] == "suggest_only"
     assert "priority_actions" in mb
+
+    brain = await client.post(
+        "/api/v1/control/brain/train-data-driven",
+        json={"challenge": "Train CEO brain with strict data evidence", "weeks": 1},
+        headers=headers,
+    )
+    assert brain.status_code == 200
+    bb = brain.json()
+    assert bb["mode"] == "suggest_only"
+    assert "data_collection" in bb
+    assert "ceo_brain" in bb
