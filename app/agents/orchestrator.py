@@ -10,7 +10,7 @@ Roles:
 
 import json
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.services.ai_router import call_ai
 
@@ -18,8 +18,8 @@ from app.services.ai_router import call_ai
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class AgentChatRequest(BaseModel):
-    message: str
-    force_role: str | None = None
+    message: str = Field(..., max_length=10_000)
+    force_role: str | None = Field(None, max_length=50)
 
 
 class ProposedAction(BaseModel):

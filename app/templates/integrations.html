@@ -73,10 +73,10 @@
         <hr style="border:0;border-top:1px solid #eeeeee;margin:0.8rem 0">
         <div class="small" style="color:var(--text-faint);margin-bottom:0.55rem">Sync connected integrations:</div>
         <div class="row" style="gap:0.4rem">
-          <button class="btn sync" type="button" onclick="window.syncIntegration('clickup')">Sync ClickUp</button>
-          <button class="btn sync" type="button" onclick="window.syncIntegration('github')">Sync GitHub</button>
-          <button class="btn sync" type="button" onclick="window.syncIntegration('slack')">Sync Slack</button>
-          <button class="btn sync" type="button" onclick="window.syncCalendar()">Sync Calendar</button>
+          <button class="btn sync" type="button" data-sync="clickup">Sync ClickUp</button>
+          <button class="btn sync" type="button" data-sync="github">Sync GitHub</button>
+          <button class="btn sync" type="button" data-sync="slack">Sync Slack</button>
+          <button class="btn sync" type="button" data-sync="calendar">Sync Calendar</button>
         </div>
         <div class="status" id="sync-status" style="margin-top:0.4rem"></div>
         <div class="status" id="connect-status" style="margin-top:0.4rem"></div>

@@ -189,6 +189,8 @@ async def _record_job_run(
     details: dict[str, object] | None = None,
     error: str | None = None,
 ) -> None:
+    if not hasattr(db, "add"):
+        return
     details_json = "{}"
     if details:
         try:
@@ -262,6 +264,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
         ("digitalocean", do_service.sync_digitalocean),
         ("slack", slack_service.sync_slack_messages),
     ]:
+        started = datetime.now(timezone.utc)
         try:
             result = await run_with_retry(
                 lambda _fn=fn: _fn(db, org_id),
@@ -269,13 +272,32 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
                 timeout_seconds=30.0,
                 backoff_seconds=1.0,
             )
-            logger.debug("Sync %s org=%d → %s", name, org_id, result)
+            logger.debug("Sync %s org=%d -> %s", name, org_id, result)
             await _mark_status(name, "ok")
+            await _record_job_run(
+                db,
+                org_id=org_id,
+                job_name=f"{name}_sync",
+                status="ok",
+                started_at=started,
+                finished_at=datetime.now(timezone.utc),
+                details={"result": result if isinstance(result, dict) else {"ok": True}},
+            )
         except Exception as exc:
-            logger.warning("Background %s sync failed org=%d: %s", name, org_id, type(exc).__name__)
+            logger.warning("Background %s sync failed org=%d: %s: %s", name, org_id, type(exc).__name__, str(exc)[:500])
             await _mark_status(name, "error")
+            await _record_job_run(
+                db,
+                org_id=org_id,
+                job_name=f"{name}_sync",
+                status="error",
+                started_at=started,
+                finished_at=datetime.now(timezone.utc),
+                error=f"{type(exc).__name__}: {str(exc)[:500]}",
+            )
 
-    # Google Calendar sync — stored as DailyContext, auto-included in memory
+    # Google Calendar sync - stored as DailyContext, auto-included in memory
+    started = datetime.now(timezone.utc)
     try:
         result = await run_with_retry(
             lambda: sync_calendar_events(db, organization_id=org_id),
@@ -283,21 +305,111 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             timeout_seconds=30.0,
             backoff_seconds=1.0,
         )
-        logger.debug("Sync calendar org=%d → %s", org_id, result)
+        logger.debug("Sync calendar org=%d -> %s", org_id, result)
         await _mark_status("google_calendar", "ok")
+        await _record_job_run(
+            db,
+            org_id=org_id,
+            job_name="google_calendar_sync",
+            status="ok",
+            started_at=started,
+            finished_at=datetime.now(timezone.utc),
+            details={"result": result if isinstance(result, dict) else {"ok": True}},
+        )
     except Exception as exc:
-        logger.warning("Background calendar sync failed org=%d: %s", org_id, type(exc).__name__)
+        logger.warning("Background calendar sync failed org=%d: %s: %s", org_id, type(exc).__name__, str(exc)[:500])
         await _mark_status("google_calendar", "error")
+        await _record_job_run(
+            db,
+            org_id=org_id,
+            job_name="google_calendar_sync",
+            status="error",
+            started_at=started,
+            finished_at=datetime.now(timezone.utc),
+            error=f"{type(exc).__name__}: {str(exc)[:500]}",
+        )
 
+    started = datetime.now(timezone.utc)
     try:
         # Suggest-only compliance scan: records violations, blocks nothing.
-        await compliance_engine.run_compliance(db, org_id)
+        report = await compliance_engine.run_compliance(db, org_id)
+        await _record_job_run(
+            db,
+            org_id=org_id,
+            job_name="compliance_run",
+            status="ok",
+            started_at=started,
+            finished_at=datetime.now(timezone.utc),
+            details={"compliance_score": report.get("compliance_score")},
+        )
+        if hasattr(db, "commit"):
+            await db.commit()
+    except Exception as exc:
+        await _record_job_run(
+            db,
+            org_id=org_id,
+            job_name="compliance_run",
+            status="error",
+            started_at=started,
+            finished_at=datetime.now(timezone.utc),
+            error=f"{type(exc).__name__}: {str(exc)[:500]}",
+        )
+        if hasattr(db, "commit"):
+            await db.commit()
+
+
+async def replay_job_for_org(db: AsyncSession, org_id: int, job_name: str) -> dict[str, object]:
+    """Manually replay a scheduler job for one organization."""
+    from app.services import clickup_service, do_service, github_service, slack_service
+    from app.services import compliance_engine
+    from app.services.calendar_service import sync_calendar_events
+
+    started = datetime.now(timezone.utc)
+    try:
+        if job_name == "clickup_sync":
+            result = await clickup_service.sync_clickup_tasks(db, org_id)
+        elif job_name == "github_sync":
+            result = await github_service.sync_github(db, org_id)
+        elif job_name == "digitalocean_sync":
+            result = await do_service.sync_digitalocean(db, org_id)
+        elif job_name == "slack_sync":
+            result = await slack_service.sync_slack_messages(db, org_id)
+        elif job_name == "google_calendar_sync":
+            result = await sync_calendar_events(db, organization_id=org_id)
+        elif job_name == "compliance_run":
+            result = await compliance_engine.run_compliance(db, org_id)
+        elif job_name == "daily_ceo_summary":
+            await _maybe_generate_daily_ceo_summary(db, org_id)
+            result = {"ok": True}
+        elif job_name == "full_sync":
+            await _run_integrations(db, org_id)
+            result = {"ok": True}
+        else:
+            raise ValueError(f"Unsupported job_name: {job_name}")
+
+        await _record_job_run(
+            db,
+            org_id=org_id,
+            job_name=f"manual_{job_name}",
+            status="ok",
+            started_at=started,
+            finished_at=datetime.now(timezone.utc),
+            details={"result": result if isinstance(result, dict) else {"ok": True}},
+        )
         await db.commit()
-    except Exception:
-        pass
-
-
-# ── On-demand (throttled) trigger ────────────────────────────────────────────
+        return {"ok": True, "job_name": job_name, "result": result}
+    except Exception as exc:
+        await _record_job_run(
+            db,
+            org_id=org_id,
+            job_name=f"manual_{job_name}",
+            status="error",
+            started_at=started,
+            finished_at=datetime.now(timezone.utc),
+            error=f"{type(exc).__name__}: {str(exc)[:500]}",
+        )
+        await db.commit()
+        return {"ok": False, "job_name": job_name, "error": f"{type(exc).__name__}: {str(exc)[:500]}"}
 
 async def trigger_sync_for_org(org_id: int) -> None:
     """
@@ -309,6 +421,11 @@ async def trigger_sync_for_org(org_id: int) -> None:
     last = _last_synced.get(org_id)
     if last and (now - last).total_seconds() < _throttle_minutes() * 60:
         logger.debug("Sync throttled for org=%d (last=%s)", org_id, last.isoformat())
+        return
+
+    _MAX_INFLIGHT = 50
+    if len(_inflight_tasks) >= _MAX_INFLIGHT:
+        logger.warning("Inflight task cap reached (%d), skipping sync for org=%d", _MAX_INFLIGHT, org_id)
         return
 
     _last_synced[org_id] = now
@@ -387,6 +504,7 @@ async def _maybe_generate_daily_ceo_summary(db: AsyncSession, org_id: int) -> No
     day_key = local_now.strftime("%Y-%m-%d")
     if _last_ceo_summary_date_by_org.get(org_id) == day_key:
         return
+    started = datetime.now(timezone.utc)
     report = await compliance_engine.latest_report(db, org_id)
     top_risks = _extract_top_risks(report, limit=5)
     stale_integrations = await _collect_stale_integrations(db, org_id)
@@ -406,6 +524,15 @@ async def _maybe_generate_daily_ceo_summary(db: AsyncSession, org_id: int) -> No
         )
     )
     _last_ceo_summary_date_by_org[org_id] = day_key
+    await _record_job_run(
+        db,
+        org_id=org_id,
+        job_name="daily_ceo_summary",
+        status="ok",
+        started_at=started,
+        finished_at=datetime.now(timezone.utc),
+        details={"top_risks_count": len(top_risks), "stale_integrations_count": len(stale_integrations)},
+    )
     await db.commit()
     await _maybe_send_daily_ceo_slack_summary(
         db=db,
@@ -485,12 +612,23 @@ async def stop_scheduler() -> None:
         except asyncio.CancelledError:
             pass
         _scheduler_task = None
+
     # Wait for any in-flight on-demand syncs to finish
     if _inflight_tasks:
         from app.core.config import settings
+
         grace = settings.SHUTDOWN_GRACE_SECONDS
-        logger.info("Awaiting %d in-flight sync tasks (grace=%ds)…", len(_inflight_tasks), grace)
-        done, pending = await asyncio.wait(_inflight_tasks, timeout=float(grace))
-        for t in pending:
-            t.cancel()
+        alive = {t for t in _inflight_tasks if not t.done()}
+        if not alive:
+            _inflight_tasks.clear()
+            return
+
+        logger.info("Awaiting %d in-flight sync tasks (grace=%ds)...", len(alive), grace)
+        _done, pending = await asyncio.wait(alive, timeout=float(grace))
+        for task in pending:
+            try:
+                task.cancel()
+            except RuntimeError:
+                # Event loop may already be closing during test teardown.
+                pass
         _inflight_tasks.clear()

@@ -163,7 +163,13 @@
         return;
       }
 
-      appendNode('<div class="chat-msg-user">' + esc(message) + '</div>');
+      var userDiv = document.createElement("div");
+      userDiv.className = "chat-msg-user";
+      userDiv.textContent = message;
+      userDiv.style.whiteSpace = "pre-wrap";
+      if (placeholder && placeholder.parentNode) placeholder.remove();
+      history.appendChild(userDiv);
+      history.scrollTop = history.scrollHeight;
       input.value = "";
       sendBtn.disabled = true;
 

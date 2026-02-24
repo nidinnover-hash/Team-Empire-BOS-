@@ -45,6 +45,7 @@ _SENSITIVE_QUERY_KEYS = {
     "hub.verify_token",
     "id_token",
     "password",
+    "redirect_uri",
     "refresh_token",
     "secret",
     "signature",

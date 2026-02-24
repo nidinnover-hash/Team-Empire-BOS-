@@ -85,6 +85,14 @@ jobs:
       - name: Tests with coverage
         run: python -m pytest -q -p no:cacheprovider --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=60
 
+      - name: Governance and Control Suite
+        run: |
+          python -m pytest -q \
+            tests/test_compliance_engine.py \
+            tests/test_control_api.py \
+            tests/test_sync_scheduler.py \
+            -p no:cacheprovider
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4

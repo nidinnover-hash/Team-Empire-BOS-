@@ -214,6 +214,11 @@ async def unhandled_exception_handler(request: Request, _exc: Exception) -> JSON
     )
 
 
+# Dummy hash for timing-safe login — always run verify_password even when
+# user doesn't exist so response time doesn't reveal valid usernames.
+_DUMMY_HASH = "pbkdf2_sha256$100000$QUFBQUFBQUFBQUFBQUFB$QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ=="
+
+
 async def _authenticate_user(
     db: AsyncSession, username: str, password: str, client_ip: str, endpoint: str,
 ):
@@ -228,7 +233,17 @@ async def _authenticate_user(
             detail="Too many failed login attempts. Try again later.",
         )
     user = await user_service.get_user_by_email(db, username)
-    if user is None or not user.is_active or not verify_password(password, user.password_hash):
+
+    # Constant-time: always run PBKDF2 so response time doesn't leak
+    # whether the username exists.  Offload to thread to avoid blocking
+    # the event loop (~100ms of CPU per call).
+    if user is None or not user.is_active:
+        await asyncio.to_thread(verify_password, password, _DUMMY_HASH)
+        valid = False
+    else:
+        valid = await asyncio.to_thread(verify_password, password, user.password_hash)
+
+    if not valid:
         record_login_failure(client_ip)
         _log.warning("Failed login for '%s' from %s on %s", username, client_ip, endpoint)
         audit_kwargs: dict = {
@@ -355,8 +370,8 @@ async def web_session(request: Request) -> dict:
 
 @app.post("/web/agents/chat")
 async def web_agent_chat(
-    message: str = Form(...),
-    force_role: str | None = Form(None),
+    message: str = Form(..., max_length=10_000),
+    force_role: str | None = Form(None, max_length=50),
     _csrf_ok: None = Depends(verify_csrf),
     user: dict = Depends(get_current_web_user),
     db: AsyncSession = Depends(get_db),
@@ -615,13 +630,16 @@ async def dashboard(
         {"total_income": 0, "total_expense": 0, "balance": 0},  # finance
         None, {}, {}, {},  # finance_efficiency, marketing, study, training
         {}, None, None,  # executive, intelligence_summary, intelligence_diff
+        {"critical": 0, "high": 0, "recent": []},  # ceo_action
     )
+    from app.services import compliance_engine
     try:
         (
             commands, tasks, notes, projects, goals, contacts,
             finance, finance_efficiency,
             marketing_layer, study_layer, training_layer,
             executive, intelligence_summary, intelligence_diff,
+            compliance_report,
         ) = await asyncio.wait_for(
             asyncio.gather(
                 command_service.list_commands(db, limit=10, organization_id=org_id),
@@ -638,6 +656,7 @@ async def dashboard(
                 briefing_service.get_executive_briefing(db, org_id=org_id),
                 intelligence_service.build_executive_summary(db=db, organization_id=org_id, window_days=7),
                 intelligence_service.build_change_since_yesterday(db=db, organization_id=org_id),
+                compliance_engine.latest_report(db, org_id),
             ),
             timeout=15.0,
         )
@@ -649,7 +668,24 @@ async def dashboard(
             finance, finance_efficiency,
             marketing_layer, study_layer, training_layer,
             executive, intelligence_summary, intelligence_diff,
+            compliance_report,
         ) = _DASHBOARD_DEFAULTS
+
+    ceo_action = {"critical": 0, "high": 0, "recent": []}
+    if isinstance(compliance_report, dict):
+        violations = compliance_report.get("violations")
+        if isinstance(violations, list):
+            ceo_action["critical"] = sum(1 for v in violations if isinstance(v, dict) and str(v.get("severity", "")).upper() == "CRITICAL")
+            ceo_action["high"] = sum(1 for v in violations if isinstance(v, dict) and str(v.get("severity", "")).upper() == "HIGH")
+            ceo_action["recent"] = [
+                {
+                    "title": str(v.get("title") or "Policy issue"),
+                    "severity": str(v.get("severity") or "MED").upper(),
+                    "platform": str(v.get("platform") or "unknown"),
+                }
+                for v in violations[:5]
+                if isinstance(v, dict)
+            ]
 
     return templates.TemplateResponse(
         request,
@@ -670,6 +706,7 @@ async def dashboard(
             "executive": executive,
             "intelligence_summary": intelligence_summary,
             "intelligence_diff": intelligence_diff,
+            "ceo_action": ceo_action,
             "session_user": user,
             "last_synced_at": last_synced_at,
             "csp_nonce": getattr(request.state, "csp_nonce", ""),

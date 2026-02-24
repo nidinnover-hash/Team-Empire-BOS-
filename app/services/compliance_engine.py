@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.ceo_control import (
     ClickUpTaskSnapshot,
+    DigitalOceanCostSnapshot,
     DigitalOceanDropletSnapshot,
     DigitalOceanTeamSnapshot,
     GitHubIdentityMap,
@@ -66,6 +67,22 @@ def _is_authorized_owner_email(email: str | None) -> bool:
         settings.COMPLIANCE_ALLOW_PERSONAL_OWNER_EXCEPTIONS
         and normalized in _allowed_personal_emails()
     )
+
+
+def _critical_repos() -> set[str]:
+    raw = settings.CRITICAL_GITHUB_REPOS or ""
+    return {x.strip().lower() for x in raw.split(",") if x.strip()}
+
+
+def _repo_is_critical(repo_name: str | None) -> bool:
+    if not repo_name:
+        return False
+    critical = _critical_repos()
+    if not critical:
+        return True
+    normalized = repo_name.strip().lower()
+    short = normalized.split("/")[-1]
+    return normalized in critical or short in critical
 
 
 def _now() -> datetime:
@@ -159,8 +176,12 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 )
             )
         ).scalars().all()
+        unmapped_logins: set[str] = set()
+        critical_repo_roles = [r for r in roles if _repo_is_critical(r.repo_name)]
         for r in roles:
             email = login_to_email.get((r.github_login or "").lower())
+            if (not personal_org) and (r.github_login or "").strip() and not email:
+                unmapped_logins.add((r.github_login or "").strip())
             if (
                 not personal_org
                 and email
@@ -199,6 +220,87 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                         created_at=now,
                     )
                 )
+        if not personal_org and unmapped_logins:
+            for login in sorted(unmapped_logins)[:20]:
+                violations.append(
+                    PolicyViolation(
+                        organization_id=org_id,
+                        platform="github",
+                        severity="MED",
+                        title="GitHub identity mapping missing",
+                        details_json=json.dumps({"github_login": login}),
+                        status="OPEN",
+                        created_at=now,
+                    )
+                )
+        if not personal_org and critical_repo_roles:
+            tech_lead_email = (settings.COMPLIANCE_TECH_LEAD_EMAIL or "").strip().lower()
+            ops_manager_email = (settings.COMPLIANCE_OPS_MANAGER_EMAIL or "").strip().lower()
+            tech_logins = {
+                login for login, mapped in login_to_email.items() if mapped == tech_lead_email
+            }
+            ops_logins = {
+                login for login, mapped in login_to_email.items() if mapped == ops_manager_email
+            }
+
+            if not tech_logins:
+                violations.append(
+                    PolicyViolation(
+                        organization_id=org_id,
+                        platform="github",
+                        severity="HIGH",
+                        title="Tech lead GitHub identity mapping missing",
+                        details_json=json.dumps({"expected_email": tech_lead_email}),
+                        status="OPEN",
+                        created_at=now,
+                    )
+                )
+            else:
+                by_repo: dict[str, list[GitHubRoleSnapshot]] = {}
+                for role in critical_repo_roles:
+                    if not role.repo_name:
+                        continue
+                    by_repo.setdefault(role.repo_name.lower(), []).append(role)
+                for repo_name, repo_roles in by_repo.items():
+                    if not any(
+                        (x.github_login or "").lower() in tech_logins
+                        and (x.repo_permission or "").lower() in {"maintain", "admin"}
+                        for x in repo_roles
+                    ):
+                        violations.append(
+                            PolicyViolation(
+                                organization_id=org_id,
+                                platform="github",
+                                severity="HIGH",
+                                title="Tech lead lacks maintain/admin on critical repo",
+                                details_json=json.dumps({"repo_name": repo_name, "expected_email": tech_lead_email}),
+                                status="OPEN",
+                                created_at=now,
+                            )
+                        )
+            if ops_logins:
+                by_repo: dict[str, list[GitHubRoleSnapshot]] = {}
+                for role in critical_repo_roles:
+                    if not role.repo_name:
+                        continue
+                    by_repo.setdefault(role.repo_name.lower(), []).append(role)
+                for repo_name, repo_roles in by_repo.items():
+                    if not any(
+                        (x.github_login or "").lower() in ops_logins
+                        and (x.repo_permission or "").lower() in {"read", "write", "maintain", "admin"}
+                        for x in repo_roles
+                    ):
+                        violations.append(
+                            PolicyViolation(
+                                organization_id=org_id,
+                                platform="github",
+                                severity="MED",
+                                title="Ops manager lacks visibility on critical repo PR queue",
+                                details_json=json.dumps({"repo_name": repo_name, "expected_email": ops_manager_email}),
+                                status="OPEN",
+                                created_at=now,
+                            )
+                        )
             if (
                 not personal_org
                 and email in _dev_emails()
@@ -276,6 +378,8 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
             )
         ).scalars().all()
         for repo in repos:
+            if not _repo_is_critical(repo.repo_name):
+                continue
             if not repo.is_protected or not repo.requires_reviews:
                 violations.append(
                     PolicyViolation(
@@ -348,6 +452,21 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                         created_at=now,
                     )
                 )
+            updated = t.updated_at_remote
+            if updated and updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)
+            if "block" in (t.status or "").lower() and updated and (now - updated) > timedelta(days=3):
+                violations.append(
+                    PolicyViolation(
+                        organization_id=org_id,
+                        platform="clickup",
+                        severity="HIGH",
+                        title="Blocked critical task > 3 days",
+                        details_json=json.dumps({"task_id": t.external_id, "name": t.name, "status": t.status}),
+                        status="OPEN",
+                        created_at=now,
+                    )
+                )
 
     if do_team_time:
         members = (
@@ -416,6 +535,52 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                         created_at=now,
                     )
                 )
+    recent_costs = (
+        await db.execute(
+            select(DigitalOceanCostSnapshot)
+            .where(
+                DigitalOceanCostSnapshot.organization_id == org_id,
+                DigitalOceanCostSnapshot.synced_at >= now - timedelta(days=60),
+                DigitalOceanCostSnapshot.amount_usd.is_not(None),
+            )
+            .order_by(DigitalOceanCostSnapshot.synced_at.desc())
+        )
+    ).scalars().all()
+    if len(recent_costs) >= 4:
+        recent_window = [
+            float(c.amount_usd)
+            for c in recent_costs
+            if c.synced_at >= now - timedelta(days=30) and c.amount_usd is not None
+        ]
+        previous_window = [
+            float(c.amount_usd)
+            for c in recent_costs
+            if (now - timedelta(days=60)) <= c.synced_at < (now - timedelta(days=30))
+            and c.amount_usd is not None
+        ]
+        if recent_window and previous_window:
+            recent_avg = sum(recent_window) / len(recent_window)
+            previous_avg = sum(previous_window) / len(previous_window)
+            if previous_avg > 0:
+                delta_pct = ((recent_avg - previous_avg) / previous_avg) * 100.0
+                if delta_pct > 30:
+                    violations.append(
+                        PolicyViolation(
+                            organization_id=org_id,
+                            platform="digitalocean",
+                            severity="MED",
+                            title="DigitalOcean cost spike > 30% vs previous 30 days",
+                            details_json=json.dumps(
+                                {
+                                    "recent_avg_usd": round(recent_avg, 2),
+                                    "previous_avg_usd": round(previous_avg, 2),
+                                    "delta_percent": round(delta_pct, 1),
+                                }
+                            ),
+                            status="OPEN",
+                            created_at=now,
+                        )
+                    )
 
     for v in violations:
         db.add(v)

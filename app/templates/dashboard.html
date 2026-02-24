@@ -169,6 +169,33 @@
     </div>
   </div>
 
+  <div class="section-label">CEO Action Center</div>
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">Risk & Compliance Radar</span>
+      <div style="display:flex;gap:.45rem;align-items:center">
+        <span class="card-count">Critical {{ ceo_action.critical }}</span>
+        <span class="card-count">High {{ ceo_action.high }}</span>
+      </div>
+    </div>
+    {% if ceo_action.recent %}
+      {% for item in ceo_action.recent %}
+      <div class="item">
+        <div class="task-row">
+          <div class="item-text">{{ item.title }}</div>
+          <span class="badge b-{{ item.severity|lower }}">{{ item.severity }}</span>
+        </div>
+        <div class="item-meta">{{ item.platform }}</div>
+      </div>
+      {% endfor %}
+      <div class="item">
+        <a href="/api/v1/control/compliance/report" style="color:#999999;text-decoration:none;font-size:.72rem">Open compliance report -></a>
+      </div>
+    {% else %}
+      <div class="empty">No active compliance violations.</div>
+    {% endif %}
+  </div>
+
   <div class="section-label">Executive Snapshot</div>
   <div class="card" style="margin-bottom:1.18rem">
     <div class="card-head">

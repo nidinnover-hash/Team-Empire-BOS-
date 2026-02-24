@@ -13,6 +13,7 @@ Fallback behaviour:
 """
 
 import logging
+import re
 import time
 from collections import deque
 from typing import cast
@@ -24,6 +25,16 @@ logger = logging.getLogger(__name__)
 
 # Error types that should NOT trigger a fallback (permanent / config issues)
 _NO_FALLBACK_ERRORS = ("AuthenticationError", "PermissionDeniedError", "NotFoundError")
+
+# Case-insensitive regex to neutralize prompt-injection tokens in memory context.
+_INJECTION_PATTERNS = [
+    "[MEMORY CONTEXT]", "[END MEMORY]", "[SYSTEM]", "[INSTRUCTIONS]",
+    "[CONTEXT]", "[USER]", "[ASSISTANT]", "[HUMAN]", "[AI]",
+    "[INST]", "[/INST]", "<<SYS>>", "<</SYS>>",
+]
+_INJECTION_RE = re.compile(
+    "|".join(re.escape(p) for p in _INJECTION_PATTERNS), re.IGNORECASE,
+)
 
 # In-memory ring buffer for recent AI calls (last 200) — avoids DB dependency in hot path
 _recent_calls: deque[dict] = deque(maxlen=200)
@@ -151,24 +162,11 @@ async def call_ai(
         # Escape any tokens that could be interpreted as system-level instructions.
         # These originate from user-written memory entries, emails, and task titles —
         # treat them as untrusted data that must not alter the prompt structure.
-        _INJECTION_PATTERNS = [
-            "[MEMORY CONTEXT]",
-            "[END MEMORY]",
-            "[SYSTEM]",
-            "[INSTRUCTIONS]",
-            "[CONTEXT]",
-            "[USER]",
-            "[ASSISTANT]",
-            "[HUMAN]",
-            "[AI]",
-            "[INST]",
-            "[/INST]",
-            "<<SYS>>",
-            "<</SYS>>",
-        ]
         safe_context = memory_context
-        for pat in _INJECTION_PATTERNS:
-            safe_context = safe_context.replace(pat, f"{pat[:1]}~{pat[1:]}")
+        safe_context = _INJECTION_RE.sub(
+            lambda m: m.group(0)[:1] + "~" + m.group(0)[1:],
+            safe_context,
+        )
         if len(safe_context) > 4000:
             safe_context = safe_context[:4000] + "\n... (memory truncated)"
         full_system = (

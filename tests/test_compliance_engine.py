@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from app.db.base import Base
@@ -7,6 +7,7 @@ from app.db.session import AsyncSessionLocal
 from app.models.ceo_control import (
     DigitalOceanTeamSnapshot,
     GitHubIdentityMap,
+    ClickUpTaskSnapshot,
     GitHubRepoSnapshot,
     GitHubRoleSnapshot,
 )
@@ -224,3 +225,51 @@ async def test_compliance_allows_configured_personal_owner_exception():
         settings.PERSONAL_ORG_ID = prev_personal_org
         settings.COMPLIANCE_ALLOWED_PERSONAL_EMAILS = prev_allowed
         settings.COMPLIANCE_ALLOW_PERSONAL_OWNER_EXCEPTIONS = prev_allow_owner
+
+
+async def test_compliance_flags_blocked_critical_task_over_3_days():
+    await _ensure_tables()
+    async with AsyncSessionLocal() as db:
+        now = datetime.now(timezone.utc)
+        db.add(
+            ClickUpTaskSnapshot(
+                organization_id=1,
+                external_id="CU-1",
+                name="Critical API migration",
+                status="blocked",
+                assignees='["mano@empireoe.com"]',
+                due_date=now,
+                priority="high",
+                tags='["CEO-PRIORITY"]',
+                list_id="L1",
+                folder_id="F1",
+                url="https://clickup/task/1",
+                updated_at_remote=now - timedelta(days=4),
+                synced_at=now,
+            )
+        )
+        await db.commit()
+        result = await compliance_engine.run_compliance(db, 1)
+        titles = {v["title"] for v in result["violations"]}
+        assert "Blocked critical task > 3 days" in titles
+
+
+async def test_compliance_flags_unmapped_github_identity():
+    await _ensure_tables()
+    async with AsyncSessionLocal() as db:
+        now = datetime.now(timezone.utc)
+        db.add(
+            GitHubRoleSnapshot(
+                organization_id=1,
+                org_login="EmpireO.AI",
+                github_login="unknown-login",
+                org_role="member",
+                repo_name="EmpireO.AI/core",
+                repo_permission="write",
+                synced_at=now,
+            )
+        )
+        await db.commit()
+        result = await compliance_engine.run_compliance(db, 1)
+        titles = {v["title"] for v in result["violations"]}
+        assert "GitHub identity mapping missing" in titles

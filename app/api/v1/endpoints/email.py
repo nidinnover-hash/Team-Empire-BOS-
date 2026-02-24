@@ -1,7 +1,10 @@
 import asyncio
+import logging
 from collections import deque as _deque
 from time import time
 from typing import Any, cast
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import Header
@@ -162,9 +165,10 @@ async def sync_emails(
             actor_user_id=int(current_user["id"]),
         )
     except EmailSyncError as exc:
+        logger.warning("Email sync failed org=%d: [%s] %s", org_id, exc.code, exc.message)
         raise HTTPException(
             status_code=502,
-            detail=f"Email sync failed [{exc.code}]: {exc.message}",
+            detail="Email sync failed. Check the Integrations page for connection status.",
         ) from exc
     response = SyncResult(
         new_emails=new_count,

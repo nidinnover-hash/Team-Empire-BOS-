@@ -196,6 +196,16 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("SYNC_STALE_HOURS must be <= 168 (7 days)")
     if not (s.GITHUB_ORG or "").strip() and (s.GITHUB_APP_ID or s.GITHUB_PRIVATE_KEY_PEM):
         issues.append("GITHUB_ORG must be set when GitHub App auth is configured")
+    owner_emails = [x.strip().lower() for x in (s.COMPLIANCE_OWNER_EMAILS or "").split(",") if x.strip()]
+    if not owner_emails:
+        issues.append("COMPLIANCE_OWNER_EMAILS must include at least one owner email")
+    company_domain = (s.COMPLIANCE_COMPANY_DOMAIN or "").strip().lower()
+    if company_domain:
+        bad_owner_emails = [e for e in owner_emails if "@" not in e or not e.endswith(f"@{company_domain}")]
+        if bad_owner_emails and not s.COMPLIANCE_ALLOW_PERSONAL_OWNER_EXCEPTIONS:
+            issues.append("COMPLIANCE_OWNER_EMAILS must match COMPLIANCE_COMPANY_DOMAIN unless personal owner exceptions are enabled")
+    if s.COMPLIANCE_ALLOW_PERSONAL_OWNER_EXCEPTIONS and not (s.COMPLIANCE_ALLOWED_PERSONAL_EMAILS or "").strip():
+        issues.append("COMPLIANCE_ALLOWED_PERSONAL_EMAILS must be set when COMPLIANCE_ALLOW_PERSONAL_OWNER_EXCEPTIONS=true")
 
     # --- Rate limiting / idempotency ---
     idem_backend = s.IDEMPOTENCY_BACKEND

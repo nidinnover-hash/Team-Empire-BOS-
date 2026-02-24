@@ -90,3 +90,29 @@ async def test_control_github_identity_map_upsert_and_list(client):
     payload = listing.json()
     assert payload["count"] >= 1
     assert any(item["company_email"] == "sharon@empireoe.com" for item in payload["items"])
+
+
+async def test_control_integrations_health_endpoint(client):
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    resp = await client.get("/api/v1/control/integrations/health", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "items" in body
+    assert "stale_count" in body
+    assert "failing_count" in body
+
+
+async def test_control_scheduler_jobs_endpoints(client):
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    replay = await client.post(
+        "/api/v1/control/jobs/replay",
+        json={"job_name": "compliance_run"},
+        headers=headers,
+    )
+    assert replay.status_code == 200
+    assert replay.json()["job_name"] == "compliance_run"
+
+    listing = await client.get("/api/v1/control/jobs/runs", headers=headers)
+    assert listing.status_code == 200
+    body = listing.json()
+    assert "items" in body

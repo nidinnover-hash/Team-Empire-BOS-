@@ -5,10 +5,10 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.models.approval import Approval
@@ -19,24 +19,36 @@ from app.models.ceo_control import (
     GitHubIdentityMap,
     GitHubPRSnapshot,
     GitHubRepoSnapshot,
+    SchedulerJobRun,
 )
 from app.models.integration import Integration
 from app.models.task import Task
+from app.schemas.control import (
+    CEOStatusRead,
+    ComplianceReportRead,
+    ComplianceRunRead,
+    GitHubIdentityMapListRead,
+    GitHubIdentityMapUpsertRead,
+    GitHubIdentityMapUpsertRequest,
+    HealthSummaryRead,
+    IntegrationHealthRead,
+    MessageDraftRead,
+    MessageDraftRequest,
+    SchedulerJobRunListRead,
+    SchedulerReplayRead,
+    SchedulerReplayRequest,
+)
 from app.services import compliance_engine
+from app.services import sync_scheduler
 
 router = APIRouter(prefix="/control", tags=["CEO Control"])
 
 
-class GitHubIdentityMapUpsert(BaseModel):
-    company_email: str = Field(..., min_length=5, max_length=320)
-    github_login: str = Field(..., min_length=1, max_length=255)
-
-
-@router.get("/health-summary")
+@router.get("/health-summary", response_model=HealthSummaryRead)
 async def health_summary(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
-) -> dict[str, Any]:
+) -> HealthSummaryRead:
     org_id = int(actor["org_id"])
     open_tasks = (
         await db.execute(
@@ -71,13 +83,13 @@ async def health_summary(
             )
         )
     ).scalar_one()
-    return {
-        "open_tasks": int(open_tasks or 0),
-        "pending_approvals": int(pending_approvals or 0),
-        "connected_integrations": int(connected_integrations or 0),
-        "failing_integrations": int(failing_integrations or 0),
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-    }
+    return HealthSummaryRead(
+        open_tasks=int(open_tasks or 0),
+        pending_approvals=int(pending_approvals or 0),
+        connected_integrations=int(connected_integrations or 0),
+        failing_integrations=int(failing_integrations or 0),
+        generated_at=datetime.now(timezone.utc).isoformat(),
+    )
 
 
 def _top_prs_waiting_sharon(prs: list[GitHubPRSnapshot]) -> list[dict[str, Any]]:
@@ -97,11 +109,11 @@ def _top_prs_waiting_sharon(prs: list[GitHubPRSnapshot]) -> list[dict[str, Any]]
     return rows[:10]
 
 
-@router.get("/ceo/status")
+@router.get("/ceo/status", response_model=CEOStatusRead)
 async def ceo_status(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
-) -> dict[str, Any]:
+) -> CEOStatusRead:
     org_id = int(actor["org_id"])
 
     tasks = (
@@ -188,46 +200,87 @@ async def ceo_status(
                     }
                 )
 
-    return {
-        "top_overdue_critical_tasks": overdue[:10],
-        "prs_waiting_sharon_review": _top_prs_waiting_sharon(prs),
-        "branch_protection_issues": branch_issues,
-        "infra_risks": infra_risks,
-        "cost_alerts": cost_alerts,
-        "mode": "suggest_only",
-    }
+    return CEOStatusRead(
+        top_overdue_critical_tasks=overdue[:10],
+        prs_waiting_sharon_review=_top_prs_waiting_sharon(prs),
+        branch_protection_issues=branch_issues,
+        infra_risks=infra_risks,
+        cost_alerts=cost_alerts,
+        mode="suggest_only",
+    )
 
 
-@router.post("/compliance/run")
+@router.get("/integrations/health", response_model=IntegrationHealthRead)
+async def integrations_health(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> IntegrationHealthRead:
+    org_id = int(actor["org_id"])
+    now = datetime.now(timezone.utc)
+    cutoff = now.timestamp() - (settings.SYNC_STALE_HOURS * 3600)
+    rows = (
+        await db.execute(
+            select(Integration).where(
+                Integration.organization_id == org_id,
+                Integration.status == "connected",
+            )
+        )
+    ).scalars().all()
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        age_hours: float | None = None
+        if row.last_sync_at:
+            age_hours = round((now - row.last_sync_at).total_seconds() / 3600, 2)
+        stale = bool(row.last_sync_at is None or row.last_sync_at.timestamp() < cutoff or row.last_sync_status == "error")
+        items.append(
+            {
+                "type": row.type,
+                "connected": row.status == "connected",
+                "last_sync_status": row.last_sync_status,
+                "last_sync_at": row.last_sync_at,
+                "stale": stale,
+                "age_hours": age_hours,
+            }
+        )
+    return IntegrationHealthRead(
+        generated_at=now,
+        stale_hours_threshold=int(settings.SYNC_STALE_HOURS),
+        total_connected=len(items),
+        failing_count=sum(1 for x in items if x.get("last_sync_status") == "error"),
+        stale_count=sum(1 for x in items if x.get("stale")),
+        items=items,
+    )
+
+
+@router.post("/compliance/run", response_model=ComplianceRunRead)
 async def compliance_run(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
-) -> dict[str, Any]:
+) -> ComplianceRunRead:
     org_id = int(actor["org_id"])
     result = await compliance_engine.run_compliance(db, org_id)
-    return {"ok": True, **result, "mode": "suggest_only"}
+    return ComplianceRunRead(ok=True, compliance_score=int(result["compliance_score"]), violations=result["violations"], mode="suggest_only")
 
 
-@router.get("/compliance/report")
+@router.get("/compliance/report", response_model=ComplianceReportRead)
 async def compliance_report(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
-) -> dict[str, Any]:
+) -> ComplianceReportRead:
     org_id = int(actor["org_id"])
-    return await compliance_engine.latest_report(db, org_id)
+    data = await compliance_engine.latest_report(db, org_id)
+    return ComplianceReportRead(**data)
 
 
-@router.post("/message-draft")
+@router.post("/message-draft", response_model=MessageDraftRead)
 async def message_draft(
-    payload: dict[str, Any],
+    payload: MessageDraftRequest,
     _db: AsyncSession = Depends(get_db),
     _actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
-) -> dict[str, Any]:
-    to = str(payload.get("to") or "").strip().lower()
-    topic = str(payload.get("topic") or "Compliance follow-up")
-    violations = payload.get("violations") or []
-    if not isinstance(violations, list):
-        violations = []
+) -> MessageDraftRead:
+    to = str(payload.to or "").strip().lower()
+    topic = str(payload.topic or "Compliance follow-up")
+    violations = payload.violations or []
 
     intro = "Hi Sharon," if to == "sharon" else "Hi Mano,"
     bullet_lines = []
@@ -253,14 +306,14 @@ async def message_draft(
             "This is suggest-only guidance; no automatic enforcement actions were taken.",
         ]
     )
-    return {"to": to, "message": text, "checklist": checklist}
+    return MessageDraftRead(to=to, message=text, checklist=checklist)
 
 
-@router.get("/github-identity-map")
+@router.get("/github-identity-map", response_model=GitHubIdentityMapListRead)
 async def github_identity_map_list(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
-) -> dict[str, Any]:
+) -> GitHubIdentityMapListRead:
     org_id = int(actor["org_id"])
     rows = (
         await db.execute(
@@ -269,9 +322,9 @@ async def github_identity_map_list(
             .order_by(GitHubIdentityMap.company_email.asc())
         )
     ).scalars().all()
-    return {
-        "count": len(rows),
-        "items": [
+    return GitHubIdentityMapListRead(
+        count=len(rows),
+        items=[
             {
                 "company_email": row.company_email,
                 "github_login": row.github_login,
@@ -279,15 +332,15 @@ async def github_identity_map_list(
             }
             for row in rows
         ],
-    }
+    )
 
 
-@router.post("/github-identity-map/upsert")
+@router.post("/github-identity-map/upsert", response_model=GitHubIdentityMapUpsertRead)
 async def github_identity_map_upsert(
-    payload: GitHubIdentityMapUpsert,
+    payload: GitHubIdentityMapUpsertRequest,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
-) -> dict[str, Any]:
+) -> GitHubIdentityMapUpsertRead:
     org_id = int(actor["org_id"])
     company_email = payload.company_email.strip().lower()
     github_login = payload.github_login.strip().lower()
@@ -315,4 +368,52 @@ async def github_identity_map_upsert(
             )
         )
     await db.commit()
-    return {"ok": True, "company_email": company_email, "github_login": github_login}
+    return GitHubIdentityMapUpsertRead(ok=True, company_email=company_email, github_login=github_login)
+
+
+@router.get("/jobs/runs", response_model=SchedulerJobRunListRead)
+async def scheduler_job_runs(
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> SchedulerJobRunListRead:
+    org_id = int(actor["org_id"])
+    safe_limit = max(1, min(limit, 200))
+    rows = (
+        await db.execute(
+            select(SchedulerJobRun)
+            .where(SchedulerJobRun.organization_id == org_id)
+            .order_by(SchedulerJobRun.started_at.desc())
+            .limit(safe_limit)
+        )
+    ).scalars().all()
+    items = [
+        {
+            "id": row.id,
+            "job_name": row.job_name,
+            "status": row.status,
+            "started_at": row.started_at,
+            "finished_at": row.finished_at,
+            "duration_ms": row.duration_ms,
+            "details": json.loads(row.details_json or "{}"),
+            "error": row.error,
+        }
+        for row in rows
+    ]
+    return SchedulerJobRunListRead(count=len(items), items=items)
+
+
+@router.post("/jobs/replay", response_model=SchedulerReplayRead)
+async def scheduler_job_replay(
+    payload: SchedulerReplayRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> SchedulerReplayRead:
+    org_id = int(actor["org_id"])
+    result = await sync_scheduler.replay_job_for_org(db, org_id, payload.job_name)
+    return SchedulerReplayRead(
+        ok=bool(result.get("ok")),
+        job_name=str(result.get("job_name") or payload.job_name),
+        result=result.get("result") if isinstance(result.get("result"), dict) else None,
+        error=str(result.get("error")) if result.get("error") else None,
+    )

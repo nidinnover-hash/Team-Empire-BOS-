@@ -576,6 +576,15 @@
     });
   }
 
+  // ── Delegate sync button clicks via data-sync attributes ─────────────────
+  document.addEventListener("click", function(e) {
+    var btn = e.target.closest("[data-sync]");
+    if (!btn) return;
+    var name = btn.getAttribute("data-sync");
+    if (name === "calendar") { window.syncCalendar(); }
+    else { window.syncIntegration(name); }
+  });
+
   // ── Boot ───────────────────────────────────────────────────────────────────
   try {
     await bootToken();

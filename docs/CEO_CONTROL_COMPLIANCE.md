@@ -21,11 +21,14 @@ This layer is **suggest-only**. It never blocks deployment, deletes resources, o
 - `GET /api/v1/integrations/digitalocean/status`
 - `POST /api/v1/integrations/digitalocean/sync`
 - `GET /api/v1/control/ceo/status`
+- `GET /api/v1/control/integrations/health`
 - `POST /api/v1/control/compliance/run`
 - `GET /api/v1/control/compliance/report`
 - `POST /api/v1/control/message-draft`
 - `GET /api/v1/control/github-identity-map`
 - `POST /api/v1/control/github-identity-map/upsert`
+- `GET /api/v1/control/jobs/runs`
+- `POST /api/v1/control/jobs/replay`
 
 ## Scheduler
 
@@ -43,3 +46,5 @@ This layer is **suggest-only**. It never blocks deployment, deletes resources, o
 4. Manage GitHub login mapping for accurate compliance:
    - `POST /api/v1/control/github-identity-map/upsert` with
      `{ "company_email": "sharon@empireoe.com", "github_login": "sharonempire" }`
+5. Replay scheduler jobs manually (for failed sync recovery):
+   - `POST /api/v1/control/jobs/replay` with `{ "job_name": "github_sync" }`

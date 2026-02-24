@@ -670,6 +670,7 @@ async def send_approved_compose(
         expires_at=expires_at,
     ))
     if not sent:
+        logger.warning("Gmail compose-send failed — rolled back approval %d", approval.id)
         await db.execute(
             update(Approval)
             .where(Approval.id == approval.id, Approval.executed_at == _claim_ts)
@@ -813,6 +814,7 @@ async def send_approved_reply(
         )
     else:
         # Gmail send failed — atomic rollback so only our claim is released
+        logger.warning("Gmail send failed for email %d — rolled back approval %d", email_id, approval.id)
         await db.execute(
             update(Approval)
             .where(Approval.id == approval.id, Approval.executed_at == _claim_ts)
