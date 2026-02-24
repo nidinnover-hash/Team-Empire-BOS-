@@ -50,3 +50,9 @@ async def test_control_advanced_endpoints(client):
     ps = posture.json()
     assert "status" in ps
     assert "open_issues" in ps
+
+    morning = await client.get("/api/v1/control/ceo/morning-brief", headers=headers)
+    assert morning.status_code == 200
+    mb = morning.json()
+    assert mb["mode"] == "suggest_only"
+    assert "priority_actions" in mb

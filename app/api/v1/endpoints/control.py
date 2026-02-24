@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -26,6 +26,7 @@ from app.models.ceo_control import (
 from app.models.integration import Integration
 from app.models.task import Task
 from app.schemas.control import (
+    CEOMorningBriefRead,
     CEOStatusRead,
     ComplianceReportRead,
     ComplianceRunRead,
@@ -77,6 +78,32 @@ def _integration_state(
     if age_hours >= stale_hours:
         return "stale"
     return "healthy"
+
+
+def _integration_suggested_actions(
+    *,
+    integration_type: str,
+    state: str,
+    last_sync_status: str | None,
+    age_hours: float | None,
+    stale_hours: int,
+) -> list[str]:
+    actions: list[str] = []
+    if state == "down":
+        actions.append(f"Connect {integration_type} using /api/v1/integrations/{integration_type}/connect.")
+        return actions
+    if last_sync_status == "error":
+        actions.append(f"Run /api/v1/integrations/{integration_type}/status and verify token/scopes.")
+        actions.append(f"Replay sync via /api/v1/integrations/{integration_type}/sync.")
+    if state == "stale":
+        actions.append(f"Sync is stale ({age_hours or 'unknown'}h). Run /api/v1/integrations/{integration_type}/sync.")
+    if state == "degraded" and last_sync_status != "error":
+        actions.append("Connection exists but health is degraded; run status + sync to refresh metadata.")
+    if not actions:
+        actions.append(f"{integration_type} integration is healthy; keep hourly sync enabled.")
+    if age_hours is not None and age_hours >= (stale_hours * 2):
+        actions.append("Escalate to owner if stale over 2x SLA window.")
+    return actions[:3]
 
 
 @router.get("/health-summary", response_model=HealthSummaryRead)
@@ -284,6 +311,13 @@ async def integrations_health(
                 "last_sync_at": row.last_sync_at,
                 "stale": stale,
                 "age_hours": age_hours,
+                "suggested_actions": _integration_suggested_actions(
+                    integration_type=row.type,
+                    state=state,
+                    last_sync_status=row.last_sync_status,
+                    age_hours=age_hours,
+                    stale_hours=stale_hours,
+                ),
             }
         )
     return IntegrationHealthRead(
@@ -572,19 +606,41 @@ async def scheduler_job_runs(
             .limit(safe_limit)
         )
     ).scalars().all()
-    items = [
-        {
-            "id": row.id,
-            "job_name": row.job_name,
-            "status": row.status,
-            "started_at": row.started_at,
-            "finished_at": row.finished_at,
-            "duration_ms": row.duration_ms,
-            "details": json.loads(row.details_json or "{}"),
-            "error": row.error,
-        }
-        for row in rows
-    ]
+    runs_by_job: dict[str, list[SchedulerJobRun]] = {}
+    for row in rows:
+        runs_by_job.setdefault(row.job_name, []).append(row)
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        job_runs = sorted(runs_by_job.get(row.job_name, []), key=lambda r: r.started_at, reverse=True)
+        failure_streak = 0
+        for run in job_runs:
+            if run.status == "error":
+                failure_streak += 1
+            else:
+                break
+        retry_backoff_seconds: int | None = None
+        suggested_next_retry_at: datetime | None = None
+        if row.status == "error":
+            backoff_seconds = min(3600, 60 * (2 ** max(0, failure_streak - 1)))
+            retry_backoff_seconds = backoff_seconds
+            suggested_next_retry_at = row.started_at + timedelta(seconds=backoff_seconds)
+        dead_letter_candidate = bool(row.status == "error" and failure_streak >= 3)
+        items.append(
+            {
+                "id": row.id,
+                "job_name": row.job_name,
+                "status": row.status,
+                "started_at": row.started_at,
+                "finished_at": row.finished_at,
+                "duration_ms": row.duration_ms,
+                "details": json.loads(row.details_json or "{}"),
+                "error": row.error,
+                "failure_streak": failure_streak,
+                "retry_backoff_seconds": retry_backoff_seconds,
+                "suggested_next_retry_at": suggested_next_retry_at,
+                "dead_letter_candidate": dead_letter_candidate,
+            }
+        )
     return SchedulerJobRunListRead(count=len(items), items=items)
 
 
@@ -823,4 +879,40 @@ async def founder_playbook_today(
         strategic_growth_actions=strategic_growth_actions[:5],
         evening_reflection=evening_reflection,
         coaching_prompts=coaching_prompts,
+    )
+
+
+@router.get("/ceo/morning-brief", response_model=CEOMorningBriefRead)
+async def ceo_morning_brief(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> CEOMorningBriefRead:
+    org_id = int(actor["org_id"])
+    now = datetime.now(timezone.utc)
+    ceo = await ceo_status(db=db, actor=actor)
+    quality = await clone_control.data_quality_snapshot(db, organization_id=org_id)
+    sla = await clone_control.manager_sla_snapshot(db, organization_id=org_id)
+    priority_actions: list[str] = []
+    if sla.get("pending_approvals_breached", 0):
+        priority_actions.append(f"Clear {sla['pending_approvals_breached']} approval SLA breaches.")
+    if quality.get("missing_identity_count", 0):
+        priority_actions.append(f"Resolve {quality['missing_identity_count']} missing identity mappings.")
+    if ceo.branch_protection_issues:
+        priority_actions.append(f"Fix branch protection gaps on {len(ceo.branch_protection_issues)} critical repos.")
+    if ceo.infra_risks:
+        priority_actions.append(f"Review {len(ceo.infra_risks)} infra backup risks in DigitalOcean.")
+    if not priority_actions:
+        priority_actions.append("No critical blockers detected. Focus on strategic execution plan.")
+    return CEOMorningBriefRead(
+        generated_at=now,
+        priority_actions=priority_actions[:5],
+        risk_snapshot={
+            "overdue_critical_tasks": len(ceo.top_overdue_critical_tasks),
+            "prs_waiting_sharon_review": len(ceo.prs_waiting_sharon_review),
+            "branch_protection_issues": len(ceo.branch_protection_issues),
+            "infra_risks": len(ceo.infra_risks),
+            "cost_alerts": len(ceo.cost_alerts),
+            "sla_status": sla.get("status", "unknown"),
+        },
+        mode="suggest_only",
     )

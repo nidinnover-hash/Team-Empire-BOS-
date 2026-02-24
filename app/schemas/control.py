@@ -123,6 +123,10 @@ class SchedulerJobRunItem(BaseModel):
     duration_ms: int | None = None
     details: dict
     error: str | None = None
+    failure_streak: int = 0
+    retry_backoff_seconds: int | None = None
+    suggested_next_retry_at: datetime | None = None
+    dead_letter_candidate: bool = False
 
 
 class SchedulerJobRunListRead(BaseModel):
@@ -158,6 +162,7 @@ class IntegrationHealthItem(BaseModel):
     last_sync_at: datetime | None = None
     stale: bool
     age_hours: float | None = None
+    suggested_actions: list[str] = Field(default_factory=list)
 
 
 class IntegrationHealthRead(BaseModel):
@@ -273,3 +278,10 @@ class FounderPlaybookRead(BaseModel):
     strategic_growth_actions: list[str]
     evening_reflection: list[str]
     coaching_prompts: list[str]
+
+
+class CEOMorningBriefRead(BaseModel):
+    generated_at: datetime
+    priority_actions: list[str]
+    risk_snapshot: dict
+    mode: Literal["suggest_only"]

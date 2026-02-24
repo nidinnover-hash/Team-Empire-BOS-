@@ -165,3 +165,20 @@ class DigitalOceanSyncResult(BaseModel):
     droplets: int
     members: int
     error: str | None = None
+
+
+class IntegrationSetupItem(BaseModel):
+    key: str
+    label: str
+    connected: bool
+    connect_endpoint: str
+    status_endpoint: str
+    sync_endpoint: str
+    next_step: str
+
+
+class IntegrationSetupGuideRead(BaseModel):
+    generated_at: datetime
+    ready_count: int
+    total_count: int
+    items: list[IntegrationSetupItem]

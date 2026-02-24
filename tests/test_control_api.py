@@ -102,6 +102,7 @@ async def test_control_integrations_health_endpoint(client):
     assert "failing_count" in body
     if body["items"]:
         assert body["items"][0]["state"] in {"healthy", "degraded", "stale", "down"}
+        assert "suggested_actions" in body["items"][0]
 
 
 async def test_control_system_health_endpoint(client):
@@ -128,3 +129,16 @@ async def test_control_scheduler_jobs_endpoints(client):
     assert listing.status_code == 200
     body = listing.json()
     assert "items" in body
+    if body["items"]:
+        assert "failure_streak" in body["items"][0]
+        assert "dead_letter_candidate" in body["items"][0]
+
+
+async def test_control_ceo_morning_brief(client):
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    resp = await client.get("/api/v1/control/ceo/morning-brief", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["mode"] == "suggest_only"
+    assert "priority_actions" in body
+    assert "risk_snapshot" in body

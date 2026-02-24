@@ -29,6 +29,7 @@ from app.schemas.integration import (
     GoogleAuthUrlRead,
     GoogleOAuthCallbackRequest,
     IntegrationConnectRequest,
+    IntegrationSetupGuideRead,
     IntegrationRead,
     IntegrationTestResult,
     WhatsAppSendRequest,
@@ -113,6 +114,47 @@ async def connect_integration(
         payload_json={"type": item.type, "status": item.status},
     )
     return _redact_integration(item)
+
+
+@router.get("/setup-guide", response_model=IntegrationSetupGuideRead)
+async def integration_setup_guide(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> IntegrationSetupGuideRead:
+    now = datetime.now(timezone.utc)
+    org_id = int(actor["org_id"])
+    specs = [
+        ("github", "GitHub", "/api/v1/integrations/github/connect", "/api/v1/integrations/github/status", "/api/v1/integrations/github/sync"),
+        ("clickup", "ClickUp", "/api/v1/integrations/clickup/connect", "/api/v1/integrations/clickup/status", "/api/v1/integrations/clickup/sync"),
+        ("digitalocean", "DigitalOcean", "/api/v1/integrations/digitalocean/connect", "/api/v1/integrations/digitalocean/status", "/api/v1/integrations/digitalocean/sync"),
+        ("slack", "Slack", "/api/v1/integrations/slack/connect", "/api/v1/integrations/slack/status", "/api/v1/integrations/slack/sync"),
+    ]
+    items: list[dict[str, object]] = []
+    for key, label, connect_ep, status_ep, sync_ep in specs:
+        row = await integration_service.get_integration_by_type(db, org_id, key)
+        connected = bool(row and row.status == "connected")
+        if connected:
+            next_step = f"Run {sync_ep} and verify /api/v1/control/integrations/health."
+        else:
+            next_step = f"Connect via {connect_ep} with token, then run {sync_ep}."
+        items.append(
+            {
+                "key": key,
+                "label": label,
+                "connected": connected,
+                "connect_endpoint": connect_ep,
+                "status_endpoint": status_ep,
+                "sync_endpoint": sync_ep,
+                "next_step": next_step,
+            }
+        )
+    ready_count = sum(1 for item in items if bool(item["connected"]))
+    return IntegrationSetupGuideRead(
+        generated_at=now,
+        ready_count=ready_count,
+        total_count=len(items),
+        items=items,
+    )
 
 
 # ── Google Calendar (literal prefix — must be before /{integration_id}/…) ─────
