@@ -12,7 +12,7 @@ from datetime import date, datetime, timezone
 import logging
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -92,7 +92,7 @@ async def upsert_profile_memory(
         try:
             await db.commit()
             await db.refresh(existing)
-        except Exception:
+        except SQLAlchemyError:
             await db.rollback()
             raise
         return existing
@@ -127,7 +127,7 @@ async def upsert_profile_memory(
         await db.commit()
         await db.refresh(existing)
         return existing
-    except Exception:
+    except SQLAlchemyError:
         await db.rollback()
         raise
     return new_entry
@@ -149,7 +149,7 @@ async def delete_profile_memory(
     await db.delete(entry)
     try:
         await db.commit()
-    except Exception:
+    except SQLAlchemyError:
         await db.rollback()
         raise
     return True

@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, ORJSONResponse, Redire
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select as sa_select, update as sa_update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.router import api_router
@@ -282,7 +283,7 @@ async def _authenticate_user(
                 db.add(user)
                 await db.commit()
                 _log.info("Rehashed password for user %d (%s -> 600k iterations)", user.id, iter_str)
-        except Exception:
+        except (ValueError, TypeError, SQLAlchemyError):
             _log.debug("Password rehash skipped for user %d", user.id, exc_info=True)
 
     if not valid:
@@ -335,7 +336,7 @@ def _create_jwt(user) -> str:
 
 
 def _resolve_login_profile(email: str) -> dict[str, str]:
-    return resolve_login_profile(email)
+    return cast(dict[str, str], resolve_login_profile(email))
 
 
 def _read_avatar_scope(user: dict[str, Any], requested_mode: str) -> str:
@@ -471,7 +472,7 @@ async def web_logout(
             )
         )
         await db.commit()
-    except Exception:
+    except SQLAlchemyError:
         pass  # Cookie deletion still happens even if DB bump fails
 
     response.delete_cookie("pc_session", path="/")
@@ -726,7 +727,7 @@ async def health_check():
     try:
         async with engine.connect() as conn:
             await asyncio.wait_for(conn.execute(text("SELECT 1")), timeout=3.0)
-    except Exception as exc:
+    except (SQLAlchemyError, TimeoutError) as exc:
         logging.getLogger(__name__).warning("Health DB probe failed: %s", type(exc).__name__)
         db_ok = False
 
@@ -763,7 +764,7 @@ async def _get_web_user_or_none(request: Request, db: AsyncSession) -> dict | No
     if not token:
         return None
     try:
-        return await get_current_web_user(session_token=token, db=db)
+        return cast(dict, await get_current_web_user(session_token=token, db=db))
     except HTTPException:
         return None
 

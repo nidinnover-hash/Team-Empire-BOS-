@@ -17,9 +17,10 @@ from __future__ import annotations
 import logging
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -53,7 +54,7 @@ def _parse_gh_ts(value: Any) -> datetime | None:
         return None
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except Exception:
+    except ValueError:
         return None
 
 
@@ -105,7 +106,13 @@ async def _snapshot_from_installation_token(
             protection = await github_app_auth.github_get_json(
                 f"/repos/{owner}/{name}/branches/{branch}/protection", token
             )
-        except Exception:
+        except Exception as exc:
+            logger.debug(
+                "GitHub protection fetch skipped for %s/%s: %s",
+                owner,
+                name,
+                type(exc).__name__,
+            )
             protection = {}
         required_reviews = bool((protection or {}).get("required_pull_request_reviews"))
         required_checks = bool((protection or {}).get("required_status_checks"))
@@ -258,7 +265,7 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     pushed_at = datetime.fromisoformat(pushed_at_str.replace("Z", "+00:00"))
                     if pushed_at < cutoff:
                         continue
-                except Exception as exc:
+                except ValueError as exc:
                     logger.debug(
                         "GitHub pushed_at parse failed for repo=%s: %s",
                         str(repo.get("full_name") or repo.get("name") or "<unknown>"),
@@ -281,7 +288,7 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
             # Sync open PRs
             try:
                 async def _load_prs(o: str = owner, n: str = name) -> list[dict[str, Any]]:
-                    return await get_pull_requests(token, o, n)
+                    return cast(list[dict[str, Any]], await get_pull_requests(token, o, n))
 
                 prs = await run_with_retry(_load_prs)
             except Exception as exc:
@@ -303,7 +310,7 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
             # Sync open bug/critical issues
             try:
                 async def _load_issues(o: str = owner, n: str = name) -> list[dict[str, Any]]:
-                    return await get_issues(token, o, n, labels="bug")
+                    return cast(list[dict[str, Any]], await get_issues(token, o, n, labels="bug"))
 
                 issues = await run_with_retry(_load_issues)
             except Exception as exc:
@@ -347,7 +354,7 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     if raw_ts:
                         try:
                             updated_remote = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
-                        except Exception as exc:
+                        except ValueError as exc:
                             logger.debug(
                                 "GitHub updated_at parse failed for %s: %s",
                                 upsert_item["external_id"],
@@ -375,8 +382,8 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     prs_synced += 1
                 else:
                     issues_synced += 1
-            except Exception as exc:
-                logger.warning("GitHub upsert skipped %s: %s", upsert_item["external_id"], exc)
+            except (SQLAlchemyError, KeyError, TypeError, ValueError) as exc:
+                logger.warning("GitHub upsert skipped %s: %s", upsert_item.get("external_id", "<unknown>"), exc)
                 continue
 
         await db.commit()

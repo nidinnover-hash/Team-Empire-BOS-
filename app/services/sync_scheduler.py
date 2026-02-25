@@ -13,10 +13,11 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 import json
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.db.session import AsyncSessionLocal  # noqa: E402 - imported here so tests can patch it
 from app.models.ceo_control import SchedulerJobRun
@@ -206,7 +207,7 @@ async def _record_job_run(
     if details:
         try:
             details_json = json.dumps(details)
-        except Exception:
+        except (TypeError, ValueError):
             details_json = "{}"
     duration_ms = max(0, int((finished_at - started_at).total_seconds() * 1000))
     db.add(
@@ -244,6 +245,8 @@ async def _maybe_send_daily_ceo_slack_summary(
     )
     try:
         await slack_service.send_to_slack(db, org_id=org_id, channel_id=channel_id, text=message)
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:
         logger.warning("Daily CEO Slack digest failed for org=%d: %s", org_id, type(exc).__name__)
 
@@ -267,7 +270,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
                 .where(Integration.organization_id == org_id, Integration.type == int_type)
                 .values(last_sync_status=status)
             )
-        except Exception as exc:
+        except (SQLAlchemyError, AttributeError) as exc:
             logger.debug(
                 "Status update failed org=%d integration=%s status=%s: %s",
                 org_id,
@@ -322,6 +325,8 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
                 finished_at=datetime.now(timezone.utc),
                 details={"result": result if isinstance(result, dict) else {"ok": True}},
             )
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
             key = (org_id, name)
             current = _sync_failure_streak.get(key, 0) + 1
@@ -354,6 +359,8 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
         if getattr(settings, "FEATURE_EMAIL_SYNC", True):
             try:
                 await email_service.sync_emails(db, org_id=org_id, actor_user_id=1)
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
                 logger.warning(
                     "Email sync failed org=%d: %s: %s",
@@ -383,6 +390,8 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
                     "approvals_created": approvals_created if isinstance(approvals_created, int) else 0,
                 },
             )
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:
         await _record_job_run(
             db,
@@ -415,6 +424,8 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             finished_at=datetime.now(timezone.utc),
             details={"result": result if isinstance(result, dict) else {"ok": True}},
         )
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:
         logger.warning("Background calendar sync failed org=%d: %s: %s", org_id, type(exc).__name__, str(exc)[:500])
         await _mark_status("google_calendar", "error")
@@ -445,6 +456,8 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
         )
         if hasattr(db, "commit"):
             await db.commit()
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:
         details = error_details(exc)
         await _record_job_run(
@@ -507,6 +520,8 @@ async def replay_job_for_org(db: AsyncSession, org_id: int, job_name: str) -> di
         )
         await db.commit()
         return {"ok": True, "job_name": job_name, "result": result}
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:
         await _record_job_run(
             db,
@@ -550,6 +565,8 @@ async def trigger_sync_for_org(org_id: int) -> None:
             try:
                 async with AsyncSessionLocal() as db:
                     await _run_integrations(db, org_id)
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
                 logger.error("On-demand sync error org=%d: %s", org_id, exc)
 
@@ -603,6 +620,8 @@ async def _check_morning_briefing(db: AsyncSession, org_id: int) -> None:
             ),
         )
         logger.info("Morning briefing generated for org=%d", org_id)
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:
         logger.warning("Morning briefing failed for org=%d: %s", org_id, type(exc).__name__)
 
@@ -712,6 +731,8 @@ async def _publish_due_social_posts(db: AsyncSession, org_id: int) -> None:
             details={"published_count": published},
         )
         await db.commit()
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:
         await _record_job_run(
             db,
@@ -743,7 +764,7 @@ async def _cleanup_old_chat_messages(db: AsyncSession, org_id: int) -> None:
         if result.rowcount:
             logger.info("Cleaned up %d old chat messages for org=%d", result.rowcount, org_id)
             await db.commit()
-    except Exception as exc:
+    except SQLAlchemyError as exc:
         logger.debug("Chat cleanup failed for org=%d: %s", org_id, exc)
 
 
@@ -766,7 +787,7 @@ async def _cleanup_old_logs(db: AsyncSession, org_id: int) -> None:
             if result.rowcount:
                 logger.info("Cleaned up %d old %s for org=%d", result.rowcount, name, org_id)
         await db.commit()
-    except Exception as exc:
+    except SQLAlchemyError as exc:
         logger.debug("Log cleanup failed for org=%d: %s", org_id, exc)
 
 
@@ -798,16 +819,17 @@ async def _cleanup_old_job_runs_and_snapshots(db: AsyncSession, org_id: int) -> 
     ]
     try:
         for model, name, ts_col in tables:
+            model_cls = cast(Any, model)
             result = await db.execute(
-                delete(model).where(
-                    model.organization_id == org_id,
-                    getattr(model, ts_col) < cutoff,
+                delete(model_cls).where(
+                    model_cls.organization_id == org_id,
+                    getattr(model_cls, ts_col) < cutoff,
                 )
             )
             if result.rowcount:
                 logger.info("Cleaned up %d old %s for org=%d", result.rowcount, name, org_id)
         await db.commit()
-    except Exception as exc:
+    except SQLAlchemyError as exc:
         logger.debug("Job run / snapshot cleanup failed for org=%d: %s", org_id, exc)
 
 
@@ -833,6 +855,8 @@ async def _scheduler_loop(interval_minutes: int) -> None:
                         await _cleanup_old_logs(db, org.id)
                         await _cleanup_old_job_runs_and_snapshots(db, org.id)
                         _last_synced[org.id] = datetime.now(timezone.utc)
+                except asyncio.CancelledError:
+                    raise
                 except Exception as exc:
                     logger.warning("Sync failed for org=%d: %s", org.id, exc)
             logger.info("Scheduled sync complete (%d org(s))", len(orgs))
