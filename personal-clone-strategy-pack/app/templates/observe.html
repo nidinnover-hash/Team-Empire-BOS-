@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="AI Command Center — Personal Clone by Nidin Nover" />
+  <meta name="theme-color" content="#18181b" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Observe — Nidin Nover</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/observe.css" />
+  <script nonce="{{ csp_nonce }}" src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="sb-brand">
+      <div class="sb-pulse"></div>
+      <div>
+        <div class="sb-name">Nidin Nover</div>
+        <div class="sb-sub">Command Center</div>
+      </div>
+    </div>
+    <div class="sb-nav">
+      <a href="/" class="sb-item"><i data-lucide="layout-dashboard"></i> Dashboard</a>
+      <a href="/web/talk" class="sb-item"><i data-lucide="message-circle"></i> Talk Mode</a>
+      <a href="/web/integrations" class="sb-item"><i data-lucide="plug"></i> Integrations</a>
+      <a href="/web/data-hub" class="sb-item"><i data-lucide="database"></i> Data Hub</a>
+      <a href="/web/observe" class="sb-item active"><i data-lucide="activity"></i> Observe</a>
+      <a href="/web/ops-intel" class="sb-item"><i data-lucide="bar-chart-3"></i> Ops Intel</a>
+      <a href="/web/tasks" class="sb-item"><i data-lucide="check-square"></i> Tasks</a>
+      <div class="sb-divider"></div>
+      <a href="/docs" class="sb-item" target="_blank"><i data-lucide="book-open"></i> API Docs</a>
+    </div>
+    <div class="sb-footer">
+      <button class="theme-toggle" type="button">
+        <i data-lucide="moon" class="theme-icon"></i> Toggle theme
+      </button>
+      <button class="sb-item" id="logout-btn" type="button"><i data-lucide="log-out"></i> Sign out</button>
+    </div>
+  </nav>
+
+  <div class="main-wrap">
+    <h1>Observability</h1>
+    <div id="loading">Loading metrics...</div>
+    <div id="content" style="display:none">
+      <div class="kpi-row">
+        <div class="kpi"><div class="label">AI Calls</div><div class="val" id="k-calls">0</div><div class="sub" id="k-calls-sub">last 7 days</div></div>
+        <div class="kpi"><div class="label">Fallback Rate</div><div class="val" id="k-fb">0%</div><div class="sub">provider switches</div></div>
+        <div class="kpi"><div class="label">Error Rate</div><div class="val" id="k-err">0%</div><div class="sub">failed calls</div></div>
+        <div class="kpi"><div class="label">Rejection Rate</div><div class="val" id="k-rej">0%</div><div class="sub">approvals rejected</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">Provider Latency</div>
+        <div class="card-body" id="provider-stats"><p class="empty">No data yet</p></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">Recent AI Calls</div>
+        <div class="card-body" style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Provider</th><th>Model</th><th>Latency</th><th>Status</th><th>Time</th></tr></thead>
+            <tbody id="ai-calls-body"><tr><td colspan="5" class="empty">No calls recorded</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">Decision Ledger</div>
+        <div class="card-body" style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Type</th><th>Title</th><th>Confidence</th><th>Time</th></tr></thead>
+            <tbody id="decisions-body"><tr><td colspan="4" class="empty">No decisions yet</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  
+  <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/observe-page.js"></script>
+</body>
+</html>
