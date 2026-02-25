@@ -153,7 +153,7 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
     )
 
     identity_rows = (
-        await db.execute(select(GitHubIdentityMap).where(GitHubIdentityMap.organization_id == org_id))
+        await db.execute(select(GitHubIdentityMap).where(GitHubIdentityMap.organization_id == org_id).limit(5000))
     ).scalars().all()
     login_to_email = {row.github_login.lower(): row.company_email.lower() for row in identity_rows}
     allowed_personal = _allowed_personal_emails()
@@ -301,28 +301,31 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                                 created_at=now,
                             )
                         )
-            if (
-                not personal_org
-                and email in _dev_emails()
-                and (r.repo_permission or "").lower() in {"admin", "maintain"}
-            ):
-                violations.append(
-                    PolicyViolation(
-                        organization_id=org_id,
-                        platform="github",
-                        severity="CRITICAL",
-                        title="Developer has elevated repo permission",
-                        details_json=json.dumps(
-                            {
-                                "github_login": r.github_login,
-                                "repo_name": r.repo_name,
-                                "repo_permission": r.repo_permission,
-                            }
-                        ),
-                        status="OPEN",
-                        created_at=now,
+            dev_emails = _dev_emails()
+            for cr in critical_repo_roles:
+                cr_email = login_to_email.get((cr.github_login or "").lower())
+                if (
+                    cr_email
+                    and cr_email in dev_emails
+                    and (cr.repo_permission or "").lower() in {"admin", "maintain"}
+                ):
+                    violations.append(
+                        PolicyViolation(
+                            organization_id=org_id,
+                            platform="github",
+                            severity="CRITICAL",
+                            title="Developer has elevated repo permission",
+                            details_json=json.dumps(
+                                {
+                                    "github_login": cr.github_login,
+                                    "repo_name": cr.repo_name,
+                                    "repo_permission": cr.repo_permission,
+                                }
+                            ),
+                            status="OPEN",
+                            created_at=now,
+                        )
                     )
-                )
 
     if not personal_org and (settings.GITHUB_ORG or "").strip():
         github_integration = await integration_service.get_integration_by_type(db, org_id, "github")
