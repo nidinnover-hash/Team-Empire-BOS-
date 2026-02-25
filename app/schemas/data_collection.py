@@ -23,8 +23,8 @@ class DataCollectRequest(BaseModel):
 
 
 class DataCollectResult(BaseModel):
-    target: str
-    source: str
+    target: Literal["profile_memory", "daily_context", "notes"]
+    source: DataSource
     ingested_count: int
     created_ids: list[int]
     message: str
@@ -64,3 +64,54 @@ class CloneProTrainingResult(BaseModel):
     notes_written: int
     memory_keys: list[str]
     message: str
+
+
+class MeetingCoachingRequest(BaseModel):
+    source: str = Field(default="meeting_transcript", max_length=80)
+    transcript: str = Field(..., min_length=40, max_length=20000)
+    objective: Literal["sales", "support", "general"] = "sales"
+    speaker_name: str | None = Field(default=None, max_length=80)
+    consent_confirmed: bool = Field(
+        default=False,
+        description="Must be true. Only process conversations where consent/legal basis exists.",
+    )
+
+
+class MeetingCoachingResult(BaseModel):
+    objective: Literal["sales", "support", "general"]
+    tone_profile: str
+    strengths: list[str]
+    improvement_areas: list[str]
+    sales_signals: dict[str, int]
+    memory_keys: list[str]
+    note_id: int | None = None
+    message: str
+
+
+class MobileCaptureAnalyzeRequest(BaseModel):
+    source: str = Field(default="mobile_capture", max_length=80)
+    device_type: Literal["mobile", "tablet"] = "mobile"
+    capture_type: Literal["screenshot", "photo"] = "screenshot"
+    content_text: str = Field(..., min_length=10, max_length=30000)
+    wanted_topics: list[str] = Field(default_factory=list, max_length=20)
+    unwanted_topics: list[str] = Field(default_factory=list, max_length=20)
+    create_policy_drafts: bool = True
+
+
+class MobileCaptureAnalyzeResult(BaseModel):
+    source: str
+    device_type: str
+    capture_type: str
+    scanned_lines: int
+    wanted_count: int
+    unwanted_count: int
+    memory_keys: list[str]
+    policy_rule_ids: list[int]
+    note_id: int | None = None
+    message: str
+
+
+class MobileCaptureUploadAnalyzeResult(MobileCaptureAnalyzeResult):
+    filename: str
+    extracted_chars: int
+    ocr_engine: str

@@ -2,7 +2,7 @@ from app.core.security import create_access_token
 
 
 def _auth_headers(user_id: int, email: str, role: str, org_id: int) -> dict[str, str]:
-    token = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id})
+    token = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1})
     return {"Authorization": f"Bearer {token}"}
 
 

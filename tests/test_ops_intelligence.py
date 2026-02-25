@@ -17,17 +17,31 @@ from app.services.metrics_service import _monday_of
 
 
 def _auth(role: str = "CEO", org_id: int = 1) -> dict:
-    token = create_access_token({"id": 1, "email": "ceo@org.com", "role": role, "org_id": org_id})
+    identity_by_role = {
+        "CEO": (1, "ceo@org1.com"),
+        "ADMIN": (1, "ceo@org1.com"),
+        "MANAGER": (3, "manager@org1.com"),
+        "STAFF": (4, "staff@org1.com"),
+    }
+    user_id, email = identity_by_role.get(role, (1, "ceo@org1.com"))
+    if org_id == 2:
+        user_id, email = (2, "ceo@org2.com")
+    token = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1})
     return {"Authorization": f"Bearer {token}"}
 
 
 async def _seed(org_id: int = 1) -> None:
+    """Ensure org and user rows exist.  conftest already seeds org 1 / user 1,
+    so we only insert when they are missing (e.g. org_id != 1)."""
     override = fastapi_app.dependency_overrides[get_db]
     agen = override()
     session = await agen.__anext__()
     try:
-        session.add(Organization(id=org_id, name=f"Org {org_id}", slug=f"org-{org_id}"))
-        session.add(User(id=1, email="ceo@org.com", name="CEO", role="CEO", organization_id=org_id, password_hash="x"))
+        if await session.get(Organization, org_id) is None:
+            session.add(Organization(id=org_id, name=f"Org {org_id}", slug=f"org-{org_id}"))
+            await session.flush()
+        if await session.get(User, 1) is None:
+            session.add(User(id=1, email="ceo@org1.com", name="CEO", role="CEO", organization_id=org_id, password_hash="x"))
         await session.commit()
     except Exception:
         await session.rollback()

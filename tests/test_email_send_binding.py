@@ -40,6 +40,7 @@ async def test_send_rejects_mismatched_approval_payload(client, monkeypatch):
             approval_type="send_message",
             payload_json={"email_id": email.id + 999},
             status="approved",
+            approved_by=1,
         )
         db.add(approval)
         await db.commit()
@@ -104,6 +105,7 @@ async def test_send_uses_linked_approval_once(client, monkeypatch):
             approval_type="send_message",
             payload_json={"email_id": email.id},
             status="approved",
+            approved_by=1,
         )
         db.add(approval)
         await db.commit()

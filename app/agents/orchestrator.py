@@ -21,6 +21,7 @@ from app.services.confidence import assess_agent_confidence
 class AgentChatRequest(BaseModel):
     message: str = Field(..., max_length=10_000)
     force_role: str | None = Field(None, max_length=50)
+    avatar_mode: str | None = Field(None, max_length=30)
 
 
 class ProposedAction(BaseModel):
@@ -81,6 +82,28 @@ ROLE_PROMPTS: dict[str, str] = {
 }
 
 _RISKY_TOKENS = ("send", "assign", "change", "spend", "delete", "fire", "hire", "pay")
+
+AVATAR_PROMPTS: dict[str, str] = {
+    "personal": (
+        "Avatar mode: PERSONAL.\n"
+        "Speak with warmth, empathy, and relationship-first framing.\n"
+        "Focus on life alignment, stress reduction, confidence, and growth.\n"
+        "Keep advice practical and kind. Avoid harsh corporate tone."
+    ),
+    "professional": (
+        "Avatar mode: PROFESSIONAL.\n"
+        "Use precise executive language with measurable outcomes.\n"
+        "Focus on priorities, ownership, deadlines, and risk controls.\n"
+        "Keep responses concise, action-oriented, and business strict."
+    ),
+    "entertainment": (
+        "Avatar mode: ENTERTAINMENT.\n"
+        "Be creative, energetic, and fun while staying safe and respectful.\n"
+        "Focus on storytelling, hooks, scripts, campaign ideas, and audience excitement.\n"
+        "Entertainment channels are restricted to YouTube and Audible contexts.\n"
+        "Avoid mixing confidential operational decisions into this mode."
+    ),
+}
 
 
 # ── Role Router ───────────────────────────────────────────────────────────────
@@ -161,7 +184,10 @@ async def run_agent(
         AgentChatResponse with role, AI response, approval flag, and proposed_actions.
     """
     role = route_role(request.message, request.force_role)
-    system_prompt = ROLE_PROMPTS[role]
+    avatar_key = (request.avatar_mode or "professional").strip().lower()
+    if avatar_key not in AVATAR_PROMPTS:
+        avatar_key = "professional"
+    system_prompt = f"{AVATAR_PROMPTS[avatar_key]}\n\n{ROLE_PROMPTS[role]}"
 
     response_text = await call_ai(
         system_prompt=system_prompt,

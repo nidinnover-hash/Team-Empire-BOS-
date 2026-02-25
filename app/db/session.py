@@ -9,7 +9,7 @@ _is_sqlite = settings.DATABASE_URL.startswith("sqlite")
 
 # PostgreSQL gets a real connection pool; SQLite uses its default (StaticPool).
 _engine_kwargs: dict = {
-    "echo": settings.DEBUG,
+    "echo": False,  # Never echo SQL — prevents sensitive data leaks in logs
     "pool_pre_ping": True,   # drops stale connections automatically
 }
 if not _is_sqlite:

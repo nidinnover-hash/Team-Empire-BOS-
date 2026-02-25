@@ -27,6 +27,7 @@ from app.api.v1.endpoints import (
     ops,
     orgs,
     search,
+    social,
     users,
 )
 
@@ -60,3 +61,4 @@ api_router.include_router(ops.router)
 api_router.include_router(export.router)
 api_router.include_router(search.router)
 api_router.include_router(github.router)
+api_router.include_router(social.router)

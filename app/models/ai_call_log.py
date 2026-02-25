@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -11,7 +11,7 @@ class AiCallLog(Base):
     __tablename__ = "ai_call_logs"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    organization_id: Mapped[int] = mapped_column(Integer, nullable=False, default=1, index=True)
+    organization_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, default=1, index=True)
     provider: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     model_name: Mapped[str] = mapped_column(String(80), nullable=False)
     prompt_type: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)

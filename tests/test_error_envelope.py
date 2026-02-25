@@ -2,7 +2,27 @@ from app.core.security import create_access_token
 
 
 async def test_error_envelope_forbidden_includes_code_and_request_id(client):
-    staff = create_access_token({"id": 2, "email": "staff@org.com", "role": "STAFF", "org_id": 1})
+    created = await client.post(
+        "/api/v1/users",
+        json={
+            "organization_id": 1,
+            "name": "Envelope Staff",
+            "email": "envelope.staff@example.com",
+            "password": "StrongPass123!",
+            "role": "STAFF",
+        },
+    )
+    assert created.status_code == 201
+    created_user = created.json()
+    staff = create_access_token(
+        {
+            "id": int(created_user["id"]),
+            "email": str(created_user["email"]),
+            "role": "STAFF",
+            "org_id": int(created_user["organization_id"]),
+            "token_version": 1,
+        }
+    )
     response = await client.get(
         "/api/v1/memory/profile",
         headers={"Authorization": f"Bearer {staff}"},

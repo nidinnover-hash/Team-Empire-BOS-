@@ -8,6 +8,7 @@ from app.schemas.observability import (
     AICallLogRead,
     DecisionTraceSummaryRead,
     ObservabilitySummaryRead,
+    StorageSummaryRead,
 )
 from app.services import observability as obs_service
 
@@ -20,7 +21,7 @@ async def observability_summary(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
     db: AsyncSession = Depends(get_db),
 ) -> ObservabilitySummaryRead:
-    payload = await obs_service.get_observability_summary(db, org_id=actor["org_id"], days=days)
+    payload = await obs_service.get_observability_summary(db, org_id=int(actor["org_id"]), days=days)
     return cast(ObservabilitySummaryRead, ObservabilitySummaryRead.model_validate(payload))
 
 
@@ -30,7 +31,7 @@ async def recent_ai_calls(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
     db: AsyncSession = Depends(get_db),
 ) -> list[AICallLogRead]:
-    payload = await obs_service.get_recent_ai_calls(db, org_id=actor["org_id"], limit=limit)
+    payload = await obs_service.get_recent_ai_calls(db, org_id=int(actor["org_id"]), limit=limit)
     return [AICallLogRead.model_validate(item) for item in payload]
 
 
@@ -40,5 +41,14 @@ async def recent_decisions(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
     db: AsyncSession = Depends(get_db),
 ) -> list[DecisionTraceSummaryRead]:
-    payload = await obs_service.get_recent_decisions(db, org_id=actor["org_id"], limit=limit)
+    payload = await obs_service.get_recent_decisions(db, org_id=int(actor["org_id"]), limit=limit)
     return [DecisionTraceSummaryRead.model_validate(item) for item in payload]
+
+
+@router.get("/storage", response_model=StorageSummaryRead)
+async def storage_summary(
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+    db: AsyncSession = Depends(get_db),
+) -> StorageSummaryRead:
+    payload = await obs_service.get_storage_summary(db, org_id=int(actor["org_id"]))
+    return cast(StorageSummaryRead, StorageSummaryRead.model_validate(payload))

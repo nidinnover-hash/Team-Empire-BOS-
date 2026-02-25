@@ -1,4 +1,5 @@
 from app.api.v1.endpoints import integrations as integrations_endpoint
+from app.core import oauth_nonce
 from app.core.security import create_access_token
 import hmac
 import json
@@ -90,7 +91,9 @@ async def test_whatsapp_webhook_verify_success(client, monkeypatch):
 async def test_whatsapp_webhook_replay_detected_when_signature_reused(client, monkeypatch):
     monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
     monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS", 300)
-    integrations_endpoint._whatsapp_webhook_seen_signatures.clear()
+    oauth_nonce._used_nonces.clear()
+    oauth_nonce._redis_initialized = False
+    oauth_nonce._redis_client = None
 
     payload = {
         "entry": [

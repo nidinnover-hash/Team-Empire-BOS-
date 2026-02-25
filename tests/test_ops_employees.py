@@ -5,8 +5,8 @@ from app.main import app as fastapi_app
 from app.models.organization import Organization
 
 
-def _auth_headers(user_id: int = 1, email: str = "ceo@org.com", role: str = "CEO", org_id: int = 1) -> dict:
-    token = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id})
+def _auth_headers(user_id: int = 1, email: str = "ceo@org1.com", role: str = "CEO", org_id: int = 1) -> dict:
+    token = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1})
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -15,8 +15,9 @@ async def _seed_org(org_id: int = 1) -> None:
     agen = override()
     session = await agen.__anext__()
     try:
-        session.add(Organization(id=org_id, name=f"Org {org_id}", slug=f"org-{org_id}"))
-        await session.commit()
+        if await session.get(Organization, org_id) is None:
+            session.add(Organization(id=org_id, name=f"Org {org_id}", slug=f"org-{org_id}"))
+            await session.commit()
     finally:
         await agen.aclose()
 
@@ -122,7 +123,7 @@ async def test_employee_cross_org_isolation(client):
     # List as org 2
     resp = await client.get(
         "/api/v1/ops/employees",
-        headers=_auth_headers(org_id=2),
+        headers=_auth_headers(user_id=2, email="ceo@org2.com", org_id=2),
     )
     assert resp.status_code == 200
     assert len(resp.json()) == 0
@@ -130,7 +131,7 @@ async def test_employee_cross_org_isolation(client):
 
 async def test_employee_requires_admin_role(client):
     """STAFF cannot access employee endpoints."""
-    staff_headers = _auth_headers(role="STAFF")
+    staff_headers = _auth_headers(user_id=4, email="staff@org1.com", role="STAFF")
     resp = await client.get("/api/v1/ops/employees", headers=staff_headers)
     assert resp.status_code == 403
 

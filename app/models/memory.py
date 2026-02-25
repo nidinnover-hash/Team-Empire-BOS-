@@ -92,3 +92,34 @@ class DailyContext(Base):
         DateTime(timezone=True),
         default=lambda: dt.datetime.now(dt.timezone.utc),
     )
+
+
+class AvatarMemory(Base):
+    """Strict avatar-scoped memory store to prevent personal/professional cross-leakage."""
+    __tablename__ = "avatar_memory"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "avatar_mode", "key", name="uq_avatar_memory_org_mode_key"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    organization_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+        default=1,
+        index=True,
+    )
+    avatar_mode: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    key: Mapped[str] = mapped_column(String(100), nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: dt.datetime.now(dt.timezone.utc),
+        index=True,
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: dt.datetime.now(dt.timezone.utc),
+        onupdate=lambda: dt.datetime.now(dt.timezone.utc),
+        index=True,
+    )

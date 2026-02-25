@@ -51,4 +51,34 @@
   window.addEventListener('resize', function () {
     if (window.innerWidth > BREAKPOINT && sidebar.classList.contains('mobile-open')) closeNav();
   });
+
+  // Touch swipe gestures: edge swipe opens nav, left swipe closes nav.
+  var touchStartX = 0;
+  var touchStartY = 0;
+  var touchActive = false;
+  document.addEventListener('touchstart', function (e) {
+    if (!e.touches || !e.touches.length) return;
+    var t = e.touches[0];
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+    touchActive = true;
+  }, { passive: true });
+
+  document.addEventListener('touchend', function (e) {
+    if (!touchActive || !e.changedTouches || !e.changedTouches.length) return;
+    var t = e.changedTouches[0];
+    var dx = t.clientX - touchStartX;
+    var dy = t.clientY - touchStartY;
+    touchActive = false;
+
+    if (Math.abs(dy) > 70 || Math.abs(dx) < 45) return;
+    if (window.innerWidth > BREAKPOINT) return;
+    if (!sidebar.classList.contains('mobile-open') && touchStartX < 24 && dx > 45) {
+      openNav();
+      return;
+    }
+    if (sidebar.classList.contains('mobile-open') && dx < -45) {
+      closeNav();
+    }
+  }, { passive: true });
 })();

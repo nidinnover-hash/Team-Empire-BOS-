@@ -6,7 +6,7 @@ from app.services import github_service
 
 
 def _ceo_headers(org_id: int = 1) -> dict:
-    token = create_access_token({"id": 1, "email": "ceo@org.com", "role": "CEO", "org_id": org_id})
+    token = create_access_token({"id": 1, "email": "ceo@org1.com", "role": "CEO", "org_id": org_id, "token_version": 1})
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -29,7 +29,7 @@ async def _connect_github(client):
 
 async def test_apply_governance_rejects_staff_role(client):
     """STAFF users cannot apply governance."""
-    staff_token = create_access_token({"id": 2, "email": "staff@org.com", "role": "STAFF", "org_id": 1})
+    staff_token = create_access_token({"id": 4, "email": "staff@org1.com", "role": "STAFF", "org_id": 1, "token_version": 1})
     resp = await client.post(
         "/api/v1/github/apply-governance",
         headers={"Authorization": f"Bearer {staff_token}"},

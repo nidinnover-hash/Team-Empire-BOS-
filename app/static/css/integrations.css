@@ -56,7 +56,7 @@
     .ai-name { font-size: 0.8rem; color: var(--text); text-transform: capitalize; }
     .small { font-size: 0.72rem; color: var(--text-faint); }
     /* Quick-connect grid */
-    .qc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.85rem; margin-top: 1rem; }
+    .qc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.85rem; margin-top: 1rem; }
     .qc-card {
       border: 1px solid var(--line); border-radius: var(--radius);
       background: var(--surface);
@@ -142,9 +142,30 @@
   backdrop-filter: blur(6px);
 }
 
+.hero {
+  background:
+    radial-gradient(560px 160px at 0% -40%, rgba(210, 216, 223, 0.14), transparent 62%),
+    linear-gradient(180deg, #1a1c21 0%, #111317 100%) !important;
+}
+
 .qc-actions .btn,
 .layout .btn {
   min-height: 38px;
+}
+
+@media (pointer: coarse) {
+  .qc-actions .btn,
+  .layout .btn,
+  .modal-actions .btn,
+  .table .btn {
+    min-height: 44px;
+  }
+
+  .qc-token-row .input,
+  .select,
+  .textarea {
+    min-height: 44px;
+  }
 }
 
 .health-badge {

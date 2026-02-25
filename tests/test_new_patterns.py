@@ -21,8 +21,21 @@ from app.services import email_service, execution_engine, slack_service
 
 
 def _auth(user_id: int = 1, role: str = "CEO", org_id: int = 1) -> dict:
+    email_by_user = {
+        1: "ceo@org1.com",
+        2: "ceo@org2.com",
+        3: "manager@org1.com",
+        4: "staff@org1.com",
+        5: "nidinnover@gmail.com",
+    }
     token = create_access_token(
-        {"id": user_id, "email": f"u{user_id}@org.com", "role": role, "org_id": org_id}
+        {
+            "id": user_id,
+            "email": email_by_user.get(user_id, f"u{user_id}@org.com"),
+            "role": role,
+            "org_id": org_id,
+            "token_version": 1,
+        }
     )
     return {"Authorization": f"Bearer {token}"}
 

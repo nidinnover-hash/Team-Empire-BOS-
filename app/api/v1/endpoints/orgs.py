@@ -15,9 +15,10 @@ router = APIRouter(prefix="/orgs", tags=["Organizations"])
 @router.get("", response_model=list[OrganizationRead])
 async def list_orgs(
     db: AsyncSession = Depends(get_db),
-    _actor: dict = Depends(require_roles("CEO", "ADMIN")),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> list[OrganizationRead]:
-    return await organization_service.list_organizations(db)
+    org = await organization_service.get_organization_by_id(db, actor["org_id"])
+    return [org] if org else []
 
 
 @router.post("", response_model=OrganizationRead, status_code=201)
@@ -49,6 +50,8 @@ async def update_org(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO")),
 ) -> OrganizationRead:
+    if org_id != actor["org_id"]:
+        raise HTTPException(status_code=403, detail="Cannot modify another organization")
     org = await organization_service.update_organization(
         db,
         organization_id=org_id,
@@ -73,8 +76,10 @@ async def update_org(
 async def list_org_members(
     org_id: int,
     db: AsyncSession = Depends(get_db),
-    _actor: dict = Depends(require_roles("CEO", "ADMIN")),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> list[OrganizationMembershipRead]:
+    if org_id != actor["org_id"]:
+        raise HTTPException(status_code=403, detail="Cannot view another organization's members")
     return await membership_service.list_memberships(db, organization_id=org_id)
 
 
@@ -85,6 +90,8 @@ async def upsert_org_member(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> OrganizationMembershipRead:
+    if org_id != actor["org_id"]:
+        raise HTTPException(status_code=403, detail="Cannot modify another organization's members")
     membership = await membership_service.upsert_membership(
         db,
         organization_id=org_id,

@@ -7,7 +7,7 @@ from app.core.security import create_access_token
 
 
 def _ceo_headers(org_id: int = 1) -> dict:
-    token = create_access_token({"id": 1, "email": "ceo@org.com", "role": "CEO", "org_id": org_id})
+    token = create_access_token({"id": 1, "email": "ceo@org1.com", "role": "CEO", "org_id": org_id, "token_version": 1})
     return {"Authorization": f"Bearer {token}"}
 
 

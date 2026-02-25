@@ -2,7 +2,7 @@ from typing import Literal
 
 from fastapi import Depends, HTTPException, status
 
-from app.core.security import get_current_user
+from app.core.deps import get_current_api_user
 
 Role = Literal[
     "CEO",
@@ -20,7 +20,7 @@ Role = Literal[
 def require_roles(*allowed_roles: Role):
     allowed = set(allowed_roles)
 
-    def dependency(user: dict = Depends(get_current_user)) -> dict:
+    async def dependency(user: dict = Depends(get_current_api_user)) -> dict:
         role = user.get("role", "STAFF")
         if role not in allowed:
             raise HTTPException(

@@ -15,7 +15,7 @@ from app.services import email_service as real_email_service
 
 def _auth_headers(user_id: int, email: str, role: str, org_id: int = 1) -> dict:
     token = create_access_token(
-        {"id": user_id, "email": email, "role": role, "org_id": org_id}
+        {"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1}
     )
     return {"Authorization": f"Bearer {token}"}
 
@@ -64,7 +64,7 @@ async def _fake_run_agent_none(*_args, **_kwargs) -> AgentChatResponse:
 async def test_agent_creates_task_when_triggered(client, monkeypatch):
     monkeypatch.setattr(agents_endpoint, "run_agent", _fake_run_agent_task)
 
-    headers = _auth_headers(1, "ceo@org.com", "CEO", 1)
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
     response = await client.post(
         "/api/v1/agents/chat",
         json={"message": "Create task: Review quarterly report"},
@@ -81,7 +81,7 @@ async def test_agent_creates_task_when_triggered(client, monkeypatch):
 async def test_agent_task_creation_is_audited(client, monkeypatch):
     monkeypatch.setattr(agents_endpoint, "run_agent", _fake_run_agent_task)
 
-    headers = _auth_headers(1, "ceo@org.com", "CEO", 1)
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
     await client.post(
         "/api/v1/agents/chat",
         json={"message": "Add task for me"},
@@ -97,7 +97,7 @@ async def test_agent_does_not_create_task_without_trigger(client, monkeypatch):
     """A TASK_CREATE proposed_action must not fire on a plain chat message."""
     monkeypatch.setattr(agents_endpoint, "run_agent", _fake_run_agent_none)
 
-    headers = _auth_headers(1, "ceo@org.com", "CEO", 1)
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
     await client.post(
         "/api/v1/agents/chat",
         json={"message": "What should I focus on today?"},
@@ -113,7 +113,7 @@ async def test_agent_task_create_blocked_for_staff(client, monkeypatch):
     """STAFF role must not be able to trigger TASK_CREATE."""
     monkeypatch.setattr(agents_endpoint, "run_agent", _fake_run_agent_task)
 
-    headers = _auth_headers(2, "staff@org.com", "STAFF", 1)
+    headers = _auth_headers(4, "staff@org1.com", "STAFF", 1)
     await client.post(
         "/api/v1/agents/chat",
         json={"message": "Create task: do something"},
@@ -121,7 +121,7 @@ async def test_agent_task_create_blocked_for_staff(client, monkeypatch):
     )
 
     # STAFF can view tasks (may need CEO token to check)
-    ceo_headers = _auth_headers(1, "ceo@org.com", "CEO", 1)
+    ceo_headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
     tasks = await client.get("/api/v1/tasks", headers=ceo_headers)
     assert tasks.json() == []
 
@@ -139,7 +139,7 @@ async def test_agent_drafts_email_when_triggered(client, monkeypatch):
     # Also patch the reference in the agents module
     monkeypatch.setattr(agents_endpoint.email_service, "draft_reply", fake_draft_reply)
 
-    headers = _auth_headers(1, "ceo@org.com", "CEO", 1)
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
     response = await client.post(
         "/api/v1/agents/chat",
         json={"message": "Draft reply to email 1"},
@@ -164,7 +164,7 @@ async def test_agent_does_not_draft_email_without_trigger(client, monkeypatch):
 
     monkeypatch.setattr(agents_endpoint.email_service, "draft_reply", spy_draft_reply)
 
-    headers = _auth_headers(1, "ceo@org.com", "CEO", 1)
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
     await client.post(
         "/api/v1/agents/chat",
         json={"message": "Tell me about email best practices"},
@@ -186,7 +186,7 @@ async def test_agent_email_draft_blocked_for_manager(client, monkeypatch):
 
     monkeypatch.setattr(agents_endpoint.email_service, "draft_reply", spy_draft_reply)
 
-    headers = _auth_headers(3, "mgr@org.com", "MANAGER", 1)
+    headers = _auth_headers(3, "manager@org1.com", "MANAGER", 1)
     await client.post(
         "/api/v1/agents/chat",
         json={"message": "Draft reply to email 1"},

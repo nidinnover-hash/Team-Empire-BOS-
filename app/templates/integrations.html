@@ -43,7 +43,7 @@
 <div class="main-wrap">
   <section class="hero">
     <h1>Integration Control Center</h1>
-    <p>Connect and sync ClickUp, GitHub, Slack, Gmail, Google Calendar, and WhatsApp. All tokens are encrypted at rest.</p>
+    <p>Connect and sync ClickUp, GitHub, Slack, DigitalOcean, Gmail, Google Calendar, and WhatsApp. All tokens are encrypted at rest.</p>
   </section>
 
   <!-- Row 1: Connected integrations + Gmail/Manual -->
@@ -79,6 +79,7 @@
           <button class="btn sync" type="button" data-sync="clickup">Sync ClickUp</button>
           <button class="btn sync" type="button" data-sync="github">Sync GitHub</button>
           <button class="btn sync" type="button" data-sync="slack">Sync Slack</button>
+          <button class="btn sync" type="button" data-sync="digitalocean">Sync DigitalOcean</button>
           <button class="btn sync" type="button" data-sync="calendar">Sync Calendar</button>
         </div>
         <div class="status" id="sync-status" style="margin-top:0.4rem"></div>
@@ -148,6 +149,26 @@
         <div class="qc-status" id="slack-status"></div>
       </div>
     </div>
+
+    <!-- DigitalOcean -->
+    <div class="qc-card">
+      <div class="qc-head">
+        <span class="qc-icon">DO</span>
+        <span class="qc-name">DigitalOcean</span>
+        <span class="qc-badge none" id="digitalocean-badge">not connected</span>
+      </div>
+      <div class="qc-body">
+        <div class="qc-desc">Monitor droplets, team roles, and cost snapshots in read-only mode using a Personal Access Token.</div>
+        <div class="qc-token-row">
+          <input class="input" type="password" id="digitalocean-token" placeholder="dop_v1_xxxxxxxx" autocomplete="off" />
+        </div>
+        <div class="qc-actions">
+          <button class="btn success" type="button" id="digitalocean-connect-btn">Connect</button>
+          <button class="btn sync" type="button" id="digitalocean-sync-btn" style="display:none">Sync Now</button>
+        </div>
+        <div class="qc-status" id="digitalocean-status"></div>
+      </div>
+    </div>
   </section>
 
   <!-- Row 3: AI Provider Readiness -->
@@ -165,6 +186,23 @@
       </div>
     </div>
   </section>
+
+  <section style="margin-top:1rem">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">Coding Project Discovery</div>
+        <button class="btn subtle" type="button" id="coding-discovery-btn">Generate Questions</button>
+      </div>
+      <div class="card-body">
+        <div class="row" style="gap:0.4rem">
+          <input class="input" id="coding-project-name" type="text" placeholder="Project name" />
+          <input class="input" id="coding-language" type="text" placeholder="Language/stack (e.g. Python/FastAPI)" />
+          <input class="input" id="coding-stage" type="text" placeholder="Stage (planning/building/release)" />
+        </div>
+        <div id="coding-discovery-output" class="small">Generate to get project questions and a ready prompt.</div>
+      </div>
+    </div>
+  </section>
 </div><!-- /main-wrap -->
 
 <!-- Add New Integration modal -->
@@ -179,6 +217,7 @@
       <option value="github">GitHub (manual)</option>
       <option value="clickup">ClickUp (manual)</option>
       <option value="slack">Slack (manual)</option>
+      <option value="digitalocean">DigitalOcean (manual)</option>
     </select>
     <label for="modal-config">config_json</label>
     <textarea class="textarea" id="modal-config">{

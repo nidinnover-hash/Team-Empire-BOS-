@@ -1,40 +1,6 @@
-from datetime import datetime, timezone
-
 from app.agents.orchestrator import AgentChatResponse
-from app.core.deps import get_db
-from app.core.security import create_access_token, hash_password
-from app.main import app as fastapi_app
-from app.models.organization import Organization
-from app.models.user import User
+from app.core.security import create_access_token
 from app.services import conversation_learning as learning_service
-
-
-async def _seed_web_user() -> None:
-    override = fastapi_app.dependency_overrides[get_db]
-    agen = override()
-    session = await agen.__anext__()
-    try:
-        org = await session.get(Organization, 1)
-        if org is None:
-            session.add(Organization(id=1, name="Org 1", slug="org-1"))
-            await session.flush()
-        user = await session.get(User, 1)
-        if user is None:
-            session.add(
-                User(
-                    id=1,
-                    organization_id=1,
-                    name="Web CEO",
-                    email="ceo@org1.com",
-                    password_hash=hash_password("secret123"),
-                    role="CEO",
-                    is_active=True,
-                    created_at=datetime.now(timezone.utc),
-                )
-            )
-        await session.commit()
-    finally:
-        await agen.aclose()
 
 
 def _set_web_session(client) -> None:
@@ -61,7 +27,6 @@ def test_extract_learning_signals_ignores_sensitive_text():
 
 
 async def test_web_chat_auto_learns_preference_memory(client, monkeypatch):
-    await _seed_web_user()
     _set_web_session(client)
 
     async def fake_run_agent(*_args, **_kwargs):

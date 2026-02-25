@@ -1,10 +1,22 @@
 (function () {
   'use strict';
-  var KEY = 'pc_theme';
+  function getCookie(name) {
+    var key = name + "=";
+    var parts = document.cookie.split("; ");
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].indexOf(key) === 0) return decodeURIComponent(parts[i].slice(key.length));
+    }
+    return "";
+  }
+
+  var scope = getCookie("pc_theme_scope") || "professional";
+  var defaultTheme = getCookie("pc_theme_default") || "";
+  var KEY = "pc_theme:" + scope;
 
   function getPreferred() {
     var stored = localStorage.getItem(KEY);
     if (stored === 'dark' || stored === 'light') return stored;
+    if (defaultTheme === 'dark' || defaultTheme === 'light') return defaultTheme;
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
 

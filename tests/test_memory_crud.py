@@ -12,13 +12,13 @@ from app.core.security import create_access_token
 
 
 def _token(user_id: int, email: str, role: str, org_id: int = 1) -> dict:
-    t = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id})
+    t = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1})
     return {"Authorization": f"Bearer {t}"}
 
 
-CEO     = _token(1, "ceo@ai.com",     "CEO")
-MANAGER = _token(2, "mgr@ai.com",     "MANAGER")
-STAFF   = _token(3, "staff@ai.com",   "STAFF")
+CEO     = _token(1, "ceo@org1.com",     "CEO")
+MANAGER = _token(3, "manager@org1.com", "MANAGER")
+STAFF   = _token(4, "staff@org1.com",   "STAFF")
 
 
 # ── GET /api/v1/memory/profile ────────────────────────────────────────────────
@@ -182,7 +182,7 @@ async def test_delete_profile_memory_not_found_returns_404(client):
 
 async def test_delete_profile_memory_wrong_org_returns_404(client):
     """An entry from org 2 must be invisible to a CEO of org 1."""
-    org2_token = _token(10, "ceo@org2.com", "CEO", org_id=2)
+    org2_token = _token(2, "ceo@org2.com", "CEO", org_id=2)
     r = await client.post(
         "/api/v1/memory/profile",
         json={"key": "org2_secret", "value": "hidden"},

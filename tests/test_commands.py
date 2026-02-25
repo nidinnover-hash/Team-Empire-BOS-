@@ -9,7 +9,7 @@ async def test_create_command_returns_201(client):
 
 
 async def test_create_command_returns_correct_fields(client, monkeypatch):
-    async def _fake_call_ai(text, org_id):
+    async def _fake_call_ai(text, org_id, **kwargs):
         return "Mocked AI response", "test-model"
 
     from app.services import command as command_mod

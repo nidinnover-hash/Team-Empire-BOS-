@@ -2,7 +2,7 @@ from app.core.security import create_access_token
 
 
 def _auth_headers(user_id: int = 1, email: str = "ceo@org1.com", role: str = "CEO", org_id: int = 1) -> dict[str, str]:
-    token = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id})
+    token = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1})
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -67,3 +67,14 @@ async def test_control_advanced_endpoints(client):
     assert bb["mode"] == "suggest_only"
     assert "data_collection" in bb
     assert "ceo_brain" in bb
+
+    limits = await client.post(
+        "/api/v1/control/brain/limitations-claude",
+        json={"challenge": "Figure out clone limits and self-improve"},
+        headers=headers,
+    )
+    assert limits.status_code == 200
+    lb = limits.json()
+    assert lb["mode"] == "suggest_only"
+    assert "limitations" in lb
+    assert "development_plan" in lb

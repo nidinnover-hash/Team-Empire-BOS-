@@ -80,7 +80,11 @@ jobs:
           OPENAI_API_KEY: "sk-live-valid-key-value"
           DEFAULT_AI_PROVIDER: "openai"
           DATABASE_URL: sqlite:///./ci.db
+          PURPOSE_PERSONAL_EMAILS: "nidinnover@gmail.com"
         run: python -c "import app.main"
+
+      - name: Fast API smoke suite
+        run: python -m pytest -q tests/test_api_smoke_fast.py -p no:cacheprovider
 
       - name: Tests with coverage
         run: python -m pytest -q -p no:cacheprovider --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=60

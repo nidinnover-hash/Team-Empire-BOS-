@@ -24,10 +24,15 @@ async def _get_db_session():
 
 
 async def _seed(org_id: int = 1) -> None:
+    """Ensure org and user rows exist.  conftest already seeds org 1-2 / user 1,
+    so we only insert when they are missing."""
     session, agen = await _get_db_session()
     try:
-        session.add(Organization(id=org_id, name=f"Org {org_id}", slug=f"org-{org_id}"))
-        session.add(User(id=1, email="ceo@org.com", name="CEO", role="CEO", organization_id=org_id, password_hash="x"))
+        if await session.get(Organization, org_id) is None:
+            session.add(Organization(id=org_id, name=f"Org {org_id}", slug=f"org-{org_id}"))
+            await session.flush()
+        if await session.get(User, 1) is None:
+            session.add(User(id=1, email="ceo@org1.com", name="CEO", role="CEO", organization_id=org_id, password_hash="x"))
         await session.commit()
     except Exception:
         await session.rollback()

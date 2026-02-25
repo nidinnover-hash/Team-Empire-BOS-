@@ -1,7 +1,11 @@
 from datetime import datetime, timezone
+import hashlib
+import hmac
+import json
 from typing import cast
 
 from app.core.deps import get_db
+from app.core.config import settings
 from app.main import app as fastapi_app
 from app.models.email import Email
 
@@ -36,6 +40,20 @@ async def _seed_email_for_org1(
         await agen.aclose()
 
 
+async def _post_whatsapp_webhook(client, payload: dict) -> object:
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    secret = (settings.WHATSAPP_APP_SECRET or "").encode("utf-8")
+    signature = "sha256=" + hmac.new(secret, raw, hashlib.sha256).hexdigest()
+    return await client.post(
+        "/api/v1/integrations/whatsapp/webhook",
+        content=raw,
+        headers={
+            "Content-Type": "application/json",
+            "X-Hub-Signature-256": signature,
+        },
+    )
+
+
 async def test_unified_inbox_merges_email_and_whatsapp(client):
     connected = await client.post(
         "/api/v1/integrations/connect",
@@ -52,9 +70,9 @@ async def test_unified_inbox_merges_email_and_whatsapp(client):
     email_id = await _seed_email_for_org1()
     assert email_id > 0
 
-    webhook = await client.post(
-        "/api/v1/integrations/whatsapp/webhook",
-        json={
+    webhook = await _post_whatsapp_webhook(
+        client,
+        {
             "entry": [
                 {
                     "changes": [
@@ -107,9 +125,9 @@ async def test_unified_conversations_groups_items(client):
     await _seed_email_for_org1(gmail_id="unified-email-3", from_address="lead@example.com", is_read=False)
 
     for wa_id in ("wamid.TEST201", "wamid.TEST202"):
-        webhook = await client.post(
-            "/api/v1/integrations/whatsapp/webhook",
-            json={
+        webhook = await _post_whatsapp_webhook(
+            client,
+            {
                 "entry": [
                     {
                         "changes": [

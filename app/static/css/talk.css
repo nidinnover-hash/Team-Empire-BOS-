@@ -4,6 +4,13 @@
     .title { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.03em; }
     .sub { font-size: 0.72rem; color: var(--text-muted); }
     .actions { display: flex; gap: 0.5rem; align-items: center; }
+    .avatar-switch { display: inline-flex; gap: 0.3rem; flex-wrap: wrap; }
+    .btn.avatar { min-width: 92px; }
+    .btn.avatar.active {
+      border-color: var(--brand);
+      background: var(--surface-alt);
+      font-weight: 700;
+    }
     .btn.mic { min-width: 90px; }
     .btn.stop { background: rgba(239,68,68,0.06); border-color: rgba(239,68,68,0.25); color: var(--danger); }
     .talk-header {

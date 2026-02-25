@@ -1,6 +1,14 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
+
+IntegrationType = Literal[
+    "gmail", "google_calendar", "github", "clickup",
+    "slack", "whatsapp_business", "digitalocean",
+]
+IntegrationStatus = Literal["connected", "disconnected", "error"]
+IntegrationTestStatus = Literal["ok", "failed", "not_configured"]
 
 _SENSITIVE_CONFIG_KEYS = frozenset({
     "access_token", "refresh_token", "api_key", "bot_token",
@@ -9,16 +17,16 @@ _SENSITIVE_CONFIG_KEYS = frozenset({
 
 
 class IntegrationConnectRequest(BaseModel):
-    type: str = Field(..., max_length=50)
+    type: IntegrationType = Field(...)
     config_json: dict = Field(default_factory=dict)
 
 
 class IntegrationRead(BaseModel):
     id: int
     organization_id: int
-    type: str
+    type: IntegrationType
     config_json: dict
-    status: str
+    status: IntegrationStatus
     last_sync_at: datetime | None
     last_sync_status: str | None = None
     created_at: datetime
@@ -38,7 +46,7 @@ class IntegrationRead(BaseModel):
 
 class IntegrationTestResult(BaseModel):
     integration_id: int
-    status: str
+    status: IntegrationTestStatus
     message: str
 
 
@@ -75,9 +83,21 @@ class AIProviderStatus(BaseModel):
 
 class AITestResult(BaseModel):
     provider: str
-    status: str
+    status: IntegrationTestStatus
     message: str
     sample_response: str | None = None
+
+
+class CodingProjectDiscoveryRead(BaseModel):
+    provider_options: list[str]
+    questions: list[str]
+    next_prompt: str
+
+
+class WhatsAppWebhookResult(BaseModel):
+    status: str = "received"
+    entries: int = 0
+    stored: int = 0
 
 
 class WhatsAppSendRequest(BaseModel):

@@ -9,6 +9,7 @@ so every attempt resolves to the "unknown" bucket).
 import pytest_asyncio
 
 from app.core.middleware import _login_failures, LOGIN_FAIL_MAX
+from app.core.security import decode_access_token
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -147,3 +148,26 @@ async def test_successful_login_resets_failure_bucket(client):
     )
     assert bad_after_success_1.status_code == 401
     assert bad_after_success_2.status_code == 401
+
+
+async def test_auth_router_login_token_includes_purpose_and_token_version(client):
+    created = await client.post(
+        "/api/v1/users",
+        json={
+            "organization_id": 1,
+            "name": "Purpose Login User",
+            "email": "purpose-login@gmail.com",
+            "password": "StrongPass123!",
+            "role": "STAFF",
+        },
+    )
+    assert created.status_code == 201
+
+    login = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "purpose-login@gmail.com", "password": "StrongPass123!"},
+    )
+    assert login.status_code == 200
+    payload = decode_access_token(login.json()["access_token"])
+    assert payload.get("purpose") == "personal"
+    assert int(payload.get("token_version", 0)) >= 1

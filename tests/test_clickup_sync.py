@@ -8,7 +8,7 @@ from app.services import clickup_service
 
 
 def _ceo_headers(org_id: int = 1) -> dict:
-    token = create_access_token({"id": 1, "email": "ceo@org.com", "role": "CEO", "org_id": org_id})
+    token = create_access_token({"id": 1, "email": "ceo@org1.com", "role": "CEO", "org_id": org_id, "token_version": 1})
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -51,7 +51,7 @@ async def test_clickup_connect_bad_token_returns_400(client, monkeypatch):
 
 
 async def test_clickup_connect_denied_for_staff(client):
-    staff_token = create_access_token({"id": 2, "email": "staff@org.com", "role": "STAFF", "org_id": 1})
+    staff_token = create_access_token({"id": 4, "email": "staff@org1.com", "role": "STAFF", "org_id": 1, "token_version": 1})
     response = await client.post(
         "/api/v1/integrations/clickup/connect",
         json={"api_token": "pk_anything"},
@@ -123,7 +123,7 @@ async def test_clickup_sync_when_not_connected_returns_400(client, monkeypatch):
 
 
 async def test_clickup_sync_denied_for_manager(client):
-    mgr_token = create_access_token({"id": 3, "email": "mgr@org.com", "role": "MANAGER", "org_id": 1})
+    mgr_token = create_access_token({"id": 3, "email": "manager@org1.com", "role": "MANAGER", "org_id": 1, "token_version": 1})
     response = await client.post(
         "/api/v1/integrations/clickup/sync",
         headers={"Authorization": f"Bearer {mgr_token}"},

@@ -158,10 +158,15 @@ class IntegrationHealthItem(BaseModel):
     type: str
     connected: bool
     state: Literal["healthy", "degraded", "stale", "down"]
+    health_score: int = Field(default=0, ge=0, le=100)
     last_sync_status: str | None = None
     last_sync_at: datetime | None = None
     stale: bool
     age_hours: float | None = None
+    token_age_days: int | None = None
+    sync_error_rate_24h: float | None = Field(default=None, ge=0.0, le=1.0)
+    recent_failures_24h: int = 0
+    rate_limit_state: Literal["ok", "elevated", "unknown"] = "unknown"
     suggested_actions: list[str] = Field(default_factory=list)
 
 
@@ -171,6 +176,7 @@ class IntegrationHealthRead(BaseModel):
     total_connected: int
     failing_count: int
     stale_count: int
+    overall_health_score: int = Field(default=0, ge=0, le=100)
     items: list[IntegrationHealthItem]
 
 
@@ -287,6 +293,28 @@ class CEOMorningBriefRead(BaseModel):
     mode: Literal["suggest_only"]
 
 
+class RecommendationConfidenceRead(BaseModel):
+    score: int = Field(ge=0, le=100)
+    level: Literal["low", "medium", "high"]
+    reasons: list[str]
+    needs_human_review: bool
+
+
+class CEODailyBriefActionRead(BaseModel):
+    title: str
+    owner: Literal["nidin", "admin", "sharon", "mano"]
+    priority: Literal["high", "medium", "low"]
+    source: str
+    confidence: RecommendationConfidenceRead
+
+
+class CEODailyBriefRead(BaseModel):
+    generated_at: datetime
+    summary: dict
+    top_actions: list[CEODailyBriefActionRead]
+    mode: Literal["suggest_only"]
+
+
 class BrainTrainRequest(BaseModel):
     challenge: str = Field(default="Increase execution quality with strict data-driven coaching.", min_length=8, max_length=2000)
     weeks: int = Field(default=1, ge=1, le=12)
@@ -299,3 +327,29 @@ class BrainTrainRead(BaseModel):
     metrics: dict
     clone_training: dict
     ceo_brain: dict
+
+
+class CloneSelfDevelopRequest(BaseModel):
+    challenge: str = Field(
+        default="Identify clone limitations and propose a practical self-improvement plan.",
+        min_length=8,
+        max_length=2000,
+    )
+    week_start_date: datetime | None = None
+
+
+class CloneLimitationRead(BaseModel):
+    name: str
+    severity: Literal["low", "medium", "high", "critical"]
+    impact: str
+    evidence: str
+
+
+class CloneSelfDevelopRead(BaseModel):
+    ok: bool
+    mode: Literal["suggest_only"]
+    provider: str
+    limitations: list[CloneLimitationRead]
+    development_plan: str
+    next_actions: list[str]
+    diagnostics: dict

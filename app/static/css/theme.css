@@ -956,3 +956,33 @@ h1,
     font-weight: 600 !important;
   }
 }
+
+/* -------------------------------------------------------------------------
+   Touch-first ergonomics
+--------------------------------------------------------------------------- */
+@media (pointer: coarse) {
+  html, body {
+    overscroll-behavior-y: contain;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :where(button, a, input, textarea, select, summary, .sb-item) {
+    touch-action: manipulation;
+  }
+
+  :where(.btn, .btn-run, .chat-send, .role-btn, .ia-btn, .filter-btn, .btn-agent-action, .sb-item) {
+    min-height: 44px !important;
+  }
+
+  :where(.btn, .btn-run, .chat-send, .role-btn, .ia-btn, .filter-btn, .btn-agent-action):active {
+    transform: scale(0.985);
+  }
+
+  .chat-history,
+  #tasks-list,
+  #inbox-list,
+  #audit-list,
+  #integrations-list {
+    -webkit-overflow-scrolling: touch;
+  }
+}

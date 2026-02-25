@@ -26,6 +26,10 @@ async def agent_chat(
     The clone automatically picks the right role (CEO, Ops, Sales, Tech PM)
     based on your message, or you can force a role with force_role.
     """
+    # Only CEO/ADMIN may force a specific role; other roles get keyword routing
+    if data.force_role and current_user["role"] not in {"CEO", "ADMIN"}:
+        data.force_role = None
+
     # Build memory context from profile, team, and today's priorities
     org_id = int(current_user["org_id"])
     memory_context = await build_memory_context(db, organization_id=org_id)

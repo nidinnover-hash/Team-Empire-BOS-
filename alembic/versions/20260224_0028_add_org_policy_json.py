@@ -17,13 +17,18 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "organizations",
-        sa.Column("policy_json", sa.Text(), nullable=False, server_default="{}"),
-    )
-    op.alter_column("organizations", "policy_json", server_default=None)
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    columns = {col["name"] for col in inspector.get_columns("organizations")}
+    if "policy_json" not in columns:
+        op.add_column(
+            "organizations",
+            sa.Column("policy_json", sa.Text(), nullable=False, server_default="{}"),
+        )
+    # SQLite doesn't support ALTER COLUMN DROP DEFAULT.
+    if bind.dialect.name != "sqlite":
+        op.alter_column("organizations", "policy_json", server_default=None)
 
 
 def downgrade() -> None:
     op.drop_column("organizations", "policy_json")
-

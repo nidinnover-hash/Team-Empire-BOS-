@@ -17,12 +17,14 @@ async def _get_session():
 async def _seed_approval(client, **overrides):
     session, agen = await _get_session()
     try:
+        _status = overrides.get("status", "pending")
         approval = Approval(
             organization_id=overrides.get("organization_id", 1),
             requested_by=overrides.get("requested_by", 1),
             approval_type=overrides.get("approval_type", "task_execution"),
             payload_json=overrides.get("payload_json", {}),
-            status=overrides.get("status", "pending"),
+            status=_status,
+            approved_by=overrides.get("approved_by", 1 if _status == "approved" else None),
             created_at=datetime.now(timezone.utc),
         )
         session.add(approval)

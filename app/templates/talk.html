@@ -45,6 +45,11 @@
     <div class="sub">Continuous work conversation mode</div>
   </div>
   <div class="actions">
+    <div class="avatar-switch" role="group" aria-label="Avatar mode">
+      <button class="btn avatar active" type="button" id="avatar-professional-btn">Professional</button>
+      <button class="btn avatar" type="button" id="avatar-personal-btn">Personal</button>
+      <button class="btn avatar" type="button" id="avatar-entertainment-btn">Entertainment</button>
+    </div>
     <button class="btn mic" type="button" id="mic-btn">Start Mic</button>
   </div>
 </div>
@@ -75,6 +80,10 @@
       <div>
         <div class="section-title">Top Tasks</div>
         <div class="list" id="top-tasks"><div class="item">No open tasks yet.</div></div>
+      </div>
+      <div>
+        <div class="section-title">Mode Focus</div>
+        <div class="item" id="mode-focus-copy">Professional mode: strategy, execution, approvals, and KPIs.</div>
       </div>
       <div>
         <div class="section-title">Suggested Prompts</div>

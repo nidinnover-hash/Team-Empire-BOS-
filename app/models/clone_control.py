@@ -93,7 +93,7 @@ class CloneLearningFeedback(Base):
     source_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     outcome_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)  # 0..1
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

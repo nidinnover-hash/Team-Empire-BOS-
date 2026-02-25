@@ -1,8 +1,16 @@
 from app.core.security import create_access_token
 
 
+_ROLE_USER = {
+    "CEO": (1, "ceo@org1.com"),
+    "MANAGER": (3, "manager@org1.com"),
+    "STAFF": (4, "staff@org1.com"),
+}
+
+
 def _auth(role: str, org_id: int = 1) -> dict:
-    token = create_access_token({"id": 99, "email": f"{role.lower()}@org.com", "role": role, "org_id": org_id})
+    uid, email = _ROLE_USER.get(role, (1, "ceo@org1.com"))
+    token = create_access_token({"id": uid, "email": email, "role": role, "org_id": org_id, "token_version": 1})
     return {"Authorization": f"Bearer {token}"}
 
 

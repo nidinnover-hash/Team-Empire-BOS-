@@ -8,7 +8,7 @@ from app.models.email import Email
 
 def _auth_headers(user_id: int, email: str, role: str, org_id: int) -> dict:
     token = create_access_token(
-        {"id": user_id, "email": email, "role": role, "org_id": org_id}
+        {"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1}
     )
     return {"Authorization": f"Bearer {token}"}
 
@@ -28,10 +28,12 @@ async def test_orgs_create_and_list(client):
     org2_id = await _create_second_org(client, ceo_headers)
     assert org2_id >= 1
 
+    # List returns only the actor's own org (org_id=1), not all orgs.
     list_response = await client.get("/api/v1/orgs", headers=ceo_headers)
     assert list_response.status_code == 200
     slugs = {item["slug"] for item in list_response.json()}
-    assert "org-two" in slugs
+    assert "test-org" in slugs
+    assert "org-two" not in slugs
 
 
 async def test_cross_org_project_update_is_denied(client):

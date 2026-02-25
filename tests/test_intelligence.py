@@ -2,12 +2,12 @@ from app.core.security import create_access_token
 
 
 def _auth_headers(user_id: int, email: str, role: str, org_id: int = 1) -> dict:
-    token = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id})
+    token = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1})
     return {"Authorization": f"Bearer {token}"}
 
 
 async def test_intelligence_summary_returns_kpis(client):
-    headers = _auth_headers(1, "ceo@ai.com", "CEO")
+    headers = _auth_headers(1, "ceo@org1.com", "CEO")
     response = await client.get("/api/v1/intelligence/summary?window_days=7", headers=headers)
     assert response.status_code == 200
     payload = response.json()
@@ -21,7 +21,7 @@ async def test_intelligence_summary_returns_kpis(client):
 
 
 async def test_intelligence_diff_returns_expected_shape(client):
-    headers = _auth_headers(1, "ceo@ai.com", "CEO")
+    headers = _auth_headers(1, "ceo@org1.com", "CEO")
     response = await client.get("/api/v1/intelligence/diff", headers=headers)
     assert response.status_code == 200
     payload = response.json()
@@ -38,7 +38,7 @@ async def test_intelligence_diff_returns_expected_shape(client):
 
 
 async def test_daily_run_writes_decision_trace(client):
-    headers = _auth_headers(1, "ceo@ai.com", "CEO")
+    headers = _auth_headers(1, "ceo@org1.com", "CEO")
     team_member = await client.post(
         "/api/v1/memory/team",
         json={

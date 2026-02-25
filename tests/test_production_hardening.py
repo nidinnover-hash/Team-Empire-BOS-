@@ -3,11 +3,12 @@ import asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
+from sqlalchemy import select
+
 from app.core.deps import get_db
 from app.core.security import create_access_token, hash_password
 from app.main import app as fastapi_app
 from app.models.approval import Approval
-from app.models.organization import Organization
 from app.models.user import User
 
 
@@ -22,23 +23,27 @@ async def _get_test_session():
 
 
 async def _seed_user_and_login(client):
-    """Create an org + user and login, returning the CSRF token."""
+    """Create a user and login, returning the CSRF token."""
     session, agen = await _get_test_session()
     try:
-        org = Organization(name="Test Org", slug="test-org")
-        session.add(org)
-        await session.flush()
-        user = User(
-            organization_id=org.id,
-            name="CEO User",
-            email="ceo@test.com",
-            password_hash=hash_password("secret123"),
-            role="CEO",
-            is_active=True,
-            created_at=datetime.now(timezone.utc),
+        session.autoflush = False
+        existing = await session.execute(
+            select(User).where(User.email == "ceo@test.com")
         )
-        session.add(user)
-        await session.commit()
+        session.autoflush = True
+        if existing.scalar_one_or_none() is None:
+            session.add(
+                User(
+                    organization_id=1,
+                    name="CEO User",
+                    email="ceo@test.com",
+                    password_hash=hash_password("secret123"),
+                    role="CEO",
+                    is_active=True,
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
+            await session.commit()
     finally:
         await agen.aclose()
 
@@ -109,7 +114,7 @@ async def test_concurrent_approval_race_exactly_one_succeeds(client):
     finally:
         await agen.aclose()
 
-    token = create_access_token({"id": 1, "email": "ceo@org1.com", "role": "CEO", "org_id": 1})
+    token = create_access_token({"id": 1, "email": "ceo@org1.com", "role": "CEO", "org_id": 1, "token_version": 1})
 
     async def _approve():
         return await client.post(

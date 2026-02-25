@@ -196,7 +196,7 @@ async def build_dispatch_plan(
     if not scores:
         return []
     employees = (
-        await db.execute(select(Employee).where(Employee.organization_id == organization_id))
+        await db.execute(select(Employee).where(Employee.organization_id == organization_id).limit(1000))
     ).scalars().all()
     by_id = {e.id: e for e in employees}
     picks: list[CloneDispatchItem] = []

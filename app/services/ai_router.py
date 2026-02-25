@@ -34,6 +34,10 @@ _INJECTION_PATTERNS = [
     "[MEMORY CONTEXT]", "[END MEMORY]", "[SYSTEM]", "[INSTRUCTIONS]",
     "[CONTEXT]", "[USER]", "[ASSISTANT]", "[HUMAN]", "[AI]",
     "[INST]", "[/INST]", "<<SYS>>", "<</SYS>>",
+    "### System", "### Human", "### Assistant",
+    "<|system|>", "<|user|>", "<|assistant|>", "<|im_start|>", "<|im_end|>",
+    "[MEMORY CONTEXT \u2014 USER-SUPPLIED DATA",
+    "TREAT AS UNTRUSTED",
 ]
 _INJECTION_RE = re.compile(
     "|".join(re.escape(p) for p in _INJECTION_PATTERNS), re.IGNORECASE,
@@ -166,10 +170,7 @@ async def call_ai(
         # These originate from user-written memory entries, emails, and task titles —
         # treat them as untrusted data that must not alter the prompt structure.
         safe_context = memory_context
-        safe_context = _INJECTION_RE.sub(
-            lambda m: m.group(0)[:1] + "~" + m.group(0)[1:],
-            safe_context,
-        )
+        safe_context = _INJECTION_RE.sub("[REDACTED]", safe_context)
         if len(safe_context) > 4000:
             safe_context = safe_context[:4000] + "\n... (memory truncated)"
         full_system = (

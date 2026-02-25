@@ -88,3 +88,95 @@ async def test_collect_data_daily_context_rejects_invalid_type(client):
     )
     assert r.status_code == 400
     assert "context_type must be one of" in r.json()["detail"]
+
+
+async def test_meeting_coach_generates_training_signals(client):
+    r = await client.post(
+        "/api/v1/data/meeting-coach",
+        json={
+            "objective": "sales",
+            "speaker_name": "Sharon",
+            "consent_confirmed": True,
+            "transcript": (
+                "Hi team, thanks for joining. Can you share your current admission goals? "
+                "I understand your concern about budget and timeline. "
+                "What outcome matters most in the next 90 days? "
+                "Great, next step is I will send a proposal and confirm timeline by tomorrow."
+            ),
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["tone_profile"] in {"consultative", "advisor-led", "pitch-heavy"}
+    assert "sales_signals" in body
+    assert body["memory_keys"]
+    assert body["note_id"] is not None
+
+
+async def test_meeting_coach_requires_consent(client):
+    r = await client.post(
+        "/api/v1/data/meeting-coach",
+        json={
+            "objective": "sales",
+            "consent_confirmed": False,
+            "transcript": "This transcript is long enough to pass minimum length but should fail due to consent.",
+        },
+    )
+    assert r.status_code == 400
+    assert "consent_confirmed must be true" in r.json()["detail"]
+
+
+async def test_mobile_capture_analyze_feeds_memory_and_policy_layer(client):
+    r = await client.post(
+        "/api/v1/data/mobile-capture/analyze",
+        json={
+            "device_type": "mobile",
+            "capture_type": "screenshot",
+            "content_text": (
+                "Project roadmap review and task deadline this week.\n"
+                "Follow up client meeting notes and approval checklist.\n"
+                "Gambling promo link and phishing scam message spotted."
+            ),
+            "wanted_topics": ["roadmap", "deadline", "client"],
+            "unwanted_topics": ["gambling", "phishing"],
+            "create_policy_drafts": True,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["wanted_count"] >= 2
+    assert body["unwanted_count"] >= 1
+    assert body["memory_keys"]
+    assert body["policy_rule_ids"]
+    assert body["note_id"] is not None
+
+
+async def test_mobile_capture_upload_analyze_with_mocked_ocr(client, monkeypatch):
+    from app.services import data_collection as data_collection_service
+
+    def _fake_ocr(_payload: bytes) -> tuple[str, str]:
+        return (
+            "Deadline moved to Friday. Client follow-up required.\nPhishing link detected in screenshot.",
+            "mock-ocr",
+        )
+
+    monkeypatch.setattr(data_collection_service, "extract_text_from_image_bytes", _fake_ocr)
+
+    r = await client.post(
+        "/api/v1/data/mobile-capture/upload-analyze",
+        data={
+            "device_type": "mobile",
+            "capture_type": "screenshot",
+            "wanted_topics": "deadline,client",
+            "unwanted_topics": "phishing",
+            "create_policy_drafts": "true",
+        },
+        files={"file": ("capture.png", b"fake-image-bytes", "image/png")},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ocr_engine"] == "mock-ocr"
+    assert body["filename"] == "capture.png"
+    assert body["extracted_chars"] > 10
+    assert body["wanted_count"] >= 1
+    assert body["unwanted_count"] >= 1

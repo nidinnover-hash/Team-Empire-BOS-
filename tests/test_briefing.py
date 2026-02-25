@@ -5,14 +5,14 @@ from app.core.security import create_access_token
 
 def _auth_headers(user_id: int, email: str, role: str, org_id: int = 1) -> dict:
     token = create_access_token(
-        {"id": user_id, "email": email, "role": role, "org_id": org_id}
+        {"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1}
     )
     return {"Authorization": f"Bearer {token}"}
 
 
 async def test_executive_briefing_returns_expected_sections(client):
-    ceo_headers = _auth_headers(1, "ceo@ai.com", "CEO", 1)
-    manager_headers = _auth_headers(2, "manager@ai.com", "MANAGER", 1)
+    ceo_headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    manager_headers = _auth_headers(3, "manager@org1.com", "MANAGER", 1)
 
     context_res = await client.post(
         "/api/v1/memory/context",
@@ -46,6 +46,6 @@ async def test_executive_briefing_returns_expected_sections(client):
 
 
 async def test_executive_briefing_staff_forbidden(client):
-    staff_headers = _auth_headers(3, "staff@ai.com", "STAFF", 1)
+    staff_headers = _auth_headers(4, "staff@org1.com", "STAFF", 1)
     response = await client.get("/api/v1/briefing/executive", headers=staff_headers)
     assert response.status_code == 403

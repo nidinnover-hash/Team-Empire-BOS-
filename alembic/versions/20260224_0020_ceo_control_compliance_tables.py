@@ -15,37 +15,61 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "org_people",
-        sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
-        sa.Column("organization_id", sa.Integer, sa.ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False),
-        sa.Column("email", sa.String(320), nullable=False),
-        sa.Column("name", sa.String(255), nullable=True),
-        sa.Column("internal_role", sa.String(50), nullable=False),
-        sa.Column("active", sa.Boolean, nullable=False, server_default=sa.text("1")),
-        sa.Column("manager_email", sa.String(320), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-    )
-    op.create_index("ix_org_people_org_id", "org_people", ["organization_id"])
-    op.create_index("ix_org_people_email", "org_people", ["email"])
-    op.create_unique_constraint("uq_org_people_org_email", "org_people", ["organization_id", "email"])
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    tables = set(inspector.get_table_names())
+    existing_org_people_indexes = {
+        idx["name"] for idx in inspector.get_indexes("org_people")
+    } if "org_people" in tables else set()
 
-    op.create_table(
-        "github_identity_map",
-        sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
-        sa.Column("organization_id", sa.Integer, sa.ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False),
-        sa.Column("company_email", sa.String(320), nullable=False),
-        sa.Column("github_login", sa.String(255), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-    )
-    op.create_index("ix_github_identity_map_org_id", "github_identity_map", ["organization_id"])
-    op.create_index("ix_github_identity_map_email", "github_identity_map", ["company_email"])
-    op.create_index("ix_github_identity_map_login", "github_identity_map", ["github_login"])
-    op.create_unique_constraint(
-        "uq_github_identity_map_org_email", "github_identity_map", ["organization_id", "company_email"]
-    )
+    if "org_people" not in tables:
+        op.create_table(
+            "org_people",
+            sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+            sa.Column("organization_id", sa.Integer, sa.ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False),
+            sa.Column("email", sa.String(320), nullable=False),
+            sa.Column("name", sa.String(255), nullable=True),
+            sa.Column("internal_role", sa.String(50), nullable=False),
+            sa.Column("active", sa.Boolean, nullable=False, server_default=sa.text("1")),
+            sa.Column("manager_email", sa.String(320), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+            sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        )
+    if "ix_org_people_org_id" not in existing_org_people_indexes:
+        op.create_index("ix_org_people_org_id", "org_people", ["organization_id"])
+    if "ix_org_people_email" not in existing_org_people_indexes:
+        op.create_index("ix_org_people_email", "org_people", ["email"])
+    if "uq_org_people_org_email" not in existing_org_people_indexes:
+        # SQLite does not support ALTER TABLE ADD CONSTRAINT UNIQUE.
+        op.create_index("uq_org_people_org_email", "org_people", ["organization_id", "email"], unique=True)
+
+    existing_gh_identity_indexes = {
+        idx["name"] for idx in inspector.get_indexes("github_identity_map")
+    } if "github_identity_map" in tables else set()
+    if "github_identity_map" not in tables:
+        op.create_table(
+            "github_identity_map",
+            sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+            sa.Column("organization_id", sa.Integer, sa.ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False),
+            sa.Column("company_email", sa.String(320), nullable=False),
+            sa.Column("github_login", sa.String(255), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+            sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        )
+    if "ix_github_identity_map_org_id" not in existing_gh_identity_indexes:
+        op.create_index("ix_github_identity_map_org_id", "github_identity_map", ["organization_id"])
+    if "ix_github_identity_map_email" not in existing_gh_identity_indexes:
+        op.create_index("ix_github_identity_map_email", "github_identity_map", ["company_email"])
+    if "ix_github_identity_map_login" not in existing_gh_identity_indexes:
+        op.create_index("ix_github_identity_map_login", "github_identity_map", ["github_login"])
+    if "uq_github_identity_map_org_email" not in existing_gh_identity_indexes:
+        # SQLite does not support ALTER TABLE ADD CONSTRAINT UNIQUE.
+        op.create_index(
+            "uq_github_identity_map_org_email",
+            "github_identity_map",
+            ["organization_id", "company_email"],
+            unique=True,
+        )
 
     op.create_table(
         "github_role_snapshot",
@@ -291,4 +315,3 @@ def downgrade() -> None:
     op.drop_index("ix_org_people_email", table_name="org_people")
     op.drop_index("ix_org_people_org_id", table_name="org_people")
     op.drop_table("org_people")
-

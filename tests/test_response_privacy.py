@@ -5,7 +5,6 @@ from app.core.deps import get_db
 from app.core.security import create_access_token
 from app.main import app as fastapi_app
 from app.models.event import Event
-from app.models.organization import Organization
 
 
 async def _insert_raw_event(payload_json: dict) -> None:
@@ -13,10 +12,6 @@ async def _insert_raw_event(payload_json: dict) -> None:
     agen = override()
     session = await agen.__anext__()
     try:
-        org = await session.get(Organization, 1)
-        if org is None:
-            session.add(Organization(id=1, name="Org 1", slug="org-1"))
-            await session.flush()
         session.add(
             Event(
                 organization_id=1,

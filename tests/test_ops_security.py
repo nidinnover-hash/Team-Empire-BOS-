@@ -9,12 +9,12 @@ from app.models.email import Email
 
 
 def _auth_headers(user_id: int, email: str, role: str, org_id: int = 1) -> dict:
-    token = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id})
+    token = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1})
     return {"Authorization": f"Bearer {token}"}
 
 
 async def test_ops_project_create_requires_manager_or_above(client):
-    headers = _auth_headers(2, "staff@ai.com", "STAFF")
+    headers = _auth_headers(4, "staff@org1.com", "STAFF")
     response = await client.post(
         "/api/v1/ops/projects",
         json={"title": "Restricted Project"},
@@ -24,7 +24,7 @@ async def test_ops_project_create_requires_manager_or_above(client):
 
 
 async def test_ops_task_create_logs_event(client):
-    headers = _auth_headers(1, "ceo@ai.com", "CEO")
+    headers = _auth_headers(1, "ceo@org1.com", "CEO")
     create_response = await client.post(
         "/api/v1/ops/tasks",
         json={"title": "Audit me"},
@@ -38,7 +38,7 @@ async def test_ops_task_create_logs_event(client):
 
 
 async def test_approval_request_and_approve_flow(client):
-    staff_headers = _auth_headers(3, "staff@ai.com", "STAFF")
+    staff_headers = _auth_headers(4, "staff@org1.com", "STAFF")
     req = await client.post(
         "/api/v1/approvals/request",
         json={"approval_type": "assign_leads", "payload_json": {"count": 10}},
@@ -48,7 +48,7 @@ async def test_approval_request_and_approve_flow(client):
     approval_id = req.json()["id"]
     assert req.json()["status"] == "pending"
 
-    ceo_headers = _auth_headers(1, "ceo@ai.com", "CEO")
+    ceo_headers = _auth_headers(1, "ceo@org1.com", "CEO")
     approved = await client.post(
         f"/api/v1/approvals/{approval_id}/approve",
         json={"note": "YES EXECUTE"},
@@ -59,7 +59,7 @@ async def test_approval_request_and_approve_flow(client):
 
 
 async def test_risky_approval_requires_yes_execute(client):
-    staff_headers = _auth_headers(3, "staff@ai.com", "STAFF")
+    staff_headers = _auth_headers(4, "staff@org1.com", "STAFF")
     req = await client.post(
         "/api/v1/approvals/request",
         json={"approval_type": "spend", "payload_json": {"amount": 50}},
@@ -68,7 +68,7 @@ async def test_risky_approval_requires_yes_execute(client):
     assert req.status_code == 201
     approval_id = req.json()["id"]
 
-    ceo_headers = _auth_headers(1, "ceo@ai.com", "CEO")
+    ceo_headers = _auth_headers(1, "ceo@org1.com", "CEO")
     denied = await client.post(
         f"/api/v1/approvals/{approval_id}/approve",
         json={"note": "approved"},
@@ -78,7 +78,7 @@ async def test_risky_approval_requires_yes_execute(client):
 
 
 async def test_approval_timeline_returns_summary_and_items(client):
-    staff_headers = _auth_headers(3, "staff@ai.com", "STAFF")
+    staff_headers = _auth_headers(4, "staff@org1.com", "STAFF")
     req = await client.post(
         "/api/v1/approvals/request",
         json={"approval_type": "assign_leads", "payload_json": {"count": 10}},
@@ -86,7 +86,7 @@ async def test_approval_timeline_returns_summary_and_items(client):
     )
     assert req.status_code == 201
 
-    ceo_headers = _auth_headers(1, "ceo@ai.com", "CEO")
+    ceo_headers = _auth_headers(1, "ceo@org1.com", "CEO")
     timeline = await client.get("/api/v1/approvals/timeline?limit=10", headers=ceo_headers)
     assert timeline.status_code == 200
     data = timeline.json()
@@ -124,7 +124,7 @@ async def _seed_email_for_org1() -> int:
 
 
 async def test_ops_daily_run_creates_drafts_only(client):
-    ceo_headers = _auth_headers(1, "ceo@ai.com", "CEO")
+    ceo_headers = _auth_headers(1, "ceo@org1.com", "CEO")
 
     team_member = await client.post(
         "/api/v1/memory/team",
@@ -158,13 +158,13 @@ async def test_ops_daily_run_creates_drafts_only(client):
 
 
 async def test_ops_daily_run_staff_forbidden(client):
-    staff_headers = _auth_headers(4, "staff@ai.com", "STAFF")
+    staff_headers = _auth_headers(4, "staff@org1.com", "STAFF")
     response = await client.post("/api/v1/ops/daily-run", headers=staff_headers)
     assert response.status_code == 403
 
 
 async def test_ops_daily_run_is_idempotent_same_scope_same_day(client):
-    ceo_headers = _auth_headers(1, "ceo@ai.com", "CEO")
+    ceo_headers = _auth_headers(1, "ceo@org1.com", "CEO")
     team_member = await client.post(
         "/api/v1/memory/team",
         json={
@@ -194,7 +194,7 @@ async def test_ops_daily_run_is_idempotent_same_scope_same_day(client):
 
 
 async def test_ops_daily_runs_history_lists_runs(client):
-    ceo_headers = _auth_headers(1, "ceo@ai.com", "CEO")
+    ceo_headers = _auth_headers(1, "ceo@org1.com", "CEO")
     team_member = await client.post(
         "/api/v1/memory/team",
         json={
