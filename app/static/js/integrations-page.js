@@ -90,6 +90,35 @@
     slack:             '{\n  "access_token": "xoxb-XXXX-YYYY"\n}',
     digitalocean:      '{\n  "api_token": "dop_v1_xxxxxxxx"\n}',
   };
+  var MODAL_CONNECT_ENDPOINTS = {
+    github: "/api/v1/integrations/github/connect",
+    clickup: "/api/v1/integrations/clickup/connect",
+    slack: "/api/v1/integrations/slack/connect",
+    digitalocean: "/api/v1/integrations/digitalocean/connect",
+    perplexity: "/api/v1/integrations/perplexity/connect",
+    linkedin: "/api/v1/integrations/linkedin/connect",
+    notion: "/api/v1/integrations/notion/connect",
+    stripe: "/api/v1/integrations/stripe/connect",
+    google_analytics: "/api/v1/integrations/google-analytics/connect",
+    calendly: "/api/v1/integrations/calendly/connect",
+    elevenlabs: "/api/v1/integrations/elevenlabs/connect",
+    hubspot: "/api/v1/integrations/hubspot/connect"
+  };
+
+  function buildModalProviderPayload(type, config) {
+    if (type === "github" || type === "clickup") return { api_token: config.api_token || config.access_token || "" };
+    if (type === "slack") return { bot_token: config.bot_token || config.access_token || "" };
+    if (type === "digitalocean") return { api_token: config.api_token || config.access_token || "" };
+    if (type === "perplexity" || type === "elevenlabs") return { api_key: config.api_key || config.access_token || "" };
+    if (type === "linkedin" || type === "hubspot") return { access_token: config.access_token || "" };
+    if (type === "notion" || type === "calendly") return { api_token: config.api_token || config.access_token || "" };
+    if (type === "stripe") return { secret_key: config.secret_key || config.api_key || "" };
+    if (type === "google_analytics") return {
+      access_token: config.access_token || "",
+      property_id: config.property_id || ""
+    };
+    return { type: type, config_json: config };
+  }
 
   var esc = window.PCUI.escapeHtml;
   function fmtDate(v) {
@@ -493,10 +522,11 @@
     catch (err) { setModalStatus("Invalid JSON in config_json.", "err"); return; }
     try {
       if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(btn, true, "Saving...");
-      await apiJson("/api/v1/integrations/connect", {
+      var endpoint = MODAL_CONNECT_ENDPOINTS[type] || "/api/v1/integrations/connect";
+      await apiJson(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: type, config_json: config })
+        body: JSON.stringify(buildModalProviderPayload(type, config))
       });
       setModalStatus("Saved: " + type, "ok");
       await fetchIntegrations();

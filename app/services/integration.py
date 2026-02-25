@@ -6,12 +6,14 @@ from sqlalchemy.orm.attributes import set_committed_value
 from typing import cast
 
 from app.core.token_crypto import decrypt_config, encrypt_config
+from app.core.sensitive_keys import is_sensitive_key
 from app.models.integration import Integration
 
 
 def _validate_token_fields(config_json: dict) -> None:
-    for field in ("access_token", "refresh_token", "api_token"):
-        value = config_json.get(field)
+    for field, value in config_json.items():
+        if not isinstance(field, str) or not is_sensitive_key(field):
+            continue
         if value is None:
             continue
         if not isinstance(value, str):

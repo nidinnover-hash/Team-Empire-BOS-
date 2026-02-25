@@ -71,12 +71,23 @@ async def test_cross_org_disconnect_is_denied_by_not_found(client):
     assert response.status_code == 404
 
 
+async def test_generic_connect_blocks_provider_specific_types(client):
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    blocked = await client.post(
+        "/api/v1/integrations/connect",
+        json={"type": "github", "config_json": {"access_token": "ghp_x"}},
+        headers=headers,
+    )
+    assert blocked.status_code == 400
+    assert "provider-specific verification endpoint" in blocked.json()["detail"]
+
+
 async def test_decrypted_read_does_not_persist_plaintext_tokens_on_commit(client):
     headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
     connected = await client.post(
         "/api/v1/integrations/connect",
         json={
-            "type": "github",
+            "type": "gmail",
             "config_json": {"access_token": "ghp_sensitive_token_123"},
         },
         headers=headers,
@@ -90,7 +101,7 @@ async def test_decrypted_read_does_not_persist_plaintext_tokens_on_commit(client
     agen = override()
     session = await agen.__anext__()
     try:
-        item = await integration_service.get_integration_by_type(session, 1, "github")
+        item = await integration_service.get_integration_by_type(session, 1, "gmail")
         assert item is not None
         assert item.config_json.get("access_token") == "ghp_sensitive_token_123"
         item.updated_at = datetime.now(timezone.utc)

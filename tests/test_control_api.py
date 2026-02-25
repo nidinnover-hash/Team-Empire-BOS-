@@ -50,7 +50,7 @@ async def test_control_health_summary_counts(client):
     # one connected integration
     integration_resp = await client.post(
         "/api/v1/integrations/connect",
-        json={"type": "slack", "config_json": {"access_token": "xoxb-demo-token"}},
+        json={"type": "gmail", "config_json": {"access_token": "token-demo"}},
         headers=headers,
     )
     assert integration_resp.status_code == 201
@@ -113,6 +113,17 @@ async def test_control_system_health_endpoint(client):
     assert body["overall_status"] in {"ok", "degraded", "down"}
     assert isinstance(body["dependencies"], list)
     assert "integrations" in body
+
+
+async def test_control_storage_metrics_endpoint(client):
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    resp = await client.get("/api/v1/control/storage/metrics", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "generated_at" in body
+    assert "memory_context_cache" in body
+    for key in ("hits", "misses", "stale_pruned", "evictions", "size"):
+        assert key in body["memory_context_cache"]
 
 
 async def test_control_scheduler_jobs_endpoints(client):

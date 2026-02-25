@@ -23,8 +23,8 @@ from typing import cast
 from cryptography.fernet import Fernet, InvalidToken
 
 from app.core.config import settings
+from app.core.sensitive_keys import is_sensitive_key
 
-_TOKEN_FIELDS = ("access_token", "refresh_token", "api_token", "api_key")
 _INVALID_FIELDS_KEY = "__invalid_token_fields"
 logger = logging.getLogger(__name__)
 
@@ -72,8 +72,10 @@ def encrypt_config(config_json: dict) -> dict:
     result = dict(config_json)
     # Internal diagnostics only; never persist this helper field.
     result.pop(_INVALID_FIELDS_KEY, None)
-    for field in _TOKEN_FIELDS:
-        value = result.get(field)
+    for field, current_value in list(result.items()):
+        if not isinstance(field, str) or not is_sensitive_key(field):
+            continue
+        value = current_value
         if not value or not isinstance(value, str):
             continue
         # Normalize accidentally pre-encrypted values before re-encrypting.
@@ -98,10 +100,12 @@ def decrypt_config(config_json: dict) -> dict:
     """
     result = dict(config_json)
     invalid_fields: list[str] = []
-    for field in _TOKEN_FIELDS:
-        if result.get(field):
+    for field, current_value in list(result.items()):
+        if not isinstance(field, str) or not is_sensitive_key(field):
+            continue
+        if current_value:
             try:
-                result[field] = decrypt_token(result[field])
+                result[field] = decrypt_token(str(current_value))
             except InvalidToken:
                 # Pre-migration plaintext value — leave as-is.
                 value = result.get(field)

@@ -12,6 +12,7 @@ from app.services import (
     linkedin_service,
     notion_service,
     stripe_service,
+    google_analytics_service,
     calendly_service,
     elevenlabs_service,
     hubspot_service,
@@ -131,6 +132,20 @@ async def test_stripe_sync_not_connected(client):
 
 
 # ── Google Analytics ────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_ga_connect(client, monkeypatch):
+    async def fake_connect(db, org_id, access_token, property_id=None):
+        return {"id": 106, "connected": True, "property_id": property_id or "123456789"}
+    monkeypatch.setattr(google_analytics_service, "connect_google_analytics", fake_connect)
+    resp = await client.post(
+        "/api/v1/integrations/google-analytics/connect",
+        json={"access_token": "ga-token", "property_id": "123456789"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["connected"] is True
+    assert resp.json()["property_id"] == "123456789"
+
 
 @pytest.mark.asyncio
 async def test_ga_status_not_connected(client):

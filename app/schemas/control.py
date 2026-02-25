@@ -193,6 +193,11 @@ class SystemHealthRead(BaseModel):
     integrations: IntegrationHealthRead
 
 
+class StorageMetricsRead(BaseModel):
+    generated_at: datetime
+    memory_context_cache: dict[str, int]
+
+
 class SecurityPostureRead(BaseModel):
     generated_at: datetime
     status: Literal["ok", "needs_attention"]

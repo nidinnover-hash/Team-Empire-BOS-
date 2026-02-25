@@ -171,6 +171,29 @@ def test_validate_startup_flags_sync_failure_alert_threshold_bounds():
     assert any("SYNC_FAILURE_ALERT_THRESHOLD must be <= 100" in i for i in high_issues)
 
 
+def test_validate_startup_flags_memory_context_cache_bounds():
+    low_ttl = _base_settings(MEMORY_CONTEXT_CACHE_TTL_SECONDS=10)
+    high_ttl = _base_settings(MEMORY_CONTEXT_CACHE_TTL_SECONDS=90_000)
+    low_orgs = _base_settings(MEMORY_CONTEXT_CACHE_MAX_ORGS=5)
+    high_orgs = _base_settings(MEMORY_CONTEXT_CACHE_MAX_ORGS=20_000)
+    assert any(
+        "MEMORY_CONTEXT_CACHE_TTL_SECONDS must be >= 30" in i
+        for i in validate_startup_settings(low_ttl)
+    )
+    assert any(
+        "MEMORY_CONTEXT_CACHE_TTL_SECONDS must be <= 86400" in i
+        for i in validate_startup_settings(high_ttl)
+    )
+    assert any(
+        "MEMORY_CONTEXT_CACHE_MAX_ORGS must be >= 10" in i
+        for i in validate_startup_settings(low_orgs)
+    )
+    assert any(
+        "MEMORY_CONTEXT_CACHE_MAX_ORGS must be <= 10000" in i
+        for i in validate_startup_settings(high_orgs)
+    )
+
+
 def test_validate_startup_flags_rate_limit_max_too_high():
     s = _base_settings(RATE_LIMIT_MAX_REQUESTS=50000)
     issues = validate_startup_settings(s)

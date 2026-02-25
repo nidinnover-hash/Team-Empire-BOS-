@@ -5,12 +5,43 @@ from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
 from app.schemas.integration import (
+    GoogleAnalyticsConnectRequest,
     GoogleAnalyticsStatusRead,
     GoogleAnalyticsSyncResult,
 )
 from app.services import google_analytics_service
 
 router = APIRouter(tags=["Integrations"])
+
+
+@router.post("/google-analytics/connect", response_model=GoogleAnalyticsStatusRead, status_code=201)
+async def ga_connect(
+    data: GoogleAnalyticsConnectRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> GoogleAnalyticsStatusRead:
+    try:
+        result = await google_analytics_service.connect_google_analytics(
+            db,
+            org_id=int(actor["org_id"]),
+            access_token=data.access_token,
+            property_id=data.property_id,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Google Analytics connection failed ({type(exc).__name__}). Check token and GA4 property ID.",
+        ) from exc
+    await record_action(
+        db,
+        event_type="integration_connected",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="integration",
+        entity_id=int(result["id"]),
+        payload_json={"type": "google_analytics", "status": "connected", "property_id": result["property_id"]},
+    )
+    return GoogleAnalyticsStatusRead(connected=True, property_id=str(result["property_id"]))
 
 
 @router.get("/google-analytics/status", response_model=GoogleAnalyticsStatusRead)

@@ -171,3 +171,18 @@ def test_build_typed_context_debug_includes_explain() -> None:
     assert layers
     assert "score" in layers[0]
     assert "explain" in layers[0]
+
+
+def test_memory_context_cache_prune_evicts_stale_and_limits_size() -> None:
+    memory_service._memory_context_cache.clear()
+    memory_service._memory_context_cache.update(
+        {
+            1: (100.0, "ctx-1"),
+            2: (200.0, "ctx-2"),
+            3: (300.0, "ctx-3"),
+        }
+    )
+    memory_service._prune_memory_cache(now_ts=700.0, ttl_seconds=350, max_orgs=2)
+    # org 1 is stale (700-100 >= 350), then oldest remaining is evicted to fit max_orgs.
+    assert 1 not in memory_service._memory_context_cache
+    assert len(memory_service._memory_context_cache) <= 2

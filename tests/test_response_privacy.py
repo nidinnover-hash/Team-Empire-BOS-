@@ -39,7 +39,7 @@ async def test_integrations_response_redacts_sensitive_config_fields(client):
     create_resp = await client.post(
         "/api/v1/integrations/connect",
         json={
-            "type": "github",
+            "type": "gmail",
             "config_json": {
                 "access_token": "ghp_very_secret",
                 "api_key": "secret-key",
@@ -91,7 +91,7 @@ async def test_response_privacy_profile_strict_masks_pii(monkeypatch, client):
     create_resp = await client.post(
         "/api/v1/integrations/connect",
         json={
-            "type": "github",
+            "type": "gmail",
             "config_json": {
                 "username": "strict@example.com",
                 "access_token": "ghp_very_secret",
@@ -109,7 +109,7 @@ async def test_response_privacy_profile_debug_keeps_pii(monkeypatch, client):
     create_resp = await client.post(
         "/api/v1/integrations/connect",
         json={
-            "type": "github",
+            "type": "gmail",
             "config_json": {
                 "username": "debug@example.com",
                 "access_token": "ghp_very_secret",

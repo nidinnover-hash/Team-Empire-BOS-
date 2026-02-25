@@ -116,7 +116,7 @@ async def test_cross_org_integration_list_is_isolated(client):
 
     create = await client.post(
         "/api/v1/integrations/connect",
-        json={"type": "github", "config_json": {"access_token": "abc"}},
+        json={"type": "gmail", "config_json": {"access_token": "abc"}},
         headers=ceo_org1,
     )
     assert create.status_code == 201
@@ -124,10 +124,10 @@ async def test_cross_org_integration_list_is_isolated(client):
     resp_org1 = await client.get("/api/v1/integrations", headers=ceo_org1)
     assert resp_org1.status_code == 200
     types_org1 = {item["type"] for item in resp_org1.json()}
-    assert "github" in types_org1
+    assert "gmail" in types_org1
 
     ceo_org2 = _auth_headers(2, "ceo@org2.com", "CEO", 2)
     resp_org2 = await client.get("/api/v1/integrations", headers=ceo_org2)
     assert resp_org2.status_code == 200
     types_org2 = {item["type"] for item in resp_org2.json()}
-    assert "github" not in types_org2
+    assert "gmail" not in types_org2

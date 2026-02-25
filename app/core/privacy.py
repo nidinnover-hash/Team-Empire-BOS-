@@ -3,34 +3,10 @@ import re
 from typing import Any, cast
 
 from app.core.config import settings
+from app.core.sensitive_keys import is_sensitive_key
 
 REDACTED = "***"
 _MAX_DEPTH = 8
-
-_SECRET_EXACT_KEYS = {
-    "access_token",
-    "refresh_token",
-    "id_token",
-    "api_key",
-    "authorization",
-    "password",
-    "secret",
-    "client_secret",
-    "cookie",
-    "set_cookie",
-    "webhook_verify_token",
-    "pc_session",
-    "pc_csrf",
-}
-_SECRET_KEY_MARKERS = (
-    "password",
-    "secret",
-    "token",
-    "api_key",
-    "authorization",
-    "cookie",
-)
-_SECRET_KEY_EXCEPTIONS = {"token_type"}
 
 _PII_EXACT_KEYS = {
     "email",
@@ -45,7 +21,24 @@ _PII_EXACT_KEYS = {
     "ip",
 }
 _DATA_CLASSIFICATION: dict[str, str] = {
-    **{k: "secret" for k in _SECRET_EXACT_KEYS},
+    **{
+        k: "secret"
+        for k in (
+            "access_token",
+            "refresh_token",
+            "id_token",
+            "api_key",
+            "authorization",
+            "password",
+            "secret",
+            "client_secret",
+            "cookie",
+            "set_cookie",
+            "webhook_verify_token",
+            "pc_session",
+            "pc_csrf",
+        )
+    },
     **{k: "pii" for k in _PII_EXACT_KEYS},
 }
 
@@ -71,17 +64,6 @@ def _mask_pii_enabled() -> bool:
 
 def _classify_key(key: str) -> str | None:
     return _DATA_CLASSIFICATION.get(key.strip().lower())
-
-
-def _is_sensitive_key(key: str) -> bool:
-    k = key.strip().lower()
-    if not k:
-        return False
-    if k in _SECRET_KEY_EXCEPTIONS:
-        return False
-    if _classify_key(k) == "secret":
-        return True
-    return any(marker in k for marker in _SECRET_KEY_MARKERS)
 
 
 def _mask_email(value: str) -> str:
@@ -139,7 +121,7 @@ def _sanitize_string(value: str) -> str:
 def _sanitize_value(value: Any, key_hint: str | None, depth: int) -> Any:
     if depth > _MAX_DEPTH:
         return REDACTED
-    if key_hint and _is_sensitive_key(key_hint):
+    if key_hint and is_sensitive_key(key_hint):
         return REDACTED
     if isinstance(value, dict):
         return {

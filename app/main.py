@@ -84,6 +84,8 @@ from app.models import org_role_permission as _model_org_role_permission  # noqa
 from app.models import clone_performance as _model_clone_performance  # noqa: F401
 from app.models import clone_control as _model_clone_control  # noqa: F401
 from app.models import social as _model_social  # noqa: F401
+from app.models import threat_signal as _model_threat_signal  # noqa: F401
+from app.models import media_project as _model_media_project  # noqa: F401
 
 # Startup safety guard
 _UNSAFE_SECRET_KEYS = {"change_me_in_env", "changeme", "secret", "change-me", ""}

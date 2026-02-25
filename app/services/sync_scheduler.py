@@ -256,6 +256,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
     from app.core.config import settings
     from app.models.integration import Integration
     from app.services import clickup_service, do_service, email_control, email_service, github_service, slack_service
+    from app.services import calendly_service, google_analytics_service, hubspot_service, notion_service, stripe_service
     from app.services import compliance_engine
     from app.services.calendar_service import sync_calendar_events
     failure_alert_threshold = max(1, int(getattr(settings, "SYNC_FAILURE_ALERT_THRESHOLD", 3)))
@@ -291,6 +292,11 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
         ("github", github_service.sync_github),
         ("digitalocean", do_service.sync_digitalocean),
         ("slack", slack_service.sync_slack_messages),
+        ("notion", notion_service.sync_pages_to_notes),
+        ("calendly", calendly_service.sync_events),
+        ("google_analytics", google_analytics_service.sync_analytics),
+        ("stripe", stripe_service.sync_stripe_data),
+        ("hubspot", hubspot_service.sync_hubspot_data),
     ]:
         started = datetime.now(timezone.utc)
         try:

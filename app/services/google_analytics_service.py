@@ -23,6 +23,8 @@ async def connect_google_analytics(
     pid = property_id or settings.GA4_PROPERTY_ID or ""
     if not pid:
         raise ValueError("GA4_PROPERTY_ID must be set in config or provided")
+    # Verify credentials up-front before marking integration connected.
+    await ga_tool.get_realtime(access_token, pid)
     integration = await connect_integration(
         db, organization_id=org_id, integration_type=_TYPE,
         config_json={"access_token": access_token, "property_id": pid},

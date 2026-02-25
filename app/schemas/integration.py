@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
+from app.core.sensitive_keys import is_sensitive_key
 
 IntegrationType = Literal[
     "gmail", "google_calendar", "github", "clickup",
@@ -11,12 +12,6 @@ IntegrationType = Literal[
 ]
 IntegrationStatus = Literal["connected", "disconnected", "error"]
 IntegrationTestStatus = Literal["ok", "failed", "not_configured"]
-
-_SENSITIVE_CONFIG_KEYS = frozenset({
-    "access_token", "refresh_token", "api_key", "bot_token",
-    "app_secret", "api_token", "private_key",
-})
-
 
 class IntegrationConnectRequest(BaseModel):
     type: IntegrationType = Field(...)
@@ -40,7 +35,7 @@ class IntegrationRead(BaseModel):
     def _redact_tokens(self):
         if self.config_json:
             self.config_json = {
-                k: ("***" if k in _SENSITIVE_CONFIG_KEYS else v)
+                k: ("***" if is_sensitive_key(k) else v)
                 for k, v in self.config_json.items()
             }
         return self
@@ -297,6 +292,11 @@ class GoogleAnalyticsStatusRead(BaseModel):
     connected: bool
     property_id: str | None = None
     last_sync_at: str | None = None
+
+
+class GoogleAnalyticsConnectRequest(BaseModel):
+    access_token: str = Field(..., min_length=2, max_length=2000)
+    property_id: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class GoogleAnalyticsSyncResult(BaseModel):

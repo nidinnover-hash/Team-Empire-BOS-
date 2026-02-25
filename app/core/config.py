@@ -178,6 +178,8 @@ class Settings(BaseSettings):
     CEO_ALERTS_SLACK_CHANNEL_ID: str | None = None
     SYNC_STALE_HOURS: int = 24
     SYNC_FAILURE_ALERT_THRESHOLD: int = 3
+    MEMORY_CONTEXT_CACHE_TTL_SECONDS: int = 300
+    MEMORY_CONTEXT_CACHE_MAX_ORGS: int = 200
 
     # Feature flags — disable expensive features without redeploying
     FEATURE_AI_COMMANDS: bool = True     # AI responses in command input
@@ -317,6 +319,14 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("SYNC_FAILURE_ALERT_THRESHOLD must be >= 1")
     if s.SYNC_FAILURE_ALERT_THRESHOLD > 100:
         issues.append("SYNC_FAILURE_ALERT_THRESHOLD must be <= 100")
+    if s.MEMORY_CONTEXT_CACHE_TTL_SECONDS < 30:
+        issues.append("MEMORY_CONTEXT_CACHE_TTL_SECONDS must be >= 30")
+    if s.MEMORY_CONTEXT_CACHE_TTL_SECONDS > 86_400:
+        issues.append("MEMORY_CONTEXT_CACHE_TTL_SECONDS must be <= 86400 (24 hours)")
+    if s.MEMORY_CONTEXT_CACHE_MAX_ORGS < 10:
+        issues.append("MEMORY_CONTEXT_CACHE_MAX_ORGS must be >= 10")
+    if s.MEMORY_CONTEXT_CACHE_MAX_ORGS > 10_000:
+        issues.append("MEMORY_CONTEXT_CACHE_MAX_ORGS must be <= 10000")
     if not (0 <= s.EMAIL_CONTROL_DIGEST_HOUR_IST <= 23):
         issues.append("EMAIL_CONTROL_DIGEST_HOUR_IST must be between 0 and 23")
     if not (0 <= s.EMAIL_CONTROL_DIGEST_MINUTE_IST <= 59):

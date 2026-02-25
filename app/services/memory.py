@@ -9,11 +9,13 @@ from collections.abc import Mapping
 from typing import cast
 
 from datetime import date, datetime, timezone
+import logging
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.memory import AvatarMemory, DailyContext, ProfileMemory, TeamMember
 from app.schemas.memory import (
     DailyContextCreate,
@@ -26,6 +28,7 @@ from app.memory.retrieval import (
     build_typed_context,
 )
 
+logger = logging.getLogger(__name__)
 
 # ── Profile Memory ────────────────────────────────────────────────────────────
 
@@ -258,12 +261,41 @@ async def add_daily_context(
 
 # ── Memory Context Cache ─────────────────────────────────────────────────────
 _memory_context_cache: dict[int, tuple[float, str]] = {}
-_MEMORY_CACHE_TTL_SECONDS = 300  # 5 minutes
+_memory_context_cache_stats: dict[str, int] = {
+    "hits": 0,
+    "misses": 0,
+    "stale_pruned": 0,
+    "evictions": 0,
+    "size": 0,
+}
 
 
 def invalidate_memory_cache(organization_id: int) -> None:
     """Clear cached memory context for an org (call after memory writes)."""
     _memory_context_cache.pop(organization_id, None)
+    _memory_context_cache_stats["size"] = len(_memory_context_cache)
+
+
+def get_memory_cache_stats() -> dict[str, int]:
+    stats = dict(_memory_context_cache_stats)
+    stats["size"] = len(_memory_context_cache)
+    return stats
+
+
+def _prune_memory_cache(now_ts: float, ttl_seconds: int, max_orgs: int) -> None:
+    stale_orgs = [
+        org_id for org_id, (ts, _ctx) in _memory_context_cache.items()
+        if now_ts - ts >= ttl_seconds
+    ]
+    for org_id in stale_orgs:
+        _memory_context_cache.pop(org_id, None)
+    _memory_context_cache_stats["stale_pruned"] += len(stale_orgs)
+    # Enforce bounded cache size.
+    while len(_memory_context_cache) >= max_orgs and _memory_context_cache:
+        oldest_org = min(_memory_context_cache.items(), key=lambda item: item[1][0])[0]
+        _memory_context_cache.pop(oldest_org, None)
+        _memory_context_cache_stats["evictions"] += 1
+    _memory_context_cache_stats["size"] = len(_memory_context_cache)
 
 
 # ── Memory Context Builder ────────────────────────────────────────────────────
@@ -285,12 +317,17 @@ async def build_memory_context(
     who his team is, and what's happening today.
     """
     import time as _time
-    # Return cached context if fresh (5 min TTL)
+    ttl_seconds = int(settings.MEMORY_CONTEXT_CACHE_TTL_SECONDS)
+    max_orgs = int(settings.MEMORY_CONTEXT_CACHE_MAX_ORGS)
+    # Return cached context if fresh.
     cached = _memory_context_cache.get(organization_id)
     if cached and categories is None and char_limit == DEFAULT_CONTEXT_CHAR_LIMIT:
         ts, ctx = cached
-        if _time.time() - ts < _MEMORY_CACHE_TTL_SECONDS:
+        if _time.time() - ts < ttl_seconds:
+            _memory_context_cache_stats["hits"] += 1
             return ctx
+    if categories is None and char_limit == DEFAULT_CONTEXT_CHAR_LIMIT:
+        _memory_context_cache_stats["misses"] += 1
 
     import asyncio as _asyncio
     from sqlalchemy import select as _select
@@ -386,8 +423,12 @@ async def build_memory_context(
             remaining = char_limit - len(base_context)
             if remaining > 200:
                 base_context = base_context + "\n\n" + patterns_block[:remaining]
-    except Exception:
-        pass  # Graceful degradation — patterns are supplementary
+    except Exception as exc:
+        logger.warning(
+            "Skipping work pattern context org=%s due to %s",
+            organization_id,
+            type(exc).__name__,
+        )
 
     # ── Threat intelligence context ──
     try:
@@ -411,8 +452,12 @@ async def build_memory_context(
             remaining = char_limit - len(base_context)
             if remaining > 150:
                 base_context = base_context + "\n\n" + threat_block[:remaining]
-    except Exception:
-        pass  # Graceful degradation
+    except Exception as exc:
+        logger.warning(
+            "Skipping threat intelligence context org=%s due to %s",
+            organization_id,
+            type(exc).__name__,
+        )
 
     # ── Stripe financial context ──
     try:
@@ -431,8 +476,12 @@ async def build_memory_context(
             remaining = char_limit - len(base_context)
             if remaining > 100:
                 base_context = base_context + "\n\n" + fin_block[:remaining]
-    except Exception:
-        pass  # Graceful degradation
+    except Exception as exc:
+        logger.warning(
+            "Skipping stripe financial context org=%s due to %s",
+            organization_id,
+            type(exc).__name__,
+        )
 
     # ── Calendly upcoming events context ──
     try:
@@ -457,8 +506,12 @@ async def build_memory_context(
                 remaining = char_limit - len(base_context)
                 if remaining > 100:
                     base_context = base_context + "\n\n" + cal_block[:remaining]
-    except Exception:
-        pass  # Graceful degradation
+    except Exception as exc:
+        logger.warning(
+            "Skipping calendly context org=%s due to %s",
+            organization_id,
+            type(exc).__name__,
+        )
 
     # ── Character study traits ──
     char_traits = [
@@ -478,6 +531,9 @@ async def build_memory_context(
 
     # Cache the result for subsequent requests (skip if category-filtered or custom limit)
     if categories is None and char_limit == DEFAULT_CONTEXT_CHAR_LIMIT:
-        _memory_context_cache[organization_id] = (_time.time(), base_context)
+        now_ts = _time.time()
+        _prune_memory_cache(now_ts, ttl_seconds=ttl_seconds, max_orgs=max_orgs)
+        _memory_context_cache[organization_id] = (now_ts, base_context)
+        _memory_context_cache_stats["size"] = len(_memory_context_cache)
 
     return cast(str, base_context)

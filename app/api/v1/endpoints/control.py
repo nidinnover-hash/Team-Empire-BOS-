@@ -57,10 +57,12 @@ from app.schemas.control import (
     SecurityPostureRead,
     SystemHealthDependency,
     SystemHealthRead,
+    StorageMetricsRead,
     WeeklyBoardPacketRead,
 )
 from app.services import clone_brain, clone_control, compliance_engine, email_control, organization as organization_service
 from app.services import metrics_service, signal_ingestion
+from app.services import memory as memory_service
 from app.services.ai_router import call_ai
 from app.services import sync_scheduler
 
@@ -444,6 +446,17 @@ async def system_health(
         overall_status=overall_status,
         dependencies=dependencies,
         integrations=integration_health,
+    )
+
+
+@router.get("/storage/metrics", response_model=StorageMetricsRead)
+async def storage_metrics(
+    _db: AsyncSession = Depends(get_db),
+    _actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> StorageMetricsRead:
+    return StorageMetricsRead(
+        generated_at=datetime.now(timezone.utc),
+        memory_context_cache=memory_service.get_memory_cache_stats(),
     )
 
 

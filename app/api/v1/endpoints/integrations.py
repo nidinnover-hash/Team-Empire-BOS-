@@ -67,6 +67,22 @@ from app.api.v1.endpoints import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
 
+_GENERIC_CONNECT_ALLOWED_TYPES = {"gmail", "google_calendar", "whatsapp_business"}
+_GENERIC_CONNECT_BLOCKED_ROUTES = {
+    "github": "/api/v1/integrations/github/connect",
+    "clickup": "/api/v1/integrations/clickup/connect",
+    "digitalocean": "/api/v1/integrations/digitalocean/connect",
+    "slack": "/api/v1/integrations/slack/connect",
+    "perplexity": "/api/v1/integrations/perplexity/connect",
+    "linkedin": "/api/v1/integrations/linkedin/connect",
+    "notion": "/api/v1/integrations/notion/connect",
+    "stripe": "/api/v1/integrations/stripe/connect",
+    "google_analytics": "/api/v1/integrations/google-analytics/connect",
+    "calendly": "/api/v1/integrations/calendly/connect",
+    "elevenlabs": "/api/v1/integrations/elevenlabs/connect",
+    "hubspot": "/api/v1/integrations/hubspot/connect",
+}
+
 
 def _safe_provider_error(prefix: str) -> str:
     return f"{prefix}. Reconnect integration and retry."
@@ -103,6 +119,18 @@ async def connect_integration(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> IntegrationRead:
+    integration_type = str(data.type)
+    if integration_type in _GENERIC_CONNECT_BLOCKED_ROUTES:
+        route = _GENERIC_CONNECT_BLOCKED_ROUTES[integration_type]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Use provider-specific verification endpoint: {route}",
+        )
+    if integration_type not in _GENERIC_CONNECT_ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Generic connect is not allowed for integration type '{integration_type}'.",
+        )
     item = await integration_service.connect_integration(
         db,
         organization_id=actor["org_id"],
@@ -141,7 +169,7 @@ async def integration_setup_guide(
         ("linkedin", "LinkedIn", "/api/v1/integrations/linkedin/connect", "/api/v1/integrations/linkedin/status", "/api/v1/integrations/linkedin/publish"),
         ("notion", "Notion", "/api/v1/integrations/notion/connect", "/api/v1/integrations/notion/status", "/api/v1/integrations/notion/sync"),
         ("stripe", "Stripe", "/api/v1/integrations/stripe/connect", "/api/v1/integrations/stripe/status", "/api/v1/integrations/stripe/sync"),
-        ("google_analytics", "Google Analytics", "/api/v1/integrations/google-analytics/status", "/api/v1/integrations/google-analytics/status", "/api/v1/integrations/google-analytics/sync"),
+        ("google_analytics", "Google Analytics", "/api/v1/integrations/google-analytics/connect", "/api/v1/integrations/google-analytics/status", "/api/v1/integrations/google-analytics/sync"),
         ("calendly", "Calendly", "/api/v1/integrations/calendly/connect", "/api/v1/integrations/calendly/status", "/api/v1/integrations/calendly/sync"),
         ("elevenlabs", "ElevenLabs", "/api/v1/integrations/elevenlabs/connect", "/api/v1/integrations/elevenlabs/status", "/api/v1/integrations/elevenlabs/tts"),
         ("hubspot", "HubSpot CRM", "/api/v1/integrations/hubspot/connect", "/api/v1/integrations/hubspot/status", "/api/v1/integrations/hubspot/sync"),
