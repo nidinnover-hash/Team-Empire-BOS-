@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from importlib import import_module
 import logging
+from importlib import import_module
 from threading import Lock
 from time import time
 from typing import Protocol, cast
@@ -10,7 +10,7 @@ from app.core.config import settings
 
 _used_nonces: dict[str, float] = {}
 _nonce_lock = Lock()
-_redis_client: "_RedisLike | None" = None
+_redis_client: _RedisLike | None = None
 _redis_initialized = False
 _MAX_NONCE_ITEMS = 10_000  # Cap to prevent memory leak from nonce churn
 logger = logging.getLogger(__name__)
@@ -61,6 +61,9 @@ def consume_oauth_nonce_once(namespace: str, nonce: str, *, max_age_seconds: int
     now = time()
     key = f"{namespace}:{nonce}"
     redis_client = _get_redis_client()
+    if redis_client is None and not settings.DEBUG:
+        logger.error("OAuth nonce protection requires Redis when DEBUG=false")
+        return False
     if redis_client is not None:
         try:
             created = redis_client.set(name=key, value="1", ex=ttl, nx=True)

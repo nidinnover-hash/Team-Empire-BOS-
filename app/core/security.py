@@ -1,11 +1,11 @@
 import base64
 import hashlib
 import hmac
-import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
+import jwt
 from fastapi.security import OAuth2PasswordBearer
 
 from app.core.config import settings
@@ -13,58 +13,32 @@ from app.core.config import settings
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
-def _b64url_encode(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
-
-def _b64url_decode(data: str) -> bytes:
-    padding = "=" * (-len(data) % 4)
-    return base64.urlsafe_b64decode((data + padding).encode("ascii"))
-
-
 def create_access_token(data: dict, expires_minutes: int = 30) -> str:
-    header = {"alg": settings.ALGORITHM, "typ": "JWT"}
     payload = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
+    expire = datetime.now(UTC) + timedelta(minutes=expires_minutes)
     payload["exp"] = int(expire.timestamp())
-
-    signing_input = (
-        f"{_b64url_encode(json.dumps(header, separators=(',', ':')).encode('utf-8'))}."
-        f"{_b64url_encode(json.dumps(payload, separators=(',', ':')).encode('utf-8'))}"
+    token = jwt.encode(
+        payload,
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+        headers={"typ": "JWT"},
     )
-    signature = hmac.new(
-        settings.SECRET_KEY.encode("utf-8"),
-        signing_input.encode("ascii"),
-        hashlib.sha256,
-    ).digest()
-    return f"{signing_input}.{_b64url_encode(signature)}"
+    return cast(str, token)
 
 
 def decode_access_token(token: str) -> dict:
-    parts = token.split(".")
-    if len(parts) != 3:
-        raise ValueError("Malformed token")
-    header_b64, payload_b64, sig_b64 = parts
     try:
-        header = cast(dict, json.loads(_b64url_decode(header_b64).decode("utf-8")))
-    except Exception as exc:
-        raise ValueError("Malformed token header") from exc
-    if header.get("alg") != settings.ALGORITHM:
-        raise ValueError("Unexpected token algorithm")
-    signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
-    expected_sig = hmac.new(
-        settings.SECRET_KEY.encode("utf-8"),
-        signing_input,
-        hashlib.sha256,
-    ).digest()
-    provided_sig = _b64url_decode(sig_b64)
-    if not hmac.compare_digest(expected_sig, provided_sig):
-        raise ValueError("Invalid signature")
-    payload = cast(dict, json.loads(_b64url_decode(payload_b64).decode("utf-8")))
-    exp = payload.get("exp")
-    if exp is None or int(exp) < int(datetime.now(timezone.utc).timestamp()):
-        raise ValueError("Token expired")
-    return payload
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={"require": ["exp"]},
+        )
+    except jwt.ExpiredSignatureError as exc:
+        raise ValueError("Token expired") from exc
+    except jwt.InvalidTokenError as exc:
+        raise ValueError("Invalid token") from exc
+    return cast(dict, payload)
 
 
 def hash_password(password: str) -> str:
@@ -86,5 +60,3 @@ def verify_password(password: str, stored_hash: str) -> bool:
         return False
     candidate = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
     return hmac.compare_digest(candidate, expected)
-
-

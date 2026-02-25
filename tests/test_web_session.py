@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.core.deps import get_db
 from app.core.security import hash_password
@@ -23,7 +23,7 @@ async def _seed_web_user() -> None:
             password_hash=hash_password("secret123"),
             role="CEO",
             is_active=True,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         session.add(user)
         await session.commit()
@@ -82,3 +82,53 @@ async def test_web_daily_run_with_csrf_succeeds(client):
     assert run.status_code == 200
     body = run.json()
     assert body["requires_approval"] is True
+
+
+async def test_web_logout_invalidates_only_current_user_session(client):
+    user1 = await client.post(
+        "/api/v1/users",
+        json={
+            "organization_id": 1,
+            "name": "Logout User 1",
+            "email": "logout-u1@example.com",
+            "password": "StrongPass123!",
+            "role": "STAFF",
+        },
+    )
+    assert user1.status_code == 201
+    user2 = await client.post(
+        "/api/v1/users",
+        json={
+            "organization_id": 1,
+            "name": "Logout User 2",
+            "email": "logout-u2@example.com",
+            "password": "StrongPass123!",
+            "role": "STAFF",
+        },
+    )
+    assert user2.status_code == 201
+
+    token1 = (await client.post(
+        "/token",
+        data={"username": "logout-u1@example.com", "password": "StrongPass123!"},
+    )).json()["access_token"]
+    token2 = (await client.post(
+        "/token",
+        data={"username": "logout-u2@example.com", "password": "StrongPass123!"},
+    )).json()["access_token"]
+
+    login = await client.post(
+        "/web/login",
+        data={"username": "logout-u1@example.com", "password": "StrongPass123!"},
+    )
+    assert login.status_code == 200
+    csrf = login.cookies.get("pc_csrf")
+    assert csrf
+
+    logout = await client.post("/web/logout", headers={"X-CSRF-Token": csrf})
+    assert logout.status_code == 200
+
+    me1 = await client.get("/me", headers={"Authorization": f"Bearer {token1}"})
+    me2 = await client.get("/me", headers={"Authorization": f"Bearer {token2}"})
+    assert me1.status_code == 401
+    assert me2.status_code == 200
