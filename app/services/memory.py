@@ -389,6 +389,47 @@ async def build_memory_context(
     except Exception:
         pass  # Graceful degradation — patterns are supplementary
 
+    # ── Threat intelligence context ──
+    try:
+        from app.services.data_collection import get_threat_layer_report
+        threat_report = await get_threat_layer_report(db, organization_id)
+        if threat_report.total_signals_7d > 0:
+            threat_lines = [
+                "[SECURITY POSTURE]",
+                f"Security Score: {threat_report.security_score}/100",
+                f"Threats (7d): {threat_report.total_signals_7d}",
+                f"Active Policies: {threat_report.active_policies}",
+            ]
+            if threat_report.top_threats:
+                threat_lines.append("Top threats:")
+                for t in threat_report.top_threats[:3]:
+                    threat_lines.append(f"  - [{t.severity}] {t.title}")
+            if threat_report.recommendations:
+                threat_lines.append(f"Action: {threat_report.recommendations[0]}")
+            threat_lines.append("[END SECURITY]")
+            threat_block = "\n".join(threat_lines)
+            remaining = char_limit - len(base_context)
+            if remaining > 150:
+                base_context = base_context + "\n\n" + threat_block[:remaining]
+    except Exception:
+        pass  # Graceful degradation
+
+    # ── Character study traits ──
+    char_traits = [
+        p for p in profile
+        if getattr(p, "category", None) == "character_study"
+        and getattr(p, "key", "").startswith("character.study.summary")
+    ]
+    if char_traits:
+        trait_lines = ["[CHARACTER PROFILE]"]
+        for ct in char_traits[:3]:
+            trait_lines.append(f"- {ct.value}")
+        trait_lines.append("[END CHARACTER]")
+        trait_block = "\n".join(trait_lines)
+        remaining = char_limit - len(base_context)
+        if remaining > 100:
+            base_context = base_context + "\n\n" + trait_block[:remaining]
+
     # Cache the result for subsequent requests (skip if category-filtered or custom limit)
     if categories is None and char_limit == DEFAULT_CONTEXT_CHAR_LIMIT:
         _memory_context_cache[organization_id] = (_time.time(), base_context)

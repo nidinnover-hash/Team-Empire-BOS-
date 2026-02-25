@@ -17,6 +17,7 @@ from app.schemas.layers import (
     StudyLayerReport,
     TrainingLayerReport,
 )
+from app.schemas.data_collection import BrandingPowerReport, EthicalBoundaryReport, FraudLayerReport, ThreatLayerReport
 from app.services import layers as layers_service
 
 router = APIRouter(prefix="/layers", tags=["Layers"])
@@ -175,4 +176,48 @@ async def opportunity_association_layer(
         db=db,
         organization_id=int(actor["org_id"]),
         window_days=window_days,
+    )
+
+
+@router.get("/threat-detection", response_model=ThreatLayerReport)
+async def threat_detection_layer(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> ThreatLayerReport:
+    return await layers_service.get_threat_detection_layer(
+        db=db,
+        organization_id=int(actor["org_id"]),
+    )
+
+
+@router.get("/branding-power", response_model=BrandingPowerReport)
+async def branding_power_layer(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> BrandingPowerReport:
+    return await layers_service.get_branding_power_layer(
+        db=db,
+        organization_id=int(actor["org_id"]),
+    )
+
+
+@router.get("/fraud-detection", response_model=FraudLayerReport)
+async def fraud_detection_layer(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> FraudLayerReport:
+    return await layers_service.get_fraud_detection_layer(
+        db=db,
+        organization_id=int(actor["org_id"]),
+    )
+
+
+@router.get("/ethical-boundary", response_model=EthicalBoundaryReport)
+async def ethical_boundary_layer(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> EthicalBoundaryReport:
+    return await layers_service.get_ethical_boundary_layer(
+        db=db,
+        organization_id=int(actor["org_id"]),
     )

@@ -115,3 +115,168 @@ class MobileCaptureUploadAnalyzeResult(MobileCaptureAnalyzeResult):
     filename: str
     extracted_chars: int
     ocr_engine: str
+
+
+# ── Photo Character Study ────────────────────────────────────────────────
+
+class PhotoCharacterStudyResult(BaseModel):
+    filename: str
+    extracted_chars: int
+    ocr_engine: str
+    traits: list[str]
+    character_summary: str
+    confidence: Literal["low", "medium", "high"]
+    memory_keys: list[str]
+    note_id: int | None = None
+    message: str
+
+
+# ── Digital Threat Detection ─────────────────────────────────────────────
+
+ThreatSeverity = Literal["info", "low", "medium", "high", "critical"]
+ThreatCategory = Literal[
+    "credential_leak", "injection_attempt", "rate_abuse",
+    "privilege_escalation", "data_exfiltration", "suspicious_pattern",
+    "config_weakness", "dependency_risk",
+]
+
+
+class ThreatSignalOut(BaseModel):
+    id: int
+    category: str
+    severity: str
+    title: str
+    description: str
+    source: str
+    auto_mitigated: bool
+    created_at: str
+
+
+class ThreatDetectionResult(BaseModel):
+    scope: str
+    signals_found: int
+    signals: list[ThreatSignalOut]
+    severity_breakdown: dict[str, int]
+    policy_drafts_created: int
+    message: str
+
+
+class ThreatTrainRequest(BaseModel):
+    signal_ids: list[int] = Field(..., min_length=1, max_length=50)
+    action: Literal["approve", "dismiss"] = "approve"
+
+
+class ThreatTrainResult(BaseModel):
+    processed: int
+    policies_activated: int
+    policies_dismissed: int
+    memory_keys: list[str]
+    message: str
+
+
+class ThreatLayerReport(BaseModel):
+    security_score: int = Field(ge=0, le=100)
+    total_signals_7d: int
+    severity_breakdown: dict[str, int]
+    top_threats: list[ThreatSignalOut]
+    active_policies: int
+    auto_mitigated_count: int
+    recommendations: list[str]
+
+
+# ── Personal Branding Power ─────────────────────────────────────────────
+
+class BrandingPowerReport(BaseModel):
+    branding_score: int = Field(ge=0, le=100)
+    content_consistency: int = Field(ge=0, le=100)
+    platform_coverage: int = Field(ge=0, le=100)
+    audience_alignment: int = Field(ge=0, le=100)
+    total_posts_30d: int
+    published_posts_30d: int
+    platforms_active: list[str]
+    content_themes: list[str]
+    strengths: list[str]
+    gaps: list[str]
+    next_actions: list[str]
+
+
+# ── Fraud Detection ─────────────────────────────────────────────────────
+
+FraudCategory = Literal[
+    "financial_anomaly", "identity_fraud", "duplicate_transaction",
+    "unauthorized_access", "data_tampering", "invoice_fraud",
+    "expense_fraud", "phantom_vendor",
+]
+
+class FraudSignalOut(BaseModel):
+    category: str
+    severity: str
+    title: str
+    description: str
+    source: str
+    risk_score: int = Field(ge=0, le=100)
+
+
+class FraudDetectionResult(BaseModel):
+    scope: str
+    signals_found: int
+    signals: list[FraudSignalOut]
+    risk_breakdown: dict[str, int]
+    total_anomalies: int
+    message: str
+
+
+class FraudLayerReport(BaseModel):
+    fraud_risk_score: int = Field(ge=0, le=100)
+    total_anomalies_30d: int
+    risk_breakdown: dict[str, int]
+    top_signals: list[FraudSignalOut]
+    guardrails_active: int
+    recommendations: list[str]
+
+
+# ── AI News Digest ──────────────────────────────────────────────────────
+
+class NewsDigestRequest(BaseModel):
+    interests: list[str] = Field(
+        default_factory=lambda: [
+            "artificial intelligence", "AI startups", "LLM",
+            "education technology", "overseas education",
+            "personal branding", "SaaS", "automation",
+        ],
+        max_length=20,
+    )
+    max_items: int = Field(default=10, ge=1, le=20)
+
+
+class NewsDigestItem(BaseModel):
+    title: str
+    summary: str
+    relevance_tag: str
+    relevance_score: int = Field(ge=0, le=100)
+
+
+class NewsDigestResult(BaseModel):
+    items: list[NewsDigestItem]
+    interests_matched: list[str]
+    memory_keys: list[str]
+    message: str
+
+
+# ── Ethical Boundary Layer ──────────────────────────────────────────────
+
+class EthicalViolation(BaseModel):
+    category: str
+    severity: str
+    description: str
+    source: str
+
+
+class EthicalBoundaryReport(BaseModel):
+    ethics_score: int = Field(ge=0, le=100)
+    violations_found: int
+    violations: list[EthicalViolation]
+    category_breakdown: dict[str, int]
+    active_guardrails: int
+    compliance_areas: list[str]
+    recommendations: list[str]

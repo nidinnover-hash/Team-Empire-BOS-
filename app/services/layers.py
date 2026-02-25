@@ -33,6 +33,7 @@ from app.schemas.layers import (
     StudyLayerReport,
     TrainingLayerReport,
 )
+from app.schemas.data_collection import BrandingPowerReport, EthicalBoundaryReport, FraudLayerReport, ThreatLayerReport
 
 _MARKETING_TASK_KEYWORDS = ("lead", "follow", "campaign", "outreach", "marketing", "sales")
 _AD_SPEND_KEYWORDS = ("ads", "marketing", "campaign", "meta ads", "google ads")
@@ -1187,3 +1188,35 @@ async def get_opportunity_association_layer(
         top_opportunities=top,
         next_actions=next_actions,
     )
+
+
+async def get_threat_detection_layer(
+    db: AsyncSession,
+    organization_id: int,
+) -> ThreatLayerReport:
+    from app.services.data_collection import get_threat_layer_report
+    return await get_threat_layer_report(db, organization_id)
+
+
+async def get_branding_power_layer(
+    db: AsyncSession,
+    organization_id: int,
+) -> BrandingPowerReport:
+    from app.services.data_collection import get_branding_power_report
+    return await get_branding_power_report(db, organization_id)
+
+
+async def get_fraud_detection_layer(
+    db: AsyncSession,
+    organization_id: int,
+) -> FraudLayerReport:
+    from app.services.data_collection import get_fraud_layer_report
+    return await get_fraud_layer_report(db, organization_id)
+
+
+async def get_ethical_boundary_layer(
+    db: AsyncSession,
+    organization_id: int,
+) -> EthicalBoundaryReport:
+    from app.services.data_collection import get_ethical_boundary_report
+    return await get_ethical_boundary_report(db, organization_id)

@@ -66,6 +66,7 @@ from app.models import clone_control as _model_clone_control  # noqa: F401
 from app.models import clone_performance as _model_clone_performance  # noqa: F401
 from app.models import org_membership as _model_org_membership  # noqa: F401
 from app.models import org_role_permission as _model_org_role_permission  # noqa: F401
+from app.models import threat_signal as _model_threat_signal  # noqa: F401
 
 # StaticPool + check_same_thread=False makes all connections share one
 # in-memory SQLite database — required for :memory: to work across requests.
