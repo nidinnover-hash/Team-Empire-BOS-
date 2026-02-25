@@ -377,3 +377,160 @@
 [data-theme="dark"] .toast.success { color: var(--ok); }
 [data-theme="dark"] .toast.error   { color: var(--danger); }
 [data-theme="dark"] .toast.warn    { color: var(--warn); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ULTRA PREMIUM — Dashboard-specific
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Hero section premium atmosphere ──────────────────────────────────── */
+.hero {
+  border: 1px solid var(--glass-border) !important;
+}
+
+.hero h1 {
+  font-family: var(--font-display) !important;
+  font-size: 1.2rem !important;
+  letter-spacing: -0.01em;
+  background: linear-gradient(135deg, #f4f6f8 0%, #c9ced6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-chip {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  color: rgba(161, 167, 177, 0.6) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.hero-chip:hover {
+  border-color: var(--premium-border) !important;
+  color: rgba(201, 206, 214, 0.8) !important;
+}
+
+/* ── Stat cards: animated value pulse on change ───────────────────────── */
+.stat strong {
+  font-family: var(--font-display) !important;
+  font-size: 1.2rem !important;
+  transition: color 0.3s ease, text-shadow 0.3s ease;
+}
+
+.stat span {
+  font-family: var(--font-display) !important;
+  letter-spacing: 0.1em !important;
+}
+
+/* ── Finance section premium ──────────────────────────────────────────── */
+.fin-val {
+  letter-spacing: -0.01em;
+}
+
+.fin-green {
+  text-shadow: 0 0 16px rgba(34, 197, 94, 0.15) !important;
+}
+
+.fin-red {
+  text-shadow: 0 0 16px rgba(239, 68, 68, 0.12) !important;
+}
+
+/* ── Chat area premium ────────────────────────────────────────────────── */
+.chat-textarea {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease !important;
+}
+
+.chat-textarea:focus {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+.chat-msg-agent {
+  background: linear-gradient(180deg, rgba(23, 24, 27, 0.7) 0%, rgba(17, 18, 20, 0.8) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.chat-msg-user {
+  background: linear-gradient(145deg, rgba(99, 102, 241, 0.08), rgba(129, 140, 248, 0.04)) !important;
+  border: 1px solid rgba(129, 140, 248, 0.12) !important;
+}
+
+.chat-role-tag {
+  font-family: var(--font-display) !important;
+  color: rgba(129, 140, 248, 0.6) !important;
+}
+
+.chat-hint {
+  color: rgba(161, 167, 177, 0.3) !important;
+}
+
+/* ── Approval action buttons premium ──────────────────────────────────── */
+.btn-approve {
+  transition: all 0.15s ease;
+}
+
+.btn-approve:hover {
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.15) !important;
+}
+
+.btn-execute:hover {
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.15) !important;
+}
+
+.btn-reject:hover {
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.12) !important;
+}
+
+/* ── Inbox premium ────────────────────────────────────────────────────── */
+.inbox-item {
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.inbox-item:hover {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+.inbox-strategy {
+  background: rgba(34, 197, 94, 0.06) !important;
+  border-color: rgba(34, 197, 94, 0.15) !important;
+}
+
+.inbox-draft {
+  background: rgba(245, 158, 11, 0.06) !important;
+  border-color: rgba(245, 158, 11, 0.15) !important;
+}
+
+/* ── Audit log dots glow ──────────────────────────────────────────────── */
+.a-green {
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.3) !important;
+}
+
+.a-red {
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.3) !important;
+}
+
+.a-orange {
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.25) !important;
+}
+
+/* ── Memory editor premium ────────────────────────────────────────────── */
+.mem-key {
+  font-family: var(--font-display) !important;
+  color: rgba(129, 140, 248, 0.7) !important;
+}
+
+/* ── Card count badge premium ─────────────────────────────────────────── */
+.card-count {
+  font-family: var(--font-display) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+/* ── Section label display font ───────────────────────────────────────── */
+.card-title {
+  font-family: var(--font-display) !important;
+}

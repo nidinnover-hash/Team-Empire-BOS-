@@ -2,7 +2,7 @@
    Nidin Nover — Professional Design System
    ═══════════════════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
   /* ── Surface palette ─────────────────────────────────────────────────── */
@@ -662,12 +662,28 @@ textarea.input-error {
   --zip-accent: #c9ced6;
   --zip-accent-dark: #9ea5af;
   --zip-metal-sheen: linear-gradient(145deg, #2a2d33 0%, #17191d 45%, #0f1012 100%);
+  /* ── Premium accent tokens ──────────────────────────────────────────── */
+  --premium-accent: #818cf8;
+  --premium-accent-dim: #6366f1;
+  --premium-glow: rgba(99, 102, 241, 0.08);
+  --premium-glow-md: rgba(99, 102, 241, 0.15);
+  --premium-glow-strong: rgba(99, 102, 241, 0.3);
+  --premium-border: rgba(129, 140, 248, 0.2);
+  --glass-bg: rgba(17, 18, 20, 0.72);
+  --glass-bg-heavy: rgba(17, 18, 20, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-border-hover: rgba(255, 255, 255, 0.1);
+  --glass-highlight: rgba(255, 255, 255, 0.04);
+  --glass-blur: blur(20px) saturate(1.4);
+  --font-display: 'Space Grotesk', var(--font);
 }
 
 body {
   background:
-    radial-gradient(1200px 420px at 20% -10%, rgba(201, 206, 214, 0.13), transparent 60%),
-    radial-gradient(1000px 360px at 90% -20%, rgba(110, 115, 122, 0.10), transparent 60%),
+    radial-gradient(1200px 420px at 20% -10%, rgba(201, 206, 214, 0.11), transparent 60%),
+    radial-gradient(1000px 360px at 90% -20%, rgba(110, 115, 122, 0.08), transparent 60%),
+    radial-gradient(800px 500px at 10% 100%, rgba(99, 102, 241, 0.04), transparent 70%),
+    radial-gradient(600px 400px at 90% 80%, rgba(129, 140, 248, 0.03), transparent 70%),
     var(--zip-bg) !important;
   color: var(--zip-text) !important;
 }
@@ -985,4 +1001,368 @@ h1,
   #integrations-list {
     -webkit-overflow-scrolling: touch;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ULTRA PREMIUM FINISH
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Premium font rendering ───────────────────────────────────────────── */
+html {
+  font-feature-settings: 'cv01' 1, 'cv02' 1, 'ss01' 1;
+  text-rendering: optimizeLegibility;
+  font-optical-sizing: auto;
+}
+
+::selection {
+  background: rgba(129, 140, 248, 0.28);
+  color: #fff;
+}
+
+/* ── Custom Scrollbar ─────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.06) transparent;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.14); }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* ── Page entrance ────────────────────────────────────────────────────── */
+@keyframes premium-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+main, .main-wrap {
+  animation: premium-enter 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Sidebar ultra-premium ────────────────────────────────────────────── */
+.sidebar {
+  background:
+    linear-gradient(180deg, rgba(11, 12, 13, 0.96) 0%, rgba(6, 7, 8, 0.99) 100%) !important;
+  backdrop-filter: blur(28px) saturate(1.2) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(1.2) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.04) !important;
+}
+
+.sb-item.active {
+  position: relative;
+  background: linear-gradient(90deg, rgba(129, 140, 248, 0.1), rgba(99, 102, 241, 0.03)) !important;
+}
+
+.sb-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, #818cf8, #6366f1);
+  box-shadow: 0 0 12px var(--premium-glow-strong);
+}
+
+.sb-pulse {
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4), 0 0 10px rgba(34, 197, 94, 0.15) !important;
+}
+
+.sb-divider {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent) !important;
+}
+
+.sb-brand {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+}
+
+.sb-name {
+  font-family: var(--font-display) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+}
+
+/* ── Glass cards ──────────────────────────────────────────────────────── */
+.card, .kpi, .panel, .qc-card, .ai-card, .stat {
+  background: var(--glass-bg-heavy) !important;
+  backdrop-filter: var(--glass-blur) !important;
+  -webkit-backdrop-filter: var(--glass-blur) !important;
+  border: 1px solid var(--glass-border) !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.02),
+    0 12px 40px -20px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 var(--glass-highlight) !important;
+}
+
+.card:hover, .kpi:hover, .panel:hover, .qc-card:hover, .ai-card:hover, .stat:hover {
+  border-color: var(--glass-border-hover) !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 20px 50px -20px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+.card-head {
+  border-bottom-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* ── Premium input focus ──────────────────────────────────────────────── */
+.input:focus, input:focus, textarea:focus, select:focus,
+.chat-textarea:focus, .mem-input:focus, #message-input:focus {
+  border-color: var(--premium-border) !important;
+  box-shadow:
+    0 0 0 3px var(--premium-glow),
+    0 0 20px -4px rgba(99, 102, 241, 0.08) !important;
+}
+
+/* ── Premium section labels ───────────────────────────────────────────── */
+.section-label {
+  font-family: var(--font-display) !important;
+  font-size: 0.6rem !important;
+  letter-spacing: 0.14em !important;
+  color: rgba(161, 167, 177, 0.45) !important;
+}
+
+.section-label::after {
+  background: linear-gradient(90deg, var(--premium-border), transparent 80%) !important;
+  height: 1px;
+}
+
+/* ── Progress bar premium ─────────────────────────────────────────────── */
+.prog-fill {
+  background: linear-gradient(90deg, #6366f1, #818cf8, #a5b4fc) !important;
+  box-shadow: 0 0 14px var(--premium-glow-strong);
+  position: relative;
+  overflow: hidden;
+}
+
+.prog-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 30%, rgba(255, 255, 255, 0.3) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: premium-shimmer 2.5s ease infinite;
+  border-radius: inherit;
+}
+
+@keyframes premium-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.prog-wrap {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* ── Number typography ────────────────────────────────────────────────── */
+.stat strong, .kpi .val, .kpi .value, .fin-val, .card-count {
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.fin-val, .stat strong, .kpi .val, .kpi .value {
+  font-family: var(--font-display) !important;
+}
+
+/* ── Premium hero ─────────────────────────────────────────────────────── */
+.hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 600px 200px at 0% -20%, rgba(99, 102, 241, 0.1), transparent 60%),
+    radial-gradient(ellipse 400px 200px at 100% 130%, rgba(129, 140, 248, 0.05), transparent 60%),
+    linear-gradient(180deg, rgba(25, 27, 32, 0.94) 0%, rgba(18, 19, 23, 0.97) 100%) !important;
+}
+
+.hero::before {
+  content: "";
+  position: absolute;
+  top: -40%;
+  right: -15%;
+  width: 450px;
+  height: 450px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.035), transparent 70%);
+  animation: premium-orb 18s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes premium-orb {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.6; }
+  33%      { transform: translate(-25px, 18px) scale(1.08); opacity: 1; }
+  66%      { transform: translate(18px, -12px) scale(0.94); opacity: 0.7; }
+}
+
+.hero h1 {
+  font-family: var(--font-display) !important;
+}
+
+/* ── Stats bar glass ──────────────────────────────────────────────────── */
+.stats {
+  background: rgba(12, 13, 15, 0.82) !important;
+  backdrop-filter: blur(28px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(1.3) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
+}
+
+/* ── Premium badge glow ───────────────────────────────────────────────── */
+.badge.b-critical, .p4 {
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.2) !important;
+}
+
+.badge.b-done, .badge.b-completed {
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.15) !important;
+}
+
+/* ── Toast glass ──────────────────────────────────────────────────────── */
+.toast {
+  backdrop-filter: blur(20px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.4) !important;
+  border: 1px solid var(--glass-border) !important;
+}
+
+/* ── Modal ultra-premium ──────────────────────────────────────────────── */
+.modal-mask, .modal-overlay {
+  backdrop-filter: blur(10px) saturate(0.7) !important;
+}
+
+.modal {
+  background:
+    linear-gradient(180deg, rgba(23, 24, 27, 0.95) 0%, rgba(15, 16, 18, 0.98) 100%) !important;
+  backdrop-filter: blur(28px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(1.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 25px 65px -15px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* ── Empty state ──────────────────────────────────────────────────────── */
+.empty {
+  color: rgba(161, 167, 177, 0.4) !important;
+}
+
+/* ── Skeleton loading ─────────────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(255, 255, 255, 0.03) 25%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(255, 255, 255, 0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: premium-shimmer 1.8s ease infinite;
+  border-radius: 6px;
+  color: transparent !important;
+}
+
+/* ── Subtle noise texture ─────────────────────────────────────────────── */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  opacity: 0.018;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 180px 180px;
+}
+
+/* ── Premium link and pill refinements ────────────────────────────────── */
+.pill.connected {
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.12) !important;
+}
+
+.link-muted {
+  transition: color 0.15s ease;
+}
+
+.link-muted:hover {
+  color: var(--premium-accent) !important;
+}
+
+/* ── Table row hover refinement ───────────────────────────────────────── */
+tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+/* ── Card-head title display font ─────────────────────────────────────── */
+.card-title, .panel-head {
+  font-family: var(--font-display) !important;
+}
+
+/* ── Semantic badge dark mode refinement ───────────────────────────────── */
+.tag.ok, .badge.b-done, .badge.b-completed {
+  background: rgba(34, 197, 94, 0.1) !important;
+  border-color: rgba(34, 197, 94, 0.2) !important;
+}
+
+.tag.warn, .badge.b-high, .badge.b-paused {
+  background: rgba(245, 158, 11, 0.1) !important;
+  border-color: rgba(245, 158, 11, 0.2) !important;
+}
+
+.tag.err, .tag.danger, .badge.b-critical {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border-color: rgba(239, 68, 68, 0.2) !important;
+}
+
+/* ── Button group polish ──────────────────────────────────────────────── */
+.btn.primary {
+  background: linear-gradient(145deg, #9ba3f7, #6e77e8) !important;
+  border-color: rgba(129, 140, 248, 0.4) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 24px -10px rgba(99, 102, 241, 0.4) !important;
+}
+
+.btn.primary:hover {
+  background: linear-gradient(145deg, #a8b0fa, #7c85ec) !important;
+  box-shadow: 0 10px 28px -8px rgba(99, 102, 241, 0.5) !important;
+}
+
+.chat-send {
+  background: linear-gradient(145deg, #9ba3f7, #6e77e8) !important;
+  border-color: rgba(129, 140, 248, 0.4) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 24px -10px rgba(99, 102, 241, 0.4) !important;
+}
+
+.chat-send:hover {
+  background: linear-gradient(145deg, #a8b0fa, #7c85ec) !important;
+  box-shadow: 0 10px 28px -8px rgba(99, 102, 241, 0.5) !important;
+}
+
+/* ── KPI value glow on hover ──────────────────────────────────────────── */
+.kpi:hover .val,
+.kpi:hover .value,
+.stat:hover strong {
+  color: #fff !important;
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.08);
+}
+
+/* ── Tab/filter active accent ─────────────────────────────────────────── */
+.tab.active {
+  border-bottom-color: var(--premium-accent) !important;
+}
+
+.filter-btn.active,
+.filter-btn:hover,
+.role-btn.active,
+.role-btn:hover {
+  background: linear-gradient(145deg, rgba(129, 140, 248, 0.15), rgba(99, 102, 241, 0.08)) !important;
+  border-color: var(--premium-border) !important;
+  color: #e8ebf0 !important;
+}
+
+/* ── Premium reduced motion ───────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  main, .main-wrap { animation: none !important; }
+  .hero::before { animation: none !important; }
+  .prog-fill::after { animation: none !important; }
 }
