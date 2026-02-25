@@ -27,7 +27,7 @@ class Approval(Base):
         default=1,
         index=True,
     )
-    requested_by: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    requested_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
     approval_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String(30), default="pending", index=True)

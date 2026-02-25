@@ -1,8 +1,10 @@
 import asyncio
+from importlib import import_module
 import logging
+import uuid
 from collections import deque as _deque
 from time import time
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import Header
@@ -16,6 +18,7 @@ from app.core.idempotency import (
     store_response,
 )
 from app.core.oauth_state import sign_oauth_state, verify_oauth_state
+from app.core.oauth_nonce import consume_oauth_nonce_once
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.core.config import settings
@@ -50,6 +53,47 @@ _compose_counts: dict[int, _deque[float]] = {}
 _COMPOSE_MAX_ORGS = 500  # cap to prevent memory leak
 _COMPOSE_MAX_PER_HOUR = settings.COMPOSE_MAX_PER_HOUR
 _COMPOSE_WINDOW_SECONDS = settings.COMPOSE_WINDOW_SECONDS
+_compose_redis_client: "_ComposeRedisLike | None" = None
+_compose_redis_initialized = False
+
+
+class _ComposeRedisLike(Protocol):
+    def zremrangebyscore(self, key: str, min: int | float | str, max: int | float | str) -> int: ...
+    def zcard(self, key: str) -> int: ...
+    def zadd(self, key: str, mapping: dict[str, int]) -> int: ...
+    def expire(self, key: str, seconds: int) -> bool: ...
+
+
+def _compose_redis_url() -> str:
+    primary = (settings.RATE_LIMIT_REDIS_URL or "").strip()
+    if primary:
+        return primary
+    return (settings.IDEMPOTENCY_REDIS_URL or "").strip()
+
+
+def _get_compose_redis_client() -> _ComposeRedisLike | None:
+    global _compose_redis_client, _compose_redis_initialized
+    if _compose_redis_initialized:
+        return _compose_redis_client
+    _compose_redis_initialized = True
+    redis_url = _compose_redis_url()
+    if not redis_url:
+        return None
+    try:
+        redis_module = import_module("redis")
+        _compose_redis_client = cast(
+            _ComposeRedisLike,
+            redis_module.Redis.from_url(
+                redis_url,
+                decode_responses=True,
+                socket_timeout=0.25,
+                socket_connect_timeout=0.25,
+            ),
+        )
+        return _compose_redis_client
+    except Exception:
+        _compose_redis_client = None
+        return None
 
 
 @router.get("/control/report-template", response_model=ManagerReportTemplateRead)
@@ -100,6 +144,28 @@ def _check_compose_rate(org_id: int) -> None:
     """Raise 429 if the org has exceeded the compose rate limit."""
     max_per_hour = _COMPOSE_MAX_PER_HOUR
     window = _COMPOSE_WINDOW_SECONDS
+    redis_client = _get_compose_redis_client()
+    if redis_client is not None:
+        now_ms = int(time() * 1000)
+        min_score = now_ms - (window * 1000)
+        key = f"pc:compose:{org_id}"
+        member = f"{now_ms}:{org_id}:{uuid.uuid4().hex}"
+        try:
+            redis_client.zremrangebyscore(key, 0, min_score)
+            if int(redis_client.zcard(key)) >= max_per_hour:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Compose rate limit: max {max_per_hour} per hour.",
+                )
+            redis_client.zadd(key, {member: now_ms})
+            redis_client.expire(key, window + 10)
+            return
+        except HTTPException:
+            raise
+        except Exception:
+            # Fall back to process memory if Redis is unavailable.
+            pass
+
     now = time()
     # Proactively evict stale orgs on every call (O(n) over small dict)
     stale = [k for k, v in _compose_counts.items() if not v or now - v[-1] > window]
@@ -160,6 +226,8 @@ async def gmail_callback(
     Google redirects here after the user grants permission.
     """
     org_id = _verify_email_state(state)
+    if not consume_oauth_nonce_once(namespace="gmail_oauth", nonce=state, max_age_seconds=600):
+        raise HTTPException(status_code=409, detail="OAuth callback already processed (replay rejected)")
     try:
         tokens = await asyncio.wait_for(
             asyncio.to_thread(exchange_code_for_tokens, code),

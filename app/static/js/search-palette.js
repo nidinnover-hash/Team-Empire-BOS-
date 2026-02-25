@@ -34,6 +34,7 @@
   var inputEl = document.getElementById('search-input');
   var resultsEl = document.getElementById('search-results');
   var debounceTimer = null;
+  var searchAbort = null;
 
   function open() {
     overlay.classList.add('open');
@@ -61,9 +62,12 @@
     if (!query || query.length < 1) { resultsEl.innerHTML = ''; return; }
     var token = await getToken();
     if (!token) { resultsEl.innerHTML = '<div class="sr-empty">Not authenticated</div>'; return; }
+    if (searchAbort) searchAbort.abort();
+    searchAbort = new AbortController();
     try {
       var res = await fetch('/api/v1/search?q=' + encodeURIComponent(query), {
         headers: { Authorization: 'Bearer ' + token },
+        signal: searchAbort.signal,
       });
       if (!res.ok) throw new Error(res.status);
       var data = await res.json();
@@ -72,12 +76,16 @@
         return;
       }
       resultsEl.innerHTML = data.results.map(function (r) {
-        return '<div class="sr-item" data-type="' + r.type + '" data-id="' + r.id + '">' +
-          '<span class="sr-type">' + r.type + '</span>' +
-          '<span class="sr-title">' + (r.title || '').replace(/</g,'&lt;').substring(0,80) + '</span>' +
+        var safeType = String(r.type || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        var safeId = String(r.id || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        var safeTitle = (r.title || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').substring(0,80);
+        return '<div class="sr-item" data-type="' + safeType + '" data-id="' + safeId + '">' +
+          '<span class="sr-type">' + safeType + '</span>' +
+          '<span class="sr-title">' + safeTitle + '</span>' +
         '</div>';
       }).join('');
-    } catch (_) {
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
       resultsEl.innerHTML = '<div class="sr-empty">Search failed</div>';
     }
   }

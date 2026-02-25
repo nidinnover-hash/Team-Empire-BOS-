@@ -3,7 +3,7 @@ import asyncio
 import secrets
 from typing import Any, AsyncGenerator, cast
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, status
+from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, Response, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -644,8 +644,8 @@ async def web_chat_history(
 
 @app.post("/web/ops/daily-run")
 async def web_daily_run(
-    draft_email_limit: int = 3,
-    team: str | None = None,
+    draft_email_limit: int = Query(3, ge=0, le=50),
+    team: str | None = Query(None, max_length=100),
     _csrf_ok: None = Depends(verify_csrf),
     user: dict = Depends(get_current_web_user),
     db: AsyncSession = Depends(get_db),

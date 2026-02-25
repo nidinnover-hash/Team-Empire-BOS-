@@ -14,7 +14,15 @@ from app.core.resilience import get_retry_stats
 from app.core.tenant import apply_org_scope
 from app.models.ai_call_log import AiCallLog
 from app.models.approval import Approval
+from app.models.chat_message import ChatMessage
 from app.models.decision_trace import DecisionTrace
+from app.models.goal import Goal
+from app.models.integration import Integration
+from app.models.memory import DailyContext, ProfileMemory
+from app.models.note import Note
+from app.models.project import Project
+from app.models.task import Task
+from app.core.config import settings
 from app.services.signal_ingestion import get_ingestion_stats
 
 
@@ -60,6 +68,19 @@ class RecentDecision(TypedDict):
     confidence_score: float
     request_id: str | None
     created_at: str | None
+
+
+class StorageTableStat(TypedDict):
+    table: str
+    row_count: int
+
+
+class StorageSummary(TypedDict):
+    org_id: int
+    generated_at: str
+    total_rows: int
+    retention_days_chat: int
+    tables: list[StorageTableStat]
 
 
 async def get_observability_summary(
@@ -163,3 +184,38 @@ async def get_recent_decisions(
         }
         for row in result.scalars().all()
     ]
+
+
+async def get_storage_summary(db: AsyncSession, org_id: int) -> StorageSummary:
+    table_models = [
+        ("tasks", Task),
+        ("projects", Project),
+        ("notes", Note),
+        ("goals", Goal),
+        ("integrations", Integration),
+        ("profile_memory", ProfileMemory),
+        ("daily_context", DailyContext),
+        ("chat_messages", ChatMessage),
+        ("ai_call_logs", AiCallLog),
+    ]
+
+    stats: list[StorageTableStat] = []
+    total_rows = 0
+
+    for table_name, model in table_models:
+        q = select(func.count()).select_from(model)
+        q = apply_org_scope(q, model, org_id)
+        result = await db.execute(q)
+        count = int(result.scalar() or 0)
+        total_rows += count
+        stats.append({"table": table_name, "row_count": count})
+
+    return {
+        "org_id": org_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "total_rows": total_rows,
+        "retention_days_chat": int(settings.CHAT_HISTORY_RETENTION_DAYS),
+        "tables": stats,
+    }
+
+

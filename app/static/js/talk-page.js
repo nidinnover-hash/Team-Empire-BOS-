@@ -320,35 +320,26 @@ function getCookie(name) {
     }
 
     sendBtn.addEventListener("click", sendMessage);
-    if (professionalAvatarBtn) {
-      professionalAvatarBtn.addEventListener("click", async function () {
-        avatarMode = "professional";
-        localStorage.setItem("pc_avatar_mode:" + (getCookie("pc_theme_scope") || "professional"), avatarMode);
-        renderAvatarMode();
-        chatLog.innerHTML = "";
+    async function switchAvatar(mode, label) {
+      avatarMode = mode;
+      localStorage.setItem("pc_avatar_mode:" + (getCookie("pc_theme_scope") || "professional"), avatarMode);
+      renderAvatarMode();
+      chatLog.innerHTML = "";
+      try {
         await loadHistoryOrWelcome();
-        setStatus("Professional avatar active.", "ok");
-      });
+        setStatus(label + " avatar active.", "ok");
+      } catch (err) {
+        setStatus("Failed to load history: " + String(err.message || err), "err");
+      }
+    }
+    if (professionalAvatarBtn) {
+      professionalAvatarBtn.addEventListener("click", function () { switchAvatar("professional", "Professional"); });
     }
     if (personalAvatarBtn) {
-      personalAvatarBtn.addEventListener("click", async function () {
-        avatarMode = "personal";
-        localStorage.setItem("pc_avatar_mode:" + (getCookie("pc_theme_scope") || "professional"), avatarMode);
-        renderAvatarMode();
-        chatLog.innerHTML = "";
-        await loadHistoryOrWelcome();
-        setStatus("Personal avatar active.", "ok");
-      });
+      personalAvatarBtn.addEventListener("click", function () { switchAvatar("personal", "Personal"); });
     }
     if (entertainmentAvatarBtn) {
-      entertainmentAvatarBtn.addEventListener("click", async function () {
-        avatarMode = "entertainment";
-        localStorage.setItem("pc_avatar_mode:" + (getCookie("pc_theme_scope") || "professional"), avatarMode);
-        renderAvatarMode();
-        chatLog.innerHTML = "";
-        await loadHistoryOrWelcome();
-        setStatus("Entertainment avatar active.", "ok");
-      });
+      entertainmentAvatarBtn.addEventListener("click", function () { switchAvatar("entertainment", "Entertainment"); });
     }
     input.addEventListener("keydown", function (e) {
       if (e.key === "Enter" && !e.shiftKey) {

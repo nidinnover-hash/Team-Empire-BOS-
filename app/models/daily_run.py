@@ -21,7 +21,7 @@ class DailyRun(Base):
     )
     run_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     team_filter: Mapped[str] = mapped_column(String(50), nullable=False, default="*", index=True)
-    requested_by: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    requested_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="completed", index=True)
     drafted_plan_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     drafted_email_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -30,5 +30,6 @@ class DailyRun(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
+        index=True,
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

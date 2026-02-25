@@ -749,6 +749,29 @@ async def _cleanup_old_chat_messages(db: AsyncSession, org_id: int) -> None:
         logger.debug("Chat cleanup failed for org=%d: %s", org_id, exc)
 
 
+async def _cleanup_old_logs(db: AsyncSession, org_id: int) -> None:
+    """Delete AI call logs and decision traces older than 90 days."""
+    from datetime import timedelta
+    from sqlalchemy import delete
+    from app.models.ai_call_log import AiCallLog
+    from app.models.decision_trace import DecisionTrace
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+    try:
+        for model, name in [(AiCallLog, "ai_call_logs"), (DecisionTrace, "decision_traces")]:
+            result = await db.execute(
+                delete(model).where(
+                    model.organization_id == org_id,
+                    model.created_at < cutoff,
+                )
+            )
+            if result.rowcount:
+                logger.info("Cleaned up %d old %s for org=%d", result.rowcount, name, org_id)
+        await db.commit()
+    except Exception as exc:
+        logger.debug("Log cleanup failed for org=%d: %s", org_id, exc)
+
+
 async def _scheduler_loop(interval_minutes: int) -> None:
     """Runs forever; wakes up every interval_minutes and syncs all orgs."""
     from app.services.organization import list_organizations
@@ -768,6 +791,7 @@ async def _scheduler_loop(interval_minutes: int) -> None:
                         await _maybe_generate_daily_pending_digest(db, org.id)
                         await _publish_due_social_posts(db, org.id)
                         await _cleanup_old_chat_messages(db, org.id)
+                        await _cleanup_old_logs(db, org.id)
                         _last_synced[org.id] = datetime.now(timezone.utc)
                 except Exception as exc:
                     logger.warning("Sync failed for org=%d: %s", org.id, exc)

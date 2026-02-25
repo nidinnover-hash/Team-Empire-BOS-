@@ -46,6 +46,9 @@ from app.schemas.control import (
     MessageDraftRequest,
     MultiOrgCockpitRead,
     MultiOrgCockpitOrgRead,
+    CloneSelfDevelopRead,
+    CloneSelfDevelopRequest,
+    CloneLimitationRead,
     SchedulerJobRunListRead,
     SchedulerReplayRead,
     SchedulerReplayRequest,
@@ -58,9 +61,28 @@ from app.schemas.control import (
 )
 from app.services import clone_brain, clone_control, compliance_engine, email_control, organization as organization_service
 from app.services import metrics_service, signal_ingestion
+from app.services.ai_router import call_ai
 from app.services import sync_scheduler
 
 router = APIRouter(prefix="/control", tags=["CEO Control"])
+
+
+def _append_limitation(
+    limitations: list[CloneLimitationRead],
+    *,
+    name: str,
+    severity: str,
+    impact: str,
+    evidence: str,
+) -> None:
+    limitations.append(
+        CloneLimitationRead(
+            name=name,
+            severity=severity,
+            impact=impact,
+            evidence=evidence,
+        )
+    )
 
 
 def _integration_state(
@@ -174,13 +196,8 @@ def _top_prs_waiting_sharon(prs: list[GitHubPRSnapshot]) -> list[dict[str, Any]]
     return rows[:10]
 
 
-@router.get("/ceo/status", response_model=CEOStatusRead)
-async def ceo_status(
-    db: AsyncSession = Depends(get_db),
-    actor: dict = Depends(require_roles("CEO", "ADMIN")),
-) -> CEOStatusRead:
-    org_id = int(actor["org_id"])
-
+async def _fetch_ceo_status_data(db: AsyncSession, org_id: int) -> CEOStatusRead:
+    """Shared data-fetching logic for CEO status — used by both ceo_status and ceo_morning_brief."""
     tasks = (
         await db.execute(
             select(ClickUpTaskSnapshot)
@@ -273,6 +290,14 @@ async def ceo_status(
         cost_alerts=cost_alerts,
         mode="suggest_only",
     )
+
+
+@router.get("/ceo/status", response_model=CEOStatusRead)
+async def ceo_status(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> CEOStatusRead:
+    return await _fetch_ceo_status_data(db, int(actor["org_id"]))
 
 
 @router.get("/integrations/health", response_model=IntegrationHealthRead)
@@ -782,6 +807,197 @@ async def brain_train_data_driven(
     )
 
 
+@router.post("/brain/limitations-claude", response_model=CloneSelfDevelopRead)
+async def brain_limitations_claude(
+    payload: CloneSelfDevelopRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> CloneSelfDevelopRead:
+    org_id = int(actor["org_id"])
+    week_start = payload.week_start_date.date() if payload.week_start_date else None
+    summary = await clone_brain.clone_org_summary(
+        db,
+        organization_id=org_id,
+        week_start_date=week_start,
+    )
+    scores = await clone_brain.list_clone_scores(
+        db,
+        organization_id=org_id,
+        week_start_date=week_start,
+    )
+    data_quality = await clone_control.data_quality_snapshot(db, organization_id=org_id)
+    sla = await clone_control.manager_sla_snapshot(db, organization_id=org_id)
+
+    limitations: list[CloneLimitationRead] = []
+    avg_score = float(summary.get("avg_score", 0.0) or 0.0)
+    if int(summary.get("count", 0) or 0) == 0:
+        _append_limitation(
+            limitations,
+            name="no_clone_scores",
+            severity="critical",
+            impact="No measurable baseline for autonomous delegation quality.",
+            evidence="No clone performance rows found for selected window.",
+        )
+    if avg_score < 55.0:
+        _append_limitation(
+            limitations,
+            name="low_readiness_average",
+            severity="high",
+            impact="Autonomous decisions likely need heavy human correction.",
+            evidence=f"Average clone score is {avg_score:.2f} (<55).",
+        )
+    needs_support = int(summary.get("needs_support", 0) or 0)
+    if needs_support > 0:
+        _append_limitation(
+            limitations,
+            name="high_needs_support_population",
+            severity="high",
+            impact="Execution quality risk concentrated in low-readiness clones.",
+            evidence=f"{needs_support} clones in needs_support bucket.",
+        )
+    missing_identity = int(data_quality.get("missing_identity_count", 0) or 0)
+    if missing_identity > 0:
+        _append_limitation(
+            limitations,
+            name="identity_mapping_gaps",
+            severity="high",
+            impact="Signals cannot be attributed reliably to employee clones.",
+            evidence=f"{missing_identity} active employees missing identity mapping.",
+        )
+    stale_metrics = int(data_quality.get("stale_metrics_count", 0) or 0)
+    if stale_metrics > 0:
+        _append_limitation(
+            limitations,
+            name="stale_weekly_metrics",
+            severity="medium",
+            impact="Model is training on incomplete or outdated performance telemetry.",
+            evidence=f"{stale_metrics} employees missing current-week metrics.",
+        )
+    duplicate_conflicts = int(data_quality.get("duplicate_identity_conflicts", 0) or 0)
+    if duplicate_conflicts > 0:
+        _append_limitation(
+            limitations,
+            name="duplicate_identity_conflicts",
+            severity="medium",
+            impact="Ownership ambiguity can distort training feedback loops.",
+            evidence=f"{duplicate_conflicts} duplicate work-email identity conflicts.",
+        )
+    pending_breaches = int(sla.get("pending_approvals_breached", 0) or 0)
+    if pending_breaches > 0:
+        _append_limitation(
+            limitations,
+            name="approval_sla_breaches",
+            severity="medium",
+            impact="Decision latency blocks clone learning and execution throughput.",
+            evidence=f"{pending_breaches} pending approvals beyond SLA.",
+        )
+    if not limitations:
+        _append_limitation(
+            limitations,
+            name="no_critical_limitations_detected",
+            severity="low",
+            impact="System appears stable; focus on incremental improvement.",
+            evidence="No high-risk gaps detected in current diagnostics.",
+        )
+
+    diagnostics = {
+        "week_start_date": week_start.isoformat() if week_start else None,
+        "summary": summary,
+        "score_count": len(scores),
+        "data_quality": data_quality,
+        "manager_sla": sla,
+        "challenge": payload.challenge,
+    }
+
+    claude_plan = await call_ai(
+        system_prompt=(
+            "You are Claude acting as a clone capability architect. "
+            "Given diagnostics and limitations, produce a practical self-development plan. "
+            "Output plain text with sections: 'Top Limits', '7-Day Plan', '30-Day Plan', "
+            "'Guardrails', and 'Success Metrics'. Keep it operational and measurable."
+        ),
+        user_message=json.dumps(
+            {
+                "challenge": payload.challenge,
+                "diagnostics": diagnostics,
+                "limitations": [item.model_dump() for item in limitations],
+            },
+            ensure_ascii=True,
+            default=str,
+        ),
+        provider="anthropic",
+        max_tokens=900,
+        organization_id=org_id,
+        request_id=get_current_request_id(),
+        db=db,
+    )
+    provider = "anthropic"
+    if claude_plan.startswith("Error:"):
+        provider = "rule_based_fallback"
+        top_items = limitations[:3]
+        lines = [
+            "Top Limits",
+            *[f"- {x.name}: {x.evidence}" for x in top_items],
+            "",
+            "7-Day Plan",
+            "- Backfill identity maps and weekly metrics for every active employee.",
+            "- Re-run metrics + clone scoring daily and compare deltas.",
+            "- Complete at least one OPEN role training plan per employee.",
+            "",
+            "30-Day Plan",
+            "- Raise average clone score by >=15 points from baseline.",
+            "- Reduce needs_support share below 30%.",
+            "- Enforce approval SLA compliance and eliminate stale metrics.",
+            "",
+            "Guardrails",
+            "- Keep all actions in suggest-only mode until metrics stabilize.",
+            "- Require human approval for high-impact actions.",
+            "",
+            "Success Metrics",
+            f"- Baseline average score: {avg_score:.2f}",
+            f"- Current needs_support count: {needs_support}",
+            f"- Current stale metrics count: {stale_metrics}",
+        ]
+        claude_plan = "\n".join(lines)
+
+    next_actions = []
+    if missing_identity > 0:
+        next_actions.append(f"Map identities for {missing_identity} active employees.")
+    if stale_metrics > 0:
+        next_actions.append(f"Backfill weekly metrics for {stale_metrics} employees.")
+    if pending_breaches > 0:
+        next_actions.append(f"Clear {pending_breaches} approval SLA breaches.")
+    if avg_score < 70:
+        next_actions.append("Run weekly clone scoring + training-plan generation after each metrics refresh.")
+    if not next_actions:
+        next_actions.append("Maintain current cadence and optimize low-yield training tasks.")
+
+    await record_action(
+        db=db,
+        event_type="clone_limitations_analyzed",
+        actor_user_id=actor["id"],
+        organization_id=org_id,
+        entity_type="clone_control",
+        entity_id=None,
+        payload_json={
+            "challenge": payload.challenge,
+            "provider": provider,
+            "limitation_count": len(limitations),
+            "week_start_date": week_start.isoformat() if week_start else None,
+        },
+    )
+
+    return CloneSelfDevelopRead(
+        ok=True,
+        mode="suggest_only",
+        provider=provider,
+        limitations=limitations,
+        development_plan=claude_plan,
+        next_actions=next_actions[:5],
+        diagnostics=diagnostics,
+    )
+
+
 @router.get("/data-quality", response_model=DataQualityRead)
 async def data_quality(
     db: AsyncSession = Depends(get_db),
@@ -879,9 +1095,10 @@ async def multi_org_cockpit(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> MultiOrgCockpitRead:
-    orgs = await organization_service.list_organizations(db)
+    org = await organization_service.get_organization_by_id(db, int(actor["org_id"]))
+    orgs = [org] if org else []
     items: list[MultiOrgCockpitOrgRead] = []
-    for org in orgs[:200]:
+    for org in orgs:
         clone_summary = await clone_brain.clone_org_summary(db, organization_id=org.id, week_start_date=None)
         compliance = await compliance_engine.latest_report(db, org.id)
         quality = await clone_control.data_quality_snapshot(db, organization_id=org.id)
@@ -972,7 +1189,7 @@ async def ceo_morning_brief(
 ) -> CEOMorningBriefRead:
     org_id = int(actor["org_id"])
     now = datetime.now(timezone.utc)
-    ceo = await ceo_status(db=db, actor=actor)
+    ceo = await _fetch_ceo_status_data(db, org_id)
     quality = await clone_control.data_quality_snapshot(db, organization_id=org_id)
     sla = await clone_control.manager_sla_snapshot(db, organization_id=org_id)
     priority_actions: list[str] = []
