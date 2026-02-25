@@ -177,6 +177,22 @@ def store_response(
         client = _get_redis_client()
         if client is not None:
             try:
+                # Check for fingerprint collision before overwriting.
+                if fingerprint:
+                    existing = client.get(_redis_key(scope, key))
+                    if existing:
+                        try:
+                            old = cast(dict[str, Any], json.loads(existing))
+                            old_fp = old.get("fingerprint")
+                            if isinstance(old_fp, str) and old_fp != fingerprint:
+                                _idempotency_stats["conflicts"] += 1
+                                raise IdempotencyConflictError(
+                                    "Idempotency key replayed with different request fingerprint"
+                                )
+                        except IdempotencyConflictError:
+                            raise
+                        except Exception:
+                            pass  # Malformed entry — safe to overwrite
                 client.setex(
                     _redis_key(scope, key),
                     _ttl_seconds(),
@@ -184,12 +200,24 @@ def store_response(
                 )
                 _idempotency_stats["stores"] += 1
                 return
+            except IdempotencyConflictError:
+                raise
             except Exception:
                 logger.warning("Redis idempotency write failed; falling back to memory backend.", exc_info=True)
                 _idempotency_stats["redis_failures"] += 1
     now = time.monotonic()
     with _cache_lock:
         _cleanup(now)
-        # Keep payload JSON-serializable and detached from caller mutation.
-        _cache[_cache_key(scope, key)] = (now, cache_payload)
+        # Check for fingerprint collision before overwriting in-memory entry.
+        ck = _cache_key(scope, key)
+        existing_entry = _cache.get(ck)
+        if existing_entry and fingerprint:
+            _ts, old_payload = existing_entry
+            old_fp = old_payload.get("fingerprint")
+            if isinstance(old_fp, str) and old_fp != fingerprint:
+                _idempotency_stats["conflicts"] += 1
+                raise IdempotencyConflictError(
+                    "Idempotency key replayed with different request fingerprint"
+                )
+        _cache[ck] = (now, cache_payload)
     _idempotency_stats["stores"] += 1

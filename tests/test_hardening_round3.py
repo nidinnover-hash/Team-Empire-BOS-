@@ -1,4 +1,5 @@
 """Tests for hardening round 3: nonce replay, snapshot retention, middleware, password hashing."""
+import asyncio
 import time
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
@@ -224,3 +225,104 @@ def test_idempotency_cache_ttl_eviction(monkeypatch):
         assert idempotency.get_cached_response("scope", "key1") is None
     finally:
         idempotency._cache.clear()
+
+
+# ── 7. Idempotency fingerprint collision on store ─────────────────────────
+
+def test_idempotency_store_rejects_fingerprint_collision():
+    """store_response raises IdempotencyConflictError when fingerprints differ."""
+    from app.core import idempotency
+    from app.core.idempotency import IdempotencyConflictError
+
+    idempotency._cache.clear()
+    try:
+        idempotency.store_response("scope", "key-fp", {"a": 1}, fingerprint="fp-aaa")
+        with pytest.raises(IdempotencyConflictError):
+            idempotency.store_response("scope", "key-fp", {"b": 2}, fingerprint="fp-bbb")
+    finally:
+        idempotency._cache.clear()
+
+
+def test_idempotency_store_allows_same_fingerprint():
+    """store_response allows overwrite when fingerprint matches."""
+    from app.core import idempotency
+
+    idempotency._cache.clear()
+    try:
+        idempotency.store_response("scope", "key-fp2", {"a": 1}, fingerprint="fp-same")
+        # Same fingerprint — should not raise
+        idempotency.store_response("scope", "key-fp2", {"a": 2}, fingerprint="fp-same")
+        cached = idempotency.get_cached_response("scope", "key-fp2", fingerprint="fp-same")
+        assert cached is not None
+        assert cached["a"] == 2
+    finally:
+        idempotency._cache.clear()
+
+
+# ── 8. Password rehash on login ──────────────────────────────────────────
+
+async def test_login_rehashes_old_100k_password(client, monkeypatch):
+    """Login with old 100k-iteration hash transparently rehashes to 600k."""
+    import base64
+    import hashlib
+    import os
+
+    session, agen = await _get_test_session()
+    try:
+        from app.models.user import User
+
+        # Create a user with an old 100k-iteration hash
+        password = "OldPassword2026!"
+        salt = os.urandom(16)
+        iterations = 100_000
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+        old_hash = f"pbkdf2_sha256${iterations}${base64.b64encode(salt).decode()}${base64.b64encode(digest).decode()}"
+
+        user = User(
+            id=99, organization_id=1, name="Rehash Test",
+            email="rehash@test.com", password_hash=old_hash,
+            role="CEO", is_active=True, token_version=1,
+        )
+        session.add(user)
+        await session.commit()
+
+        # Login should succeed
+        resp = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "rehash@test.com", "password": password},
+        )
+        assert resp.status_code == 200
+        assert "access_token" in resp.json()
+
+        # Fetch the user in a fresh session to see the endpoint's commit
+        session2, agen2 = await _get_test_session()
+        try:
+            from sqlalchemy import select
+            refreshed = (await session2.execute(
+                select(User).where(User.email == "rehash@test.com")
+            )).scalar_one()
+            parts = refreshed.password_hash.split("$")
+            assert parts[0] == "pbkdf2_sha256"
+            assert int(parts[1]) == 600_000
+
+            # Verify the new hash still works
+            assert await asyncio.to_thread(verify_password, password, refreshed.password_hash) is True
+        finally:
+            await agen2.aclose()
+    finally:
+        await agen.aclose()
+
+
+# ── 9. replay_job cleanup_snapshots ───────────────────────────────────────
+
+async def test_replay_job_cleanup_snapshots(client):
+    """replay_job_for_org('cleanup_snapshots') runs without error."""
+    from app.services.sync_scheduler import replay_job_for_org
+
+    session, agen = await _get_test_session()
+    try:
+        result = await replay_job_for_org(session, org_id=1, job_name="cleanup_snapshots")
+        assert result["ok"] is True
+        assert result["job_name"] == "cleanup_snapshots"
+    finally:
+        await agen.aclose()

@@ -86,10 +86,104 @@
     }
   }
 
+  function _extractReadableText() {
+    var selected = "";
+    try { selected = (window.getSelection && String(window.getSelection() || "")) || ""; } catch (_e) { selected = ""; }
+    if (selected.trim()) return selected.trim();
+    var root = document.querySelector("main") || document.querySelector(".main-wrap") || document.body;
+    var text = (root && root.innerText) ? root.innerText : "";
+    return String(text || "").replace(/\s+/g, " ").trim();
+  }
+
+  function _ensureReadAloudControl() {
+    if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) return;
+    if (document.getElementById("read-aloud-fab")) return;
+
+    var fab = document.createElement("button");
+    fab.id = "read-aloud-fab";
+    fab.type = "button";
+    fab.textContent = "Read";
+    fab.setAttribute("aria-label", "Read page aloud");
+    fab.style.position = "fixed";
+    fab.style.right = "14px";
+    fab.style.bottom = "14px";
+    fab.style.zIndex = "9998";
+    fab.style.minHeight = "44px";
+    fab.style.minWidth = "92px";
+    fab.style.padding = "10px 14px";
+    fab.style.borderRadius = "999px";
+    fab.style.border = "1px solid rgba(201,206,214,0.55)";
+    fab.style.background = "linear-gradient(145deg, #2a2e35 0%, #1a1d23 100%)";
+    fab.style.color = "#eef0f3";
+    fab.style.fontSize = "12px";
+    fab.style.fontWeight = "700";
+    fab.style.letterSpacing = ".06em";
+    fab.style.textTransform = "uppercase";
+    fab.style.boxShadow = "0 8px 24px -12px rgba(0,0,0,.9)";
+    fab.style.touchAction = "manipulation";
+
+    var speaking = false;
+    function updateFab() {
+      fab.textContent = speaking ? "Stop" : "Read";
+      fab.setAttribute("aria-label", speaking ? "Stop reading aloud" : "Read page aloud");
+    }
+
+    fab.addEventListener("click", function () {
+      if (speaking || window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        speaking = false;
+        updateFab();
+        return;
+      }
+      var text = _extractReadableText();
+      if (!text) return;
+      var utterance = new SpeechSynthesisUtterance(text.slice(0, 6000));
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+      utterance.onend = function () { speaking = false; updateFab(); };
+      utterance.onerror = function () { speaking = false; updateFab(); };
+      speaking = true;
+      updateFab();
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+    });
+
+    document.body.appendChild(fab);
+
+    // Hide Read Aloud FAB when a modal overlay is visible
+    var _fabObserver = new MutationObserver(function () {
+      var modalVisible = document.querySelector(".modal-overlay, .modal-mask, .modal-backdrop");
+      fab.style.display = modalVisible ? "none" : "";
+    });
+    _fabObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style"] });
+  }
+
+  function escapeHtml(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function getCsrfToken() {
+    var pair = document.cookie.split("; ").find(function (c) { return c.startsWith("pc_csrf="); });
+    return pair ? decodeURIComponent(pair.split("=").slice(1).join("=") || "") : "";
+  }
+
   window.PCUI = {
     mapApiError: mapApiError,
     setButtonLoading: setButtonLoading,
     confirmDanger: confirmDanger,
     requestJson: requestJson,
+    escapeHtml: escapeHtml,
+    getCsrfToken: getCsrfToken,
   };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", _ensureReadAloudControl, { once: true });
+  } else {
+    _ensureReadAloudControl();
+  }
 })();

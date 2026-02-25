@@ -499,6 +499,9 @@ async def replay_job_for_org(db: AsyncSession, org_id: int, job_name: str) -> di
         elif job_name == "social_publish_queue":
             await _publish_due_social_posts(db, org_id)
             result = {"ok": True}
+        elif job_name == "cleanup_snapshots":
+            await _cleanup_old_job_runs_and_snapshots(db, org_id)
+            result = {"ok": True}
         elif job_name == "full_sync":
             await _run_integrations(db, org_id)
             result = {"ok": True}

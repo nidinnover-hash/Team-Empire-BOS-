@@ -41,7 +41,7 @@
           return;
         }
 
-        const csrfToken = (document.cookie.split("; ").find((c) => c.startsWith("pc_csrf=")) || "").split("=")[1];
+        const csrfToken = (document.cookie.split("; ").find((c) => c.startsWith("pc_csrf=")) || "").split("=").slice(1).join("=");
         if (!csrfToken) throw new Error("Missing CSRF token");
 
         const res = await fetch("/web/ops/daily-run?draft_email_limit=3", {
@@ -74,7 +74,7 @@
       logoutBtn.addEventListener("click", async function (e) {
         e.preventDefault();
         try {
-          const csrfToken = (document.cookie.split("; ").find((c) => c.startsWith("pc_csrf=")) || "").split("=")[1];
+          const csrfToken = (document.cookie.split("; ").find((c) => c.startsWith("pc_csrf=")) || "").split("=").slice(1).join("=");
           const res = await fetch("/web/logout", {
             method: "POST",
             headers: csrfToken ? { "X-CSRF-Token": decodeURIComponent(csrfToken) } : {}
@@ -327,7 +327,7 @@
 
     function getCsrf() {
       const pair = document.cookie.split("; ").find(function(c){ return c.startsWith("pc_csrf="); });
-      return pair ? decodeURIComponent(pair.split("=")[1]) : "";
+      return pair ? decodeURIComponent(pair.split("=").slice(1).join("=")) : "";
     }
 
     function apiHeaders() {

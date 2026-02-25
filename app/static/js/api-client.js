@@ -7,7 +7,7 @@
     var pair = document.cookie.split("; ").find(function (c) {
       return c.startsWith("pc_csrf=");
     });
-    return pair ? decodeURIComponent(pair.split("=")[1]) : "";
+    return pair ? decodeURIComponent(pair.split("=").slice(1).join("=")) : "";
   }
 
   function _clearToken() {

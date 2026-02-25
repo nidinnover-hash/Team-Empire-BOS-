@@ -88,11 +88,10 @@
     github:            '{\n  "access_token": "ghp_XXXX"\n}',
     clickup:           '{\n  "access_token": "pk_XXXX_YYYY"\n}',
     slack:             '{\n  "access_token": "xoxb-XXXX-YYYY"\n}',
+    digitalocean:      '{\n  "api_token": "dop_v1_xxxxxxxx"\n}',
   };
 
-  function esc(s) {
-    return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-  }
+  var esc = window.PCUI.escapeHtml;
   function fmtDate(v) {
     if (!v) return "never";
     var d = new Date(v);
@@ -118,9 +117,14 @@
     el.textContent = text || "";
     el.className = "status" + (klass ? " " + klass : "");
   }
-  function mapUiError(err) {
-    if (window.PCUI && window.PCUI.mapApiError) return window.PCUI.mapApiError(err);
-    return String((err && err.message) || err || "Request failed");
+  var mapUiError = window.PCUI.mapApiError;
+  function providerLabel(name) {
+    var n = String(name || "").toLowerCase();
+    if (n === "anthropic") return "Claude (Anthropic)";
+    if (n === "openai") return "OpenAI";
+    if (n === "groq") return "Groq";
+    if (n === "gemini") return "Gemini";
+    return name;
   }
   function fmtSyncAge(v) {
     if (!v) return "never";
@@ -183,7 +187,7 @@
         '</tr></thead><tbody>' +
         sorted.map(function(i) {
           var isConnected = i.status === "connected";
-          var hasSyncBtn = ["clickup","github","slack","google_calendar"].includes(i.type);
+          var hasSyncBtn = ["clickup","github","slack","digitalocean","google_calendar"].includes(i.type);
           var isOAuth = ["gmail","google_calendar"].includes(i.type);
           var bs = 'style="padding:0.28rem 0.5rem" type="button"';
           var health = getHealth(i);
@@ -228,7 +232,7 @@
   }
 
   function updateQcBadges(list) {
-    ["clickup","github","slack"].forEach(function(name) {
+    ["clickup","github","slack","digitalocean"].forEach(function(name) {
       var found = list.find(function(i){ return i.type === name && i.status === "connected"; });
       var badge = document.getElementById(name + "-badge");
       var syncBtn = document.getElementById(name + "-sync-btn");
@@ -290,6 +294,7 @@
     clickup: "/api/v1/integrations/clickup/sync",
     github:  "/api/v1/integrations/github/sync",
     slack:   "/api/v1/integrations/slack/sync",
+    digitalocean: "/api/v1/integrations/digitalocean/sync",
   };
 
   window.syncIntegration = async function(name, statusElemId) {
@@ -518,7 +523,7 @@
         return (
           '<div class="ai-card">' +
             '<div class="ai-head">' +
-              '<div class="ai-name">' + esc(p.provider) + roleTag + '</div>' +
+              '<div class="ai-name">' + esc(providerLabel(p.provider)) + roleTag + '</div>' +
               '<span class="pill ' + (p.active||p.email_active?"connected":"disconnected") + '">' + (p.active?"active":"idle") + '</span>' +
             '</div>' +
             '<div class="small">Configured: ' + (p.configured?"Yes":"No") + '</div>' +
@@ -551,8 +556,58 @@
     }
   };
 
+  bindClick("digitalocean-connect-btn", async function() {
+    var btn = byId("digitalocean-connect-btn");
+    var apiToken = document.getElementById("digitalocean-token").value.trim();
+    if (!apiToken) { setQcStatus("digitalocean-status","Enter your DigitalOcean token first.","err"); return; }
+    if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(btn, true, "Connecting...");
+    setQcStatus("digitalocean-status","Connecting to DigitalOcean...","info");
+    try {
+      await apiJson("/api/v1/integrations/digitalocean/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_token: apiToken })
+      });
+      setQcStatus("digitalocean-status","Connected! Syncing infrastructure now...","ok");
+      document.getElementById("digitalocean-token").value = "";
+      await fetchIntegrations();
+      await window.syncIntegration("digitalocean","sync-status");
+    } catch (err) {
+      setQcStatus("digitalocean-status", mapUiError(err), "err");
+    } finally {
+      if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(btn, false);
+    }
+  });
+  bindClick("digitalocean-sync-btn", function() {
+    window.syncIntegration("digitalocean","sync-status");
+  });
+
   bindClick("refresh-integrations-btn", fetchIntegrations);
   bindClick("refresh-ai-btn", fetchAiStatus);
+  bindClick("coding-discovery-btn", async function() {
+    var project = (byId("coding-project-name") && byId("coding-project-name").value || "").trim();
+    var language = (byId("coding-language") && byId("coding-language").value || "").trim();
+    var stage = (byId("coding-stage") && byId("coding-stage").value || "").trim();
+    var out = byId("coding-discovery-output");
+    if (out) out.textContent = "Generating coding discovery questions...";
+    try {
+      var qs = [];
+      if (project) qs.push("project_name=" + encodeURIComponent(project));
+      if (language) qs.push("language=" + encodeURIComponent(language));
+      if (stage) qs.push("stage=" + encodeURIComponent(stage));
+      var path = "/api/v1/integrations/ai/coding-discovery" + (qs.length ? ("?" + qs.join("&")) : "");
+      var body = await apiJson(path, { method: "GET" });
+      if (!out) return;
+      var questions = (body.questions || []).map(function(q){ return "<li>" + esc(q) + "</li>"; }).join("");
+      out.innerHTML = (
+        '<div style="margin-bottom:.45rem"><strong>Providers:</strong> ' + esc((body.provider_options || []).join(", ")) + '</div>' +
+        '<ol style="margin:0 0 .55rem 1rem;padding-left:.6rem">' + questions + '</ol>' +
+        '<div><strong>Ready Prompt:</strong><br><code style="white-space:pre-wrap;display:block;margin-top:.25rem">' + esc(body.next_prompt || "") + '</code></div>'
+      );
+    } catch (err) {
+      if (out) out.textContent = mapUiError(err);
+    }
+  });
 
   var logoutBtn = byId("logout-btn");
   if (logoutBtn) {
@@ -562,7 +617,7 @@
           await window.PCAPI.safeFetchJson("/web/logout", { method: "POST", csrf: true });
         } else {
           var csrfPair = document.cookie.split("; ").find(function(c){ return c.startsWith("pc_csrf="); });
-          var csrf = csrfPair ? decodeURIComponent(csrfPair.split("=")[1]) : "";
+          var csrf = csrfPair ? decodeURIComponent(csrfPair.split("=").slice(1).join("=")) : "";
           var r = await fetch("/web/logout", {
             method: "POST",
             headers: csrf ? { "X-CSRF-Token": csrf } : {}
@@ -610,7 +665,7 @@ window.showToast = function(msg, type) {
     el.className = "toast " + t;
     el.setAttribute("role", "status");
     el.setAttribute("aria-live", "polite");
-    el.innerHTML = "<span>" + String(msg).replace(/</g,"&lt;") + "</span>" +
+    el.innerHTML = "<span>" + String(msg).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</span>" +
       '<button aria-label="Dismiss" onclick="this.parentNode.classList.add(\'removing\');setTimeout(function(){this.parentNode.remove()}.bind(this),250)">\u00d7</button>';
     var c = document.getElementById("toast-container");
     if (c) c.appendChild(el);

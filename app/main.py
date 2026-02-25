@@ -827,23 +827,17 @@ async def dashboard(
     last_synced_at = get_last_synced_for_org(org_id)
 
     # Parallel fetch — all queries are independent reads on the same org.
-    # Timeout prevents dashboard from hanging if any single query stalls.
-    _DASHBOARD_DEFAULTS: tuple[Any, ...] = (
+    # Uses return_exceptions=True so one slow/failed query doesn't nuke others.
+    _DASHBOARD_DEFAULTS: list[Any] = [
         [], [], [], [], [], [],  # commands, tasks, notes, projects, goals, contacts
         {"total_income": 0, "total_expense": 0, "balance": 0},  # finance
         None, {}, {}, {},  # finance_efficiency, marketing, study, training
         {}, None, None,  # executive, intelligence_summary, intelligence_diff
-        {"critical": 0, "high": 0, "recent": []},  # ceo_action
-    )
+        {"critical": 0, "high": 0, "recent": []},  # ceo_action (derived, not a query)
+    ]
     from app.services import compliance_engine
     try:
-        (
-            commands, tasks, notes, projects, goals, contacts,
-            finance, finance_efficiency,
-            marketing_layer, study_layer, training_layer,
-            executive, intelligence_summary, intelligence_diff,
-            compliance_report,
-        ) = await asyncio.wait_for(
+        _raw_results = await asyncio.wait_for(
             asyncio.gather(
                 command_service.list_commands(db, limit=10, organization_id=org_id),
                 task_service.list_tasks(db, limit=20, is_done=False, organization_id=org_id),
@@ -860,19 +854,32 @@ async def dashboard(
                 intelligence_service.build_executive_summary(db=db, organization_id=org_id, window_days=7),
                 intelligence_service.build_change_since_yesterday(db=db, organization_id=org_id),
                 compliance_engine.latest_report(db, org_id),
+                return_exceptions=True,
             ),
             timeout=15.0,
         )
     except asyncio.TimeoutError:
         import logging as _logging
         _logging.getLogger(__name__).warning("Dashboard gather timed out for org=%d", org_id)
-        (
-            commands, tasks, notes, projects, goals, contacts,
-            finance, finance_efficiency,
-            marketing_layer, study_layer, training_layer,
-            executive, intelligence_summary, intelligence_diff,
-            compliance_report,
-        ) = _DASHBOARD_DEFAULTS
+        _raw_results = _DASHBOARD_DEFAULTS[:15]  # 15 queries
+
+    # Replace failed results with safe defaults; preserve successful ones.
+    _defaults = _DASHBOARD_DEFAULTS[:15]
+    _results = []
+    for i, val in enumerate(_raw_results):
+        if isinstance(val, BaseException):
+            import logging as _logging
+            _logging.getLogger(__name__).warning("Dashboard query %d failed for org=%d: %s", i, org_id, val)
+            _results.append(_defaults[i] if i < len(_defaults) else None)
+        else:
+            _results.append(val)
+    (
+        commands, tasks, notes, projects, goals, contacts,
+        finance, finance_efficiency,
+        marketing_layer, study_layer, training_layer,
+        executive, intelligence_summary, intelligence_diff,
+        compliance_report,
+    ) = _results
 
     ceo_action = {"critical": 0, "high": 0, "recent": []}
     if isinstance(compliance_report, dict):
