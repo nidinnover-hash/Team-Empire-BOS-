@@ -111,7 +111,7 @@ class Settings(BaseSettings):
     PRIVACY_REDACTION_ENABLED: bool = True
     PRIVACY_MASK_PII: bool = True
     PRIVACY_RESPONSE_SANITIZATION_ENABLED: bool = True
-    PRIVACY_POLICY_PROFILE: PrivacyPolicyProfile = "balanced"
+    PRIVACY_POLICY_PROFILE: PrivacyPolicyProfile = "strict"
     PRIVACY_AUDIT_MAX_VALUE_CHARS: int = 200
     CLONE_AUTO_LEARN_FROM_CHAT: bool = True
     SECURITY_PREMIUM_MODE: bool = True

@@ -50,7 +50,7 @@ async def ensure_default_user(db: AsyncSession, organization_id: int = 1) -> Non
         User(
             organization_id=organization_id,
             name=settings.ADMIN_NAME,
-            email=settings.ADMIN_EMAIL,
+            email=settings.ADMIN_EMAIL.lower().strip(),
             password_hash=hash_password(settings.ADMIN_PASSWORD),
             role="CEO",
             is_active=True,

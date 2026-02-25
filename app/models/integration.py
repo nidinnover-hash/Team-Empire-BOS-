@@ -33,3 +33,6 @@ class Integration(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+    def __repr__(self) -> str:
+        return f"<Integration id={self.id} type={self.type!r} status={self.status!r}>"

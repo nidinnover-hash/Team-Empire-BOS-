@@ -39,3 +39,6 @@ class Approval(Base):
         default=lambda: datetime.now(timezone.utc),
     )
 
+    def __repr__(self) -> str:
+        return f"<Approval id={self.id} type={self.approval_type!r} status={self.status!r}>"
+

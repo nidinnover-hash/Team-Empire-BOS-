@@ -27,7 +27,7 @@ from app.core.middleware import (
     check_login_allowed,
     record_login_failure,
 )
-from app.core.security import create_access_token, decode_access_token, verify_password
+from app.core.security import create_access_token, decode_access_token, hash_password, verify_password
 from app.db.base import Base
 from app.db.session import engine
 from app.services import command as command_service
@@ -268,6 +268,18 @@ async def _authenticate_user(
         valid = False
     else:
         valid = await asyncio.to_thread(verify_password, password, user.password_hash)
+
+    # Transparent rehash: upgrade old iteration counts to current OWASP minimum.
+    if valid and user is not None:
+        try:
+            _scheme, iter_str, *_ = user.password_hash.split("$", 3)
+            if _scheme == "pbkdf2_sha256" and int(iter_str) < 600_000:
+                user.password_hash = await asyncio.to_thread(hash_password, password)
+                db.add(user)
+                await db.commit()
+                _log.info("Rehashed password for user %d (%s -> 600k iterations)", user.id, iter_str)
+        except Exception:
+            _log.debug("Password rehash skipped for user %d", user.id, exc_info=True)
 
     if not valid:
         record_login_failure(client_ip)

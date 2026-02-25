@@ -17,3 +17,6 @@ class Organization(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
+
+    def __repr__(self) -> str:
+        return f"<Organization id={self.id} slug={self.slug!r}>"

@@ -60,3 +60,6 @@ class Task(Base):
     )
     external_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
     external_source: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+
+    def __repr__(self) -> str:
+        return f"<Task id={self.id} title={self.title!r} done={self.is_done}>"
