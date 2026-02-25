@@ -24,8 +24,8 @@ class ObservabilitySummaryRead(BaseModel):
 class AICallLogRead(BaseModel):
     id: int
     provider: str
-    model_name: str | None = None
-    latency_ms: int | None = None
+    model_name: str
+    latency_ms: int
     input_tokens: int | None = None
     output_tokens: int | None = None
     used_fallback: bool
@@ -40,6 +40,19 @@ class DecisionTraceSummaryRead(BaseModel):
     trace_type: str
     title: str
     summary: str
-    confidence_score: float | None = None
+    confidence_score: float = 0.0
     request_id: str | None = None
     created_at: str | None = None
+
+
+class StorageTableStatRead(BaseModel):
+    table: str
+    row_count: int
+
+
+class StorageSummaryRead(BaseModel):
+    org_id: int
+    generated_at: str
+    total_rows: int
+    retention_days_chat: int
+    tables: list[StorageTableStatRead]

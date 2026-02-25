@@ -144,8 +144,8 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
                     claims = decode_access_token(token)
                     org_id = claims.get("org_id")
                     user_id = claims.get("id")
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Failed to decode token for request log context: %s", type(exc).__name__)
             logger.info(
                 "request",
                 extra={
@@ -351,6 +351,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             # Lock contention — let the request through rather than deadlock
             return cast(Response, await call_next(request))
         try:
+            # Proactively evict stale IPs to prevent unbounded memory growth
+            if len(_rate_buckets) > 1000:
+                stale = [
+                    k for k, v in _rate_buckets.items()
+                    if not v or now - v[-1] > window
+                ]
+                for k in stale:
+                    del _rate_buckets[k]
             bucket = _rate_buckets[client_ip]
             # Drop timestamps outside the sliding window
             while bucket and now - bucket[0] > window:

@@ -37,21 +37,24 @@ async def _db_session_with_retry(max_retries: int = 3, base_delay: float = 2.0):
     """Acquire an AsyncSession with exponential backoff on connection failure."""
     for attempt in range(max_retries):
         try:
-            async with AsyncSessionLocal() as db:
-                yield db
-                return
+            session = AsyncSessionLocal()
         except Exception as exc:
             if attempt == max_retries - 1:
                 raise
             delay = base_delay * (2 ** attempt)
             logger.warning("DB connection attempt %d/%d failed, retrying in %.1fs: %s", attempt + 1, max_retries, delay, exc)
             await asyncio.sleep(delay)
+            continue
+        async with session as db:
+            yield db
+            return
 
 # Per-org throttle: don't fire on-demand sync more than once per N minutes.
 # Default 15 — overridden by settings.SYNC_THROTTLE_MINUTES at runtime.
 _last_synced: dict[int, datetime] = {}
 _last_ceo_summary_date_by_org: dict[int, str] = {}
 _last_pending_digest_date_by_org: dict[int, str] = {}
+_sync_failure_streak: dict[tuple[int, str], int] = {}
 
 
 def get_last_synced_for_org(org_id: int) -> datetime | None:
@@ -273,6 +276,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
     from app.services import clickup_service, do_service, email_control, email_service, github_service, slack_service
     from app.services import compliance_engine
     from app.services.calendar_service import sync_calendar_events
+    failure_alert_threshold = max(1, int(getattr(settings, "SYNC_FAILURE_ALERT_THRESHOLD", 3)))
     async def _mark_status(int_type: str, status: str) -> None:
         try:
             await db.execute(
@@ -280,8 +284,14 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
                 .where(Integration.organization_id == org_id, Integration.type == int_type)
                 .values(last_sync_status=status)
             )
-        except Exception:
-            pass  # best-effort status tracking
+        except Exception as exc:
+            logger.debug(
+                "Status update failed org=%d integration=%s status=%s: %s",
+                org_id,
+                int_type,
+                status,
+                type(exc).__name__,
+            )
 
     async def _run_sync_operation(name: str, fn: Any) -> dict[str, object]:
         result = await fn(db, org_id)
@@ -313,6 +323,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
                 retry_exceptions=_SYNC_RETRY_POLICY.retry_exceptions,
             )
             logger.debug("Sync %s org=%d -> %s", name, org_id, result)
+            _sync_failure_streak[(org_id, name)] = 0
             await _mark_status(name, "ok")
             await _record_job_run(
                 db,
@@ -324,7 +335,18 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
                 details={"result": result if isinstance(result, dict) else {"ok": True}},
             )
         except Exception as exc:
+            key = (org_id, name)
+            current = _sync_failure_streak.get(key, 0) + 1
+            _sync_failure_streak[key] = current
             logger.warning("Background %s sync failed org=%d: %s: %s", name, org_id, type(exc).__name__, str(exc)[:500])
+            if current >= failure_alert_threshold:
+                logger.error(
+                    "Integration sync failure threshold reached org=%d integration=%s streak=%d threshold=%d",
+                    org_id,
+                    name,
+                    current,
+                    failure_alert_threshold,
+                )
             await _mark_status(name, "error")
             details = error_details(exc)
             await _record_job_run(
@@ -344,8 +366,13 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
         if getattr(settings, "FEATURE_EMAIL_SYNC", True):
             try:
                 await email_service.sync_emails(db, org_id=org_id, actor_user_id=1)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "Email sync failed org=%d: %s: %s",
+                    org_id,
+                    type(exc).__name__,
+                    str(exc)[:300],
+                )
             control_result = await email_control.process_inbox_controls(
                 db,
                 org_id=org_id,
@@ -468,6 +495,9 @@ async def replay_job_for_org(db: AsyncSession, org_id: int, job_name: str) -> di
             result = await compliance_engine.run_compliance(db, org_id)
         elif job_name == "daily_ceo_summary":
             await _maybe_generate_daily_ceo_summary(db, org_id)
+            result = {"ok": True}
+        elif job_name == "social_publish_queue":
+            await _publish_due_social_posts(db, org_id)
             result = {"ok": True}
         elif job_name == "full_sync":
             await _run_integrations(db, org_id)
@@ -657,6 +687,46 @@ async def _maybe_generate_daily_pending_digest(db: AsyncSession, org_id: int) ->
     _last_pending_digest_date_by_org[org_id] = day_key
 
 
+async def _publish_due_social_posts(db: AsyncSession, org_id: int) -> None:
+    from app.services import social as social_service
+    from app.logs.audit import record_action
+
+    started = datetime.now(timezone.utc)
+    try:
+        published = await social_service.publish_due_queued_posts(db, organization_id=org_id)
+        if published > 0:
+            await record_action(
+                db=db,
+                organization_id=org_id,
+                actor_user_id=1,
+                event_type="social_posts_auto_published",
+                entity_type="social_post",
+                entity_id=None,
+                payload_json={"count": published},
+            )
+        await _record_job_run(
+            db,
+            org_id=org_id,
+            job_name="social_publish_queue",
+            status="ok",
+            started_at=started,
+            finished_at=datetime.now(timezone.utc),
+            details={"published_count": published},
+        )
+        await db.commit()
+    except Exception as exc:
+        await _record_job_run(
+            db,
+            org_id=org_id,
+            job_name="social_publish_queue",
+            status="error",
+            started_at=started,
+            finished_at=datetime.now(timezone.utc),
+            error=f"{type(exc).__name__}: {str(exc)[:500]}",
+        )
+        await db.commit()
+
+
 async def _cleanup_old_chat_messages(db: AsyncSession, org_id: int) -> None:
     """Delete chat messages older than CHAT_HISTORY_RETENTION_DAYS."""
     from datetime import timedelta
@@ -696,6 +766,7 @@ async def _scheduler_loop(interval_minutes: int) -> None:
                         await _check_morning_briefing(db, org.id)
                         await _maybe_generate_daily_ceo_summary(db, org.id)
                         await _maybe_generate_daily_pending_digest(db, org.id)
+                        await _publish_due_social_posts(db, org.id)
                         await _cleanup_old_chat_messages(db, org.id)
                         _last_synced[org.id] = datetime.now(timezone.utc)
                 except Exception as exc:
@@ -725,7 +796,7 @@ async def stop_scheduler() -> None:
         try:
             await _scheduler_task
         except asyncio.CancelledError:
-            pass
+            logger.debug("Scheduler task cancelled cleanly")
         _scheduler_task = None
 
     # Wait for any in-flight on-demand syncs to finish
@@ -733,17 +804,35 @@ async def stop_scheduler() -> None:
         from app.core.config import settings
 
         grace = settings.SHUTDOWN_GRACE_SECONDS
+        current_loop = asyncio.get_running_loop()
         alive = {t for t in _inflight_tasks if not t.done()}
         if not alive:
             _inflight_tasks.clear()
             return
 
-        logger.info("Awaiting %d in-flight sync tasks (grace=%ds)...", len(alive), grace)
-        _done, pending = await asyncio.wait(alive, timeout=float(grace))
+        # Tasks can belong to different loops across tests; only await same-loop tasks.
+        same_loop_alive = {t for t in alive if t.get_loop() is current_loop}
+        foreign_loop_alive = alive - same_loop_alive
+
+        for task in foreign_loop_alive:
+            try:
+                task.cancel()
+            except RuntimeError:
+                logger.debug("Foreign-loop task cancellation skipped due to closing event loop")
+
+        if not same_loop_alive:
+            _inflight_tasks.clear()
+            return
+
+        logger.info("Awaiting %d in-flight sync tasks (grace=%ds)...", len(same_loop_alive), grace)
+        _done, pending = await asyncio.wait(same_loop_alive, timeout=float(grace))
         for task in pending:
             try:
                 task.cancel()
             except RuntimeError:
                 # Event loop may already be closing during test teardown.
-                pass
+                logger.debug("Task cancellation skipped due to closing event loop")
+        if pending:
+            # Drain canceled tasks to avoid unraisable coroutine warnings during loop teardown.
+            await asyncio.gather(*pending, return_exceptions=True)
         _inflight_tasks.clear()

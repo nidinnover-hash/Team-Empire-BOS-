@@ -1,3 +1,33 @@
+function getCookie(name) {
+    var key = name + "=";
+    var parts = document.cookie.split("; ");
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].indexOf(key) === 0) return decodeURIComponent(parts[i].slice(key.length));
+    }
+    return "";
+  }
+  var modePrompts = {
+    professional: [
+      "Prioritize my top 3 CEO tasks for today.",
+      "Show integration status and biggest operational risk.",
+      "Draft a strict execution plan for my team."
+    ],
+    personal: [
+      "Help me plan a balanced day with focus and recovery.",
+      "Give me a calm and clear priority reset for today.",
+      "Coach me to communicate with more empathy and clarity."
+    ],
+    entertainment: [
+      "Create 5 viral reel hooks for study abroad promotions.",
+      "Write a 30-second high-energy script for Instagram.",
+      "Give me a fun content calendar for 7 days."
+    ]
+  };
+  var modeFocusCopy = {
+    professional: "Professional mode: strategy, execution, approvals, and KPIs.",
+    personal: "Personal mode: wellbeing, growth, relationships, and self-coaching.",
+    entertainment: "Entertainment mode: creative ideas for YouTube/Audible only."
+  };
 (async function () {
     var chatLog = document.getElementById("chat-log");
     var input = document.getElementById("message-input");
@@ -5,25 +35,56 @@
     var micBtn = document.getElementById("mic-btn");
     var logoutBtn = document.getElementById("logout-btn");
     var statusEl = document.getElementById("status");
+    var professionalAvatarBtn = document.getElementById("avatar-professional-btn");
+    var personalAvatarBtn = document.getElementById("avatar-personal-btn");
+    var entertainmentAvatarBtn = document.getElementById("avatar-entertainment-btn");
+    var modeFocusCopyEl = document.getElementById("mode-focus-copy");
     var apiToken = null;
     var csrfToken = null;
+    var avatarMode = "professional";
+    var loginPurpose = "professional";
     var isMicOn = false;
     var recognition = null;
 
-    function esc(s) {
-      return String(s || "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    }
+    var esc = window.PCUI.escapeHtml;
     function setStatus(text, cls) {
       statusEl.textContent = text || "";
       statusEl.className = cls ? cls : "";
     }
-    function mapUiError(err) {
-      if (window.PCUI && window.PCUI.mapApiError) return window.PCUI.mapApiError(err);
-      return String((err && err.message) || err || "Request failed");
+    function renderAvatarMode() {
+      if (avatarMode !== "professional" && avatarMode !== "personal" && avatarMode !== "entertainment") {
+        avatarMode = "professional";
+      }
+      if (professionalAvatarBtn) professionalAvatarBtn.classList.toggle("active", avatarMode === "professional");
+      if (personalAvatarBtn) personalAvatarBtn.classList.toggle("active", avatarMode === "personal");
+      if (entertainmentAvatarBtn) entertainmentAvatarBtn.classList.toggle("active", avatarMode === "entertainment");
+      if (modeFocusCopyEl) modeFocusCopyEl.textContent = modeFocusCopy[avatarMode] || modeFocusCopy.professional;
+      renderPrompts(modePrompts[avatarMode] || []);
     }
+
+    function enforcePurposeBarrier() {
+      if (loginPurpose !== "professional" && loginPurpose !== "personal" && loginPurpose !== "entertainment") return;
+      if (loginPurpose === "professional") {
+        avatarMode = "professional";
+        if (professionalAvatarBtn) professionalAvatarBtn.disabled = false;
+        if (personalAvatarBtn) personalAvatarBtn.disabled = true;
+        if (entertainmentAvatarBtn) entertainmentAvatarBtn.disabled = true;
+        return;
+      }
+      if (loginPurpose === "entertainment") {
+        avatarMode = "entertainment";
+        if (professionalAvatarBtn) professionalAvatarBtn.disabled = true;
+        if (personalAvatarBtn) personalAvatarBtn.disabled = true;
+        if (entertainmentAvatarBtn) entertainmentAvatarBtn.disabled = false;
+        return;
+      }
+      // personal login: can view personal + professional lane, but not entertainment lane.
+      if (avatarMode !== "personal" && avatarMode !== "professional") avatarMode = "personal";
+      if (professionalAvatarBtn) professionalAvatarBtn.disabled = false;
+      if (personalAvatarBtn) personalAvatarBtn.disabled = false;
+      if (entertainmentAvatarBtn) entertainmentAvatarBtn.disabled = true;
+    }
+    var mapUiError = window.PCUI.mapApiError;
     function notifyError(msg) {
       if (window.showToast) window.showToast(msg, "error");
       else alert(msg);
@@ -35,10 +96,7 @@
       chatLog.appendChild(div);
       chatLog.scrollTop = chatLog.scrollHeight;
     }
-    function getCsrfToken() {
-      var pair = document.cookie.split("; ").find(function (c) { return c.startsWith("pc_csrf="); });
-      return pair ? decodeURIComponent(pair.split("=")[1] || "") : null;
-    }
+    var getCsrfToken = window.PCUI.getCsrfToken;
     function renderTasks(tasks) {
       var root = document.getElementById("top-tasks");
       if (!tasks || !tasks.length) {
@@ -130,7 +188,7 @@
     }
 
     async function loadHistoryOrWelcome() {
-      var history = await fetch("/web/chat/history").then(function (r) {
+      var history = await fetch("/web/chat/history?avatar_mode=" + encodeURIComponent(avatarMode)).then(function (r) {
         if (!r.ok) throw new Error("Failed to load chat history");
         return r.json();
       });
@@ -153,7 +211,9 @@
       document.getElementById("kpi-emails").textContent = String(s.unread_emails || 0);
       renderTasks(s.tasks || []);
       renderLearned(bootstrap.learned_memory || []);
-      renderPrompts(bootstrap.suggested_prompts || []);
+      if (!modePrompts[avatarMode] || !modePrompts[avatarMode].length) {
+        renderPrompts(bootstrap.suggested_prompts || []);
+      }
       if (!chatLog.children.length && bootstrap.welcome) {
         appendMessage("clone", bootstrap.welcome);
       }
@@ -176,6 +236,7 @@
       try {
         var form = new FormData();
         form.set("message", message);
+        form.set("avatar_mode", avatarMode);
         var r = await fetch("/web/agents/chat", {
           method: "POST",
           headers: { "X-CSRF-Token": csrfToken },
@@ -223,7 +284,7 @@
         // Show interim text in faded display
         if (interimEl) interimEl.textContent = interim;
         if (final_) {
-          input.value = final_.trim();
+          input.value = (input.value + " " + final_).trim();
           if (interimEl) interimEl.textContent = "";
           // Auto-send after 1.5s of silence following a final result
           clearTimeout(autoSendTimer);
@@ -259,13 +320,43 @@
     }
 
     sendBtn.addEventListener("click", sendMessage);
+    if (professionalAvatarBtn) {
+      professionalAvatarBtn.addEventListener("click", async function () {
+        avatarMode = "professional";
+        localStorage.setItem("pc_avatar_mode:" + (getCookie("pc_theme_scope") || "professional"), avatarMode);
+        renderAvatarMode();
+        chatLog.innerHTML = "";
+        await loadHistoryOrWelcome();
+        setStatus("Professional avatar active.", "ok");
+      });
+    }
+    if (personalAvatarBtn) {
+      personalAvatarBtn.addEventListener("click", async function () {
+        avatarMode = "personal";
+        localStorage.setItem("pc_avatar_mode:" + (getCookie("pc_theme_scope") || "professional"), avatarMode);
+        renderAvatarMode();
+        chatLog.innerHTML = "";
+        await loadHistoryOrWelcome();
+        setStatus("Personal avatar active.", "ok");
+      });
+    }
+    if (entertainmentAvatarBtn) {
+      entertainmentAvatarBtn.addEventListener("click", async function () {
+        avatarMode = "entertainment";
+        localStorage.setItem("pc_avatar_mode:" + (getCookie("pc_theme_scope") || "professional"), avatarMode);
+        renderAvatarMode();
+        chatLog.innerHTML = "";
+        await loadHistoryOrWelcome();
+        setStatus("Entertainment avatar active.", "ok");
+      });
+    }
     input.addEventListener("keydown", function (e) {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         sendMessage();
       }
     });
-    logoutBtn.addEventListener("click", async function () {
+    if (logoutBtn) logoutBtn.addEventListener("click", async function () {
       if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(logoutBtn, true, "Signing out...");
       try {
         var r = await fetch("/web/logout", {
@@ -282,7 +373,13 @@
     });
 
     try {
+      var scope = getCookie("pc_theme_scope") || "professional";
+      loginPurpose = scope;
+      var fallbackAvatar = getCookie("pc_avatar_default") || "professional";
+      avatarMode = localStorage.getItem("pc_avatar_mode:" + scope) || fallbackAvatar;
       csrfToken = getCsrfToken();
+      enforcePurposeBarrier();
+      renderAvatarMode();
       setupSpeech();
       await loadApiToken();
       await loadHistoryOrWelcome();
@@ -299,7 +396,7 @@ window.showToast = function(msg, type) {
     el.className = "toast " + t;
     el.setAttribute("role", "status");
     el.setAttribute("aria-live", "polite");
-    el.innerHTML = "<span>" + String(msg).replace(/</g,"&lt;") + "</span>" +
+    el.innerHTML = "<span>" + String(msg).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</span>" +
       '<button aria-label="Dismiss" onclick="this.parentNode.classList.add(\'removing\');setTimeout(function(){this.parentNode.remove()}.bind(this),250)">\u00d7</button>';
     var c = document.getElementById("toast-container");
     if (c) c.appendChild(el);

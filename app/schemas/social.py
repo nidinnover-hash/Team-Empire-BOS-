@@ -34,6 +34,7 @@ class SocialPostStatusUpdate(BaseModel):
 
 class SocialPostRead(BaseModel):
     id: int
+    organization_id: int
     content_mode: SocialContentMode
     platform: SocialPlatform
     title: str

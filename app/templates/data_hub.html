@@ -44,6 +44,18 @@
   <!-- Page title preserved for test assertions -->
   <div style="display:none">Data Hub + Clone Playbook</div>
   <section class="card" style="grid-column:1/-1">
+    <div class="head">Data Storage Management</div>
+    <div class="body">
+      <p class="hint">Professional storage visibility across your org data. Use this to monitor growth, retention, and cleanup posture.</p>
+      <div class="actions">
+        <button class="btn" id="storage-refresh-btn" type="button">Refresh Storage Snapshot</button>
+      </div>
+      <div class="status" id="storage-status"></div>
+      <div id="storage-summary" class="hint" style="margin-top:.5rem"></div>
+      <div id="storage-table-list" class="list" style="margin-top:.6rem"></div>
+    </div>
+  </section>
+  <section class="card" style="grid-column:1/-1">
     <div class="head">Data Export</div>
     <div class="body">
       <p class="hint">Download a full JSON backup of all your data (tasks, projects, goals, notes, contacts, commands, finance, memory).</p>
@@ -133,6 +145,7 @@
 
 <div id="toast-container"></div>
 
+<script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>

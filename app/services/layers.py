@@ -68,7 +68,7 @@ async def get_marketing_layer(
     since = today - timedelta(days=max(window_days - 1, 0))
 
     contacts_result = await db.execute(
-        select(Contact).where(Contact.organization_id == organization_id)
+        select(Contact).where(Contact.organization_id == organization_id).limit(1000)
     )
     contacts = list(contacts_result.scalars().all())
     business_contacts = [c for c in contacts if (c.relationship or "").lower() == "business"]
@@ -82,7 +82,7 @@ async def get_marketing_layer(
         select(Task).where(
             Task.organization_id == organization_id,
             Task.is_done.is_(False),
-        )
+        ).limit(1000)
     )
     tasks = list(tasks_result.scalars().all())
     open_follow_up_tasks = [
@@ -186,7 +186,7 @@ async def get_study_layer(
     since = today - timedelta(days=max(window_days - 1, 0))
 
     contacts_result = await db.execute(
-        select(Contact).where(Contact.organization_id == organization_id)
+        select(Contact).where(Contact.organization_id == organization_id).limit(1000)
     )
     contacts = list(contacts_result.scalars().all())
     study_pipeline_contacts = [
@@ -200,7 +200,7 @@ async def get_study_layer(
         select(Task).where(
             Task.organization_id == organization_id,
             Task.is_done.is_(False),
-        )
+        ).limit(2000)
     )
     tasks = list(tasks_result.scalars().all())
     open_study_tasks = [
@@ -215,10 +215,10 @@ async def get_study_layer(
     notes_result = await db.execute(
         select(Note).where(
             Note.organization_id == organization_id,
-        )
+        ).order_by(Note.created_at.desc()).limit(40)
     )
     notes = list(notes_result.scalars().all())
-    recent_study_notes = [n for n in notes[:30] if _contains_any(n.content, _STUDY_KEYWORDS)]
+    recent_study_notes = [n for n in notes if _contains_any(n.content, _STUDY_KEYWORDS)]
 
     finance_result = await db.execute(
         select(FinanceEntry).where(
@@ -291,7 +291,7 @@ async def get_training_layer(
         select(Task).where(
             Task.organization_id == organization_id,
             Task.is_done.is_(False),
-        )
+        ).limit(2000)
     )
     tasks = list(tasks_result.scalars().all())
     open_training_tasks = [
@@ -306,10 +306,11 @@ async def get_training_layer(
 
     notes_result = await db.execute(
         select(Note).where(Note.organization_id == organization_id)
+        .order_by(Note.created_at.desc()).limit(40)
     )
     notes = list(notes_result.scalars().all())
     recent_training_notes = [
-        n for n in notes[:40]
+        n for n in notes
         if _contains_any(n.content, _TRAINING_KEYWORDS)
     ]
 
@@ -400,7 +401,7 @@ async def get_employee_performance_layer(
         select(Task).where(
             Task.organization_id == organization_id,
             Task.is_done.is_(False),
-        )
+        ).limit(2000)
     )
     tasks = list(tasks_result.scalars().all())
     open_operational_tasks = [
@@ -500,7 +501,7 @@ async def get_employee_management_layer(
         select(Task).where(
             Task.organization_id == organization_id,
             Task.is_done.is_(False),
-        )
+        ).limit(2000)
     )
     tasks = list(tasks_result.scalars().all())
     today = date.today()
@@ -641,7 +642,7 @@ async def get_staff_training_layer(
         select(Task).where(
             Task.organization_id == organization_id,
             Task.is_done.is_(False),
-        )
+        ).limit(2000)
     )
     tasks = list(tasks_result.scalars().all())
     open_training_tasks = [
@@ -792,7 +793,7 @@ async def get_staff_prosperity_layer(
     avg_ai_level = (sum(m.ai_level for m in members) / active_staff) if active_staff else 0.0
 
     tasks_result = await db.execute(
-        select(Task).where(Task.organization_id == organization_id, Task.is_done.is_(False))
+        select(Task).where(Task.organization_id == organization_id, Task.is_done.is_(False)).limit(2000)
     )
     tasks = list(tasks_result.scalars().all())
     overdue = len([t for t in tasks if t.due_date is not None and t.due_date < today])
@@ -990,7 +991,7 @@ async def get_clone_marketing_sales_layer(
     today = date.today()
     since = today - timedelta(days=max(window_days - 1, 0))
 
-    contacts_result = await db.execute(select(Contact).where(Contact.organization_id == organization_id))
+    contacts_result = await db.execute(select(Contact).where(Contact.organization_id == organization_id).limit(1000))
     contacts = list(contacts_result.scalars().all())
     business_contacts = [c for c in contacts if (c.relationship or "").lower() == "business"]
     new_business_contacts = [
@@ -999,7 +1000,7 @@ async def get_clone_marketing_sales_layer(
     ]
 
     tasks_result = await db.execute(
-        select(Task).where(Task.organization_id == organization_id, Task.is_done.is_(False))
+        select(Task).where(Task.organization_id == organization_id, Task.is_done.is_(False)).limit(1000)
     )
     tasks = list(tasks_result.scalars().all())
     follow_up_tasks = [

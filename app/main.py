@@ -1,9 +1,10 @@
 from contextlib import asynccontextmanager
 import asyncio
 import secrets
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, cast
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -15,7 +16,8 @@ from app.api.v1.router import api_router
 from app.api.v1.endpoints.ops import run_daily_run_workflow
 from app.core.config import format_startup_issues, settings, validate_startup_settings
 from app.core.contracts import error_envelope
-from app.core.deps import get_current_web_user, get_db, verify_csrf
+from app.core.deps import get_current_api_user, get_current_web_user, get_db, verify_csrf
+from app.core.purpose import resolve_login_profile
 from app.core.middleware import (
     CorrelationIDMiddleware,
     RateLimitMiddleware,
@@ -25,7 +27,7 @@ from app.core.middleware import (
     check_login_allowed,
     record_login_failure,
 )
-from app.core.security import create_access_token, decode_access_token, get_current_user, verify_password
+from app.core.security import create_access_token, decode_access_token, verify_password
 from app.db.base import Base
 from app.db.session import engine
 from app.services import command as command_service
@@ -40,6 +42,7 @@ from app.services import note as note_service
 from app.services import organization as organization_service
 from app.services import project as project_service
 from app.services import task as task_service
+from app.services import talk_commands as talk_command_service
 from app.services import user as user_service
 
 # Register every model with Base.metadata so create_all sees them
@@ -77,6 +80,7 @@ from app.models import org_membership as _model_org_membership  # noqa: F401
 from app.models import org_role_permission as _model_org_role_permission  # noqa: F401
 from app.models import clone_performance as _model_clone_performance  # noqa: F401
 from app.models import clone_control as _model_clone_control  # noqa: F401
+from app.models import social as _model_social  # noqa: F401
 
 # Startup safety guard
 _UNSAFE_SECRET_KEYS = {"change_me_in_env", "changeme", "secret", "change-me", ""}
@@ -129,8 +133,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # In production with multiple Gunicorn workers, set RUN_SCHEDULER=false and
     # run the scheduler as a separate systemd service (see deploy/scheduler.service).
     from app.services.sync_scheduler import start_scheduler, stop_scheduler
-    import os
-    run_scheduler = os.environ.get("RUN_SCHEDULER", "false").lower() in ("1", "true", "yes")
+    run_scheduler = settings.RUN_SCHEDULER
     if settings.SYNC_ENABLED and run_scheduler:
         start_scheduler(interval_minutes=settings.SYNC_INTERVAL_MINUTES)
     yield
@@ -205,7 +208,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=422,
         content=error_envelope(
             code="validation_error",
-            detail=exc.errors(),
+            detail=jsonable_encoder(exc.errors()),
             request_id=_request_id_from_state(request),
         ),
     )
@@ -226,6 +229,20 @@ async def unhandled_exception_handler(request: Request, _exc: Exception) -> JSON
 # Dummy hash for timing-safe login — always run verify_password even when
 # user doesn't exist so response time doesn't reveal valid usernames.
 _DUMMY_HASH = "pbkdf2_sha256$100000$QUFBQUFBQUFBQUFBQUFB$QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ=="
+
+
+def _effective_token_expiry_minutes() -> int:
+    session_cap_minutes = max(1, int(settings.ACCOUNT_SESSION_MAX_HOURS)) * 60
+    return min(int(settings.ACCESS_TOKEN_EXPIRE_MINUTES), session_cap_minutes)
+
+
+def _enforce_password_login_policy() -> None:
+    # Password login is incompatible with strict SSO-only mode.
+    if settings.ACCOUNT_SSO_REQUIRED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password login is disabled: SSO is required by policy.",
+        )
 
 
 async def _authenticate_user(
@@ -275,10 +292,53 @@ async def _authenticate_user(
 
 def _create_jwt(user) -> str:
     """Create a JWT token for the authenticated user."""
-    return create_access_token(
-        {"id": user.id, "email": user.email, "role": user.role, "org_id": user.organization_id},
-        expires_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
-    )
+    purpose_profile = _resolve_login_profile(user.email)
+    token_version = int(getattr(user, "token_version", 1) or 1)
+    return cast(str, create_access_token(
+        {
+            "id": user.id,
+            "email": user.email,
+            "role": user.role,
+            "org_id": user.organization_id,
+            "token_version": token_version,
+            "purpose": purpose_profile["purpose"],
+            "default_theme": purpose_profile["default_theme"],
+            "default_avatar_mode": purpose_profile["default_avatar_mode"],
+        },
+        expires_minutes=_effective_token_expiry_minutes(),
+    ))
+
+
+def _resolve_login_profile(email: str) -> dict[str, str]:
+    return resolve_login_profile(email)
+
+
+def _read_avatar_scope(user: dict[str, Any], requested_mode: str) -> str:
+    if not settings.PURPOSE_STRICT_BARRIERS:
+        return requested_mode
+    purpose = str(user.get("purpose") or "professional").strip().lower()
+    if purpose == "professional":
+        return "professional"
+    if purpose == "entertainment":
+        return "entertainment"
+    if purpose == "personal":
+        # Asymmetric barrier: personal lane may read CEO/professional lane.
+        if requested_mode in {"personal", "professional"}:
+            return requested_mode
+        return "personal"
+    return "professional"
+
+
+def _write_avatar_scope(user: dict[str, Any], requested_mode: str) -> str:
+    if not settings.PURPOSE_STRICT_BARRIERS:
+        return requested_mode
+    purpose = str(user.get("purpose") or "professional").strip().lower()
+    if purpose == "personal":
+        # Never write personal account messages into CEO/professional lane.
+        return "personal"
+    if purpose in {"professional", "entertainment"}:
+        return purpose
+    return "professional"
 
 
 @app.post("/token")
@@ -288,6 +348,7 @@ async def login(
     password: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
+    _enforce_password_login_policy()
     client_ip = request.client.host if request.client else "unknown"
     user = await _authenticate_user(db, username, password, client_ip, "/token")
     return {"access_token": _create_jwt(user), "token_type": "bearer"}
@@ -307,11 +368,16 @@ async def web_login(
     password: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
+    _enforce_password_login_policy()
     client_ip = request.client.host if request.client else "unknown"
     user = await _authenticate_user(db, username, password, client_ip, "/web/login")
     access_token = _create_jwt(user)
+    purpose_profile = _resolve_login_profile(user.email)
     csrf_token = secrets.token_urlsafe(32)
-    max_age = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    max_age = _effective_token_expiry_minutes() * 60
+    # Clear stale cookies before setting new ones (prevents session fixation)
+    for _cookie_name in ("pc_session", "pc_csrf", "pc_theme_scope", "pc_theme_default", "pc_avatar_default"):
+        response.delete_cookie(_cookie_name, path="/")
     response.set_cookie(
         key="pc_session",
         value=access_token,
@@ -324,6 +390,33 @@ async def web_login(
     response.set_cookie(
         key="pc_csrf",
         value=csrf_token,
+        max_age=max_age,
+        httponly=False,
+        samesite="lax",
+        secure=settings.COOKIE_SECURE,
+        path="/",
+    )
+    response.set_cookie(
+        key="pc_theme_scope",
+        value=purpose_profile["purpose"],
+        max_age=max_age,
+        httponly=False,
+        samesite="lax",
+        secure=settings.COOKIE_SECURE,
+        path="/",
+    )
+    response.set_cookie(
+        key="pc_theme_default",
+        value=purpose_profile["default_theme"],
+        max_age=max_age,
+        httponly=False,
+        samesite="lax",
+        secure=settings.COOKIE_SECURE,
+        path="/",
+    )
+    response.set_cookie(
+        key="pc_avatar_default",
+        value=purpose_profile["default_avatar_mode"],
         max_age=max_age,
         httponly=False,
         samesite="lax",
@@ -344,21 +437,37 @@ async def web_logout(
 ) -> dict:
     response.delete_cookie("pc_session", path="/")
     response.delete_cookie("pc_csrf", path="/")
+    response.delete_cookie("pc_theme_scope", path="/")
+    response.delete_cookie("pc_theme_default", path="/")
+    response.delete_cookie("pc_avatar_default", path="/")
     return {"status": "logged_out"}
 
 
 @app.get("/web/api-token", include_in_schema=False)
 async def web_api_token(user: dict = Depends(get_current_web_user)) -> dict:
     """Return a fresh Bearer token for the current web session. Used by dashboard JS."""
+    purpose_profile = _resolve_login_profile(str(user.get("email", "")))
+    purpose = str(user.get("purpose") or purpose_profile["purpose"])
+    default_theme = str(user.get("default_theme") or purpose_profile["default_theme"])
+    default_avatar_mode = str(user.get("default_avatar_mode") or purpose_profile["default_avatar_mode"])
     token = create_access_token(
-        {"id": user["id"], "email": user["email"], "role": user["role"], "org_id": user["org_id"]},
-        expires_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        {
+            "id": user["id"],
+            "email": user["email"],
+            "role": user["role"],
+            "org_id": user["org_id"],
+            "token_version": int(user.get("token_version") or 1),
+            "purpose": purpose,
+            "default_theme": default_theme,
+            "default_avatar_mode": default_avatar_mode,
+        },
+        expires_minutes=_effective_token_expiry_minutes(),
     )
     return {"token": token}
 
 
 @app.get("/web/session")
-async def web_session(request: Request) -> dict:
+async def web_session(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
     token = request.cookies.get("pc_session")
     if not token:
         return {"logged_in": False}
@@ -366,13 +475,20 @@ async def web_session(request: Request) -> dict:
         payload = decode_access_token(token)
     except ValueError:
         return {"logged_in": False}
+    try:
+        user = await get_current_web_user(session_token=token, db=db)
+    except HTTPException:
+        return {"logged_in": False}
     return {
         "logged_in": True,
         "user": {
-            "id": payload.get("id"),
-            "email": payload.get("email"),
-            "role": payload.get("role", "STAFF"),
-            "org_id": payload.get("org_id"),
+            "id": user.get("id"),
+            "email": user.get("email"),
+            "role": user.get("role", "STAFF"),
+            "org_id": user.get("org_id"),
+            "purpose": user.get("purpose", "professional"),
+            "default_theme": payload.get("default_theme", settings.PURPOSE_DEFAULT_THEME_PROFESSIONAL),
+            "default_avatar_mode": payload.get("default_avatar_mode", "professional"),
         },
     }
 
@@ -381,6 +497,7 @@ async def web_session(request: Request) -> dict:
 async def web_agent_chat(
     message: str = Form(..., max_length=10_000),
     force_role: str | None = Form(None, max_length=50),
+    avatar_mode: str | None = Form(None, max_length=30),
     _csrf_ok: None = Depends(verify_csrf),
     user: dict = Depends(get_current_web_user),
     db: AsyncSession = Depends(get_db),
@@ -393,21 +510,79 @@ async def web_agent_chat(
     # Only CEO/ADMIN may force a specific role; other roles get keyword routing
     if force_role and user["role"] not in {"CEO", "ADMIN"}:
         force_role = None
+    default_avatar = str(user.get("default_avatar_mode") or "professional")
+    avatar_mode = (avatar_mode or default_avatar).strip().lower()
+    if avatar_mode not in {"personal", "professional", "entertainment"}:
+        avatar_mode = "professional"
+    read_avatar_mode = _read_avatar_scope(user, avatar_mode)
+    write_avatar_mode = _write_avatar_scope(user, avatar_mode)
 
     org_id = int(user["org_id"])
-    memory_context = await build_memory_context(db, organization_id=org_id)
+    memory_context = await build_memory_context(
+        db,
+        organization_id=org_id,
+        categories=(
+            None
+            if read_avatar_mode == "professional"
+            else ["identity", "preference", "learned", "personal", "entertainment"]
+        ),
+    )
+    avatar_memories = await memory_service.get_avatar_memory(
+        db,
+        organization_id=org_id,
+        avatar_mode=read_avatar_mode,
+    )
+    if avatar_memories:
+        avatar_block = "\n".join(f"- {item.key}: {item.value}" for item in avatar_memories[:30])
+        memory_context = f"{memory_context}\n\n[AVATAR:{read_avatar_mode.upper()}]\n{avatar_block}"
 
     # Load the last 10 turns for multi-turn context
-    recent = await chat_history_service.get_recent(db, org_id=org_id, limit=10)
+    recent = await chat_history_service.get_recent(
+        db,
+        org_id=org_id,
+        limit=10,
+        avatar_mode=read_avatar_mode,
+    )
     history = chat_history_service.as_openai_history(recent) or None
+
+    command_result = await talk_command_service.maybe_handle_talk_command(
+        db=db,
+        org_id=org_id,
+        message=message,
+        actor_role=user.get("role"),
+    )
+    if command_result.handled:
+        await chat_history_service.save_message(
+            db,
+            org_id=org_id,
+            user_id=int(user["id"]),
+            role=command_result.role,
+            user_message=message,
+            ai_response=command_result.response,
+            avatar_mode=write_avatar_mode,
+        )
+        await conversation_learning_service.learn_from_message(
+            db=db,
+            org_id=org_id,
+            actor_user_id=int(user["id"]),
+            message=message,
+        )
+        return JSONResponse(content={
+            "role": command_result.role,
+            "response": command_result.response,
+            "requires_approval": command_result.requires_approval,
+            "proposed_actions": [],
+        })
 
     result = await run_agent(
         request=AgentChatRequest(
             message=message,
             force_role=force_role if force_role else None,
+            avatar_mode=read_avatar_mode if read_avatar_mode else None,
         ),
         memory_context=memory_context,
         conversation_history=history,
+        organization_id=org_id,
     )
 
     # Persist this exchange for future context
@@ -418,6 +593,7 @@ async def web_agent_chat(
         role=result.role,
         user_message=message,
         ai_response=result.response,
+        avatar_mode=write_avatar_mode,
     )
     await conversation_learning_service.learn_from_message(
         db=db,
@@ -436,6 +612,7 @@ async def web_agent_chat(
 
 @app.get("/web/chat/history", include_in_schema=False)
 async def web_chat_history(
+    avatar_mode: str | None = None,
     user: dict = Depends(get_current_web_user),
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
@@ -443,11 +620,20 @@ async def web_chat_history(
     from app.services import chat_history as chat_history_service
 
     org_id = int(user["org_id"])
-    recent = await chat_history_service.get_recent(db, org_id=org_id, limit=20)
+    avatar_mode = _read_avatar_scope(
+        user,
+        (avatar_mode or str(user.get("default_avatar_mode") or "professional")).strip().lower(),
+    )
+    recent = await chat_history_service.get_recent(
+        db,
+        org_id=org_id,
+        limit=20,
+        avatar_mode=avatar_mode,
+    )
     return JSONResponse(content=[
         {
             "id": m.id,
-            "role": m.role,
+            "role": chat_history_service.decode_role(m.role),
             "user_message": m.user_message,
             "ai_response": m.ai_response,
             "created_at": m.created_at.isoformat(),
@@ -477,7 +663,7 @@ async def web_daily_run(
 
 
 @app.get("/me")
-def me(user=Depends(get_current_user)):
+def me(user=Depends(get_current_api_user)):
     return {
         "email": user["email"],
         "id": user["id"],
@@ -490,6 +676,7 @@ _server_start_time: float | None = None
 
 @app.get("/health")
 async def health_check():
+    import logging
     import time
     from sqlalchemy import text
     from fastapi.responses import JSONResponse as _JSONResponse
@@ -498,7 +685,8 @@ async def health_check():
     try:
         async with engine.connect() as conn:
             await asyncio.wait_for(conn.execute(text("SELECT 1")), timeout=3.0)
-    except Exception:
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Health DB probe failed: %s", type(exc).__name__)
         db_ok = False
 
     # Scheduler status
@@ -528,21 +716,21 @@ else:
     raise RuntimeError(f"Unsupported APP_MODE: {settings.APP_MODE!r}")
 
 
-def _get_web_user_or_none(request: Request) -> dict | None:
+async def _get_web_user_or_none(request: Request, db: AsyncSession) -> dict | None:
     """Extract user from session cookie. Returns None if not logged in."""
     token = request.cookies.get("pc_session")
     if not token:
         return None
     try:
-        return decode_access_token(token)
-    except ValueError:
+        return await get_current_web_user(session_token=token, db=db)
+    except HTTPException:
         return None
 
 
 def _web_page(template_name: str):
     """Factory for simple authenticated web page endpoints."""
-    async def handler(request: Request) -> HTMLResponse:
-        user = _get_web_user_or_none(request)
+    async def handler(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+        user = await _get_web_user_or_none(request, db)
         if user is None:
             return RedirectResponse(url="/web/login", status_code=302)
         nonce = getattr(request.state, "csp_nonce", "")
@@ -565,24 +753,20 @@ async def web_talk_bootstrap(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     org_id = int(user["org_id"])
-    try:
-        tasks, projects, notes, profile_memory, executive = await asyncio.wait_for(
-            asyncio.gather(
-                task_service.list_tasks(
-                    db,
-                    limit=5,
-                    is_done=False,
-                    organization_id=org_id,
-                ),
-                project_service.list_projects(db, limit=5, organization_id=org_id),
-                note_service.list_notes(db, limit=3, organization_id=org_id),
-                memory_service.get_profile_memory(db, organization_id=org_id),
-                briefing_service.get_executive_briefing(db, org_id=org_id),
-            ),
-            timeout=10.0,
-        )
-    except asyncio.TimeoutError:
-        tasks, projects, notes, profile_memory, executive = [], [], [], [], {}
+    # Fire all queries concurrently; each returns independently so partial results survive timeouts
+    coros = [
+        task_service.list_tasks(db, limit=5, is_done=False, organization_id=org_id),
+        project_service.list_projects(db, limit=5, organization_id=org_id),
+        note_service.list_notes(db, limit=3, organization_id=org_id),
+        memory_service.get_profile_memory(db, organization_id=org_id),
+        briefing_service.get_executive_briefing(db, org_id=org_id),
+    ]
+    results = await asyncio.gather(*coros, return_exceptions=True)
+    tasks = results[0] if not isinstance(results[0], BaseException) else []
+    projects = results[1] if not isinstance(results[1], BaseException) else []
+    notes = results[2] if not isinstance(results[2], BaseException) else []
+    profile_memory = results[3] if not isinstance(results[3], BaseException) else []
+    executive = results[4] if not isinstance(results[4], BaseException) else {}
     summary = executive.get("team_summary", {})
     open_tasks = len(tasks)
     pending_approvals = int(summary.get("pending_approvals", 0) or 0)
@@ -629,13 +813,7 @@ async def dashboard(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    token = request.cookies.get("pc_session")
-    user = None
-    if token:
-        try:
-            user = decode_access_token(token)
-        except ValueError:
-            user = None
+    user = await _get_web_user_or_none(request, db)
     if user is None:
         return RedirectResponse(url="/web/login", status_code=302)
     org_id = int(user["org_id"])

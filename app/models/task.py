@@ -18,6 +18,10 @@ class Task(Base):
             "priority >= 1 AND priority <= 4",
             name="ck_task_priority",
         ),
+        CheckConstraint(
+            "NOT is_done OR completed_at IS NOT NULL",
+            name="ck_task_done_has_completed_at",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -37,7 +41,7 @@ class Task(Base):
     project_id: Mapped[int | None] = mapped_column(
         ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
     )
-    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     is_done: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.memory import DailyContext, ProfileMemory, TeamMember
+from app.models.memory import AvatarMemory, DailyContext, ProfileMemory, TeamMember
 from app.schemas.memory import (
     DailyContextCreate,
     TeamMemberCreate,
@@ -40,6 +40,24 @@ async def get_profile_memory(
             (ProfileMemory.expires_at.is_(None)) | (ProfileMemory.expires_at > now),
         )
         .order_by(ProfileMemory.category, ProfileMemory.key)
+    )
+    return list(result.scalars().all())
+
+
+async def get_avatar_memory(
+    db: AsyncSession,
+    organization_id: int,
+    avatar_mode: str,
+) -> list[AvatarMemory]:
+    lowered = str(avatar_mode).strip().lower()
+    mode = lowered if lowered in {"personal", "professional", "entertainment"} else "professional"
+    result = await db.execute(
+        select(AvatarMemory)
+        .where(
+            AvatarMemory.organization_id == organization_id,
+            AvatarMemory.avatar_mode == mode,
+        )
+        .order_by(AvatarMemory.key)
     )
     return list(result.scalars().all())
 
@@ -269,7 +287,7 @@ async def build_memory_context(
     import time as _time
     # Return cached context if fresh (5 min TTL)
     cached = _memory_context_cache.get(organization_id)
-    if cached and categories is None:
+    if cached and categories is None and char_limit == DEFAULT_CONTEXT_CHAR_LIMIT:
         ts, ctx = cached
         if _time.time() - ts < _MEMORY_CACHE_TTL_SECONDS:
             return ctx
@@ -371,8 +389,8 @@ async def build_memory_context(
     except Exception:
         pass  # Graceful degradation — patterns are supplementary
 
-    # Cache the result for subsequent requests (skip if category-filtered)
-    if categories is None:
+    # Cache the result for subsequent requests (skip if category-filtered or custom limit)
+    if categories is None and char_limit == DEFAULT_CONTEXT_CHAR_LIMIT:
         _memory_context_cache[organization_id] = (_time.time(), base_context)
 
-    return base_context
+    return cast(str, base_context)

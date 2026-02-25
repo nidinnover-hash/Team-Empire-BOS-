@@ -1,7 +1,7 @@
 window.__bootPromise = fetch('/web/api-token')
       .then(r => { if (!r.ok) throw new Error('Session expired'); return r.json(); })
       .then(d => d.token);
-    function esc(s) { const d=document.createElement('div'); d.textContent=String(s??''); return d.innerHTML; }
+    var esc = window.PCUI.escapeHtml;
     async function fetchJsonOrThrow(url, opts) {
       const r = await fetch(url, opts);
       const d = await r.json().catch(() => ({}));
@@ -56,7 +56,7 @@ window.__bootPromise = fetch('/web/api-token')
         const dbody = document.getElementById('decisions-body');
         if (decisions.length) {
           dbody.innerHTML = decisions.map(d => {
-            const conf = (d.confidence_score * 100).toFixed(0) + '%';
+            const conf = ((d.confidence_score || 0) * 100).toFixed(0) + '%';
             const t = d.created_at ? new Date(d.created_at).toLocaleTimeString() : '';
             return `<tr><td><span class="tag">${esc(d.trace_type)}</span></td><td>${esc(d.title)}</td><td>${esc(conf)}</td><td style="color:#999">${esc(t)}</td></tr>`;
           }).join('');
@@ -73,7 +73,7 @@ window.__bootPromise = fetch('/web/api-token')
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) logoutBtn.addEventListener('click', async () => {
       const csrf = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('pc_csrf='));
-      const csrfVal = csrf ? csrf.split('=')[1] : '';
+      const csrfVal = csrf ? decodeURIComponent(csrf.split('=')[1]) : '';
       try {
         const r = await fetch('/web/logout', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':csrfVal}});
         if (!r.ok) throw new Error('Logout failed');

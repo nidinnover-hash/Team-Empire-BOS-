@@ -1,7 +1,4 @@
-const mapUiError = (err) => {
-      if (window.PCUI && window.PCUI.mapApiError) return window.PCUI.mapApiError(err);
-      return String((err && err.message) || err || 'Request failed');
-    };
+const mapUiError = window.PCUI.mapApiError;
 
     window.__bootPromise = fetch('/web/api-token')
       .then(r => { if (!r.ok) throw new Error('Session expired'); return r.json(); })
@@ -71,7 +68,7 @@ const mapUiError = (err) => {
     if (logoutBtn) logoutBtn.addEventListener('click', async () => {
       if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(logoutBtn, true, 'Signing out...');
       const csrf = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('pc_csrf='));
-      const csrfVal = csrf ? csrf.split('=')[1] : '';
+      const csrfVal = csrf ? decodeURIComponent(csrf.split('=')[1]) : '';
       try {
         await window.PCUI.requestJson('/web/logout', {
           method: 'POST',
