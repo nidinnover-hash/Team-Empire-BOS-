@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime, timezone, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.memory import DailyContext
@@ -66,11 +67,18 @@ async def sync_events(
         max_start_time=max_time.isoformat(),
         count=50,
     )
+    # Pre-load existing calendly context entries for dedup
+    existing_result = await db.execute(
+        select(DailyContext.related_to, DailyContext.date).where(
+            DailyContext.organization_id == org_id,
+            DailyContext.context_type == "calendly_event",
+        ).limit(500)
+    )
+    existing_keys = {(row.related_to, row.date) for row in existing_result}
     synced = 0
     for event in events:
         name = event.get("name", "Calendly Meeting")
         start = event.get("start_time", "")
-        end = event.get("end_time", "")
         location_data = event.get("location", {})
         location = ""
         if isinstance(location_data, dict):
@@ -79,8 +87,11 @@ async def sync_events(
         if start:
             try:
                 event_date = datetime.fromisoformat(start.replace("Z", "+00:00")).date()
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as exc:
+                logger.debug("Calendly event date parse failed for start=%r: %s", start, type(exc).__name__)
+        # Skip if this event was already synced for this date
+        if (name[:100], event_date) in existing_keys:
+            continue
         content = f"[Calendly] {name}"
         if start:
             content += f" | {start}"

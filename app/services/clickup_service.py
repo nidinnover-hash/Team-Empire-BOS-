@@ -204,8 +204,12 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 from datetime import date
                 try:
                     due_date = date.fromisoformat(due_date_str)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug(
+                        "ClickUp due_date parse failed for task %s: %s",
+                        external_id,
+                        type(exc).__name__,
+                    )
             parsed.append({
                 "external_id": external_id, "title": title, "description": description,
                 "priority": priority, "due_date": due_date, "is_done": is_done,
@@ -238,8 +242,12 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     if updated_ms:
                         try:
                             updated_remote = datetime.fromtimestamp(int(updated_ms) / 1000, tz=timezone.utc)
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.debug(
+                                "ClickUp updated_at parse failed for task %s: %s",
+                                p["external_id"],
+                                type(exc).__name__,
+                            )
                     if updated_remote and getattr(existing, "updated_at", None) and existing.updated_at > updated_remote:
                         continue
                     existing.title = p["title"]

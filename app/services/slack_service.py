@@ -169,11 +169,15 @@ async def sync_slack_messages(db: AsyncSession, org_id: int) -> dict[str, Any]:
     except Exception as exc:
         logger.warning("Slack sync failed: %s", type(exc).__name__)
         return {"channels_synced": channels_synced, "messages_read": messages_read, "error": type(exc).__name__}
+    finally:
+        # Always update last_sync_at so the scheduler doesn't retry immediately on failure
+        try:
+            cfg["channels_tracked"] = channels_synced
+            item.config_json = cfg
+            await integration_service.mark_sync_time(db, item)
+        except Exception:
+            logger.debug("Failed to update Slack sync timestamp", exc_info=True)
 
-    # Update channels_tracked in config
-    cfg["channels_tracked"] = channels_synced
-    item.config_json = cfg
-    await integration_service.mark_sync_time(db, item)
     return {"channels_synced": channels_synced, "messages_read": messages_read, "error": None}
 
 

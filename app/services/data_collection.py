@@ -4,6 +4,7 @@ from datetime import date, timedelta
 import re
 from collections import Counter
 import json
+import logging
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -65,6 +66,7 @@ _UNWANTED_HINTS = {
     "gambling", "bet", "porn", "explicit", "nude", "phishing", "scam", "torrent", "piracy",
     "crack", "hate", "violence", "abuse", "fraud", "spam", "deepfake",
 }
+logger = logging.getLogger(__name__)
 
 
 def _normalize_items(content: str, split_lines: bool) -> list[str]:
@@ -541,8 +543,8 @@ def parse_topic_tokens(raw: str | None) -> list[str]:
             parsed = json.loads(text)
             if isinstance(parsed, list):
                 return [str(x).strip() for x in parsed if str(x).strip()][:20]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Topic token JSON parse failed: %s", type(exc).__name__)
     tokens = re.split(r"[,;\n]", text)
     return [tok.strip() for tok in tokens if tok.strip()][:20]
 

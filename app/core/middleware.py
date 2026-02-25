@@ -7,6 +7,7 @@ Middleware stack:
 """
 from __future__ import annotations
 
+import ipaddress
 import time
 import uuid
 from collections import defaultdict, deque
@@ -163,7 +164,7 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
                     "latency_ms": elapsed_ms,
                     "org_id": org_id,
                     "user_id": user_id,
-                    "client_ip": request.client.host if request.client else None,
+                    "client_ip": get_client_ip(request),
                 },
             )
 
@@ -189,6 +190,51 @@ _login_lock = Lock()
 
 _redis_client: _RedisLike | None = None
 _redis_initialized = False
+
+
+def _trusted_proxy_networks() -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    raw = (settings.TRUSTED_PROXY_CIDRS or "").strip()
+    if not raw:
+        return []
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for value in raw.split(","):
+        cidr = value.strip()
+        if not cidr:
+            continue
+        try:
+            network = ipaddress.ip_network(cidr, strict=False)
+            networks.append(network)
+        except ValueError:
+            logger.warning("Invalid TRUSTED_PROXY_CIDRS entry ignored: %r", cidr)
+    return networks
+
+
+def get_client_ip(request: Request) -> str:
+    """
+    Resolve client IP with optional trusted-proxy support.
+    Trust X-Forwarded-For only when the direct peer is in TRUSTED_PROXY_CIDRS.
+    """
+    direct_ip = request.client.host if request.client else "unknown"
+    if not settings.USE_FORWARDED_HEADERS:
+        return direct_ip
+    networks = _trusted_proxy_networks()
+    if not networks:
+        return direct_ip
+    try:
+        remote = ipaddress.ip_address(direct_ip)
+    except ValueError:
+        return direct_ip
+    if not any(remote in net for net in networks):
+        return direct_ip
+    xff = (request.headers.get("X-Forwarded-For") or "").strip()
+    if not xff:
+        return direct_ip
+    forwarded = xff.split(",", 1)[0].strip()
+    try:
+        ipaddress.ip_address(forwarded)
+        return forwarded
+    except ValueError:
+        return direct_ip
 
 
 class _RedisLike(Protocol):
@@ -331,7 +377,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if any(path.startswith(p) for p in _EXEMPT_PREFIXES):
             return cast(Response, await call_next(request))
 
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = get_client_ip(request)
         window = settings.RATE_LIMIT_WINDOW_SECONDS
         max_req = settings.RATE_LIMIT_MAX_REQUESTS
         if _rate_backend() == "redis":

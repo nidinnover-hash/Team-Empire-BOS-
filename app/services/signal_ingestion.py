@@ -21,6 +21,7 @@ from app.core.config import settings
 from app.models.employee import Employee
 from app.models.integration import Integration
 from app.models.integration_signal import IntegrationSignal
+from app.services import integration as integration_service
 
 logger = logging.getLogger(__name__)
 _ingestion_stats: dict[str, int] = {
@@ -30,6 +31,9 @@ _ingestion_stats: dict[str, int] = {
     "github_failed": 0,
     "github_cicd_synced": 0,
     "github_cicd_failed": 0,
+    "github_workflow_fetch_failed": 0,
+    "github_deployment_fetch_failed": 0,
+    "github_workflow_parse_failed": 0,
     "gmail_synced": 0,
     "gmail_failed": 0,
     "gmail_skipped_non_work": 0,
@@ -84,14 +88,10 @@ def _gmail_label_allowlist() -> set[str]:
 
 
 async def _get_integration(db: AsyncSession, org_id: int, itype: str) -> Integration | None:
-    result = await db.execute(
-        select(Integration).where(
-            Integration.organization_id == org_id,
-            Integration.type == itype,
-            Integration.status == "connected",
-        )
-    )
-    return cast(Integration | None, result.scalar_one_or_none())
+    item = await integration_service.get_integration_by_type(db, org_id, itype)
+    if item is None or item.status != "connected":
+        return None
+    return item
 
 
 async def _employee_map(
@@ -454,7 +454,15 @@ async def ingest_github_cicd_signals(db: AsyncSession, org_id: int) -> dict[str,
         # Workflow runs
         try:
             runs = await github_tool.get_workflow_runs(token, owner, repo_name, per_page=15)
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "GitHub workflow fetch failed org=%d repo=%s/%s: %s",
+                org_id,
+                owner,
+                repo_name,
+                type(exc).__name__,
+            )
+            _ingestion_stats["github_workflow_fetch_failed"] += 1
             runs = []
 
         for run in runs:
@@ -480,8 +488,16 @@ async def ingest_github_cicd_signals(db: AsyncSession, org_id: int) -> dict[str,
                     t_start = datetime.fromisoformat(run_started.replace("Z", "+00:00"))
                     t_end = datetime.fromisoformat(run_updated.replace("Z", "+00:00"))
                     duration_seconds = int((t_end - t_start).total_seconds())
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError) as exc:
+                    logger.debug(
+                        "GitHub workflow duration parse failed org=%d repo=%s/%s run_id=%s: %s",
+                        org_id,
+                        owner,
+                        repo_name,
+                        run_id,
+                        type(exc).__name__,
+                    )
+                    _ingestion_stats["github_workflow_parse_failed"] += 1
 
             payload = {
                 "name": run.get("name"),
@@ -507,7 +523,15 @@ async def ingest_github_cicd_signals(db: AsyncSession, org_id: int) -> dict[str,
         # Deployments
         try:
             deployments = await github_tool.get_deployments(token, owner, repo_name, per_page=10)
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "GitHub deployment fetch failed org=%d repo=%s/%s: %s",
+                org_id,
+                owner,
+                repo_name,
+                type(exc).__name__,
+            )
+            _ingestion_stats["github_deployment_fetch_failed"] += 1
             deployments = []
 
         for deploy in deployments:

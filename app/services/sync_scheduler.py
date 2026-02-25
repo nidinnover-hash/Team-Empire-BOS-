@@ -33,6 +33,7 @@ _SYNC_RETRY_POLICY = RetryPolicy(
 # Per-org throttle: don't fire on-demand sync more than once per N minutes.
 # Default 15 — overridden by settings.SYNC_THROTTLE_MINUTES at runtime.
 _last_synced: dict[int, datetime] = {}
+_sync_locks: dict[int, asyncio.Lock] = {}  # prevent concurrent syncs for the same org
 _last_ceo_summary_date_by_org: dict[int, str] = {}
 _last_pending_digest_date_by_org: dict[int, str] = {}
 _sync_failure_streak: dict[tuple[int, str], int] = {}
@@ -532,12 +533,19 @@ async def trigger_sync_for_org(org_id: int) -> None:
 
     _last_synced[org_id] = now
 
+    # Per-org lock prevents concurrent syncs for the same org
+    lock = _sync_locks.setdefault(org_id, asyncio.Lock())
+
     async def _do():
-        try:
-            async with AsyncSessionLocal() as db:
-                await _run_integrations(db, org_id)
-        except Exception as exc:
-            logger.error("On-demand sync error org=%d: %s", org_id, exc)
+        if lock.locked():
+            logger.debug("Sync already running for org=%d, skipping", org_id)
+            return
+        async with lock:
+            try:
+                async with AsyncSessionLocal() as db:
+                    await _run_integrations(db, org_id)
+            except Exception as exc:
+                logger.error("On-demand sync error org=%d: %s", org_id, exc)
 
     task = asyncio.create_task(_do())
     _inflight_tasks.add(task)

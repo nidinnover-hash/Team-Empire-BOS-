@@ -258,8 +258,12 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     pushed_at = datetime.fromisoformat(pushed_at_str.replace("Z", "+00:00"))
                     if pushed_at < cutoff:
                         continue
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug(
+                        "GitHub pushed_at parse failed for repo=%s: %s",
+                        str(repo.get("full_name") or repo.get("name") or "<unknown>"),
+                        type(exc).__name__,
+                    )
             if not repo.get("archived") and not repo.get("disabled"):
                 active_repos.append(repo)
 
@@ -343,8 +347,12 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     if raw_ts:
                         try:
                             updated_remote = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.debug(
+                                "GitHub updated_at parse failed for %s: %s",
+                                upsert_item["external_id"],
+                                type(exc).__name__,
+                            )
                     if updated_remote and getattr(existing, "updated_at", None) and existing.updated_at > updated_remote:
                         continue
                     existing.title = upsert_item["title"]

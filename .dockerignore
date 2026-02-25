@@ -7,6 +7,11 @@ __pycache__
 .mypy_cache
 .ruff_cache
 *.db
+*.sqlite
+*.sqlite3
 coverage.xml
 perf-baseline.txt
 node_modules
+.venv
+venv
+*.egg-info

@@ -44,7 +44,7 @@ def test_404_messages_do_not_expose_ids():
         matches = pattern.findall(source)
         for m in matches:
             violations.append(f"{mod_name}: {m}")
-    assert not violations, f"404 messages expose entity IDs:\n" + "\n".join(violations)
+    assert not violations, "404 messages expose entity IDs:\n" + "\n".join(violations)
 
 
 # ── 4. search-palette uses textContent for no-results message ─────────────

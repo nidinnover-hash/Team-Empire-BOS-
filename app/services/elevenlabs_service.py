@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +20,7 @@ _TYPE = "elevenlabs"
 async def connect_elevenlabs(
     db: AsyncSession, org_id: int, api_key: str
 ) -> dict:
-    user = await elevenlabs_tool.get_user_info(api_key)
+    await elevenlabs_tool.get_user_info(api_key)
     integration = await connect_integration(
         db, organization_id=org_id, integration_type=_TYPE,
         config_json={"api_key": api_key},
@@ -43,8 +42,8 @@ async def get_elevenlabs_status(db: AsyncSession, org_id: int) -> dict:
         usage = await elevenlabs_tool.get_usage(api_key)
         chars_used = usage.get("character_count", 0)
         chars_limit = usage.get("character_limit", 0)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("ElevenLabs status check degraded for org %s: %s", org_id, type(exc).__name__)
     return {
         "connected": True,
         "last_sync_at": integration.last_sync_at.isoformat() if integration.last_sync_at else None,

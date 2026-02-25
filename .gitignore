@@ -24,9 +24,10 @@ build/
 .coverage
 htmlcov/
 
-# Editors
+# Editors & IDE plugins
 .vscode/
 .idea/
+.continue/
 *.swp
 
 # Local Codex/Claude metadata
@@ -41,3 +42,4 @@ nul
 # Local frontend import artifacts
 _frontend_import/
 b_vQRsLDjjOMc-1771887990410.zip
+personal-clone-strategy-pack.zip

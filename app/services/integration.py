@@ -128,6 +128,8 @@ async def mark_sync_time(
 
 # In-memory cache: phone_number_id → integration_id.
 # Avoids repeated full-table scan + decrypt for every webhook event.
+# Bounded to _MAX_PHONE_CACHE entries to prevent unbounded memory growth.
+_MAX_PHONE_CACHE = 200
 _whatsapp_phone_cache: dict[str, int] = {}
 
 
@@ -172,6 +174,10 @@ async def find_whatsapp_integration_by_phone_number_id(
         cfg = decrypt_config(item.config_json or {})
         item_phone = cfg.get("phone_number_id")
         if item_phone == phone_number_id:
+            # Evict oldest entries if cache is full
+            if len(_whatsapp_phone_cache) >= _MAX_PHONE_CACHE:
+                oldest_key = next(iter(_whatsapp_phone_cache))
+                _whatsapp_phone_cache.pop(oldest_key, None)
             _whatsapp_phone_cache[phone_number_id] = item.id
             set_committed_value(item, "config_json", cfg)
             return cast(Integration, item)

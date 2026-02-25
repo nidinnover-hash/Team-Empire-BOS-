@@ -226,6 +226,8 @@ async def google_calendar_oauth_callback(
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET or not redir:
         raise HTTPException(status_code=400, detail="Google OAuth is not configured")
     _verify_google_calendar_state(data.state, expected_org_id=int(actor["org_id"]))
+    if not consume_oauth_nonce_once(namespace="gcal_oauth", nonce=data.state, max_age_seconds=600):
+        raise HTTPException(status_code=409, detail="OAuth callback already processed (replay rejected)")
     tokens = await exchange_code_for_tokens(
         code=data.code,
         client_id=settings.GOOGLE_CLIENT_ID,
@@ -289,6 +291,8 @@ async def google_calendar_oauth_callback_redirect(
         raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
 
     _verify_google_calendar_state(state, expected_org_id=org_id)
+    if not consume_oauth_nonce_once(namespace="gcal_oauth", nonce=state, max_age_seconds=600):
+        raise HTTPException(status_code=409, detail="OAuth callback already processed (replay rejected)")
 
     tokens = await exchange_code_for_tokens(
         code=code,

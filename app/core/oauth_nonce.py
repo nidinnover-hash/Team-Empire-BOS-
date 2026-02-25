@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from importlib import import_module
+import logging
 from threading import Lock
 from time import time
 from typing import Protocol, cast
@@ -12,6 +13,7 @@ _nonce_lock = Lock()
 _redis_client: "_RedisLike | None" = None
 _redis_initialized = False
 _MAX_NONCE_ITEMS = 10_000  # Cap to prevent memory leak from nonce churn
+logger = logging.getLogger(__name__)
 
 
 class _RedisLike(Protocol):
@@ -63,9 +65,9 @@ def consume_oauth_nonce_once(namespace: str, nonce: str, *, max_age_seconds: int
         try:
             created = redis_client.set(name=key, value="1", ex=ttl, nx=True)
             return bool(created)
-        except Exception:
+        except Exception as exc:
             # Fall back to in-memory replay protection when Redis is unavailable.
-            pass
+            logger.warning("OAuth nonce Redis fallback engaged: %s", type(exc).__name__)
 
     expiry = now + ttl
     with _nonce_lock:

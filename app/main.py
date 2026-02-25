@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import select as sa_select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.router import api_router
@@ -25,6 +26,7 @@ from app.core.middleware import (
     SecurityHeadersMiddleware,
     clear_login_failures,
     check_login_allowed,
+    get_client_ip,
     record_login_failure,
 )
 from app.core.security import create_access_token, decode_access_token, hash_password, verify_password
@@ -151,10 +153,7 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # CORS: strict-origin whitelist from config
-_cors_origins = [
-    o.strip() for o in settings.CORS_ALLOWED_ORIGINS.split(",")
-    if o.strip()
-]
+_cors_origins = settings.cors_allowed_origins_list
 if _cors_origins:
     app.add_middleware(
         CORSMiddleware,
@@ -370,7 +369,7 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ):
     _enforce_password_login_policy()
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     user = await _authenticate_user(db, username, password, client_ip, "/token")
     return {"access_token": _create_jwt(user), "token_type": "bearer"}
 
@@ -390,7 +389,7 @@ async def web_login(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     _enforce_password_login_policy()
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     user = await _authenticate_user(db, username, password, client_ip, "/web/login")
     access_token = _create_jwt(user)
     purpose_profile = _resolve_login_profile(user.email)
@@ -455,7 +454,21 @@ async def web_login(
 async def web_logout(
     response: Response,
     _csrf_ok: None = Depends(verify_csrf),
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
+    # Bump token_version so all existing JWTs (session + API) become invalid.
+    # Single-user system: blanket bump is safe and immediate.
+    try:
+        from app.models.user import User
+        await db.execute(
+            sa_update(User).where(User.is_active.is_(True)).values(
+                token_version=User.token_version + 1
+            )
+        )
+        await db.commit()
+    except Exception:
+        pass  # Cookie deletion still happens even if DB bump fails
+
     response.delete_cookie("pc_session", path="/")
     response.delete_cookie("pc_csrf", path="/")
     response.delete_cookie("pc_theme_scope", path="/")
@@ -471,6 +484,7 @@ async def web_api_token(user: dict = Depends(get_current_web_user)) -> dict:
     purpose = str(user.get("purpose") or purpose_profile["purpose"])
     default_theme = str(user.get("default_theme") or purpose_profile["default_theme"])
     default_avatar_mode = str(user.get("default_avatar_mode") or purpose_profile["default_avatar_mode"])
+    web_ttl = max(1, int(settings.WEB_API_TOKEN_EXPIRE_MINUTES))
     token = create_access_token(
         {
             "id": user["id"],
@@ -481,8 +495,9 @@ async def web_api_token(user: dict = Depends(get_current_web_user)) -> dict:
             "purpose": purpose,
             "default_theme": default_theme,
             "default_avatar_mode": default_avatar_mode,
+            "web_api": True,
         },
-        expires_minutes=_effective_token_expiry_minutes(),
+        expires_minutes=min(_effective_token_expiry_minutes(), web_ttl),
     )
     return {"token": token}
 

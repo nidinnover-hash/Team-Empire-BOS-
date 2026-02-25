@@ -1,14 +1,12 @@
 """Tests for hardening round 3: nonce replay, snapshot retention, middleware, password hashing."""
 import asyncio
-import time
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
-import pytest_asyncio
 
 from app.core.deps import get_db
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import hash_password, verify_password
 from app.main import app as fastapi_app
 
 

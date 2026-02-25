@@ -61,7 +61,7 @@ def test_validate_startup_rejects_auto_seed_defaults_in_production_mode():
 def test_validate_startup_flags_missing_token_encryption_key():
     s = _base_settings(TOKEN_ENCRYPTION_KEY=None)
     issues = validate_startup_settings(s)
-    assert any("TOKEN_ENCRYPTION_KEY should be set" in i for i in issues)
+    assert any("TOKEN_ENCRYPTION_KEY must be set" in i for i in issues)
 
 
 def test_validate_startup_flags_same_token_and_secret_key():
@@ -175,6 +175,58 @@ def test_validate_startup_flags_rate_limit_max_too_high():
     s = _base_settings(RATE_LIMIT_MAX_REQUESTS=50000)
     issues = validate_startup_settings(s)
     assert any("RATE_LIMIT_MAX_REQUESTS must be <= 10000" in i for i in issues)
+
+
+def test_validate_startup_flags_missing_email_provider_key_when_overridden():
+    s = _base_settings(
+        DEFAULT_AI_PROVIDER="openai",
+        OPENAI_API_KEY="sk-live-valid-key-value",
+        EMAIL_AI_PROVIDER="anthropic",
+        ANTHROPIC_API_KEY=None,
+    )
+    issues = validate_startup_settings(s)
+    assert any("EMAIL_AI_PROVIDER=anthropic" in i for i in issues)
+
+
+def test_validate_startup_flags_invalid_cors_wildcard():
+    s = _base_settings(CORS_ALLOWED_ORIGINS="*")
+    issues = validate_startup_settings(s)
+    assert any("must not include '*'" in i for i in issues)
+
+
+def test_validate_startup_flags_invalid_cors_path():
+    s = _base_settings(CORS_ALLOWED_ORIGINS="https://app.example.com/path")
+    issues = validate_startup_settings(s)
+    assert any("must not include a path" in i for i in issues)
+
+
+def test_validate_startup_flags_http_cors_origin_in_production():
+    s = _base_settings(DEBUG=False, CORS_ALLOWED_ORIGINS="http://example.com")
+    issues = validate_startup_settings(s)
+    assert any("must use https in production" in i for i in issues)
+
+
+def test_validate_startup_flags_web_api_token_ttl_bounds():
+    low = _base_settings(WEB_API_TOKEN_EXPIRE_MINUTES=0)
+    high = _base_settings(WEB_API_TOKEN_EXPIRE_MINUTES=121)
+    low_issues = validate_startup_settings(low)
+    high_issues = validate_startup_settings(high)
+    assert any("WEB_API_TOKEN_EXPIRE_MINUTES must be between 1 and 120" in i for i in low_issues)
+    assert any("WEB_API_TOKEN_EXPIRE_MINUTES must be between 1 and 120" in i for i in high_issues)
+
+
+def test_validate_startup_flags_unknown_env_keys(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/personal_clone_test\n"
+        "UNKNOWN_CONFIG_FLAG=true\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setitem(Settings.model_config, "env_file", str(env_file))
+
+    s = _base_settings(DEBUG=False)
+    issues = validate_startup_settings(s)
+    assert any("UNKNOWN_CONFIG_FLAG" in i for i in issues)
 
 
 def test_validate_startup_clean_passes():

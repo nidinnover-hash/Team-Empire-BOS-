@@ -563,3 +563,55 @@ async def test_sync_github_cicd_dedup_on_rerun(client, monkeypatch):
         assert result.scalar() == 1
     finally:
         await agen2.aclose()
+
+
+async def test_sync_github_cicd_tracks_duration_parse_failures(client, monkeypatch):
+    """Duration parse failures should be counted without breaking sync."""
+    await _seed()
+
+    override = fastapi_app.dependency_overrides[get_db]
+    agen = override()
+    session = await agen.__anext__()
+    try:
+        from app.models.integration import Integration
+        integ = Integration(
+            organization_id=1, type="github", status="connected",
+            config_json={"access_token": "ghp_fake"},
+        )
+        session.add(integ)
+        await session.commit()
+    finally:
+        await agen.aclose()
+
+    async def fake_list_repos(token):
+        return [{"owner": {"login": "org"}, "name": "repo"}]
+
+    async def fake_get_workflow_runs(token, owner, repo, per_page=15):
+        return [{
+            "id": 900,
+            "name": "CI",
+            "status": "completed",
+            "conclusion": "success",
+            "head_branch": "main",
+            "actor": {"login": ""},
+            "event": "push",
+            "run_number": 1,
+            "run_attempt": 1,
+            "run_started_at": "bad-start",
+            "updated_at": "bad-end",
+            "created_at": "2026-02-24T10:00:00Z",
+        }]
+
+    async def fake_get_deployments(token, owner, repo, per_page=10):
+        return []
+
+    from app.tools import github as github_tool
+    monkeypatch.setattr(github_tool, "list_repos", fake_list_repos)
+    monkeypatch.setattr(github_tool, "get_workflow_runs", fake_get_workflow_runs)
+    monkeypatch.setattr(github_tool, "get_deployments", fake_get_deployments)
+
+    before = signal_ingestion.get_ingestion_stats().get("github_workflow_parse_failed", 0)
+    resp = await client.post("/api/v1/ops/sync/github-cicd")
+    assert resp.status_code == 200
+    after = signal_ingestion.get_ingestion_stats().get("github_workflow_parse_failed", 0)
+    assert after >= before + 1

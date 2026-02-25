@@ -17,3 +17,11 @@
   2. Install Playwright test runner in your JS toolchain
   3. Run `npx playwright test tests/ui --update-snapshots` for first baseline
   4. Run `npx playwright test tests/ui` in CI for diff detection
+
+## Release gate
+- Linux/macOS/CI: `python scripts/check_ready.py`
+- Windows PowerShell: `.\scripts\check_ready.ps1`
+
+## Launch docs
+- [Launch checklist](docs/LAUNCH_CHECKLIST.md)
+- [Production runbook](docs/PRODUCTION_RUNBOOK.md)

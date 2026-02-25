@@ -8,8 +8,9 @@
 - Restrict force-push and direct pushes to `main`.
 
 ## Required Pre-Merge Checks
+- `python scripts/check_ready.py`
 - `ruff check app tests`
-- `python -m mypy app tests`
+- `python -m mypy`
 - `python -m pytest -q -p no:cacheprovider`
 - `python scripts/check_migration_heads.py`
 - `pip-audit -r requirements.txt --progress-spinner off`

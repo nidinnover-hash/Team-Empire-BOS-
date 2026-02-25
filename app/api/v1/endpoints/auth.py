@@ -6,7 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.deps import get_current_api_user, get_db
-from app.core.middleware import check_login_allowed, clear_login_failures, record_login_failure
+from app.core.middleware import (
+    check_login_allowed,
+    clear_login_failures,
+    get_client_ip,
+    record_login_failure,
+)
 from app.core.purpose import resolve_login_profile
 from app.core.security import create_access_token, hash_password, verify_password
 from app.logs.audit import record_action
@@ -43,7 +48,7 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ):
     _enforce_password_login_policy()
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     if not check_login_allowed(client_ip):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,

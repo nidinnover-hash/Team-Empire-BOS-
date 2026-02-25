@@ -163,7 +163,7 @@ async def get_unified_conversations(
 
     # Batch-load all existing conversation records for this org in 1 query
     existing_result = await db.execute(
-        select(Conversation).where(Conversation.organization_id == org_id)
+        select(Conversation).where(Conversation.organization_id == org_id).limit(5000)
     )
     existing_map: dict[tuple[str, str], Conversation] = {
         (c.channel, c.participant_key): c for c in existing_result.scalars().all()

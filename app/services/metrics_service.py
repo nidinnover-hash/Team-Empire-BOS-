@@ -96,8 +96,12 @@ async def compute_weekly_metrics(
                             due_date = date.fromisoformat(due)
                             if sig.timestamp.date() <= due_date:
                                 on_time_count += 1
-                        except (ValueError, TypeError):
-                            pass
+                        except (ValueError, TypeError) as exc:
+                            logger.debug(
+                                "Task due_date parse failed for signal=%s: %s",
+                                sig.external_id,
+                                type(exc).__name__,
+                            )
                 elif status in ("reopened", "reopen"):
                     reopen_count += 1
 

@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.note import Note
@@ -72,11 +73,23 @@ async def sync_pages_to_notes(
         raise ValueError("Notion not connected")
     token = (integration.config_json or {}).get("api_token", "")
     pages = await notion_tool.search_pages(token, query, page_size=max_pages, filter_type="page")
+    # Pre-load existing Notion note titles for dedup
+    existing_result = await db.execute(
+        select(Note.title).where(
+            Note.organization_id == org_id,
+            Note.source == "notion",
+        ).limit(1000)
+    )
+    existing_titles = {row.title for row in existing_result}
     notes_created = 0
     for page in pages[:max_pages]:
         title = _extract_title(page)
         page_id = page.get("id", "")
         if not page_id:
+            continue
+        note_title = f"[Notion] {title}"[:200]
+        # Skip if this page was already synced
+        if note_title in existing_titles:
             continue
         try:
             blocks = await notion_tool.get_page_content(token, page_id, page_size=50)
@@ -87,7 +100,7 @@ async def sync_pages_to_notes(
             continue
         note = Note(
             organization_id=org_id,
-            title=f"[Notion] {title}"[:200],
+            title=note_title,
             content=content[:6000],
             source="notion",
             created_at=datetime.now(timezone.utc),

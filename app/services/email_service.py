@@ -217,8 +217,12 @@ async def sync_emails(
             if raw.get("received_at"):
                 try:
                     received_at = datetime.fromisoformat(raw["received_at"])
-                except ValueError:
-                    pass
+                except ValueError as exc:
+                    logger.debug(
+                        "Email received_at parse failed for gmail_id=%s: %s",
+                        raw.get("gmail_id"),
+                        type(exc).__name__,
+                    )
 
             email = Email(
                 organization_id=org_id,

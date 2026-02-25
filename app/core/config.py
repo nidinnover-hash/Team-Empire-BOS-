@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -108,7 +109,7 @@ class Settings(BaseSettings):
     AUTO_CREATE_SCHEMA: bool = False
     AUTO_SEED_DEFAULTS: bool = False
     COOKIE_SECURE: bool = False  # Set True in production (requires HTTPS)
-    SECRET_KEY: str = ""  # Must be set in .env (min 16 chars)
+    SECRET_KEY: str = ""  # Must be set in .env (min 32 chars)
     ADMIN_EMAIL: str = "demo@ai.com"
     ADMIN_PASSWORD: str = ""  # Must be set in .env (min 8 chars)
     ADMIN_NAME: str = "Nidin Nover"
@@ -116,8 +117,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     CHAT_HISTORY_RETENTION_DAYS: int = 90
     # Separate key for Fernet token encryption (Integration.config_json).
-    # If not set, falls back to a SHA-256 derivative of SECRET_KEY (legacy behaviour).
-    # Set this to a different random 32-byte hex value to achieve key separation.
+    # This should always be set and must differ from SECRET_KEY.
     TOKEN_ENCRYPTION_KEY: str | None = None
     # Separate key for OAuth state HMAC signing.
     # Falls back to SECRET_KEY if not set — set a distinct value to avoid key coupling.
@@ -167,7 +167,13 @@ class Settings(BaseSettings):
     SYNC_THROTTLE_MINUTES: int = 15   # min gap for on-demand (login/dashboard) syncs
     SHUTDOWN_GRACE_SECONDS: int = 15  # max wait for in-flight syncs on shutdown
     LOG_FORMAT: Literal["json", "text"] = "text"
-    LOG_LEVEL: str = "INFO"
+    LOG_LEVEL: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"] = "INFO"
+    # Use forwarded headers only when running behind a trusted reverse proxy.
+    USE_FORWARDED_HEADERS: bool = False
+    # Comma-separated CIDRs of trusted reverse proxies.
+    TRUSTED_PROXY_CIDRS: str = ""
+    # Short-lived API token minted from web session for browser-side API calls.
+    WEB_API_TOKEN_EXPIRE_MINUTES: int = 15
     CEO_SUMMARY_TIMEZONE: str = "Asia/Kolkata"
     CEO_ALERTS_SLACK_CHANNEL_ID: str | None = None
     SYNC_STALE_HOURS: int = 24
@@ -219,9 +225,20 @@ class Settings(BaseSettings):
             return value.strip().upper()
         return value
 
+    @field_validator("LOG_LEVEL", mode="before")
+    @classmethod
+    def _normalize_log_level(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip().upper()
+        return value
+
     @property
     def app_mode_normalized(self) -> str:
         return self.APP_MODE
+
+    @property
+    def cors_allowed_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.CORS_ALLOWED_ORIGINS.split(",") if o.strip()]
 
 
 @lru_cache
@@ -232,12 +249,54 @@ def get_settings() -> Settings:
 settings: Settings = get_settings()
 
 
+def _settings_env_file_paths() -> list[Path]:
+    raw = Settings.model_config.get("env_file")
+    if raw is None:
+        return []
+    values = raw if isinstance(raw, (list, tuple)) else [raw]
+    paths: list[Path] = []
+    for value in values:
+        path = Path(str(value))
+        paths.append(path)
+    return paths
+
+
+def _parse_env_keys_from_file(path: Path) -> set[str]:
+    keys: set[str] = set()
+    if not path.exists():
+        return keys
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.lower().startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            continue
+        key = line.split("=", 1)[0].strip()
+        if key and key.replace("_", "").isalnum() and not key[0].isdigit():
+            keys.add(key)
+    return keys
+
+
+def _unknown_env_file_keys() -> list[str]:
+    known = set(Settings.model_fields.keys())
+    unknown: set[str] = set()
+    for path in _settings_env_file_paths():
+        unknown.update(_parse_env_keys_from_file(path) - known)
+    return sorted(unknown)
+
+
 def validate_startup_settings(s: Settings) -> list[str]:
     """
     Return startup configuration issues.
     Enforcement is opt-in via ENFORCE_STARTUP_VALIDATION.
     """
     issues: list[str] = []
+    if not s.DEBUG:
+        unknown_env = _unknown_env_file_keys()
+        if unknown_env:
+            issues.append("Unknown .env keys detected (possible typos): " + ", ".join(unknown_env))
 
     # --- Numeric bounds ---
     if s.ACCESS_TOKEN_EXPIRE_MINUTES < 5:
@@ -298,23 +357,29 @@ def validate_startup_settings(s: Settings) -> list[str]:
     if s.RATE_LIMIT_MAX_REQUESTS > 10_000:
         issues.append("RATE_LIMIT_MAX_REQUESTS must be <= 10000")
 
+    def _check_provider_key(provider: str, source_name: str) -> None:
+        if provider == "openai":
+            key = (s.OPENAI_API_KEY or "").strip()
+            if key in PLACEHOLDER_OPENAI_KEYS:
+                issues.append(f"OPENAI_API_KEY is missing or placeholder while {source_name}=openai")
+        elif provider == "anthropic":
+            key = (s.ANTHROPIC_API_KEY or "").strip()
+            if key in PLACEHOLDER_ANTHROPIC_KEYS:
+                issues.append(f"ANTHROPIC_API_KEY is missing or placeholder while {source_name}=anthropic")
+        elif provider == "groq":
+            key = (s.GROQ_API_KEY or "").strip()
+            if key in PLACEHOLDER_GROQ_KEYS:
+                issues.append(f"GROQ_API_KEY is missing or placeholder while {source_name}=groq")
+        elif provider == "gemini":
+            key = (s.GEMINI_API_KEY or "").strip()
+            if key in PLACEHOLDER_GEMINI_KEYS:
+                issues.append(f"GEMINI_API_KEY is missing or placeholder while {source_name}=gemini")
+
     provider = s.DEFAULT_AI_PROVIDER
-    if provider == "openai":
-        key = (s.OPENAI_API_KEY or "").strip()
-        if key in PLACEHOLDER_OPENAI_KEYS:
-            issues.append("OPENAI_API_KEY is missing or placeholder while DEFAULT_AI_PROVIDER=openai")
-    elif provider == "anthropic":
-        key = (s.ANTHROPIC_API_KEY or "").strip()
-        if key in PLACEHOLDER_ANTHROPIC_KEYS:
-            issues.append("ANTHROPIC_API_KEY is missing or placeholder while DEFAULT_AI_PROVIDER=anthropic")
-    elif provider == "groq":
-        key = (s.GROQ_API_KEY or "").strip()
-        if key in PLACEHOLDER_GROQ_KEYS:
-            issues.append("GROQ_API_KEY is missing or placeholder while DEFAULT_AI_PROVIDER=groq")
-    elif provider == "gemini":
-        key = (s.GEMINI_API_KEY or "").strip()
-        if key in PLACEHOLDER_GEMINI_KEYS:
-            issues.append("GEMINI_API_KEY is missing or placeholder while DEFAULT_AI_PROVIDER=gemini")
+    _check_provider_key(provider, "DEFAULT_AI_PROVIDER")
+    email_provider = (s.EMAIL_AI_PROVIDER or provider)
+    if email_provider != provider:
+        _check_provider_key(email_provider, "EMAIL_AI_PROVIDER")
     google_id = (s.GOOGLE_CLIENT_ID or "").strip()
     google_secret = (s.GOOGLE_CLIENT_SECRET or "").strip()
     google_redirect = (s.GOOGLE_REDIRECT_URI or "").strip()
@@ -331,11 +396,13 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("PRIVACY_AUDIT_MAX_VALUE_CHARS must be >= 32")
     if s.WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS < 30:
         issues.append("WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS must be >= 30")
+    if s.WEB_API_TOKEN_EXPIRE_MINUTES < 1 or s.WEB_API_TOKEN_EXPIRE_MINUTES > 120:
+        issues.append("WEB_API_TOKEN_EXPIRE_MINUTES must be between 1 and 120")
     if not s.DEBUG and not s.COOKIE_SECURE:
         issues.append("COOKIE_SECURE must be true when DEBUG=false (production mode)")
     token_key = (s.TOKEN_ENCRYPTION_KEY or "").strip()
     if not token_key:
-        issues.append("TOKEN_ENCRYPTION_KEY should be set for key separation from SECRET_KEY")
+        issues.append("TOKEN_ENCRYPTION_KEY must be set for key separation from SECRET_KEY")
     else:
         if token_key == s.SECRET_KEY:
             issues.append("TOKEN_ENCRYPTION_KEY must not equal SECRET_KEY")
@@ -345,6 +412,19 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("WHATSAPP_APP_SECRET should be set when WhatsApp webhook verify token is configured")
     if not s.DEBUG and s.PRIVACY_POLICY_PROFILE == "debug":
         issues.append("PRIVACY_POLICY_PROFILE=debug is not allowed when DEBUG=false")
+    for origin in s.cors_allowed_origins_list:
+        if origin == "*":
+            issues.append("CORS_ALLOWED_ORIGINS must not include '*' when credentials are enabled")
+            continue
+        parsed = urlsplit(origin)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.query or parsed.fragment:
+            issues.append(f"CORS origin is invalid: {origin!r}")
+            continue
+        if parsed.path not in {"", "/"}:
+            issues.append(f"CORS origin must not include a path: {origin!r}")
+            continue
+        if not s.DEBUG and parsed.scheme == "http" and parsed.hostname not in {"localhost", "127.0.0.1"}:
+            issues.append(f"CORS origin must use https in production: {origin!r}")
     if s.ACCOUNT_SESSION_MAX_HOURS < 1 or s.ACCOUNT_SESSION_MAX_HOURS > 24:
         issues.append("ACCOUNT_SESSION_MAX_HOURS must be between 1 and 24")
     db_url = (s.DATABASE_URL or "").strip().lower()
@@ -390,8 +470,8 @@ def validate_startup_settings(s: Settings) -> list[str]:
 
     # --- Security: reject insecure defaults ---
     _WEAK_SECRETS = {"change_me_in_env", "secret", "changeme", "your_32_plus_char_secret_here"}
-    if s.SECRET_KEY in _WEAK_SECRETS or len(s.SECRET_KEY) < 16:
-        issues.append("SECRET_KEY is a placeholder or too short (min 16 chars)")
+    if s.SECRET_KEY in _WEAK_SECRETS or len(s.SECRET_KEY) < 32:
+        issues.append("SECRET_KEY is a placeholder or too short (min 32 chars)")
     _WEAK_PASSWORDS = {"demo", "password", "admin", "123456", "changeme"}
     if s.ADMIN_PASSWORD in _WEAK_PASSWORDS or len(s.ADMIN_PASSWORD) < 8:
         issues.append("ADMIN_PASSWORD is weak or too short (min 8 chars)")

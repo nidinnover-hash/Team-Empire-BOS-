@@ -140,3 +140,38 @@ def test_ai_router_uses_deque():
     from app.services.ai_router import _recent_calls
     assert isinstance(_recent_calls, deque)
     assert _recent_calls.maxlen == 200
+
+
+def test_compose_rate_limit_falls_back_when_redis_errors(monkeypatch):
+    """Redis errors should fall back to in-memory compose rate limiting."""
+    from fastapi import HTTPException
+    from app.api.v1.endpoints import email as email_mod
+
+    class _BrokenRedis:
+        def zremrangebyscore(self, *_args, **_kwargs):
+            raise RuntimeError("redis down")
+
+        def zcard(self, *_args, **_kwargs):
+            return 0
+
+        def zadd(self, *_args, **_kwargs):
+            return 1
+
+        def expire(self, *_args, **_kwargs):
+            return True
+
+    monkeypatch.setattr(email_mod, "_compose_redis_initialized", True)
+    monkeypatch.setattr(email_mod, "_compose_redis_client", _BrokenRedis())
+    email_mod._compose_counts.clear()
+
+    original_max = email_mod._COMPOSE_MAX_PER_HOUR
+    email_mod._COMPOSE_MAX_PER_HOUR = 2
+    try:
+        email_mod._check_compose_rate(55)
+        email_mod._check_compose_rate(55)
+        with pytest.raises(HTTPException) as exc_info:
+            email_mod._check_compose_rate(55)
+        assert exc_info.value.status_code == 429
+    finally:
+        email_mod._COMPOSE_MAX_PER_HOUR = original_max
+        email_mod._compose_counts.clear()

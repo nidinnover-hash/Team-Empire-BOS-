@@ -383,8 +383,8 @@ async def run_ceo_sync(db: AsyncSession, org_id: int) -> dict[str, Any]:
         sync_run.error_message = str(exc)[:500]
         try:
             await db.commit()
-        except Exception:
-            pass
+        except Exception as commit_exc:
+            logger.error("Failed to persist CEO GitHub sync error status: %s", type(commit_exc).__name__)
         return {"error": str(exc), **stats}
 
     return {"error": None, **stats}
@@ -500,7 +500,7 @@ async def get_ceo_summary(
 
     # Inactive devs (no commits in range)
     all_users_q = await db.execute(
-        select(GitHubUser.login).where(GitHubUser.organization_id == org_id)
+        select(GitHubUser.login).where(GitHubUser.organization_id == org_id).limit(1000)
     )
     all_users = {r.login for r in all_users_q}
 

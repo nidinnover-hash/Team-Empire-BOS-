@@ -1,4 +1,5 @@
 from datetime import date
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from sqlalchemy import func, select
@@ -59,6 +60,7 @@ from app.services import task as task_service
 from app.services import task_engine
 
 router = APIRouter(prefix="/ops", tags=["Ops"])
+logger = logging.getLogger(__name__)
 
 
 async def run_daily_run_workflow(
@@ -245,8 +247,13 @@ async def run_daily_run_workflow(
                 pending_approvals=0,
                 result_json={},
             )
-        except Exception:
-            pass  # Don't shadow the original exception
+        except Exception as exc:
+            logger.warning(
+                "Failed to mark daily run as failed (run_id=%s org_id=%s): %s",
+                run.id,
+                org_id,
+                type(exc).__name__,
+            )
         raise
 
 

@@ -1,13 +1,9 @@
 """Tests for hardening round 5: dead code removal, timing fixes, audit, email safety."""
-import asyncio
-import hmac
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.core.deps import get_db
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import hash_password
 from app.main import app as fastapi_app
 
 
@@ -52,9 +48,6 @@ def test_main_dummy_hash_uses_600k():
 
 async def test_login_success_is_audited(client):
     """Successful login creates a login_success audit event."""
-    import base64
-    import hashlib
-    import os
 
     session, agen = await _get_test_session()
     try:

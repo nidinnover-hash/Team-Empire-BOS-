@@ -162,9 +162,13 @@ def _check_compose_rate(org_id: int) -> None:
             return
         except HTTPException:
             raise
-        except Exception:
+        except Exception as exc:
             # Fall back to process memory if Redis is unavailable.
-            pass
+            logger.warning(
+                "Compose rate-limit Redis fallback for org %s: %s",
+                org_id,
+                type(exc).__name__,
+            )
 
     now = time()
     # Proactively evict stale orgs on every call (O(n) over small dict)
@@ -468,10 +472,10 @@ async def strategize_email(
             org_id=org_id,
             actor_user_id=int(current_user["id"]),
         )
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Email not found or not accessible")
-    except RuntimeError:
-        raise HTTPException(status_code=502, detail="Email strategy generation failed — try again later")
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Email not found or not accessible") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail="Email strategy generation failed — try again later") from exc
     return EmailStrategyResponse(email_id=email_id, strategy=analysis)
 
 
