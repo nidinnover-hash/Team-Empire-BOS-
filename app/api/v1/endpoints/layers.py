@@ -17,7 +17,7 @@ from app.schemas.layers import (
     StudyLayerReport,
     TrainingLayerReport,
 )
-from app.schemas.data_collection import BrandingPowerReport, EthicalBoundaryReport, FraudLayerReport, ThreatLayerReport
+from app.schemas.data_collection import BrandingPowerReport, EthicalBoundaryReport, FraudLayerReport, MediaEditingLayerReport, SocialManagementLayerReport, ThreatLayerReport
 from app.services import layers as layers_service
 
 router = APIRouter(prefix="/layers", tags=["Layers"])
@@ -218,6 +218,28 @@ async def ethical_boundary_layer(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> EthicalBoundaryReport:
     return await layers_service.get_ethical_boundary_layer(
+        db=db,
+        organization_id=int(actor["org_id"]),
+    )
+
+
+@router.get("/media-editing", response_model=MediaEditingLayerReport)
+async def media_editing_layer(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> MediaEditingLayerReport:
+    return await layers_service.get_media_editing_layer(
+        db=db,
+        organization_id=int(actor["org_id"]),
+    )
+
+
+@router.get("/social-management", response_model=SocialManagementLayerReport)
+async def social_management_layer(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> SocialManagementLayerReport:
+    return await layers_service.get_social_management_layer(
         db=db,
         organization_id=int(actor["org_id"]),
     )

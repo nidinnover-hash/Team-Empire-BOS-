@@ -280,3 +280,65 @@ class EthicalBoundaryReport(BaseModel):
     active_guardrails: int
     compliance_areas: list[str]
     recommendations: list[str]
+
+
+# ── Video & Audio Editing Layer ─────────────────────────────────────────
+
+MediaType = Literal["video", "audio", "podcast", "reel", "short"]
+
+class MediaProjectCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+    media_type: MediaType
+    platform: str = Field(default="youtube", max_length=30)
+    description: str = Field(default="", max_length=2000)
+    duration_seconds: int | None = Field(default=None, ge=0, le=86400)
+    script_text: str | None = Field(default=None, max_length=10000)
+    tags: str = Field(default="", max_length=300)
+
+
+class MediaProjectOut(BaseModel):
+    id: int
+    title: str
+    media_type: str
+    platform: str
+    description: str
+    status: str
+    duration_seconds: int | None
+    script_text: str | None
+    tags: str
+    quality_score: int
+    feedback: list[str]
+    created_at: str
+
+
+class MediaEditingLayerReport(BaseModel):
+    editing_score: int = Field(ge=0, le=100)
+    total_projects_30d: int
+    published_projects: int
+    draft_projects: int
+    avg_quality_score: int
+    media_type_breakdown: dict[str, int]
+    platform_breakdown: dict[str, int]
+    content_velocity: int
+    strengths: list[str]
+    gaps: list[str]
+    next_actions: list[str]
+
+
+# ── Social Media Management Layer ──────────────────────────────────────
+
+class SocialManagementLayerReport(BaseModel):
+    management_score: int = Field(ge=0, le=100)
+    total_posts_30d: int
+    published_30d: int
+    draft_30d: int
+    queued_30d: int
+    failed_30d: int
+    publish_rate: int = Field(ge=0, le=100)
+    platform_breakdown: dict[str, int]
+    content_mode_breakdown: dict[str, int]
+    posting_consistency: int = Field(ge=0, le=100)
+    approval_pipeline_health: int = Field(ge=0, le=100)
+    strengths: list[str]
+    gaps: list[str]
+    next_actions: list[str]

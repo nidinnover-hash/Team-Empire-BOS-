@@ -13,6 +13,9 @@ from app.schemas.data_collection import (
     EthicalBoundaryReport,
     FraudDetectionResult,
     FraudLayerReport,
+    MediaEditingLayerReport,
+    MediaProjectCreate,
+    MediaProjectOut,
     MobileCaptureAnalyzeRequest,
     MobileCaptureAnalyzeResult,
     MobileCaptureUploadAnalyzeResult,
@@ -21,6 +24,7 @@ from app.schemas.data_collection import (
     NewsDigestRequest,
     NewsDigestResult,
     PhotoCharacterStudyResult,
+    SocialManagementLayerReport,
     ThreatDetectionResult,
     ThreatLayerReport,
     ThreatTrainRequest,
@@ -420,3 +424,49 @@ async def ethical_boundary(
 ) -> EthicalBoundaryReport:
     org_id = int(actor["org_id"])
     return await data_collection_service.get_ethical_boundary_report(db=db, org_id=org_id)
+
+
+@router.post("/media/projects", response_model=MediaProjectOut, status_code=201)
+async def create_media_project(
+    data: MediaProjectCreate,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> MediaProjectOut:
+    org_id = int(actor["org_id"])
+    result = await data_collection_service.create_media_project(
+        db=db, org_id=org_id, data=data, actor_user_id=int(actor["id"]),
+    )
+
+    await record_action(
+        db=db,
+        event_type="media_project_created",
+        actor_user_id=int(actor["id"]),
+        organization_id=org_id,
+        entity_type="media_project",
+        entity_id=result.id,
+        payload_json={
+            "title": data.title,
+            "media_type": data.media_type,
+            "platform": data.platform,
+            "quality_score": result.quality_score,
+        },
+    )
+    return result
+
+
+@router.get("/media/layer", response_model=MediaEditingLayerReport)
+async def media_editing_layer(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> MediaEditingLayerReport:
+    org_id = int(actor["org_id"])
+    return await data_collection_service.get_media_editing_layer(db=db, org_id=org_id)
+
+
+@router.get("/social/management-layer", response_model=SocialManagementLayerReport)
+async def social_management_layer(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> SocialManagementLayerReport:
+    org_id = int(actor["org_id"])
+    return await data_collection_service.get_social_management_layer(db=db, org_id=org_id)
