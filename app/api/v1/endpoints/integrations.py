@@ -681,10 +681,17 @@ async def whatsapp_webhook_receive(
         ):
             raise HTTPException(status_code=409, detail="Webhook replay detected")
 
+    _MAX_WEBHOOK_BODY = 1_048_576  # 1 MB guard against oversized payloads
+    if len(raw_body) > _MAX_WEBHOOK_BODY:
+        raise HTTPException(status_code=413, detail="Webhook payload too large")
+
     try:
         payload = _json.loads(raw_body)
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid JSON payload") from exc
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Webhook payload must be a JSON object")
 
     entries = payload.get("entry")
     count = len(entries) if isinstance(entries, list) else 0

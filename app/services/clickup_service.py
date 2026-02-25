@@ -170,9 +170,10 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
                         )
                     )
 
-        # Collect all ClickUp tasks first
+        # Collect all ClickUp tasks first (capped to prevent runaway pagination)
+        _MAX_PAGES = 50  # 50 pages × 100 tasks = 5,000 tasks max
         all_cu_tasks: list[dict[str, Any]] = []
-        while True:
+        while page < _MAX_PAGES:
             async def _load_tasks(p: int = page) -> list[dict[str, Any]]:
                 return await get_tasks(api_token, team_id, page=p, include_closed=False)
 

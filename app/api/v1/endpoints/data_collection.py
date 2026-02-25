@@ -167,6 +167,9 @@ async def mobile_capture_analyze(
     return result
 
 
+_ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp", "image/tiff"}
+
+
 @router.post("/mobile-capture/upload-analyze", response_model=MobileCaptureUploadAnalyzeResult)
 async def mobile_capture_upload_analyze(
     file: UploadFile = File(...),
@@ -180,6 +183,8 @@ async def mobile_capture_upload_analyze(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> MobileCaptureUploadAnalyzeResult:
     org_id = int(actor["org_id"])
+    if file.content_type and file.content_type not in _ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="File must be an image (JPEG, PNG, WebP, GIF, BMP, or TIFF)")
     file_bytes = await file.read()
     if len(file_bytes) > 8 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large (max 8MB)")
@@ -242,6 +247,8 @@ async def photo_character_upload_analyze(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> PhotoCharacterStudyResult:
     org_id = int(actor["org_id"])
+    if file.content_type and file.content_type not in _ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="File must be an image (JPEG, PNG, WebP, GIF, BMP, or TIFF)")
     file_bytes = await file.read()
     if len(file_bytes) > 8 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large (max 8MB)")

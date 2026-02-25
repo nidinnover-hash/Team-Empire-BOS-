@@ -147,6 +147,6 @@ async def get_calendar_events_from_context(
             DailyContext.organization_id == organization_id,
             DailyContext.date == target,
             DailyContext.context_type == "calendar_event",
-        ).order_by(DailyContext.created_at)
+        ).order_by(DailyContext.created_at).limit(500)
     )
     return list(result.scalars().all())
