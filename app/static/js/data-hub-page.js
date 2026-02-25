@@ -9,6 +9,10 @@
     var logoutBtn = document.getElementById("logout-btn");
     var samplePriorityBtn = document.getElementById("sample-priority-btn");
     var sampleMemoryBtn = document.getElementById("sample-memory-btn");
+    var storageRefreshBtn = document.getElementById("storage-refresh-btn");
+    var storageStatusEl = document.getElementById("storage-status");
+    var storageSummaryEl = document.getElementById("storage-summary");
+    var storageTableListEl = document.getElementById("storage-table-list");
     var apiToken = null;
 
     function setStatus(text, cls) {
@@ -20,6 +24,45 @@
       else alert(msg);
     }
 
+    function setStorageStatus(text, cls) {
+      if (!storageStatusEl) return;
+      storageStatusEl.textContent = text || "";
+      storageStatusEl.className = "status" + (cls ? " " + cls : "");
+    }
+
+    function renderStorage(payload) {
+      if (!payload || !storageSummaryEl || !storageTableListEl) return;
+      storageSummaryEl.textContent =
+        "Total rows: " + String(payload.total_rows || 0) +
+        " | Chat retention: " + String(payload.retention_days_chat || 0) + " days" +
+        " | Generated: " + String(payload.generated_at || "");
+      var tables = Array.isArray(payload.tables) ? payload.tables : [];
+      if (!tables.length) {
+        storageTableListEl.innerHTML = '<div class="item">No table metrics available.</div>';
+        return;
+      }
+      storageTableListEl.innerHTML = tables.map(function (t) {
+        var name = String(t.table || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+        return '<div class="item"><strong>' + name + '</strong><small>Rows: ' + String(t.row_count || 0) + "</small></div>";
+      }).join("");
+    }
+
+    async function loadStorageSummary() {
+      if (!apiToken) return;
+      setStorageStatus("Loading storage snapshot...");
+      try {
+        var r = await fetch("/api/v1/observability/storage", {
+          headers: { "Authorization": "Bearer " + apiToken }
+        });
+        var body = await r.json().catch(function () { return {}; });
+        if (!r.ok) throw new Error(body.detail || "Storage snapshot failed");
+        renderStorage(body);
+        setStorageStatus("Storage snapshot updated.", "ok");
+      } catch (err) {
+        setStorageStatus(String(err.message || err), "err");
+      }
+    }
+
     async function loadApiToken() {
       var r = await fetch("/web/api-token");
       if (!r.ok) throw new Error("Session expired");
@@ -27,6 +70,7 @@
       apiToken = d.token;
     }
 
+    if (!collectBtn) return;
     collectBtn.addEventListener("click", async function () {
       if (!apiToken) {
         setStatus("No API token available. Refresh the page.", "err");
@@ -75,7 +119,7 @@
       }
     });
 
-    samplePriorityBtn.addEventListener("click", function () {
+    if (samplePriorityBtn) samplePriorityBtn.addEventListener("click", function () {
       targetEl.value = "daily_context";
       sourceEl.value = "meeting";
       keyEl.value = "";
@@ -84,7 +128,7 @@
       setStatus("Priority sample loaded.");
     });
 
-    sampleMemoryBtn.addEventListener("click", function () {
+    if (sampleMemoryBtn) sampleMemoryBtn.addEventListener("click", function () {
       targetEl.value = "profile_memory";
       sourceEl.value = "manual";
       keyEl.value = "preference.communication_style";
@@ -93,10 +137,20 @@
       setStatus("Preference sample loaded.");
     });
 
+    if (storageRefreshBtn) {
+      storageRefreshBtn.addEventListener("click", async function () {
+        storageRefreshBtn.disabled = true;
+        try {
+          await loadStorageSummary();
+        } finally {
+          storageRefreshBtn.disabled = false;
+        }
+      });
+    }
+
     logoutBtn && logoutBtn.addEventListener("click", async function () {
       try {
-        var csrfPair = document.cookie.split("; ").find(function(c){ return c.startsWith("pc_csrf="); });
-        var csrf = csrfPair ? decodeURIComponent(csrfPair.split("=")[1]) : "";
+        var csrf = window.PCUI.getCsrfToken();
         var r = await fetch("/web/logout", {
           method: "POST",
           headers: csrf ? { "X-CSRF-Token": csrf } : {}
@@ -111,6 +165,7 @@
     try {
       await loadApiToken();
       setStatus("Data Hub ready.");
+      await loadStorageSummary();
 
       // Export button
       var exportBtn = document.getElementById("export-btn");
@@ -141,6 +196,7 @@
       }
     } catch (err) {
       setStatus("Session expired. Sign in again.", "err");
+      setStorageStatus("Session expired. Sign in again.", "err");
     }
   })();
 
@@ -150,7 +206,7 @@ window.showToast = function(msg, type) {
     el.className = "toast " + t;
     el.setAttribute("role", "status");
     el.setAttribute("aria-live", "polite");
-    el.innerHTML = "<span>" + String(msg).replace(/</g,"&lt;") + "</span>" +
+    el.innerHTML = "<span>" + String(msg).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</span>" +
       '<button aria-label="Dismiss" onclick="this.parentNode.classList.add(\'removing\');setTimeout(function(){this.parentNode.remove()}.bind(this),250)">\u00d7</button>';
     var c = document.getElementById("toast-container");
     if (c) c.appendChild(el);

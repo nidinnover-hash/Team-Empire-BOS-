@@ -70,7 +70,7 @@ def decode_access_token(token: str) -> dict:
 
 def hash_password(password: str) -> str:
     salt = os.urandom(16)
-    iterations = 100_000
+    iterations = 600_000  # OWASP 2023 minimum for PBKDF2-SHA256
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
     return f"pbkdf2_sha256${iterations}${base64.b64encode(salt).decode()}${base64.b64encode(digest).decode()}"
 

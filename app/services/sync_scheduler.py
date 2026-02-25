@@ -772,6 +772,47 @@ async def _cleanup_old_logs(db: AsyncSession, org_id: int) -> None:
         logger.debug("Log cleanup failed for org=%d: %s", org_id, exc)
 
 
+async def _cleanup_old_job_runs_and_snapshots(db: AsyncSession, org_id: int) -> None:
+    """Delete scheduler_job_runs and integration snapshots older than 90 days."""
+    from datetime import timedelta
+    from sqlalchemy import delete
+    from app.models.ceo_control import (
+        SchedulerJobRun,
+        GitHubRoleSnapshot,
+        GitHubRepoSnapshot,
+        GitHubPRSnapshot,
+        ClickUpTaskSnapshot,
+        DigitalOceanDropletSnapshot,
+        DigitalOceanTeamSnapshot,
+        DigitalOceanCostSnapshot,
+    )
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+    tables: list[tuple[type, str, str]] = [
+        (SchedulerJobRun, "scheduler_job_runs", "started_at"),
+        (GitHubRoleSnapshot, "github_role_snapshot", "synced_at"),
+        (GitHubRepoSnapshot, "github_repo_snapshot", "synced_at"),
+        (GitHubPRSnapshot, "github_pr_snapshot", "synced_at"),
+        (ClickUpTaskSnapshot, "clickup_tasks_snapshot", "synced_at"),
+        (DigitalOceanDropletSnapshot, "do_droplet_snapshot", "synced_at"),
+        (DigitalOceanTeamSnapshot, "do_team_snapshot", "synced_at"),
+        (DigitalOceanCostSnapshot, "do_cost_snapshot", "synced_at"),
+    ]
+    try:
+        for model, name, ts_col in tables:
+            result = await db.execute(
+                delete(model).where(
+                    model.organization_id == org_id,
+                    getattr(model, ts_col) < cutoff,
+                )
+            )
+            if result.rowcount:
+                logger.info("Cleaned up %d old %s for org=%d", result.rowcount, name, org_id)
+        await db.commit()
+    except Exception as exc:
+        logger.debug("Job run / snapshot cleanup failed for org=%d: %s", org_id, exc)
+
+
 async def _scheduler_loop(interval_minutes: int) -> None:
     """Runs forever; wakes up every interval_minutes and syncs all orgs."""
     from app.services.organization import list_organizations
@@ -792,6 +833,7 @@ async def _scheduler_loop(interval_minutes: int) -> None:
                         await _publish_due_social_posts(db, org.id)
                         await _cleanup_old_chat_messages(db, org.id)
                         await _cleanup_old_logs(db, org.id)
+                        await _cleanup_old_job_runs_and_snapshots(db, org.id)
                         _last_synced[org.id] = datetime.now(timezone.utc)
                 except Exception as exc:
                     logger.warning("Sync failed for org=%d: %s", org.id, exc)

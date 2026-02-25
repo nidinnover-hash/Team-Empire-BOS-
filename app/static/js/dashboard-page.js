@@ -117,13 +117,8 @@
       });
     });
 
-    function esc(str) {
-      return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-    }
+    var esc = window.PCUI.escapeHtml;
+    var getCsrf = window.PCUI.getCsrfToken;
 
     function appendNode(html) {
       if (placeholder && placeholder.parentNode) placeholder.remove();
@@ -131,11 +126,6 @@
       wrap.innerHTML = html;
       history.appendChild(wrap.firstChild);
       history.scrollTop = history.scrollHeight;
-    }
-
-    function getCsrf() {
-      const pair = document.cookie.split("; ").find(function (c) { return c.startsWith("pc_csrf="); });
-      return pair ? decodeURIComponent(pair.split("=")[1]) : "";
     }
 
     async function ensureLoggedIn() {
@@ -242,6 +232,10 @@
       var action = actions[idx];
       if (!action) { if (btn) { btn.textContent = "Error"; } return; }
       var token = window.__apiToken;
+      if (!token && window.__bootPromise) {
+        token = await window.__bootPromise;
+        if (token) window.__apiToken = token;
+      }
       if (!token) {
         if (window.showToast) window.showToast("Not authenticated.", "error");
         else alert("Not authenticated.");
@@ -492,7 +486,7 @@
     const refreshBtn = document.getElementById("approvals-refresh-btn");
     if (!list) return;
 
-    function esc(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+    var esc = window.PCUI.escapeHtml;
 
     function fmtPayload(p) {
       var parts = [];
@@ -617,8 +611,9 @@
       await loadApprovals();
     })();
 
-    // Auto-refresh every 60 seconds
-    setInterval(function() { if (window.__apiToken) loadApprovals(); }, 60000);
+    // Auto-refresh every 60 seconds (tracked for cleanup)
+    var _approvalTimer = setInterval(function() { if (window.__apiToken) loadApprovals(); }, 60000);
+    window.addEventListener("beforeunload", function() { clearInterval(_approvalTimer); });
   })();
 
   // ── Audit Log Panel ─────────────────────────────────────────────────────────
@@ -628,7 +623,7 @@
     var refreshBtn = document.getElementById("audit-refresh-btn");
     if (!list) return;
 
-    function esc(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+    var esc = window.PCUI.escapeHtml;
 
     // Colour-code the dot based on outcome
     function dotClass(t) {
@@ -702,8 +697,9 @@
     if (!window.__apiToken) window.__apiToken = token;
     await loadAudit();
 
-    // Auto-refresh every 30 seconds
-    setInterval(function() { if (window.__apiToken) loadAudit(); }, 30000);
+    // Auto-refresh every 30 seconds (tracked for cleanup)
+    var _auditTimer = setInterval(function() { if (window.__apiToken) loadAudit(); }, 30000);
+    window.addEventListener("beforeunload", function() { clearInterval(_auditTimer); });
   })();
 
   // ── Memory Editor Panel ──────────────────────────────────────────────────────
@@ -717,7 +713,7 @@
     var formStatus = document.getElementById("mem-form-status");
     if (!list) return;
 
-    function esc(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+    var esc = window.PCUI.escapeHtml;
 
     async function loadMemory() {
       var token = window.__apiToken;
@@ -820,7 +816,7 @@
     var P_LABELS  = ["", "Low", "Med", "High", "Urgent"];
     var P_CLASSES = ["", "p1",  "p2",  "p3",  "p4"];
 
-    function esc(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+    var esc = window.PCUI.escapeHtml;
 
     async function loadTasks() {
       var token = window.__apiToken;
@@ -937,7 +933,7 @@ window.showToast = function(msg, type) {
     el.className = "toast " + t;
     el.setAttribute("role", "status");
     el.setAttribute("aria-live", "polite");
-    el.innerHTML = "<span>" + String(msg).replace(/</g,"&lt;") + "</span>" +
+    el.innerHTML = "<span>" + String(msg).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</span>" +
       '<button aria-label="Dismiss" onclick="this.parentNode.classList.add(\'removing\');setTimeout(function(){this.parentNode.remove()}.bind(this),250)">\u00d7</button>';
     var c = document.getElementById("toast-container");
     if (c) c.appendChild(el);

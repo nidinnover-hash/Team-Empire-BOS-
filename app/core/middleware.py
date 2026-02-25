@@ -106,12 +106,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 class CorrelationIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
-        correlation_id = request.headers.get("X-Correlation-ID") or str(uuid.uuid4())
+        correlation_id = (
+            request.headers.get("X-Correlation-ID")
+            or request.headers.get("X-Request-ID")
+            or str(uuid.uuid4())
+        )
         request.state.correlation_id = correlation_id
         token = set_current_request_id(correlation_id)
         try:
             response = cast(Response, await call_next(request))
             response.headers["X-Correlation-ID"] = correlation_id
+            response.headers["X-Request-ID"] = correlation_id
             return response
         finally:
             reset_current_request_id(token)
