@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, model_validator
 IntegrationType = Literal[
     "gmail", "google_calendar", "github", "clickup",
     "slack", "whatsapp_business", "digitalocean",
+    "perplexity", "linkedin", "notion", "stripe",
+    "google_analytics", "calendly", "elevenlabs", "hubspot",
 ]
 IntegrationStatus = Literal["connected", "disconnected", "error"]
 IntegrationTestStatus = Literal["ok", "failed", "not_configured"]
@@ -202,3 +204,164 @@ class IntegrationSetupGuideRead(BaseModel):
     ready_count: int
     total_count: int
     items: list[IntegrationSetupItem]
+
+
+# ── Perplexity (web search) ─────────────────────────────────────────────
+
+class PerplexityConnectRequest(BaseModel):
+    api_key: str = Field(..., min_length=2, max_length=300)
+
+
+class PerplexityStatusRead(BaseModel):
+    connected: bool
+    last_sync_at: str | None = None
+
+
+class PerplexitySearchRequest(BaseModel):
+    query: str = Field(..., min_length=3, max_length=500)
+    max_tokens: int = Field(default=1024, ge=100, le=4096)
+
+
+class PerplexitySearchResult(BaseModel):
+    content: str
+    citations: list[str]
+
+
+# ── LinkedIn ────────────────────────────────────────────────────────────
+
+class LinkedInConnectRequest(BaseModel):
+    access_token: str = Field(..., min_length=2, max_length=2000)
+
+
+class LinkedInStatusRead(BaseModel):
+    connected: bool
+    last_sync_at: str | None = None
+    name: str | None = None
+    author_urn: str | None = None
+
+
+class LinkedInPublishRequest(BaseModel):
+    text: str = Field(..., min_length=5, max_length=3000)
+    visibility: str = Field(default="PUBLIC", pattern="^(PUBLIC|CONNECTIONS)$")
+
+
+class LinkedInPublishResult(BaseModel):
+    post_id: str
+    status: str
+
+
+# ── Notion ──────────────────────────────────────────────────────────────
+
+class NotionConnectRequest(BaseModel):
+    api_token: str = Field(..., min_length=2, max_length=300)
+
+
+class NotionStatusRead(BaseModel):
+    connected: bool
+    last_sync_at: str | None = None
+    bot_name: str | None = None
+
+
+class NotionSyncResult(BaseModel):
+    pages_synced: int
+    notes_created: int
+    last_sync_at: str | None = None
+
+
+class NotionSearchRequest(BaseModel):
+    query: str = Field(default="", max_length=200)
+    page_size: int = Field(default=20, ge=1, le=100)
+
+
+# ── Stripe ──────────────────────────────────────────────────────────────
+
+class StripeConnectRequest(BaseModel):
+    secret_key: str = Field(..., min_length=2, max_length=300)
+
+
+class StripeStatusRead(BaseModel):
+    connected: bool
+    last_sync_at: str | None = None
+
+
+class StripeSyncResult(BaseModel):
+    charges_synced: int
+    refunds_synced: int
+    disputes_synced: int
+    last_sync_at: str | None = None
+
+
+# ── Google Analytics ────────────────────────────────────────────────────
+
+class GoogleAnalyticsStatusRead(BaseModel):
+    connected: bool
+    property_id: str | None = None
+    last_sync_at: str | None = None
+
+
+class GoogleAnalyticsSyncResult(BaseModel):
+    sessions_30d: int
+    active_users_30d: int
+    page_views_30d: int
+    top_pages: list[dict[str, str]]
+    traffic_sources: list[dict[str, str]]
+
+
+# ── Calendly ────────────────────────────────────────────────────────────
+
+class CalendlyConnectRequest(BaseModel):
+    api_token: str = Field(..., min_length=2, max_length=300)
+
+
+class CalendlyStatusRead(BaseModel):
+    connected: bool
+    last_sync_at: str | None = None
+    user_name: str | None = None
+
+
+class CalendlySyncResult(BaseModel):
+    events_synced: int
+    upcoming_events: int
+    last_sync_at: str | None = None
+
+
+# ── ElevenLabs ──────────────────────────────────────────────────────────
+
+class ElevenLabsConnectRequest(BaseModel):
+    api_key: str = Field(..., min_length=2, max_length=300)
+
+
+class ElevenLabsStatusRead(BaseModel):
+    connected: bool
+    last_sync_at: str | None = None
+    voices_available: int = 0
+    characters_used: int = 0
+    character_limit: int = 0
+
+
+class ElevenLabsTTSRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=5000)
+    voice_id: str | None = Field(default=None, max_length=100)
+
+
+class ElevenLabsTTSResult(BaseModel):
+    audio_size_bytes: int
+    voice_id: str
+    model: str
+
+
+# ── HubSpot ─────────────────────────────────────────────────────────────
+
+class HubSpotConnectRequest(BaseModel):
+    access_token: str = Field(..., min_length=2, max_length=300)
+
+
+class HubSpotStatusRead(BaseModel):
+    connected: bool
+    last_sync_at: str | None = None
+
+
+class HubSpotSyncResult(BaseModel):
+    contacts_synced: int
+    deals_synced: int
+    last_sync_at: str | None = None

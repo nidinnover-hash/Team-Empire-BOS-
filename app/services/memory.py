@@ -414,6 +414,52 @@ async def build_memory_context(
     except Exception:
         pass  # Graceful degradation
 
+    # ── Stripe financial context ──
+    try:
+        from app.services.stripe_service import get_financial_summary
+        fin = await get_financial_summary(db, organization_id)
+        if fin.get("connected") and fin.get("total_charges", 0) > 0:
+            fin_lines = [
+                "[STRIPE FINANCIALS]",
+                f"Charges (30d): {fin['total_charges']}",
+                f"Revenue: ${fin['total_revenue_usd']}",
+                f"Refunded: ${fin['total_refunded_usd']}",
+                f"Open disputes: {fin.get('disputes_open', 0)}",
+                "[END STRIPE]",
+            ]
+            fin_block = "\n".join(fin_lines)
+            remaining = char_limit - len(base_context)
+            if remaining > 100:
+                base_context = base_context + "\n\n" + fin_block[:remaining]
+    except Exception:
+        pass  # Graceful degradation
+
+    # ── Calendly upcoming events context ──
+    try:
+        from app.services.integration import get_integration_by_type as _get_int_by_type
+        cal_int = await _get_int_by_type(db, organization_id, "calendly")
+        if cal_int and cal_int.status == "connected":
+            from sqlalchemy import select as _sel_dc
+            cal_result = await db.execute(
+                _sel_dc(DailyContext).where(
+                    DailyContext.organization_id == organization_id,
+                    DailyContext.context_type == "calendly_event",
+                    DailyContext.date == date.today(),
+                ).limit(10)
+            )
+            cal_events = list(cal_result.scalars().all())
+            if cal_events:
+                cal_lines = ["[CALENDLY TODAY]"]
+                for ev in cal_events[:5]:
+                    cal_lines.append(f"- {ev.content}")
+                cal_lines.append("[END CALENDLY]")
+                cal_block = "\n".join(cal_lines)
+                remaining = char_limit - len(base_context)
+                if remaining > 100:
+                    base_context = base_context + "\n\n" + cal_block[:remaining]
+    except Exception:
+        pass  # Graceful degradation
+
     # ── Character study traits ──
     char_traits = [
         p for p in profile

@@ -54,6 +54,14 @@ from app.api.v1.endpoints import (
     integrations_digitalocean,
     integrations_github,
     integrations_slack,
+    integrations_perplexity,
+    integrations_linkedin,
+    integrations_notion,
+    integrations_stripe,
+    integrations_google_analytics,
+    integrations_calendly,
+    integrations_elevenlabs,
+    integrations_hubspot,
 )
 
 logger = logging.getLogger(__name__)
@@ -129,6 +137,14 @@ async def integration_setup_guide(
         ("clickup", "ClickUp", "/api/v1/integrations/clickup/connect", "/api/v1/integrations/clickup/status", "/api/v1/integrations/clickup/sync"),
         ("digitalocean", "DigitalOcean", "/api/v1/integrations/digitalocean/connect", "/api/v1/integrations/digitalocean/status", "/api/v1/integrations/digitalocean/sync"),
         ("slack", "Slack", "/api/v1/integrations/slack/connect", "/api/v1/integrations/slack/status", "/api/v1/integrations/slack/sync"),
+        ("perplexity", "Perplexity AI", "/api/v1/integrations/perplexity/connect", "/api/v1/integrations/perplexity/status", "/api/v1/integrations/perplexity/search"),
+        ("linkedin", "LinkedIn", "/api/v1/integrations/linkedin/connect", "/api/v1/integrations/linkedin/status", "/api/v1/integrations/linkedin/publish"),
+        ("notion", "Notion", "/api/v1/integrations/notion/connect", "/api/v1/integrations/notion/status", "/api/v1/integrations/notion/sync"),
+        ("stripe", "Stripe", "/api/v1/integrations/stripe/connect", "/api/v1/integrations/stripe/status", "/api/v1/integrations/stripe/sync"),
+        ("google_analytics", "Google Analytics", "/api/v1/integrations/google-analytics/status", "/api/v1/integrations/google-analytics/status", "/api/v1/integrations/google-analytics/sync"),
+        ("calendly", "Calendly", "/api/v1/integrations/calendly/connect", "/api/v1/integrations/calendly/status", "/api/v1/integrations/calendly/sync"),
+        ("elevenlabs", "ElevenLabs", "/api/v1/integrations/elevenlabs/connect", "/api/v1/integrations/elevenlabs/status", "/api/v1/integrations/elevenlabs/tts"),
+        ("hubspot", "HubSpot CRM", "/api/v1/integrations/hubspot/connect", "/api/v1/integrations/hubspot/status", "/api/v1/integrations/hubspot/sync"),
     ]
     items: list[dict[str, object]] = []
     for key, label, connect_ep, status_ep, sync_ep in specs:
@@ -679,6 +695,14 @@ router.include_router(integrations_clickup.router)
 router.include_router(integrations_github.router)
 router.include_router(integrations_digitalocean.router)
 router.include_router(integrations_slack.router)
+router.include_router(integrations_perplexity.router)
+router.include_router(integrations_linkedin.router)
+router.include_router(integrations_notion.router)
+router.include_router(integrations_stripe.router)
+router.include_router(integrations_google_analytics.router)
+router.include_router(integrations_calendly.router)
+router.include_router(integrations_elevenlabs.router)
+router.include_router(integrations_hubspot.router)
 
 @router.post("/{integration_id}/disconnect", response_model=IntegrationRead)
 async def disconnect_integration(

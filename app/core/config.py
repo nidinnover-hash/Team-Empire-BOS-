@@ -69,6 +69,20 @@ class Settings(BaseSettings):
     CLICKUP_CEO_PRIORITY_TAG: str = "CEO-PRIORITY"
     DIGITALOCEAN_BASE_URL: str = "https://api.digitalocean.com/v2"
 
+    # New integrations
+    PERPLEXITY_API_KEY: str | None = None
+    LINKEDIN_CLIENT_ID: str | None = None
+    LINKEDIN_CLIENT_SECRET: str | None = None
+    LINKEDIN_REDIRECT_URI: str | None = None
+    NOTION_API_KEY: str | None = None
+    STRIPE_SECRET_KEY: str | None = None
+    STRIPE_WEBHOOK_SECRET: str | None = None
+    GA4_PROPERTY_ID: str | None = None
+    CALENDLY_API_KEY: str | None = None
+    ELEVENLABS_API_KEY: str | None = None
+    ELEVENLABS_DEFAULT_VOICE_ID: str = "21m00Tcm4TlvDq8ikWAM"  # Rachel
+    HUBSPOT_ACCESS_TOKEN: str | None = None
+
     # Internal API and rate limiting
     WHATSAPP_APP_SECRET: str | None = None   # Used to verify X-Hub-Signature-256 on webhook POSTs
     WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS: int = 300
