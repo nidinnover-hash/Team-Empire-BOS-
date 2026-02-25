@@ -15,6 +15,8 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-that-is-long-enough-for-tests-32c")
 os.environ.setdefault("ADMIN_PASSWORD", "TestPassword2026!")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+os.environ.setdefault("PURPOSE_PERSONAL_EMAILS", "nidinnover@gmail.com,purpose-login@gmail.com")
+os.environ.setdefault("WHATSAPP_APP_SECRET", "test-whatsapp-secret")
 os.environ["DEBUG"] = "true"
 os.environ["ENFORCE_STARTUP_VALIDATION"] = "false"
 from httpx import AsyncClient, ASGITransport
@@ -25,6 +27,8 @@ from app.core.deps import get_db
 from app.core.security import create_access_token
 from app.db.base import Base
 from app.main import app as fastapi_app
+from app.models.organization import Organization
+from app.models.user import User
 
 # Register all models so Base.metadata knows about the tables
 from app.models import approval as _model_approval  # noqa: F401
@@ -57,6 +61,11 @@ from app.models import policy_rule as _model_policy_rule  # noqa: F401
 from app.models import weekly_report as _model_weekly_report  # noqa: F401
 from app.models import ceo_control as _model_ceo_control  # noqa: F401
 from app.models import github as _model_github  # noqa: F401
+from app.models import social as _model_social  # noqa: F401
+from app.models import clone_control as _model_clone_control  # noqa: F401
+from app.models import clone_performance as _model_clone_performance  # noqa: F401
+from app.models import org_membership as _model_org_membership  # noqa: F401
+from app.models import org_role_permission as _model_org_role_permission  # noqa: F401
 
 # StaticPool + check_same_thread=False makes all connections share one
 # in-memory SQLite database — required for :memory: to work across requests.
@@ -81,13 +90,44 @@ async def client():
         expire_on_commit=False,
     )
 
+    # Seed standard test users so JWT auth resolves against the DB.
+    # Tests that use _auth_headers() must match these emails and user IDs.
+    async with TestSession() as seed_session:
+        seed_session.add(Organization(id=1, name="Test Org", slug="test-org"))
+        seed_session.add(Organization(id=2, name="Test Org 2", slug="test-org-2"))
+        seed_session.add(User(id=1, organization_id=1, name="Test CEO",
+                              email="ceo@org1.com", password_hash="unused",
+                              role="CEO", is_active=True, token_version=1))
+        seed_session.add(User(id=2, organization_id=2, name="Test CEO 2",
+                              email="ceo@org2.com", password_hash="unused",
+                              role="CEO", is_active=True, token_version=1))
+        seed_session.add(User(id=3, organization_id=1, name="Test Manager",
+                              email="manager@org1.com", password_hash="unused",
+                              role="MANAGER", is_active=True, token_version=1))
+        seed_session.add(User(id=4, organization_id=1, name="Test Staff",
+                              email="staff@org1.com", password_hash="unused",
+                              role="STAFF", is_active=True, token_version=1))
+        seed_session.add(User(id=5, organization_id=1, name="Personal CEO",
+                              email="nidinnover@gmail.com", password_hash="unused",
+                              role="CEO", is_active=True, token_version=1))
+        await seed_session.commit()
+
     async def override_get_db():
         async with TestSession() as session:
             yield session
 
     fastapi_app.dependency_overrides[get_db] = override_get_db
     token = create_access_token(
-        {"id": 1, "email": "ceo@org1.com", "role": "CEO", "org_id": 1}
+        {
+            "id": 1,
+            "email": "ceo@org1.com",
+            "role": "CEO",
+            "org_id": 1,
+            "token_version": 1,
+            "purpose": "professional",
+            "default_theme": "light",
+            "default_avatar_mode": "professional",
+        }
     )
 
     async with AsyncClient(

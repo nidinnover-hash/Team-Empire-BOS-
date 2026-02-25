@@ -23,11 +23,12 @@ class Settings(BaseSettings):
         env_file=str(Path(__file__).resolve().parents[2] / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=True,
+        env_ignore_empty=True,
         extra="ignore",  # silently drop any unrecognized env vars
     )
 
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/personal_clone"
+    DATABASE_URL: str = ""  # Must be set in .env
 
     # AI providers
     OPENAI_API_KEY: str | None = None
@@ -93,9 +94,9 @@ class Settings(BaseSettings):
     AUTO_CREATE_SCHEMA: bool = False
     AUTO_SEED_DEFAULTS: bool = False
     COOKIE_SECURE: bool = False  # Set True in production (requires HTTPS)
-    SECRET_KEY: str = "change_me_in_env"
+    SECRET_KEY: str = ""  # Must be set in .env (min 16 chars)
     ADMIN_EMAIL: str = "demo@ai.com"
-    ADMIN_PASSWORD: str = "demo"  # Override in .env — never leave 'demo' in production
+    ADMIN_PASSWORD: str = ""  # Must be set in .env (min 8 chars)
     ADMIN_NAME: str = "Nidin Nover"
     ALGORITHM: Literal["HS256"] = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
@@ -146,6 +147,7 @@ class Settings(BaseSettings):
     APPROVAL_SLA_HOURS: int = 24
 
     # Background sync scheduler
+    RUN_SCHEDULER: bool = False  # Set via env; avoids os.environ.get() bypass
     SYNC_ENABLED: bool = True
     SYNC_INTERVAL_MINUTES: int = 30   # how often the scheduler fires
     SYNC_THROTTLE_MINUTES: int = 15   # min gap for on-demand (login/dashboard) syncs
@@ -155,6 +157,7 @@ class Settings(BaseSettings):
     CEO_SUMMARY_TIMEZONE: str = "Asia/Kolkata"
     CEO_ALERTS_SLACK_CHANNEL_ID: str | None = None
     SYNC_STALE_HOURS: int = 24
+    SYNC_FAILURE_ALERT_THRESHOLD: int = 3
 
     # Feature flags — disable expensive features without redeploying
     FEATURE_AI_COMMANDS: bool = True     # AI responses in command input
@@ -162,6 +165,25 @@ class Settings(BaseSettings):
     FEATURE_TALK_MODE: bool = True       # Voice/chat Talk Mode page
     FEATURE_OPS_INTEL: bool = True       # Ops Intelligence page
     FEATURE_DAILY_RUN: bool = True       # Daily run draft generation
+    CLONE_REQUIRE_CLARIFYING_QUESTION: bool = True
+    CLONE_PATTERN_AUTOMATION_ENABLED: bool = False
+    CLONE_PATTERN_WINDOW: int = 50
+    CLONE_UNUSUAL_ACTIVITY_ALERTS: bool = True
+    PURPOSE_PERSONAL_EMAILS: str = ""
+    PURPOSE_ENTERTAINMENT_EMAILS: str = ""
+    PURPOSE_DEFAULT_THEME_PROFESSIONAL: Literal["light", "dark"] = "light"
+    PURPOSE_DEFAULT_THEME_PERSONAL: Literal["light", "dark"] = "dark"
+    PURPOSE_DEFAULT_THEME_ENTERTAINMENT: Literal["light", "dark"] = "dark"
+    PURPOSE_STRICT_BARRIERS: bool = True
+
+    @field_validator("EMAIL_AI_PROVIDER", mode="before")
+    @classmethod
+    def _empty_to_none(cls, value: Any) -> Any:
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
 
     @field_validator(
         "DEFAULT_AI_PROVIDER",
@@ -218,6 +240,10 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("SYNC_STALE_HOURS must be >= 1")
     if s.SYNC_STALE_HOURS > 168:
         issues.append("SYNC_STALE_HOURS must be <= 168 (7 days)")
+    if s.SYNC_FAILURE_ALERT_THRESHOLD < 1:
+        issues.append("SYNC_FAILURE_ALERT_THRESHOLD must be >= 1")
+    if s.SYNC_FAILURE_ALERT_THRESHOLD > 100:
+        issues.append("SYNC_FAILURE_ALERT_THRESHOLD must be <= 100")
     if not (0 <= s.EMAIL_CONTROL_DIGEST_HOUR_IST <= 23):
         issues.append("EMAIL_CONTROL_DIGEST_HOUR_IST must be between 0 and 23")
     if not (0 <= s.EMAIL_CONTROL_DIGEST_MINUTE_IST <= 59):
@@ -283,9 +309,9 @@ def validate_startup_settings(s: Settings) -> list[str]:
 
     if any_google and not all_google:
         issues.append("Google OAuth config is partial; set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI")
-    if google_id in _PLACEHOLDER_GOOGLE_VALUES:
+    if google_id and google_id in _PLACEHOLDER_GOOGLE_VALUES:
         issues.append("GOOGLE_CLIENT_ID looks like a placeholder")
-    if google_secret in _PLACEHOLDER_GOOGLE_VALUES:
+    if google_secret and google_secret in _PLACEHOLDER_GOOGLE_VALUES:
         issues.append("GOOGLE_CLIENT_SECRET looks like a placeholder")
     if s.PRIVACY_AUDIT_MAX_VALUE_CHARS < 32:
         issues.append("PRIVACY_AUDIT_MAX_VALUE_CHARS must be >= 32")
@@ -307,6 +333,15 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("PRIVACY_POLICY_PROFILE=debug is not allowed when DEBUG=false")
     if s.ACCOUNT_SESSION_MAX_HOURS < 1 or s.ACCOUNT_SESSION_MAX_HOURS > 24:
         issues.append("ACCOUNT_SESSION_MAX_HOURS must be between 1 and 24")
+    db_url = (s.DATABASE_URL or "").strip().lower()
+    if not db_url:
+        issues.append("DATABASE_URL must be configured")
+    if not s.DEBUG and db_url.startswith("sqlite"):
+        issues.append("DATABASE_URL should not use sqlite when DEBUG=false (production mode)")
+    if not s.DEBUG and s.AUTO_CREATE_SCHEMA:
+        issues.append("AUTO_CREATE_SCHEMA must be false when DEBUG=false (production mode)")
+    if not s.DEBUG and s.AUTO_SEED_DEFAULTS:
+        issues.append("AUTO_SEED_DEFAULTS must be false when DEBUG=false (production mode)")
     if s.SECURITY_PREMIUM_MODE:
         if s.PRIVACY_POLICY_PROFILE != "strict":
             issues.append("PRIVACY_POLICY_PROFILE must be strict when SECURITY_PREMIUM_MODE=true")
@@ -318,6 +353,26 @@ def validate_startup_settings(s: Settings) -> list[str]:
             issues.append("LEGAL_TERMS_VERSION must be set when SECURITY_PREMIUM_MODE=true")
         if s.MARKETING_EXPORT_PII_ALLOWED:
             issues.append("MARKETING_EXPORT_PII_ALLOWED must be false when SECURITY_PREMIUM_MODE=true")
+    if s.PURPOSE_STRICT_BARRIERS:
+        personal_emails = [x.strip().lower() for x in (s.PURPOSE_PERSONAL_EMAILS or "").split(",") if x.strip()]
+        entertainment_emails = [x.strip().lower() for x in (s.PURPOSE_ENTERTAINMENT_EMAILS or "").split(",") if x.strip()]
+        if not personal_emails and not entertainment_emails:
+            issues.append(
+                "PURPOSE_STRICT_BARRIERS=true but no purpose emails configured; "
+                "set PURPOSE_PERSONAL_EMAILS and/or PURPOSE_ENTERTAINMENT_EMAILS"
+            )
+        overlap = sorted(set(personal_emails).intersection(entertainment_emails))
+        if overlap:
+            issues.append(
+                "PURPOSE_PERSONAL_EMAILS and PURPOSE_ENTERTAINMENT_EMAILS must not overlap: "
+                + ", ".join(overlap)
+            )
+        malformed = [
+            value for value in set(personal_emails + entertainment_emails)
+            if "@" not in value or value.startswith("@") or value.endswith("@")
+        ]
+        if malformed:
+            issues.append("Purpose email lists contain invalid email values: " + ", ".join(sorted(malformed)))
 
     # --- Security: reject insecure defaults ---
     _WEAK_SECRETS = {"change_me_in_env", "secret", "changeme", "your_32_plus_char_secret_here"}

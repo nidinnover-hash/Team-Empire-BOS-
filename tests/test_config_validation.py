@@ -6,6 +6,9 @@ def _base_settings(**overrides) -> Settings:
     data = {
         "DEFAULT_AI_PROVIDER": "openai",
         "OPENAI_API_KEY": "sk-live-valid-key-value",
+        "GOOGLE_CLIENT_ID": None,
+        "GOOGLE_CLIENT_SECRET": None,
+        "GOOGLE_REDIRECT_URI": None,
         "DEBUG": False,
         "COOKIE_SECURE": True,
         "PRIVACY_POLICY_PROFILE": "strict",
@@ -21,7 +24,11 @@ def _base_settings(**overrides) -> Settings:
         "LEGAL_DPA_REQUIRED": True,
         "ACCOUNT_MFA_REQUIRED": True,
         "ACCOUNT_SESSION_MAX_HOURS": 12,
+        "AUTO_CREATE_SCHEMA": False,
+        "AUTO_SEED_DEFAULTS": False,
         "MARKETING_EXPORT_PII_ALLOWED": False,
+        "PURPOSE_PERSONAL_EMAILS": "nidinnover@gmail.com",
+        "DATABASE_URL": "postgresql+asyncpg://user:pass@localhost:5432/personal_clone_test",
     }
     data.update(overrides)
     return Settings(**data)
@@ -31,6 +38,24 @@ def test_validate_startup_flags_insecure_cookie_in_production():
     s = _base_settings(COOKIE_SECURE=False, DEBUG=False)
     issues = validate_startup_settings(s)
     assert any("COOKIE_SECURE" in i for i in issues)
+
+
+def test_validate_startup_rejects_sqlite_in_production_mode():
+    s = _base_settings(DEBUG=False, DATABASE_URL="sqlite:///./prod.db")
+    issues = validate_startup_settings(s)
+    assert any("should not use sqlite when DEBUG=false" in i for i in issues)
+
+
+def test_validate_startup_rejects_auto_create_schema_in_production_mode():
+    s = _base_settings(DEBUG=False, AUTO_CREATE_SCHEMA=True)
+    issues = validate_startup_settings(s)
+    assert any("AUTO_CREATE_SCHEMA must be false when DEBUG=false" in i for i in issues)
+
+
+def test_validate_startup_rejects_auto_seed_defaults_in_production_mode():
+    s = _base_settings(DEBUG=False, AUTO_SEED_DEFAULTS=True)
+    issues = validate_startup_settings(s)
+    assert any("AUTO_SEED_DEFAULTS must be false when DEBUG=false" in i for i in issues)
 
 
 def test_validate_startup_flags_missing_token_encryption_key():
@@ -137,6 +162,15 @@ def test_validate_startup_flags_sync_interval_bounds():
     assert any("SYNC_INTERVAL_MINUTES must be >= 1" in i for i in issues)
 
 
+def test_validate_startup_flags_sync_failure_alert_threshold_bounds():
+    low = _base_settings(SYNC_FAILURE_ALERT_THRESHOLD=0)
+    high = _base_settings(SYNC_FAILURE_ALERT_THRESHOLD=101)
+    low_issues = validate_startup_settings(low)
+    high_issues = validate_startup_settings(high)
+    assert any("SYNC_FAILURE_ALERT_THRESHOLD must be >= 1" in i for i in low_issues)
+    assert any("SYNC_FAILURE_ALERT_THRESHOLD must be <= 100" in i for i in high_issues)
+
+
 def test_validate_startup_flags_rate_limit_max_too_high():
     s = _base_settings(RATE_LIMIT_MAX_REQUESTS=50000)
     issues = validate_startup_settings(s)
@@ -173,6 +207,30 @@ def test_validate_startup_account_session_hours_bounds():
     assert any("ACCOUNT_SESSION_MAX_HOURS must be between 1 and 24" in i for i in issues)
 
 
+def test_validate_startup_flags_missing_purpose_email_lists_with_strict_barriers():
+    s = _base_settings(PURPOSE_PERSONAL_EMAILS="", PURPOSE_ENTERTAINMENT_EMAILS="")
+    issues = validate_startup_settings(s)
+    assert any("PURPOSE_STRICT_BARRIERS=true but no purpose emails configured" in i for i in issues)
+
+
+def test_validate_startup_flags_overlapping_purpose_email_lists():
+    s = _base_settings(
+        PURPOSE_PERSONAL_EMAILS="user@example.com",
+        PURPOSE_ENTERTAINMENT_EMAILS="user@example.com",
+    )
+    issues = validate_startup_settings(s)
+    assert any("must not overlap" in i for i in issues)
+
+
+def test_validate_startup_flags_invalid_purpose_email_values():
+    s = _base_settings(
+        PURPOSE_PERSONAL_EMAILS="invalid-email",
+        PURPOSE_ENTERTAINMENT_EMAILS="",
+    )
+    issues = validate_startup_settings(s)
+    assert any("invalid email values" in i for i in issues)
+
+
 def test_format_startup_issues_groups_by_domain():
     text = format_startup_issues(
         [
@@ -184,4 +242,3 @@ def test_format_startup_issues_groups_by_domain():
     assert "security:" in text
     assert "integrations:" in text
     assert "runtime:" in text
-
