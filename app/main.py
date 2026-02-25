@@ -7,7 +7,8 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, Respo
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse, ORJSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select as sa_select, update as sa_update
@@ -147,6 +148,7 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     lifespan=lifespan,
+    default_response_class=ORJSONResponse,
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
 )
@@ -164,7 +166,8 @@ if _cors_origins:
     )
 
 # Middleware is applied in reverse order (last added = outermost)
-# SecurityHeaders → CorrelationID → RateLimit → handler
+# GZip → SecurityHeaders → CorrelationID → RateLimit → handler
+app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(CorrelationIDMiddleware)
 app.add_middleware(RequestLogMiddleware)

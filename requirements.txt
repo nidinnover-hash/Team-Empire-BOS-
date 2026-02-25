@@ -1,24 +1,50 @@
+# Web framework + server
 fastapi==0.121.0
 uvicorn[standard]==0.34.0
+gunicorn==23.0.0; sys_platform != "win32"
+uvloop==0.21.0; sys_platform != "win32"
+
+# Database + migrations
 sqlalchemy==2.0.38
+asyncpg==0.30.0
 aiosqlite==0.20.0
 alembic==1.14.1
+
+# Config + validation
 pydantic-settings==2.8.1
+email-validator==2.2.0
+
+# Templating + forms
 jinja2==3.1.6
 python-multipart==0.0.22
+
+# Serialization (fast JSON for API responses)
+orjson==3.10.15
+
+# Security + crypto
 cryptography==46.0.5
+PyJWT[crypto]==2.10.1
+
+# AI providers
 openai==1.57.0
 anthropic==0.40.0
 groq==0.11.0
 google-genai==1.0.0
+
+# Google OAuth + APIs
 google-auth==2.38.0
 google-auth-oauthlib==1.2.1
 google-api-python-client==2.159.0
+
+# HTTP client (used by app/tools/ for all API integrations)
+httpx==0.28.1
+
+# Cache + rate limiting
 redis==5.2.1
-PyJWT[crypto]==2.10.1
-asyncpg==0.30.0
+
+# Image processing + OCR
 Pillow==12.1.1
 pytesseract==0.3.13
-gunicorn==23.0.0; sys_platform != "win32"
-uvloop==0.21.0; sys_platform != "win32"
+
+# Platform-specific
 tzdata==2025.1; sys_platform == "win32"

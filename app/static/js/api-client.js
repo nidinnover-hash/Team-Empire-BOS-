@@ -1,7 +1,7 @@
 (function () {
   var tokenPromise = null;
   var tokenFetchedAt = 0;
-  var TOKEN_TTL_MS = 7 * 60 * 60 * 1000; // 7 hours (server token lasts 8h)
+  var TOKEN_TTL_MS = 12 * 60 * 1000; // 12 min (server WEB_API_TOKEN_EXPIRE_MINUTES=15; refresh early)
 
   function getCsrfToken() {
     var pair = document.cookie.split("; ").find(function (c) {
