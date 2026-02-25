@@ -68,7 +68,7 @@ const mapUiError = window.PCUI.mapApiError;
     if (logoutBtn) logoutBtn.addEventListener('click', async () => {
       if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(logoutBtn, true, 'Signing out...');
       const csrf = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('pc_csrf='));
-      const csrfVal = csrf ? decodeURIComponent(csrf.split('=')[1]) : '';
+      const csrfVal = csrf ? decodeURIComponent(csrf.split('=').slice(1).join('=')) : '';
       try {
         await window.PCUI.requestJson('/web/logout', {
           method: 'POST',

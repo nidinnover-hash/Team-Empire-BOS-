@@ -17,6 +17,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if "avatar_memory" in inspector.get_table_names():
+        return
     op.create_table(
         "avatar_memory",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True, nullable=False),

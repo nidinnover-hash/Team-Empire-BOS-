@@ -80,7 +80,7 @@ window.__bootPromise = fetch('/web/api-token')
         <td>${esc(p.title)}</td>
         <td style="color:#666;font-size:.75rem">${esc((p.rule_text || '').substring(0, 100))}</td>
         <td>${p.is_active ? '<span class="tag ok">Active</span>' : '<span class="tag draft">Draft</span>'}</td>
-        <td>${!p.is_active ? `<button class="btn" onclick="activatePolicy(${p.id})">Activate</button>` : '<span style="color:#999;font-size:.72rem">-</span>'}</td>
+        <td>${!p.is_active ? `<button class="btn" data-activate-policy="${p.id}">Activate</button>` : '<span style="color:#999;font-size:.72rem">-</span>'}</td>
       </tr>`).join('');
     }
 
@@ -93,6 +93,12 @@ window.__bootPromise = fetch('/web/api-token')
         notify(String(e.message || e), "error");
       }
     }
+
+    // Event delegation for policy activate buttons (CSP-safe, no inline onclick)
+    document.getElementById('policies-body').addEventListener('click', e => {
+      const btn = e.target.closest('[data-activate-policy]');
+      if (btn) activatePolicy(parseInt(btn.dataset.activatePolicy, 10));
+    });
 
     // Sync buttons
     async function syncSource(source, statusId) {
@@ -246,7 +252,7 @@ window.__bootPromise = fetch('/web/api-token')
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) logoutBtn.addEventListener('click', async () => {
       const csrf = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('pc_csrf='));
-      const csrfVal = csrf ? csrf.split('=')[1] : '';
+      const csrfVal = csrf ? csrf.split('=').slice(1).join('=') : '';
       try {
         const r = await fetch('/web/logout', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':csrfVal}});
         if (!r.ok) throw new Error("Logout failed");

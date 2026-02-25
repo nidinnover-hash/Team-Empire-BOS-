@@ -73,7 +73,7 @@ window.__bootPromise = fetch('/web/api-token')
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) logoutBtn.addEventListener('click', async () => {
       const csrf = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('pc_csrf='));
-      const csrfVal = csrf ? decodeURIComponent(csrf.split('=')[1]) : '';
+      const csrfVal = csrf ? decodeURIComponent(csrf.split('=').slice(1).join('=')) : '';
       try {
         const r = await fetch('/web/logout', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':csrfVal}});
         if (!r.ok) throw new Error('Logout failed');

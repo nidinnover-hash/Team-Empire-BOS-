@@ -18,8 +18,6 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from contextlib import asynccontextmanager
-
 from app.db.session import AsyncSessionLocal  # noqa: E402 - imported here so tests can patch it
 from app.models.ceo_control import SchedulerJobRun
 from app.core.resilience import IntegrationSyncError, RetryPolicy, error_details, run_with_retry
@@ -31,23 +29,6 @@ _SYNC_RETRY_POLICY = RetryPolicy(
     backoff_seconds=1.0,
     retry_exceptions=(IntegrationSyncError, TimeoutError, ConnectionError),
 )
-
-@asynccontextmanager
-async def _db_session_with_retry(max_retries: int = 3, base_delay: float = 2.0):
-    """Acquire an AsyncSession with exponential backoff on connection failure."""
-    for attempt in range(max_retries):
-        try:
-            session = AsyncSessionLocal()
-        except Exception as exc:
-            if attempt == max_retries - 1:
-                raise
-            delay = base_delay * (2 ** attempt)
-            logger.warning("DB connection attempt %d/%d failed, retrying in %.1fs: %s", attempt + 1, max_retries, delay, exc)
-            await asyncio.sleep(delay)
-            continue
-        async with session as db:
-            yield db
-            return
 
 # Per-org throttle: don't fire on-demand sync more than once per N minutes.
 # Default 15 — overridden by settings.SYNC_THROTTLE_MINUTES at runtime.
@@ -701,11 +682,11 @@ async def _publish_due_social_posts(db: AsyncSession, org_id: int) -> None:
             await record_action(
                 db=db,
                 organization_id=org_id,
-                actor_user_id=1,
+                actor_user_id=None,
                 event_type="social_posts_auto_published",
-                entity_type="social_post",
+                entity_type="scheduler",
                 entity_id=None,
-                payload_json={"count": published},
+                payload_json={"count": published, "trigger": "scheduled"},
             )
         await _record_job_run(
             db,
