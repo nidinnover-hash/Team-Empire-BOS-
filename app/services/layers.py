@@ -279,7 +279,7 @@ async def get_training_layer(
         select(TeamMember).where(
             TeamMember.organization_id == organization_id,
             TeamMember.is_active.is_(True),
-        )
+        ).limit(500)
     )
     members = list(members_result.scalars().all())
     active_team_members = len(members)
@@ -387,7 +387,7 @@ async def get_employee_performance_layer(
         select(TeamMember).where(
             TeamMember.organization_id == organization_id,
             TeamMember.is_active.is_(True),
-        )
+        ).limit(500)
     )
     members = list(members_result.scalars().all())
     active_team_members = len(members)
@@ -486,7 +486,7 @@ async def get_employee_management_layer(
     window_days: int = 30,
 ) -> EmployeeManagementLayerReport:
     employees_result = await db.execute(
-        select(Employee).where(Employee.organization_id == organization_id)
+        select(Employee).where(Employee.organization_id == organization_id).limit(500)
     )
     employees = list(employees_result.scalars().all())
     total_employees = len(employees)
@@ -629,7 +629,7 @@ async def get_staff_training_layer(
         select(TeamMember).where(
             TeamMember.organization_id == organization_id,
             TeamMember.is_active.is_(True),
-        )
+        ).limit(500)
     )
     members = list(members_result.scalars().all())
     active_staff = len(members)
@@ -722,7 +722,7 @@ async def get_ai_skill_routing_layer(
         select(TeamMember).where(
             TeamMember.organization_id == organization_id,
             TeamMember.is_active.is_(True),
-        )
+        ).limit(500)
     )
     members = list(members_result.scalars().all())
     active_staff = len(members)
@@ -787,7 +787,7 @@ async def get_staff_prosperity_layer(
         select(TeamMember).where(
             TeamMember.organization_id == organization_id,
             TeamMember.is_active.is_(True),
-        )
+        ).limit(500)
     )
     members = list(members_result.scalars().all())
     active_staff = len(members)
@@ -861,18 +861,18 @@ async def get_clone_training_layer(
         select(Employee).where(
             Employee.organization_id == organization_id,
             Employee.is_active.is_(True),
-        )
+        ).limit(500)
     )
     employees = list(employees_result.scalars().all())
 
     id_map_result = await db.execute(
-        select(EmployeeIdentityMap).where(EmployeeIdentityMap.organization_id == organization_id)
+        select(EmployeeIdentityMap).where(EmployeeIdentityMap.organization_id == organization_id).limit(500)
     )
     id_maps = list(id_map_result.scalars().all())
     id_by_emp = {row.employee_id: row for row in id_maps}
 
     profile_result = await db.execute(
-        select(EmployeeCloneProfile).where(EmployeeCloneProfile.organization_id == organization_id)
+        select(EmployeeCloneProfile).where(EmployeeCloneProfile.organization_id == organization_id).limit(500)
     )
     profiles = list(profile_result.scalars().all())
     profile_by_emp = {row.employee_id: row for row in profiles}
@@ -881,6 +881,7 @@ async def get_clone_training_layer(
         select(ClonePerformanceWeekly)
         .where(ClonePerformanceWeekly.organization_id == organization_id)
         .order_by(ClonePerformanceWeekly.week_start_date.desc())
+        .limit(500)
     )
     perf_rows = list(perf_result.scalars().all())
     latest_perf_by_emp: dict[int, ClonePerformanceWeekly] = {}
@@ -889,7 +890,7 @@ async def get_clone_training_layer(
             latest_perf_by_emp[row.employee_id] = row
 
     plan_result = await db.execute(
-        select(RoleTrainingPlan).where(RoleTrainingPlan.organization_id == organization_id)
+        select(RoleTrainingPlan).where(RoleTrainingPlan.organization_id == organization_id).limit(500)
     )
     plans = list(plan_result.scalars().all())
     latest_plan_by_emp: dict[int, RoleTrainingPlan] = {}
@@ -1012,7 +1013,7 @@ async def get_clone_marketing_sales_layer(
     ]
 
     employees_result = await db.execute(
-        select(Employee).where(Employee.organization_id == organization_id, Employee.is_active.is_(True))
+        select(Employee).where(Employee.organization_id == organization_id, Employee.is_active.is_(True)).limit(500)
     )
     employees = list(employees_result.scalars().all())
 
@@ -1020,6 +1021,7 @@ async def get_clone_marketing_sales_layer(
         select(ClonePerformanceWeekly)
         .where(ClonePerformanceWeekly.organization_id == organization_id)
         .order_by(ClonePerformanceWeekly.week_start_date.desc())
+        .limit(500)
     )
     perf_rows = list(perf_result.scalars().all())
     latest_perf: dict[int, ClonePerformanceWeekly] = {}
@@ -1115,7 +1117,7 @@ async def get_opportunity_association_layer(
         select(Employee).where(
             Employee.organization_id == organization_id,
             Employee.is_active.is_(True),
-        )
+        ).limit(500)
     )
     employees = list(employees_result.scalars().all())
 
