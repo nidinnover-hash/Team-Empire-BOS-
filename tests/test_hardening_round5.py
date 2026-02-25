@@ -133,7 +133,8 @@ def test_idempotency_409_does_not_leak_internal_message():
 # ── 6. Compose rate limiter enforces org cap ─────────────────────────────
 
 def test_compose_rate_limiter_org_cap():
-    """_compose_counts dict does not grow past _COMPOSE_MAX_ORGS."""
+    """_compose_counts dict does not grow past _COMPOSE_MAX_ORGS; returns 429."""
+    from fastapi import HTTPException
     from app.api.v1.endpoints import email as email_mod
     from collections import deque
     from time import time
@@ -149,9 +150,11 @@ def test_compose_rate_limiter_org_cap():
         for i in range(5):
             email_mod._compose_counts[i] = deque([now])
 
-        # Calling _check_compose_rate for a new org_id should not grow the dict
+        # Calling _check_compose_rate for a new org_id should raise 429
         # because we're at the cap
-        email_mod._check_compose_rate(999)
+        with pytest.raises(HTTPException) as exc_info:
+            email_mod._check_compose_rate(999)
+        assert exc_info.value.status_code == 429
         assert 999 not in email_mod._compose_counts
     finally:
         email_mod._COMPOSE_MAX_ORGS = old_max

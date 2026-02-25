@@ -173,7 +173,10 @@ def _check_compose_rate(org_id: int) -> None:
         del _compose_counts[k]
     # Enforce org cap to prevent unbounded memory growth
     if len(_compose_counts) >= _COMPOSE_MAX_ORGS and org_id not in _compose_counts:
-        return  # Silently skip rate limiting rather than grow unbounded
+        raise HTTPException(
+            status_code=429,
+            detail=f"Compose rate limit: max {max_per_hour} per hour.",
+        )
     if org_id not in _compose_counts:
         _compose_counts[org_id] = _deque()
     bucket = _compose_counts[org_id]
@@ -220,8 +223,8 @@ async def gmail_auth_url(
 
 @router.get("/callback")
 async def gmail_callback(
-    code: str,
-    state: str,
+    code: str = Query(..., min_length=1),
+    state: str = Query(..., min_length=1),
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
     """

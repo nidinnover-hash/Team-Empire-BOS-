@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles
+from app.core.request_context import get_current_request_id
 from app.logs.audit import record_action
 from app.models.approval import Approval
 from app.schemas.approval import (
@@ -45,7 +46,7 @@ async def request_approval(
         organization_id=actor["org_id"],
         entity_type="approval",
         entity_id=approval.id,
-        payload_json={"approval_type": approval.approval_type},
+        payload_json={"approval_type": approval.approval_type, "request_id": get_current_request_id()},
     )
     return approval
 
@@ -148,7 +149,7 @@ async def approve(
         organization_id=actor["org_id"],
         entity_type="approval",
         entity_id=approval.id,
-        payload_json={"status": approval.status},
+        payload_json={"status": approval.status, "request_id": get_current_request_id()},
     )
     if should_execute:
         await execution_engine.execute_approval(
@@ -190,6 +191,6 @@ async def reject(
         organization_id=actor["org_id"],
         entity_type="approval",
         entity_id=approval.id,
-        payload_json={"status": approval.status},
+        payload_json={"status": approval.status, "request_id": get_current_request_id()},
     )
     return approval

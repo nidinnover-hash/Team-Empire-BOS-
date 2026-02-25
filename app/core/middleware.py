@@ -88,6 +88,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        response.headers["Cache-Control"] = "no-store, must-revalidate, max-age=0"
         response.headers["X-API-Contract-Version"] = API_CONTRACT_VERSION
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
@@ -296,13 +297,15 @@ def record_login_failure(ip: str) -> None:
     now = time.monotonic()
     with _login_lock:
         # Proactively evict stale IPs to prevent memory leak
-        if len(_login_failures) > 100:
+        if len(_login_failures) > _LOGIN_MAX_IPS // 2:
             stale = [
                 k for k, v in _login_failures.items()
                 if not v or now - v[-1] > LOGIN_FAIL_WINDOW
             ]
             for k in stale:
                 del _login_failures[k]
+        if len(_login_failures) >= _LOGIN_MAX_IPS and ip not in _login_failures:
+            return  # Hard cap reached; silently ignore new IPs
         _login_failures[ip].append(now)
 
 

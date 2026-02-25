@@ -201,7 +201,7 @@
                 if (a.action_type === "MEMORY_WRITE" && a.params)
                   desc = " — " + esc((a.params.key || "") + (a.params.value ? ": " + String(a.params.value).slice(0,40) : ""));
                 return '<button class="btn-agent-action" id="aa-' + msgId + '-' + i + '" ' +
-                  'onclick="executeAgentAction(' + msgId + ',' + i + ')">' +
+                  'data-agent-msg="' + msgId + '" data-agent-idx="' + i + '">' +
                   label + desc + '</button>';
               }).join("") +
             '</div>';
@@ -224,8 +224,17 @@
       }
     }
 
+    // Event delegation for agent action buttons (CSP-safe, no inline onclick)
+    history.addEventListener('click', function(e) {
+      var btn = e.target.closest('[data-agent-msg]');
+      if (!btn) return;
+      var msgId = parseInt(btn.dataset.agentMsg, 10);
+      var idx = parseInt(btn.dataset.agentIdx, 10);
+      executeAgentAction(msgId, idx);
+    });
+
     // Execute a proposed agent action (TASK_CREATE or MEMORY_WRITE)
-    window.executeAgentAction = async function(msgId, idx) {
+    async function executeAgentAction(msgId, idx) {
       var btn = document.getElementById("aa-" + msgId + "-" + idx);
       if (btn) { btn.disabled = true; btn.textContent = "…"; }
       var actions = (window.__agentActions || {})[msgId] || [];
@@ -361,9 +370,9 @@
             '<div class="inbox-meta">' + esc(fmt(e.received_at)) + (e.reply_sent ? ' · <span style="color:var(--ok)">replied</span>' : '') + '</div>' +
             (e.ai_summary ? '<div class="inbox-summary">' + esc(e.ai_summary) + '</div>' : '') +
             '<div class="inbox-actions">' +
-              (!e.ai_summary ? '<button class="ia-btn ia-summarize" onclick="inboxAction(' + e.id + ',\'summarize\')">Summarize</button>' : '') +
-              '<button class="ia-btn ia-strategy" onclick="inboxAction(' + e.id + ',\'strategize\')">Strategy</button>' +
-              (!e.draft_reply ? '<button class="ia-btn ia-draft" onclick="inboxAction(' + e.id + ',\'draft\')">Draft Reply</button>' : '<button class="ia-btn ia-draft" onclick="inboxAction(' + e.id + ',\'draft\')">Re-draft</button>') +
+              (!e.ai_summary ? '<button class="ia-btn ia-summarize" data-inbox-id="' + e.id + '" data-inbox-action="summarize">Summarize</button>' : '') +
+              '<button class="ia-btn ia-strategy" data-inbox-id="' + e.id + '" data-inbox-action="strategize">Strategy</button>' +
+              (!e.draft_reply ? '<button class="ia-btn ia-draft" data-inbox-id="' + e.id + '" data-inbox-action="draft">Draft Reply</button>' : '<button class="ia-btn ia-draft" data-inbox-id="' + e.id + '" data-inbox-action="draft">Re-draft</button>') +
             '</div>' +
             (e.draft_reply ? '<div class="inbox-draft" id="draft-' + e.id + '">' + esc(e.draft_reply) + '</div>' : '') +
           '</div>';
@@ -373,8 +382,14 @@
       }
     }
 
-    // Expose globally so inline onclick works
-    window.inboxAction = async function(emailId, action) {
+    // Event delegation for inbox action buttons (CSP-safe)
+    document.getElementById("inbox-list").addEventListener("click", function(e) {
+      var btn = e.target.closest("[data-inbox-id]");
+      if (!btn) return;
+      inboxAction(parseInt(btn.dataset.inboxId, 10), btn.dataset.inboxAction);
+    });
+
+    async function inboxAction(emailId, action) {
       const item = document.getElementById("email-" + emailId);
       const btn = item ? item.querySelector(".ia-" + (action === "draft" ? "draft" : action === "strategize" ? "strategy" : "summarize")) : null;
       if (btn) { btn.disabled = true; btn.textContent = "…"; }
@@ -530,10 +545,10 @@
             (Object.keys(payload).length ? '<div class="ap-payload">' + fmtPayload(payload) + '</div>' : '') +
             '<div class="ap-actions">' +
               (risky
-                ? '<button class="btn-execute" onclick="approvalAction(' + a.id + ',true)">Approve &amp; Send ⚡</button>'
-                : '<button class="btn-approve" onclick="approvalAction(' + a.id + ',false)">Approve</button>'
+                ? '<button class="btn-execute" data-approval-id="' + a.id + '" data-approval-execute="true">Approve &amp; Send ⚡</button>'
+                : '<button class="btn-approve" data-approval-id="' + a.id + '" data-approval-execute="false">Approve</button>'
               ) +
-              '<button class="btn-reject" onclick="approvalReject(' + a.id + ')">Reject</button>' +
+              '<button class="btn-reject" data-approval-reject="' + a.id + '">Reject</button>' +
             '</div>' +
           '</div>';
         }).join("");
@@ -542,7 +557,20 @@
       }
     }
 
-    window.approvalAction = async function(id, isRisky) {
+    // Event delegation for approval action buttons (CSP-safe)
+    document.getElementById("approvals-list").addEventListener("click", function(e) {
+      var approveBtn = e.target.closest("[data-approval-id]");
+      if (approveBtn) {
+        approvalAction(parseInt(approveBtn.dataset.approvalId, 10), approveBtn.dataset.approvalExecute === "true");
+        return;
+      }
+      var rejectBtn = e.target.closest("[data-approval-reject]");
+      if (rejectBtn) {
+        approvalReject(parseInt(rejectBtn.dataset.approvalReject, 10));
+      }
+    });
+
+    async function approvalAction(id, isRisky) {
       if (isRisky) {
         var ok = window.confirm("This will SEND the email / execute the action.\nAre you absolutely sure?");
         if (!ok) return;
@@ -573,7 +601,7 @@
       }
     };
 
-    window.approvalReject = async function(id) {
+    async function approvalReject(id) {
       var ok = window.confirm("Reject this approval? This cannot be undone.");
       if (!ok) return;
       var item = document.getElementById("ap-" + id);
@@ -733,7 +761,7 @@
               '</div>' +
               '<div class="mem-val">' + esc(m.value) + '</div>' +
             '</div>' +
-            '<button class="btn-mem-del" title="Delete entry" onclick="memoryDelete(' + m.id + ')">✕</button>' +
+            '<button class="btn-mem-del" title="Delete entry" data-memory-delete="' + m.id + '">✕</button>' +
           '</div>';
         }).join("");
       } catch(err) {
@@ -741,7 +769,13 @@
       }
     }
 
-    window.memoryDelete = async function(id) {
+    // Event delegation for memory delete buttons (CSP-safe)
+    document.getElementById("mem-list").addEventListener("click", function(e) {
+      var btn = e.target.closest("[data-memory-delete]");
+      if (btn) memoryDelete(parseInt(btn.dataset.memoryDelete, 10));
+    });
+
+    async function memoryDelete(id) {
       var ok = window.confirm("Delete this memory entry?");
       if (!ok) return;
       var token = window.__apiToken;
@@ -933,8 +967,17 @@ window.showToast = function(msg, type) {
     el.className = "toast " + t;
     el.setAttribute("role", "status");
     el.setAttribute("aria-live", "polite");
-    el.innerHTML = "<span>" + String(msg).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</span>" +
-      '<button aria-label="Dismiss" onclick="this.parentNode.classList.add(\'removing\');setTimeout(function(){this.parentNode.remove()}.bind(this),250)">\u00d7</button>';
+    var span = document.createElement("span");
+    span.textContent = String(msg);
+    var dismissBtn = document.createElement("button");
+    dismissBtn.setAttribute("aria-label", "Dismiss");
+    dismissBtn.textContent = "\u00d7";
+    dismissBtn.addEventListener("click", function() {
+      el.classList.add("removing");
+      setTimeout(function() { el.remove(); }, 250);
+    });
+    el.appendChild(span);
+    el.appendChild(dismissBtn);
     var c = document.getElementById("toast-container");
     if (c) c.appendChild(el);
     setTimeout(function() {
