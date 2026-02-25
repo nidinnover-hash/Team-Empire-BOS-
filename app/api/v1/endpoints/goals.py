@@ -38,7 +38,7 @@ async def update_progress(
     """Update goal progress (0–100). Auto-completes at 100."""
     goal = await goal_service.update_goal_progress(db, goal_id, data, organization_id=actor["org_id"])
     if goal is None:
-        raise HTTPException(status_code=404, detail=f"Goal {goal_id} not found")
+        raise HTTPException(status_code=404, detail="Goal not found")
     return goal
 
 
@@ -52,5 +52,5 @@ async def update_status(
     """Update goal status (active|completed|paused|abandoned)."""
     goal = await goal_service.update_goal_status(db, goal_id, data, organization_id=actor["org_id"])
     if goal is None:
-        raise HTTPException(status_code=404, detail=f"Goal {goal_id} not found")
+        raise HTTPException(status_code=404, detail="Goal not found")
     return goal

@@ -85,7 +85,7 @@ async def update_social_post_status(
         post_id=post_id,
     )
     if existing is None:
-        raise HTTPException(status_code=404, detail=f"Social post {post_id} not found")
+        raise HTTPException(status_code=404, detail="Social post not found")
     if existing.content_mode != allowed_mode:
         raise HTTPException(status_code=403, detail=f"This login is restricted to '{allowed_mode}' mode")
     try:
@@ -99,7 +99,7 @@ async def update_social_post_status(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail="Invalid operation on social post") from exc
     if post is None:
-        raise HTTPException(status_code=404, detail=f"Social post {post_id} not found")
+        raise HTTPException(status_code=404, detail="Social post not found")
     await record_action(
         db=db,
         organization_id=int(actor["org_id"]),
@@ -139,7 +139,7 @@ async def approve_social_post(
         post_id=post_id,
     )
     if existing is None:
-        raise HTTPException(status_code=404, detail=f"Social post {post_id} not found")
+        raise HTTPException(status_code=404, detail="Social post not found")
     if existing.content_mode != allowed_mode:
         raise HTTPException(status_code=403, detail=f"This login is restricted to '{allowed_mode}' mode")
     post = await social_service.approve_social_post(
@@ -149,7 +149,7 @@ async def approve_social_post(
         actor_user_id=int(actor["id"]),
     )
     if post is None:
-        raise HTTPException(status_code=404, detail=f"Social post {post_id} not found")
+        raise HTTPException(status_code=404, detail="Social post not found")
     await record_action(
         db=db,
         organization_id=int(actor["org_id"]),
@@ -175,7 +175,7 @@ async def publish_social_post(
         post_id=post_id,
     )
     if existing is None:
-        raise HTTPException(status_code=404, detail=f"Social post {post_id} not found")
+        raise HTTPException(status_code=404, detail="Social post not found")
     if existing.content_mode != allowed_mode:
         raise HTTPException(status_code=403, detail=f"This login is restricted to '{allowed_mode}' mode")
     try:
@@ -188,7 +188,7 @@ async def publish_social_post(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail="Invalid operation on social post") from exc
     if post is None:
-        raise HTTPException(status_code=404, detail=f"Social post {post_id} not found")
+        raise HTTPException(status_code=404, detail="Social post not found")
     await record_action(
         db=db,
         organization_id=int(actor["org_id"]),

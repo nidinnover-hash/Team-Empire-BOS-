@@ -40,5 +40,5 @@ async def update_status(
     """Update a project's status (active|completed|paused|archived)."""
     project = await project_service.update_project_status(db, project_id, data, organization_id=actor["org_id"])
     if project is None:
-        raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
+        raise HTTPException(status_code=404, detail="Project not found")
     return project

@@ -72,7 +72,11 @@
       if (!res.ok) throw new Error(res.status);
       var data = await res.json();
       if (!data.results || !data.results.length) {
-        resultsEl.innerHTML = '<div class="sr-empty">No results for "' + query.replace(/</g,'&lt;') + '"</div>';
+        var noResultEl = document.createElement('div');
+        noResultEl.className = 'sr-empty';
+        noResultEl.textContent = 'No results for "' + query + '"';
+        resultsEl.innerHTML = '';
+        resultsEl.appendChild(noResultEl);
         return;
       }
       resultsEl.innerHTML = data.results.map(function (r) {

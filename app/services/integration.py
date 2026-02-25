@@ -126,14 +126,42 @@ async def mark_sync_time(
     return integration
 
 
+# In-memory cache: phone_number_id → integration_id.
+# Avoids repeated full-table scan + decrypt for every webhook event.
+_whatsapp_phone_cache: dict[str, int] = {}
+
+
 async def find_whatsapp_integration_by_phone_number_id(
     db: AsyncSession,
     phone_number_id: str,
 ) -> Integration | None:
     """
     Resolve WhatsApp integration for an incoming webhook by phone_number_id.
-    phone_number_id is stored in config_json for whatsapp_business.
+    phone_number_id is stored inside encrypted config_json, so we must decrypt
+    each connected integration to match. Results are cached in memory.
+
+    NOTE: Webhooks arrive without org context (from Meta), so this intentionally
+    searches across all orgs. Each phone_number_id maps to exactly one integration;
+    if duplicates exist, the first match wins and is cached.
     """
+    # Fast path: cache hit
+    cached_id = _whatsapp_phone_cache.get(phone_number_id)
+    if cached_id is not None:
+        result = await db.execute(
+            select(Integration).where(
+                Integration.id == cached_id,
+                Integration.status == "connected",
+            )
+        )
+        item = result.scalar_one_or_none()
+        if item is not None:
+            cfg = decrypt_config(item.config_json or {})
+            set_committed_value(item, "config_json", cfg)
+            return cast(Integration, item)
+        # Cached entry stale (disconnected/deleted) — fall through to full scan
+        _whatsapp_phone_cache.pop(phone_number_id, None)
+
+    # Slow path: scan all connected WhatsApp integrations
     result = await db.execute(
         select(Integration).where(
             Integration.type == "whatsapp_business",
@@ -142,7 +170,9 @@ async def find_whatsapp_integration_by_phone_number_id(
     )
     for item in result.scalars().all():
         cfg = decrypt_config(item.config_json or {})
-        if cfg.get("phone_number_id") == phone_number_id:
+        item_phone = cfg.get("phone_number_id")
+        if item_phone == phone_number_id:
+            _whatsapp_phone_cache[phone_number_id] = item.id
             set_committed_value(item, "config_json", cfg)
             return cast(Integration, item)
     return None

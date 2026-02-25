@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles
+from app.logs.audit import record_action
 from app.schemas.task import TaskCreate, TaskUpdate, TaskRead
 from app.services import task as task_service
 
@@ -16,7 +17,13 @@ async def create_task(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> TaskRead:
     """Create a task. Optionally link to a project and set priority/due_date."""
-    return await task_service.create_task(db, data, organization_id=actor["org_id"])
+    task = await task_service.create_task(db, data, organization_id=actor["org_id"])
+    await record_action(
+        db, event_type="task_created", actor_user_id=actor["id"],
+        organization_id=actor["org_id"], entity_type="task", entity_id=task.id,
+        payload_json={"title": task.title, "priority": task.priority},
+    )
+    return task
 
 
 @router.get("", response_model=list[TaskRead])
@@ -46,7 +53,12 @@ async def update_task(
     """Update a task — edit fields, mark done, or reopen."""
     task = await task_service.update_task(db, task_id, data, organization_id=actor["org_id"])
     if task is None:
-        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+        raise HTTPException(status_code=404, detail="Task not found")
+    await record_action(
+        db, event_type="task_updated", actor_user_id=actor["id"],
+        organization_id=actor["org_id"], entity_type="task", entity_id=task_id,
+        payload_json=data.model_dump(exclude_unset=True),
+    )
     return task
 
 
@@ -59,4 +71,8 @@ async def delete_task(
     """Delete a task. CEO/ADMIN only."""
     deleted = await task_service.delete_task(db, task_id, organization_id=actor["org_id"])
     if not deleted:
-        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+        raise HTTPException(status_code=404, detail="Task not found")
+    await record_action(
+        db, event_type="task_deleted", actor_user_id=actor["id"],
+        organization_id=actor["org_id"], entity_type="task", entity_id=task_id,
+    )
