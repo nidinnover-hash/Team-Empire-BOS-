@@ -95,7 +95,7 @@ async def clickup_sync(
             if cached:
                 return cast(ClickUpSyncResult, ClickUpSyncResult.model_validate(cached))
         except IdempotencyConflictError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
     result = await clickup_service.sync_clickup_tasks(db, org_id=int(actor["org_id"]))
     if result["error"]:
         await record_action(

@@ -2,7 +2,6 @@ import hmac
 import logging
 from datetime import date, datetime, timezone
 from hashlib import sha256
-from time import time
 from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Header
@@ -16,6 +15,7 @@ from app.core.idempotency import (
     get_cached_response,
     store_response,
 )
+from app.core.oauth_nonce import consume_oauth_nonce_once
 from app.core.oauth_state import sign_oauth_state, verify_oauth_state
 from app.core.privacy import sanitize_response_payload
 from app.core.deps import get_db
@@ -32,6 +32,7 @@ from app.schemas.integration import (
     IntegrationSetupGuideRead,
     IntegrationRead,
     IntegrationTestResult,
+    CodingProjectDiscoveryRead,
     WhatsAppSendRequest,
     WhatsAppSendResult,
 )
@@ -57,10 +58,6 @@ from app.api.v1.endpoints import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
-# NOTE: In-memory replay cache — sufficient for single-worker deployment.
-# For multi-worker, migrate to Redis with TTL-based expiry.
-_whatsapp_webhook_seen_signatures: dict[str, float] = {}
-_WHATSAPP_REPLAY_CACHE_MAX = 5000
 
 
 def _safe_provider_error(prefix: str) -> str:
@@ -68,7 +65,7 @@ def _safe_provider_error(prefix: str) -> str:
 
 
 def _sign_google_calendar_state(org_id: int) -> str:
-    return sign_oauth_state(org_id)
+    return str(sign_oauth_state(org_id))
 
 
 def _verify_google_calendar_state(state: str, expected_org_id: int, max_age_seconds: int = 600) -> None:
@@ -123,6 +120,10 @@ async def integration_setup_guide(
 ) -> IntegrationSetupGuideRead:
     now = datetime.now(timezone.utc)
     org_id = int(actor["org_id"])
+    connected_by_type = {
+        row.type: (row.status == "connected")
+        for row in await integration_service.list_integrations(db, org_id, limit=200)
+    }
     specs = [
         ("github", "GitHub", "/api/v1/integrations/github/connect", "/api/v1/integrations/github/status", "/api/v1/integrations/github/sync"),
         ("clickup", "ClickUp", "/api/v1/integrations/clickup/connect", "/api/v1/integrations/clickup/status", "/api/v1/integrations/clickup/sync"),
@@ -131,8 +132,7 @@ async def integration_setup_guide(
     ]
     items: list[dict[str, object]] = []
     for key, label, connect_ep, status_ep, sync_ep in specs:
-        row = await integration_service.get_integration_by_type(db, org_id, key)
-        connected = bool(row and row.status == "connected")
+        connected = bool(connected_by_type.get(key, False))
         if connected:
             next_step = f"Run {sync_ep} and verify /api/v1/control/integrations/health."
         else:
@@ -331,7 +331,7 @@ async def sync_google_calendar(
             if cached:
                 return cast(CalendarSyncResult, CalendarSyncResult.model_validate(cached))
         except IdempotencyConflictError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
     result = await sync_calendar_events(
         db,
         organization_id=actor["org_id"],
@@ -440,11 +440,13 @@ async def test_ai_provider(
     from app.services.ai_router import call_ai
 
     chosen = (provider or settings.DEFAULT_AI_PROVIDER or "").strip().lower()
+    if chosen == "claude":
+        chosen = "anthropic"
     if chosen not in {"openai", "anthropic", "groq", "gemini"}:
         return AITestResult(
             provider=chosen or "unknown",
             status="failed",
-            message="Unsupported provider. Use one of: openai, anthropic, groq, gemini.",
+            message="Unsupported provider. Use one of: openai, claude, anthropic, groq, gemini.",
         )
 
     if chosen == "openai" and not _key_is_configured(settings.OPENAI_API_KEY):
@@ -507,6 +509,43 @@ async def test_ai_provider(
         status="ok",
         message=f"{chosen.capitalize()} is connected and responding.",
         sample_response=response,
+    )
+
+
+@router.get("/ai/coding-discovery", response_model=CodingProjectDiscoveryRead)
+async def ai_coding_discovery(
+    project_name: str | None = Query(None, max_length=120),
+    language: str | None = Query(None, max_length=60),
+    stage: str | None = Query(None, max_length=60),
+    _actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+) -> CodingProjectDiscoveryRead:
+    """
+    Return coding-project discovery questions so the clone asks before implementation.
+    """
+    p = (project_name or "project").strip()
+    lang = (language or "stack").strip()
+    s = (stage or "planning").strip()
+    questions = [
+        f"What is the exact outcome you want for {p} in this phase?",
+        "What are the top 3 blockers today?",
+        f"What tech stack and runtime versions are required ({lang})?",
+        "What constraints exist (deadline, budget, infra, compliance)?",
+        "What is the current architecture and where does this change fit?",
+        "What are the acceptance criteria and measurable success metrics?",
+        "What risks are unacceptable (downtime, data loss, security regressions)?",
+        "What tests must pass before release?",
+        "Who approves production changes and what is rollback plan?",
+        "Which tasks can be automated safely vs require manual approval?",
+    ]
+    next_prompt = (
+        f"You are my senior coding assistant for {p}. Current stage: {s}. "
+        "Ask concise discovery questions first, then propose an implementation plan "
+        "with risks, tests, and rollout steps."
+    )
+    return CodingProjectDiscoveryRead(
+        provider_options=["openai", "claude", "groq", "gemini"],
+        questions=questions,
+        next_prompt=next_prompt,
     )
 
 
@@ -578,7 +617,7 @@ async def whatsapp_webhook_verify(
         hub_mode == "subscribe"
         and hub_verify_token
         and expected
-        and hub_verify_token == expected
+        and hmac.compare_digest(hub_verify_token, expected)
         and hub_challenge is not None
     ):
         return PlainTextResponse(content=hub_challenge, status_code=200)
@@ -589,7 +628,7 @@ async def whatsapp_webhook_verify(
 async def whatsapp_webhook_receive(
     request: Request,
     db: AsyncSession = Depends(get_db),
-) -> dict:
+):
     """
     Receive webhook events from WhatsApp Business.
     Verifies X-Hub-Signature-256 when WHATSAPP_APP_SECRET is configured.
@@ -598,8 +637,13 @@ async def whatsapp_webhook_receive(
     import json as _json
     raw_body = await request.body()
 
-    # Verify HMAC signature when app secret is configured
+    # Verify HMAC signature — reject entirely when secret is not configured
     app_secret = (settings.WHATSAPP_APP_SECRET or "").strip()
+    if not app_secret:
+        raise HTTPException(
+            status_code=503,
+            detail="WhatsApp webhook disabled: WHATSAPP_APP_SECRET not configured",
+        )
     if app_secret:
         sig_header = request.headers.get("X-Hub-Signature-256", "")
         expected_sig = "sha256=" + hmac.new(
@@ -609,19 +653,13 @@ async def whatsapp_webhook_receive(
         ).hexdigest()
         if not sig_header or not hmac.compare_digest(sig_header, expected_sig):
             raise HTTPException(status_code=403, detail="Webhook signature verification failed")
-        # Replay protection: reject duplicate signatures within short window.
-        now = time()
         window = max(30, int(settings.WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS))
-        for seen_sig, seen_at in list(_whatsapp_webhook_seen_signatures.items()):
-            if now - seen_at > window:
-                _whatsapp_webhook_seen_signatures.pop(seen_sig, None)
-        # Evict oldest entries if cache exceeds max size
-        if len(_whatsapp_webhook_seen_signatures) >= _WHATSAPP_REPLAY_CACHE_MAX:
-            oldest_key = min(_whatsapp_webhook_seen_signatures, key=_whatsapp_webhook_seen_signatures.get)  # type: ignore[arg-type]
-            _whatsapp_webhook_seen_signatures.pop(oldest_key, None)
-        if sig_header in _whatsapp_webhook_seen_signatures:
+        if not consume_oauth_nonce_once(
+            namespace="whatsapp_webhook_sig",
+            nonce=sig_header,
+            max_age_seconds=window,
+        ):
             raise HTTPException(status_code=409, detail="Webhook replay detected")
-        _whatsapp_webhook_seen_signatures[sig_header] = now
 
     try:
         payload = _json.loads(raw_body)
@@ -700,7 +738,14 @@ async def test_integration(
                     day=datetime.now(timezone.utc).date(),
                     calendar_id=calendar_id,
                 )
-            except Exception:
+            except Exception as exc:
+                logger.warning(
+                    "Google Calendar connection test failed org=%s integration_id=%s: %s: %s",
+                    actor["org_id"],
+                    item.id,
+                    type(exc).__name__,
+                    str(exc)[:300],
+                )
                 if refresh_token and settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET:
                     try:
                         refresh = await refresh_access_token(
@@ -716,8 +761,14 @@ async def test_integration(
                         await integration_service.mark_sync_time(db, item)
                         status = "ok"
                         message = "Connection test passed after token refresh"
-                    except Exception:
-                        logger.warning("Google Calendar token refresh failed", exc_info=True)
+                    except Exception as refresh_exc:
+                        logger.warning(
+                            "Google Calendar token refresh failed org=%s integration_id=%s: %s: %s",
+                            actor["org_id"],
+                            item.id,
+                            type(refresh_exc).__name__,
+                            str(refresh_exc)[:300],
+                        )
                         status = "failed"
                         message = _safe_provider_error("Google Calendar test failed after token refresh")
                 else:
@@ -735,7 +786,14 @@ async def test_integration(
                     access_token=str(access_token),
                     phone_number_id=str(phone_number_id),
                 )
-            except Exception:
+            except Exception as exc:
+                logger.warning(
+                    "WhatsApp Business connection test failed org=%s integration_id=%s: %s: %s",
+                    actor["org_id"],
+                    item.id,
+                    type(exc).__name__,
+                    str(exc)[:300],
+                )
                 status = "failed"
                 message = _safe_provider_error("WhatsApp Business test failed")
 

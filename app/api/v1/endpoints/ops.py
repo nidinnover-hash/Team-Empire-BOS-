@@ -388,7 +388,7 @@ async def daily_run_ops(
             if cached:
                 return cached
         except IdempotencyConflictError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
 
     result = await run_daily_run_workflow(
         db=db,

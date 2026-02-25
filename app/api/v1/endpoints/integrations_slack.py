@@ -92,7 +92,7 @@ async def slack_sync(
             if cached:
                 return cast(SlackSyncResult, SlackSyncResult.model_validate(cached))
         except IdempotencyConflictError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
     result = await slack_service.sync_slack_messages(db, org_id=org_id)
     if result["error"]:
         await record_action(

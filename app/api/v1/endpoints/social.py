@@ -97,7 +97,7 @@ async def update_social_post_status(
             actor_user_id=int(actor["id"]),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail="Invalid operation on social post") from exc
     if post is None:
         raise HTTPException(status_code=404, detail=f"Social post {post_id} not found")
     await record_action(
@@ -186,7 +186,7 @@ async def publish_social_post(
             actor_user_id=int(actor["id"]),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail="Invalid operation on social post") from exc
     if post is None:
         raise HTTPException(status_code=404, detail=f"Social post {post_id} not found")
     await record_action(

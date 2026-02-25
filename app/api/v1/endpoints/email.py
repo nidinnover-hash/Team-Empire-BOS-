@@ -171,6 +171,9 @@ def _check_compose_rate(org_id: int) -> None:
     stale = [k for k, v in _compose_counts.items() if not v or now - v[-1] > window]
     for k in stale:
         del _compose_counts[k]
+    # Enforce org cap to prevent unbounded memory growth
+    if len(_compose_counts) >= _COMPOSE_MAX_ORGS and org_id not in _compose_counts:
+        return  # Silently skip rate limiting rather than grow unbounded
     if org_id not in _compose_counts:
         _compose_counts[org_id] = _deque()
     bucket = _compose_counts[org_id]
@@ -275,7 +278,7 @@ async def sync_emails(
             if cached:
                 return cast(SyncResult, SyncResult.model_validate(cached))
         except IdempotencyConflictError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
     try:
         new_count = await email_service.sync_emails(
             db=db,
@@ -368,7 +371,7 @@ async def draft_reply(
             if cached:
                 return cast(EmailDraftResponse, EmailDraftResponse.model_validate(cached))
         except IdempotencyConflictError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
     draft = await email_service.draft_reply(
         db=db,
         email_id=email_id,
@@ -410,7 +413,7 @@ async def send_email(
             if cached:
                 return cast(EmailSendResponse, EmailSendResponse.model_validate(cached))
         except IdempotencyConflictError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
     sent = await email_service.send_approved_reply(
         db=db,
         email_id=email_id,
@@ -462,10 +465,10 @@ async def strategize_email(
             org_id=org_id,
             actor_user_id=int(current_user["id"]),
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Email not found or not accessible")
+    except RuntimeError:
+        raise HTTPException(status_code=502, detail="Email strategy generation failed — try again later")
     return EmailStrategyResponse(email_id=email_id, strategy=analysis)
 
 
@@ -497,7 +500,7 @@ async def compose_email(
             if cached:
                 return cast(EmailComposeResponse, EmailComposeResponse.model_validate(cached))
         except IdempotencyConflictError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
     draft = await email_service.compose_email(
         db=db,
         org_id=org_id,

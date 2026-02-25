@@ -228,7 +228,7 @@ async def unhandled_exception_handler(request: Request, _exc: Exception) -> JSON
 
 # Dummy hash for timing-safe login — always run verify_password even when
 # user doesn't exist so response time doesn't reveal valid usernames.
-_DUMMY_HASH = "pbkdf2_sha256$100000$QUFBQUFBQUFBQUFBQUFB$QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ=="
+_DUMMY_HASH = "pbkdf2_sha256$600000$w7gXiGr39+vmLFhN19GF2g==$2Fr/fvindUecCaX736N+jixutyVFXfjWvTN8w18qRAY="
 
 
 def _effective_token_expiry_minutes() -> int:
@@ -287,6 +287,15 @@ async def _authenticate_user(
             detail="Invalid username/password",
         )
     clear_login_failures(client_ip)
+    await record_action(
+        db,
+        event_type="login_success",
+        actor_user_id=user.id,
+        organization_id=user.organization_id,
+        entity_type="user",
+        entity_id=user.id,
+        payload_json={"ip": client_ip, "endpoint": endpoint},
+    )
     return user
 
 

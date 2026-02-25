@@ -33,9 +33,7 @@ _refresh_locks: dict[int, asyncio.Lock] = {}
 
 
 def _get_refresh_lock(org_id: int) -> asyncio.Lock:
-    if org_id not in _refresh_locks:
-        _refresh_locks[org_id] = asyncio.Lock()
-    return _refresh_locks[org_id]
+    return _refresh_locks.setdefault(org_id, asyncio.Lock())
 
 # Prefixes that indicate call_ai() returned an error string instead of content
 _AI_ERROR_PREFIXES = ("Error:", "error:", "I'm sorry", "I cannot", "I'm unable")

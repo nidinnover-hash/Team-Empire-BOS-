@@ -18,7 +18,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 # Dummy hash — always run verify_password even when user doesn't exist
 # so response time doesn't reveal valid usernames (timing-safe).
-_DUMMY_HASH = "pbkdf2_sha256$100000$QUFBQUFBQUFBQUFBQUFB$QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ=="
+_DUMMY_HASH = "pbkdf2_sha256$600000$w7gXiGr39+vmLFhN19GF2g==$2Fr/fvindUecCaX736N+jixutyVFXfjWvTN8w18qRAY="
 
 
 def _effective_token_expiry_minutes() -> int:
@@ -103,6 +103,15 @@ async def login(
         expires_minutes=_effective_token_expiry_minutes(),
     )
     clear_login_failures(client_ip)
+    await record_action(
+        db,
+        event_type="login_success",
+        actor_user_id=user.id,
+        organization_id=user.organization_id,
+        entity_type="user",
+        entity_id=user.id,
+        payload_json={"ip": client_ip, "endpoint": "/api/v1/auth/login"},
+    )
     return {"access_token": access_token, "token_type": "bearer"}
 
 

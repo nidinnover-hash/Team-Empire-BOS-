@@ -10,7 +10,9 @@ from app.schemas.user import UserCreate
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
-    result = await db.execute(select(User).where(User.email == email))
+    result = await db.execute(
+        select(User).where(User.email == email.lower().strip())
+    )
     return cast(User | None, result.scalar_one_or_none())
 
 
@@ -18,7 +20,7 @@ async def create_user(db: AsyncSession, data: UserCreate) -> User:
     user = User(
         organization_id=data.organization_id,
         name=data.name,
-        email=data.email,
+        email=data.email.lower().strip(),
         password_hash=hash_password(data.password),
         role=data.role,
     )
