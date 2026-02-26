@@ -149,7 +149,7 @@ async def _persist_refreshed_tokens(
                 payload_json={"integration": "gmail", "refresh_rotated": refresh_rotated},
             )
         except Exception:
-            logger.debug("Failed to audit-log Gmail token refresh for org=%d", org_id)
+            logger.warning("Failed to audit-log Gmail token refresh for org=%d", org_id)
     except (RuntimeError, ValueError, TypeError) as exc:
         logger.error("Failed to persist refreshed Gmail tokens for org %d: %s", org_id, type(exc).__name__)
 

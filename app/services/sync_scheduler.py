@@ -422,7 +422,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
                         entity_type="integration",
                     )
                 except Exception:
-                    logger.debug("Failed to create circuit breaker notification for %s org=%d", name, org_id)
+                    logger.warning("Failed to create circuit breaker notification for %s org=%d", name, org_id)
             await _mark_status(name, "error")
             details = error_details(exc)
             await _record_job_run(

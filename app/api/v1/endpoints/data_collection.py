@@ -53,8 +53,8 @@ async def collect_data(
             data=data,
         )
     except ValueError as exc:
-        logger.warning("request failed: %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("collect_data failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid request") from exc
 
     await record_action(
         db=db,
@@ -86,8 +86,8 @@ async def train_clone_pro(
             data=data,
         )
     except ValueError as exc:
-        logger.warning("request failed: %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("train_clone_pro failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid request") from exc
 
     await record_action(
         db=db,
@@ -120,8 +120,8 @@ async def meeting_coach(
             data=data,
         )
     except ValueError as exc:
-        logger.warning("request failed: %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("meeting_coach failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid request") from exc
 
     await record_action(
         db=db,
@@ -153,8 +153,8 @@ async def mobile_capture_analyze(
             data=data,
         )
     except ValueError as exc:
-        logger.warning("request failed: %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("mobile_capture_analyze failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid request") from exc
 
     await record_action(
         db=db,
@@ -201,8 +201,8 @@ async def mobile_capture_upload_analyze(
     try:
         extracted_text, ocr_engine = data_collection_service.extract_text_from_image_bytes(file_bytes)
     except ValueError as exc:
-        logger.warning("request failed: %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("mobile_capture_upload_analyze ocr failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Failed to process image") from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail="Failed to extract text from image") from exc
 
@@ -221,8 +221,8 @@ async def mobile_capture_upload_analyze(
             ),
         )
     except ValueError as exc:
-        logger.warning("request failed: %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("mobile_capture_upload_analyze failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid request") from exc
 
     await record_action(
         db=db,
@@ -267,8 +267,8 @@ async def photo_character_upload_analyze(
     try:
         extracted_text, ocr_engine = data_collection_service.extract_text_from_image_bytes(file_bytes)
     except ValueError as exc:
-        logger.warning("request failed: %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("photo_character_upload_analyze ocr failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Failed to process image") from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail="Failed to extract text from image") from exc
 
@@ -281,8 +281,8 @@ async def photo_character_upload_analyze(
             filename=file.filename or "unknown",
         )
     except ValueError as exc:
-        logger.warning("request failed: %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("photo_character_upload_analyze failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid request") from exc
 
     await record_action(
         db=db,

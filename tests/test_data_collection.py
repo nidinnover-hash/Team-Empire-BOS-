@@ -57,7 +57,7 @@ async def test_collect_data_profile_memory_requires_key(client):
         },
     )
     assert r.status_code == 400
-    assert "key is required" in r.json()["detail"]
+    assert r.json()["detail"] == "Invalid request"
 
 
 async def test_collect_data_profile_memory_rejects_unsafe_key(client):
@@ -72,7 +72,7 @@ async def test_collect_data_profile_memory_rejects_unsafe_key(client):
         },
     )
     assert r.status_code == 400
-    assert "key must match" in r.json()["detail"]
+    assert r.json()["detail"] == "Invalid request"
 
 
 async def test_collect_data_daily_context_rejects_invalid_type(client):
@@ -87,7 +87,7 @@ async def test_collect_data_daily_context_rejects_invalid_type(client):
         },
     )
     assert r.status_code == 400
-    assert "context_type must be one of" in r.json()["detail"]
+    assert r.json()["detail"] == "Invalid request"
 
 
 async def test_meeting_coach_generates_training_signals(client):
@@ -123,7 +123,7 @@ async def test_meeting_coach_requires_consent(client):
         },
     )
     assert r.status_code == 400
-    assert "consent_confirmed must be true" in r.json()["detail"]
+    assert r.json()["detail"] == "Invalid request"
 
 
 async def test_mobile_capture_analyze_feeds_memory_and_policy_layer(client):
