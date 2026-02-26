@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.services import (
@@ -74,12 +75,12 @@ async def export_all_data(
     """
     org_id = int(actor["org_id"])
 
-    tasks = await task_service.list_tasks(db, limit=2000, organization_id=org_id)
-    projects = await project_service.list_projects(db, limit=2000, organization_id=org_id)
-    goals = await goal_service.list_goals(db, limit=2000, organization_id=org_id)
-    notes = await note_service.list_notes(db, limit=2000, organization_id=org_id)
-    contacts = await contact_service.list_contacts(db, limit=2000, organization_id=org_id)
-    commands = await command_service.list_commands(db, limit=2000, organization_id=org_id)
+    tasks = await task_service.list_tasks(db, limit=settings.EXPORT_MAX_ROWS, organization_id=org_id)
+    projects = await project_service.list_projects(db, limit=settings.EXPORT_MAX_ROWS, organization_id=org_id)
+    goals = await goal_service.list_goals(db, limit=settings.EXPORT_MAX_ROWS, organization_id=org_id)
+    notes = await note_service.list_notes(db, limit=settings.EXPORT_MAX_ROWS, organization_id=org_id)
+    contacts = await contact_service.list_contacts(db, limit=settings.EXPORT_MAX_ROWS, organization_id=org_id)
+    commands = await command_service.list_commands(db, limit=settings.EXPORT_MAX_ROWS, organization_id=org_id)
     finance = await finance_service.get_summary(db, organization_id=org_id)
     profile_memory = await memory_service.get_profile_memory(db, organization_id=org_id)
     team_members = await memory_service.get_team_members(db, organization_id=org_id)

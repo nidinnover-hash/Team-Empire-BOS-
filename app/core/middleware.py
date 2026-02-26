@@ -202,8 +202,8 @@ _EXEMPT_PREFIXES = ("/health", "/docs", "/redoc", "/openapi.json", "/static/")
 # Sliding window per IP; resets on server restart (acceptable for a personal tool).
 
 _login_failures: dict[str, deque] = defaultdict(deque)
-LOGIN_FAIL_WINDOW = 900   # 15-minute window
-LOGIN_FAIL_MAX = 10       # max failures before lockout
+LOGIN_FAIL_WINDOW = settings.LOGIN_FAIL_WINDOW_SECONDS
+LOGIN_FAIL_MAX = settings.LOGIN_FAIL_MAX_ATTEMPTS
 _LOGIN_MAX_IPS = 10_000   # cap to prevent memory leak from IP churn
 _login_lock = Lock()
 

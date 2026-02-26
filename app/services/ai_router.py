@@ -472,7 +472,7 @@ async def _call_openai(
                 {"role": "user", "content": user_message},
             ],
             max_tokens=max_tokens,
-            timeout=20.0,
+            timeout=settings.AI_TIMEOUT_SECONDS,
         )
         if not result.choices:
             return "No response from OpenAI.", True
@@ -496,7 +496,7 @@ async def _call_anthropic(
         return "Error: Anthropic not configured. Add ANTHROPIC_API_KEY to your .env file.", False
     try:
         import anthropic
-        client = anthropic.AsyncAnthropic(api_key=key, timeout=20.0)
+        client = anthropic.AsyncAnthropic(api_key=key, timeout=settings.AI_TIMEOUT_SECONDS)
         result = await client.messages.create(
             model=settings.AGENT_MODEL_ANTHROPIC,
             max_tokens=max_tokens,
@@ -538,7 +538,7 @@ async def _call_groq(
                 {"role": "user", "content": user_message},
             ],
             max_tokens=max_tokens,
-            timeout=20.0,
+            timeout=settings.AI_TIMEOUT_SECONDS,
         )
         if not result.choices:
             return "No response from Groq.", True

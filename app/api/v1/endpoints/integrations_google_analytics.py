@@ -1,19 +1,20 @@
-import logging
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.endpoints._integration_helpers import (
+    CONNECT_EXCEPTIONS,
+    audit_connect_success,
+    audit_sync,
+    handle_connect_error,
+)
 from app.core.deps import get_db
 from app.core.rbac import require_roles
-from app.logs.audit import record_action
 from app.schemas.integration import (
     GoogleAnalyticsConnectRequest,
     GoogleAnalyticsStatusRead,
     GoogleAnalyticsSyncResult,
 )
 from app.services import google_analytics_service
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Integrations"])
 
@@ -31,20 +32,11 @@ async def ga_connect(
             access_token=data.access_token,
             property_id=data.property_id,
         )
-    except (RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
-        logger.warning("request failed: %s", exc)
-        raise HTTPException(
-            status_code=400,
-            detail="Connection failed. Check credentials and try again.",
-        ) from exc
-    await record_action(
-        db,
-        event_type="integration_connected",
-        actor_user_id=actor["id"],
-        organization_id=actor["org_id"],
-        entity_type="integration",
-        entity_id=int(result["id"]),
-        payload_json={"type": "google_analytics", "status": "connected", "property_id": result["property_id"]},
+    except CONNECT_EXCEPTIONS as exc:
+        await handle_connect_error(db, integration_type="google_analytics", actor=actor, exc=exc)
+    await audit_connect_success(
+        db, integration_type="google_analytics", actor=actor, entity_id=int(result["id"]),
+        extra={"property_id": result["property_id"]},
     )
     return GoogleAnalyticsStatusRead(connected=True, property_id=str(result["property_id"]))
 
@@ -66,11 +58,6 @@ async def ga_sync(
     try:
         result = await google_analytics_service.sync_analytics(db, org_id=int(actor["org_id"]))
     except ValueError as exc:
-        logger.warning("request failed: %s", exc)
-        raise HTTPException(status_code=400, detail="Connection failed. Check credentials and try again.") from exc
-    await record_action(
-        db, event_type="ga_synced", actor_user_id=actor["id"],
-        organization_id=actor["org_id"], entity_type="integration",
-        entity_id=None, payload_json={"sessions": result["sessions_30d"]},
-    )
+        raise HTTPException(status_code=400, detail="Sync failed. Check connection and try again.") from exc
+    await audit_sync(db, event_type="ga_synced", actor=actor, payload={"sessions": result["sessions_30d"]})
     return GoogleAnalyticsSyncResult(**result)

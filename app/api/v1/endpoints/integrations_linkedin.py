@@ -3,9 +3,14 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.endpoints._integration_helpers import (
+    CONNECT_EXCEPTIONS,
+    audit_connect_success,
+    audit_sync,
+    handle_connect_error,
+)
 from app.core.deps import get_db
 from app.core.rbac import require_roles
-from app.logs.audit import record_action
 from app.schemas.integration import (
     LinkedInConnectRequest,
     LinkedInPublishRequest,
@@ -29,14 +34,9 @@ async def linkedin_connect(
         info = await linkedin_service.connect_linkedin(
             db, org_id=int(actor["org_id"]), access_token=data.access_token,
         )
-    except (RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
-        logger.warning("request failed: %s", exc)
-        raise HTTPException(status_code=400, detail="Connection failed. Check credentials and try again.") from exc
-    await record_action(
-        db, event_type="integration_connected", actor_user_id=actor["id"],
-        organization_id=actor["org_id"], entity_type="integration",
-        entity_id=info["id"], payload_json={"type": "linkedin", "status": "ok"},
-    )
+    except CONNECT_EXCEPTIONS as exc:
+        await handle_connect_error(db, integration_type="linkedin", actor=actor, exc=exc)
+    await audit_connect_success(db, integration_type="linkedin", actor=actor, entity_id=info["id"])
     return LinkedInStatusRead(connected=True, name=info.get("name"), author_urn=info.get("author_urn"))
 
 
@@ -60,11 +60,10 @@ async def linkedin_publish(
             db, org_id=int(actor["org_id"]), text=data.text, visibility=data.visibility,
         )
     except ValueError as exc:
-        logger.warning("request failed: %s", exc)
-        raise HTTPException(status_code=400, detail="Connection failed. Check credentials and try again.") from exc
-    await record_action(
-        db, event_type="linkedin_post_published", actor_user_id=actor["id"],
-        organization_id=actor["org_id"], entity_type="integration",
-        entity_id=None, payload_json={"post_id": result["post_id"]},
+        logger.warning("linkedin publish failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Publish failed. Check connection and try again.") from exc
+    await audit_sync(
+        db, event_type="linkedin_post_published", actor=actor,
+        payload={"post_id": result["post_id"]},
     )
     return LinkedInPublishResult(**result)

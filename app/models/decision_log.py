@@ -22,7 +22,7 @@ class DecisionLog(Base):
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     risk: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False,
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

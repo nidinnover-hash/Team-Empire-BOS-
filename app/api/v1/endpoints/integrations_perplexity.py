@@ -3,9 +3,13 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.endpoints._integration_helpers import (
+    CONNECT_EXCEPTIONS,
+    audit_connect_success,
+    handle_connect_error,
+)
 from app.core.deps import get_db
 from app.core.rbac import require_roles
-from app.logs.audit import record_action
 from app.schemas.integration import (
     PerplexityConnectRequest,
     PerplexitySearchRequest,
@@ -29,14 +33,9 @@ async def perplexity_connect(
         info = await perplexity_service.connect_perplexity(
             db, org_id=int(actor["org_id"]), api_key=data.api_key,
         )
-    except (RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
-        logger.warning("request failed: %s", exc)
-        raise HTTPException(status_code=400, detail="Connection failed. Check credentials and try again.") from exc
-    await record_action(
-        db, event_type="integration_connected", actor_user_id=actor["id"],
-        organization_id=actor["org_id"], entity_type="integration",
-        entity_id=info["id"], payload_json={"type": "perplexity", "status": "ok"},
-    )
+    except CONNECT_EXCEPTIONS as exc:
+        await handle_connect_error(db, integration_type="perplexity", actor=actor, exc=exc)
+    await audit_connect_success(db, integration_type="perplexity", actor=actor, entity_id=info["id"])
     return PerplexityStatusRead(connected=True)
 
 
@@ -60,6 +59,6 @@ async def perplexity_search(
             db, org_id=int(actor["org_id"]), query=data.query, max_tokens=data.max_tokens,
         )
     except ValueError as exc:
-        logger.warning("request failed: %s", exc)
-        raise HTTPException(status_code=400, detail="Connection failed. Check credentials and try again.") from exc
+        logger.warning("perplexity search failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Search failed. Check connection and try again.") from exc
     return PerplexitySearchResult(content=result["content"], citations=result["citations"])

@@ -95,14 +95,14 @@ async def _backup_postgres(ts: str) -> dict:
         proc = await asyncio.create_subprocess_shell(
             cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
-        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=settings.BACKUP_TIMEOUT_SECONDS)
         if proc.returncode != 0:
             err_msg = (stderr or b"").decode()[:200]
             logger.error("pg_dump failed (rc=%d): %s", proc.returncode, err_msg)
             backup_path.unlink(missing_ok=True)
             return {"ok": False, "error": "pg_dump failed"}
     except TimeoutError:
-        logger.error("pg_dump timed out after 300s")
+        logger.error("pg_dump timed out after %ds", settings.BACKUP_TIMEOUT_SECONDS)
         backup_path.unlink(missing_ok=True)
         return {"ok": False, "error": "pg_dump timed out"}
     except FileNotFoundError:

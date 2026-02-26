@@ -184,6 +184,13 @@ class Settings(BaseSettings):
     MEMORY_CONTEXT_CACHE_TTL_SECONDS: int = 300
     MEMORY_CONTEXT_CACHE_MAX_ORGS: int = 200
 
+    # Tunable timeouts and limits
+    AI_TIMEOUT_SECONDS: float = 20.0       # per-request timeout for AI provider calls
+    EXPORT_MAX_ROWS: int = 2000            # max rows per table in full data export
+    BACKUP_TIMEOUT_SECONDS: int = 300      # pg_dump timeout for DB backup
+    LOGIN_FAIL_WINDOW_SECONDS: int = 900   # sliding window for login failure tracking
+    LOGIN_FAIL_MAX_ATTEMPTS: int = 10      # max failures before IP lockout
+
     # Feature flags — disable expensive features without redeploying
     FEATURE_AI_COMMANDS: bool = True     # AI responses in command input
     FEATURE_EMAIL_SYNC: bool = True      # Gmail sync + email AI
