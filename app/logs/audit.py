@@ -27,7 +27,7 @@ async def record_action(
     db: AsyncSession,
     event_type: str,
     actor_user_id: int | None,
-    organization_id: int = 1,
+    organization_id: int,
     entity_type: str | None = None,
     entity_id: int | None = None,
     payload_json: dict | None = None,

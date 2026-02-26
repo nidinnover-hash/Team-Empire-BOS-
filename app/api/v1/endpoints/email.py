@@ -1,32 +1,31 @@
 import asyncio
-from importlib import import_module
 import logging
 import uuid
 from collections import deque as _deque
+from importlib import import_module
 from time import time
 from typing import Any, Protocol, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi import Header
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
+from app.core.deps import get_db
 from app.core.idempotency import (
     IdempotencyConflictError,
     build_fingerprint,
     get_cached_response,
     store_response,
 )
-from app.core.oauth_state import sign_oauth_state, verify_oauth_state
 from app.core.oauth_nonce import consume_oauth_nonce_once
-from app.core.deps import get_db
+from app.core.oauth_state import sign_oauth_state, verify_oauth_state
 from app.core.rbac import require_roles
-from app.core.config import settings
 from app.schemas.email import (
     ComposeRequest,
     DraftReplyRequest,
-    EmailControlRunResponse,
     EmailComposeResponse,
+    EmailControlRunResponse,
     EmailDraftResponse,
     EmailRead,
     EmailSendResponse,
@@ -41,8 +40,8 @@ from app.schemas.email import (
 )
 from app.services import email_control, email_service
 from app.services.email_service import EmailSyncError
-from app.tools.gmail import exchange_code_for_tokens, get_gmail_auth_url
 from app.services.integration import connect_integration, get_integration_by_type
+from app.tools.gmail import exchange_code_for_tokens, get_gmail_auth_url
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +90,7 @@ def _get_compose_redis_client() -> _ComposeRedisLike | None:
             ),
         )
         return _compose_redis_client
-    except Exception:
+    except (ImportError, AttributeError, TypeError, ValueError, OSError):
         _compose_redis_client = None
         return None
 
@@ -162,7 +161,7 @@ def _check_compose_rate(org_id: int) -> None:
             return
         except HTTPException:
             raise
-        except Exception as exc:
+        except (RuntimeError, ValueError, TypeError, OSError, TimeoutError, ConnectionError) as exc:
             # Fall back to process memory if Redis is unavailable.
             logger.warning(
                 "Compose rate-limit Redis fallback for org %s: %s",
@@ -227,8 +226,8 @@ async def gmail_auth_url(
 
 @router.get("/callback")
 async def gmail_callback(
-    code: str = Query(..., min_length=1),
-    state: str = Query(..., min_length=1),
+    code: str = Query(..., min_length=1, max_length=2000),
+    state: str = Query(..., min_length=1, max_length=1000),
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
     """
@@ -243,7 +242,7 @@ async def gmail_callback(
             asyncio.to_thread(exchange_code_for_tokens, code),
             timeout=15.0,
         )
-    except asyncio.TimeoutError as exc:
+    except TimeoutError as exc:
         raise HTTPException(status_code=504, detail="Google token exchange timed out. Try again.") from exc
     if "error" in tokens:
         error_code = str(tokens.get("error") or "unknown")
@@ -322,7 +321,7 @@ async def gmail_health(
 async def list_inbox(
     unread_only: bool = False,
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=10_000),
     db: AsyncSession = Depends(get_db),
     _user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> list[EmailRead]:

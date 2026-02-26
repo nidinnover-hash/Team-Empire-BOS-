@@ -18,6 +18,8 @@ import time
 from collections import deque
 from typing import TYPE_CHECKING, cast
 
+from sqlalchemy.exc import SQLAlchemyError
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +27,74 @@ from app.core.config import PLACEHOLDER_AI_KEYS, settings
 from app.core.request_context import get_current_request_id
 
 logger = logging.getLogger(__name__)
+
+_COMMON_PROVIDER_EXC: tuple[type[BaseException], ...] = (
+    RuntimeError,
+    TimeoutError,
+    OSError,
+    ValueError,
+    TypeError,
+    AttributeError,
+    ImportError,
+    ModuleNotFoundError,
+)
+_OPENAI_EXC: tuple[type[BaseException], ...] = _COMMON_PROVIDER_EXC
+_ANTHROPIC_EXC: tuple[type[BaseException], ...] = _COMMON_PROVIDER_EXC
+_GROQ_EXC: tuple[type[BaseException], ...] = _COMMON_PROVIDER_EXC
+_GEMINI_EXC: tuple[type[BaseException], ...] = _COMMON_PROVIDER_EXC
+
+try:
+    import openai as _openai_mod
+
+    _OPENAI_EXC = (
+        *_COMMON_PROVIDER_EXC,
+        _openai_mod.APIError,
+        _openai_mod.APIConnectionError,
+        _openai_mod.APITimeoutError,
+        _openai_mod.AuthenticationError,
+        _openai_mod.RateLimitError,
+    )
+except (ImportError, AttributeError):
+    pass
+
+try:
+    import anthropic as _anthropic_mod
+
+    _ANTHROPIC_EXC = (
+        *_COMMON_PROVIDER_EXC,
+        _anthropic_mod.APIError,
+        _anthropic_mod.APIConnectionError,
+        _anthropic_mod.APITimeoutError,
+        _anthropic_mod.AuthenticationError,
+        _anthropic_mod.RateLimitError,
+    )
+except (ImportError, AttributeError):
+    pass
+
+try:
+    import groq as _groq_mod
+
+    _GROQ_EXC = (
+        *_COMMON_PROVIDER_EXC,
+        _groq_mod.APIError,
+        _groq_mod.APIConnectionError,
+        _groq_mod.APITimeoutError,
+        _groq_mod.AuthenticationError,
+        _groq_mod.RateLimitError,
+    )
+except (ImportError, AttributeError):
+    pass
+
+try:
+    from google.genai import errors as _genai_errors
+
+    _GEMINI_EXC = (
+        *_COMMON_PROVIDER_EXC,
+        _genai_errors.ClientError,
+        _genai_errors.APIError,
+    )
+except (ImportError, AttributeError):
+    pass
 
 # Error types that should NOT trigger a fallback (permanent / config issues)
 _NO_FALLBACK_ERRORS = ("AuthenticationError", "PermissionDeniedError", "NotFoundError")
@@ -38,6 +108,14 @@ _INJECTION_PATTERNS = [
     "<|system|>", "<|user|>", "<|assistant|>", "<|im_start|>", "<|im_end|>",
     "[MEMORY CONTEXT \u2014 USER-SUPPLIED DATA",
     "TREAT AS UNTRUSTED",
+    # Code fences that might smuggle role tags
+    "```system", "```assistant", "```user",
+    # HTML/XML comment markers used for hidden instructions
+    "<!--", "-->",
+    # Markdown heading role markers
+    "# System:", "# Assistant:", "# Human:",
+    # Newline-prefixed role injection attempts
+    "\nSYSTEM:", "\nASSISTANT:", "\nHUMAN:", "\nUSER:",
 ]
 _INJECTION_RE = re.compile(
     "|".join(re.escape(p) for p in _INJECTION_PATTERNS), re.IGNORECASE,
@@ -102,8 +180,16 @@ async def _log_ai_call(
             async with AsyncSessionLocal() as _db:
                 _db.add(log_entry)
                 await _db.commit()
-    except Exception:
-        logger.debug("Failed to persist AI call log to DB", exc_info=True)
+    except (
+        SQLAlchemyError,
+        RuntimeError,
+        TimeoutError,
+        OSError,
+        ValueError,
+        TypeError,
+        AttributeError,
+    ) as exc:
+        logger.warning("Failed to persist AI call log to DB: %s", type(exc).__name__)
 
 
 def get_recent_calls() -> list[dict]:
@@ -111,14 +197,40 @@ def get_recent_calls() -> list[dict]:
     return list(_recent_calls)
 
 
+def get_recent_calls_summary(window_seconds: int = 3600) -> dict[str, object]:
+    """Aggregate recent AI-call telemetry for observability endpoints."""
+    now_ts = time.time()
+    rows = [r for r in _recent_calls if (now_ts - float(r.get("ts", 0.0))) <= window_seconds]
+    total = len(rows)
+    fallback_count = sum(1 for r in rows if bool(r.get("used_fallback")))
+    error_count = sum(1 for r in rows if bool(r.get("error_type")))
+    by_provider: dict[str, int] = {}
+    for row in rows:
+        provider = str(row.get("provider") or "unknown")
+        by_provider[provider] = by_provider.get(provider, 0) + 1
+    return {
+        "window_seconds": window_seconds,
+        "total_calls": total,
+        "fallback_count": fallback_count,
+        "fallback_rate": round((fallback_count / total) if total else 0.0, 4),
+        "error_count": error_count,
+        "provider_counts": by_provider,
+    }
+
+
 def _key_ok(key: str | None) -> bool:
     return bool(key) and key not in PLACEHOLDER_AI_KEYS
 
 
 def _fallback_order(primary: str) -> list[str]:
-    """Return providers to try after primary fails, in preference order."""
+    """Return providers to try after primary fails, in strategic preference order."""
     all_providers = ["groq", "openai", "anthropic", "gemini"]
-    return [p for p in all_providers if p != primary]
+    default_provider = (settings.DEFAULT_AI_PROVIDER or "").strip().lower()
+    ordered: list[str] = []
+    if default_provider in all_providers and default_provider != primary:
+        ordered.append(default_provider)
+    ordered.extend(p for p in all_providers if p != primary and p not in ordered)
+    return ordered
 
 
 def _configured_providers() -> list[str]:
@@ -303,7 +415,7 @@ async def _call_openai(
         if not result.choices:
             return "No response from OpenAI.", True
         return result.choices[0].message.content or "No response from OpenAI.", False
-    except Exception as e:
+    except _OPENAI_EXC as e:
         error_type = type(e).__name__
         is_transient = error_type not in _NO_FALLBACK_ERRORS
         logger.warning("OpenAI call failed (%s): %s", error_type, e)
@@ -335,7 +447,7 @@ async def _call_anthropic(
             block.text for block in result.content if getattr(block, "type", None) == "text"
         ]
         return ("\n".join(text_parts) if text_parts else "No response from Anthropic."), False
-    except Exception as e:
+    except _ANTHROPIC_EXC as e:
         error_type = type(e).__name__
         is_transient = error_type not in _NO_FALLBACK_ERRORS
         logger.warning("Anthropic call failed (%s): %s", error_type, e)
@@ -367,7 +479,7 @@ async def _call_groq(
         if not result.choices:
             return "No response from Groq.", True
         return result.choices[0].message.content or "No response from Groq.", False
-    except Exception as e:
+    except _GROQ_EXC as e:
         error_type = type(e).__name__
         is_transient = error_type not in _NO_FALLBACK_ERRORS
         logger.warning("Groq call failed (%s): %s", error_type, e)
@@ -443,7 +555,7 @@ async def _call_gemini(
         if not text:
             return "No response from Gemini.", True
         return text, False
-    except Exception as e:
+    except _GEMINI_EXC as e:
         error_type = type(e).__name__
         is_transient = error_type not in _NO_FALLBACK_ERRORS
         logger.warning("Gemini call failed (%s): %s", error_type, e)

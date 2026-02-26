@@ -6,7 +6,6 @@ from app.core.deps import get_db
 from app.core.security import hash_password
 from app.main import app as fastapi_app
 
-
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 async def _get_test_session():
@@ -37,9 +36,9 @@ def test_auth_dummy_hash_uses_600k():
 
 
 def test_main_dummy_hash_uses_600k():
-    """_DUMMY_HASH in main.py uses 600k iterations to match live hashes."""
-    from app import main
-    parts = main._DUMMY_HASH.split("$")
+    """_DUMMY_HASH uses 600k iterations to match live hashes."""
+    from app.web._helpers import _DUMMY_HASH
+    parts = _DUMMY_HASH.split("$")
     assert parts[0] == "pbkdf2_sha256"
     assert int(parts[1]) == 600_000
 
@@ -71,6 +70,7 @@ async def test_login_success_is_audited(client):
 
         # Check audit log for login_success event
         from sqlalchemy import select
+
         from app.models.event import Event
         session2, agen2 = await _get_test_session()
         try:
@@ -112,7 +112,7 @@ async def test_email_lookup_is_case_insensitive(client):
 
 def test_idempotency_409_does_not_leak_internal_message():
     """The 409 detail should be a fixed client-safe string, not str(exc)."""
-    from app.core.idempotency import IdempotencyConflictError, store_response, _cache
+    from app.core.idempotency import IdempotencyConflictError, _cache, store_response
 
     _cache.clear()
     try:
@@ -127,10 +127,12 @@ def test_idempotency_409_does_not_leak_internal_message():
 
 def test_compose_rate_limiter_org_cap():
     """_compose_counts dict does not grow past _COMPOSE_MAX_ORGS; returns 429."""
-    from fastapi import HTTPException
-    from app.api.v1.endpoints import email as email_mod
     from collections import deque
     from time import time
+
+    from fastapi import HTTPException
+
+    from app.api.v1.endpoints import email as email_mod
 
     old_counts = email_mod._compose_counts.copy()
     old_max = email_mod._COMPOSE_MAX_ORGS
@@ -160,6 +162,7 @@ def test_compose_rate_limiter_org_cap():
 def test_whatsapp_verify_uses_hmac_compare():
     """The WhatsApp webhook verify endpoint uses hmac.compare_digest."""
     import inspect
+
     from app.api.v1.endpoints import integrations
     source = inspect.getsource(integrations.whatsapp_webhook_verify)
     assert "hmac.compare_digest" in source

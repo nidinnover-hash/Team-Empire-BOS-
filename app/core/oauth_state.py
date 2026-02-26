@@ -59,5 +59,5 @@ def verify_oauth_state(
         return int(org_id_str)
     except HTTPException:
         raise
-    except Exception as exc:
+    except (TypeError, ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc

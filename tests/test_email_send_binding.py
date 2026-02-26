@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from sqlalchemy import select
@@ -28,7 +28,7 @@ async def test_send_rejects_mismatched_approval_payload(client, monkeypatch):
             subject="Hi",
             body_text="Body",
             draft_reply="Draft reply text",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         db.add(email)
         await db.commit()
@@ -93,7 +93,7 @@ async def test_send_uses_linked_approval_once(client, monkeypatch):
             subject="Hi again",
             body_text="Body",
             draft_reply="Approved draft",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         db.add(email)
         await db.commit()

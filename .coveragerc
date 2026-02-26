@@ -1,0 +1,19 @@
+[run]
+source = app
+omit =
+    # Alembic migrations are auto-generated
+    alembic/*
+    # External API HTTP clients — tested via integration mocks, not unit tests
+    app/tools/*
+    # Scripts and one-off utilities
+    scripts/*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if TYPE_CHECKING:
+    raise NotImplementedError
+    pass
+show_missing = true
+precision = 1

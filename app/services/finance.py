@@ -1,8 +1,8 @@
+from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import date, timedelta
 
 from app.models.finance import FinanceEntry
 from app.schemas.finance import (
@@ -15,7 +15,7 @@ from app.schemas.finance import (
 
 
 async def create_entry(
-    db: AsyncSession, data: FinanceEntryCreate, organization_id: int = 1
+    db: AsyncSession, data: FinanceEntryCreate, organization_id: int
 ) -> FinanceEntry:
     entry = FinanceEntry(**data.model_dump(), organization_id=organization_id)
     db.add(entry)
@@ -25,7 +25,7 @@ async def create_entry(
 
 
 async def list_entries(
-    db: AsyncSession, limit: int = 100, organization_id: int = 1
+    db: AsyncSession, organization_id: int, limit: int = 100
 ) -> list[FinanceEntry]:
     result = await db.execute(
         select(FinanceEntry)
@@ -36,7 +36,7 @@ async def list_entries(
     return list(result.scalars().all())
 
 
-async def get_summary(db: AsyncSession, organization_id: int = 1) -> FinanceSummary:
+async def get_summary(db: AsyncSession, organization_id: int) -> FinanceSummary:
     income_result = await db.execute(
         select(func.sum(FinanceEntry.amount)).where(
             FinanceEntry.type == "income",
@@ -102,7 +102,7 @@ def _is_digital_entry(entry: FinanceEntry) -> bool:
 
 async def get_expenditure_efficiency(
     db: AsyncSession,
-    organization_id: int = 1,
+    organization_id: int,
     window_days: int = 30,
 ) -> FinanceEfficiencyReport:
     end_date = date.today()
@@ -112,7 +112,7 @@ async def get_expenditure_efficiency(
             FinanceEntry.organization_id == organization_id,
             FinanceEntry.entry_date >= start_date,
             FinanceEntry.entry_date <= end_date,
-        )
+        ).limit(5000)
     )
     rows = list(result.scalars().all())
     income = sum((Decimal(str(x.amount)) for x in rows if x.type == "income"), Decimal("0"))

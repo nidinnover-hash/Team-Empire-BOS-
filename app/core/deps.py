@@ -42,7 +42,7 @@ async def get_current_api_user(
     )
     try:
         payload = decode_access_token(token)
-    except Exception as exc:
+    except ValueError as exc:
         logger.warning("Token decode failed: %s", type(exc).__name__)
         raise credentials_exception from exc
 
@@ -108,7 +108,7 @@ async def get_current_web_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not logged in")
     try:
         payload = decode_access_token(session_token)
-    except Exception as exc:
+    except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session") from exc
     user_id = payload.get("id")
     org_id = payload.get("org_id")

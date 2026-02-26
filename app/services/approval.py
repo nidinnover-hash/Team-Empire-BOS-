@@ -1,6 +1,5 @@
+from datetime import UTC, datetime
 from typing import cast
-
-from datetime import datetime, timezone
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,7 +69,7 @@ async def approve_approval(
         .values(
             status="approved",
             approved_by=approver_id,
-            approved_at=datetime.now(timezone.utc),
+            approved_at=datetime.now(UTC),
         )
     )
     await db.commit()
@@ -96,7 +95,7 @@ async def reject_approval(
         .values(
             status="rejected",
             approved_by=approver_id,
-            approved_at=datetime.now(timezone.utc),
+            approved_at=datetime.now(UTC),
         )
     )
     await db.commit()

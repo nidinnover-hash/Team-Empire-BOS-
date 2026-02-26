@@ -1,6 +1,6 @@
 """Tests for hardening round 3: nonce replay, snapshot retention, middleware, password hashing."""
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -8,7 +8,6 @@ import pytest
 from app.core.deps import get_db
 from app.core.security import hash_password, verify_password
 from app.main import app as fastapi_app
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -49,8 +48,8 @@ async def test_gcal_oauth_get_callback_rejects_replay(client, monkeypatch):
             last_sync_at = None
             last_sync_status = None
             organization_id = 1
-            created_at = datetime.now(timezone.utc)
-            updated_at = datetime.now(timezone.utc)
+            created_at = datetime.now(UTC)
+            updated_at = datetime.now(UTC)
         return FakeIntegration()
 
     monkeypatch.setattr("app.api.v1.endpoints.integrations.integration_service.connect_integration", fake_connect)
@@ -152,7 +151,7 @@ def test_verify_password_still_works_with_old_100k_hash():
 
     salt = os.urandom(16)
     iterations = 100_000
-    digest = hashlib.pbkdf2_hmac("sha256", "old-password".encode(), salt, iterations)
+    digest = hashlib.pbkdf2_hmac("sha256", b"old-password", salt, iterations)
     old_hash = f"pbkdf2_sha256${iterations}${base64.b64encode(salt).decode()}${base64.b64encode(digest).decode()}"
 
     assert verify_password("old-password", old_hash) is True
@@ -174,8 +173,8 @@ async def test_cleanup_old_job_runs_and_snapshots(client):
 
     session, agen = await _get_test_session()
     try:
-        old_date = datetime.now(timezone.utc) - timedelta(days=100)
-        recent_date = datetime.now(timezone.utc) - timedelta(days=10)
+        old_date = datetime.now(UTC) - timedelta(days=100)
+        recent_date = datetime.now(UTC) - timedelta(days=10)
 
         session.add(SchedulerJobRun(
             organization_id=1, job_name="test_old", status="ok",

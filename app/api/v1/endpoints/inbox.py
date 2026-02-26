@@ -34,7 +34,7 @@ def _parse_conversation_id(conversation_id: str) -> tuple[str, str]:
 @router.get("/unified", response_model=list[UnifiedInboxItem])
 async def unified_inbox(
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=10_000),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> list[UnifiedInboxItem]:
@@ -49,7 +49,7 @@ async def unified_inbox(
 @router.get("/conversations", response_model=list[UnifiedConversation])
 async def unified_conversations(
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=10_000),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> list[UnifiedConversation]:

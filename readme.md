@@ -25,3 +25,10 @@
 ## Launch docs
 - [Launch checklist](docs/LAUNCH_CHECKLIST.md)
 - [Production runbook](docs/PRODUCTION_RUNBOOK.md)
+- [Error handling policy](docs/ERROR_HANDLING_POLICY.md)
+- [7-day improvement roadmap](docs/IMPROVEMENT_ROADMAP_7_DAYS.md)
+- [30-day quality upgrade plan](docs/QUALITY_UPGRADE_PLAN_30_DAYS.md)
+- [Strict quality checklist](docs/QUALITY_CHECKLIST_STRICT.md)
+- One-command local start (PowerShell): `.\start-local.ps1`
+- Owner hardening (PowerShell): `.\.venv\Scripts\python.exe scripts/harden_owner_account.py`
+- Week-1 quality sprint (PowerShell): `.\scripts\quality_week1.ps1`

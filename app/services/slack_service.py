@@ -12,19 +12,26 @@ individual Slack message, which would be too noisy for the task list.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.resilience import run_with_retry
 from app.core.tenant import require_org_id
 from app.models.memory import DailyContext
+from app.schemas.memory import DailyContextCreate
 from app.services import integration as integration_service
 from app.services import memory as memory_service
-from app.schemas.memory import DailyContextCreate
-from app.tools.slack import auth_test, get_channel_history, get_user_name, list_channels, post_message
+from app.tools.slack import (
+    auth_test,
+    get_channel_history,
+    get_user_name,
+    list_channels,
+    post_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +70,7 @@ async def connect_slack(
         "team_id": info.get("team_id"),
         "bot_user_id": info.get("user_id"),
         "channels_tracked": 0,
-        "connected_at": datetime.now(timezone.utc).isoformat(),
+        "connected_at": datetime.now(UTC).isoformat(),
     }
 
     item = await integration_service.connect_integration(
@@ -166,7 +173,7 @@ async def sync_slack_messages(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     )
                 channels_synced += 1
 
-    except Exception as exc:
+    except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
         logger.warning("Slack sync failed: %s", type(exc).__name__)
         return {"channels_synced": channels_synced, "messages_read": messages_read, "error": type(exc).__name__}
     finally:
@@ -175,7 +182,7 @@ async def sync_slack_messages(db: AsyncSession, org_id: int) -> dict[str, Any]:
             cfg["channels_tracked"] = channels_synced
             item.config_json = cfg
             await integration_service.mark_sync_time(db, item)
-        except Exception:
+        except (RuntimeError, ValueError, TypeError):
             logger.debug("Failed to update Slack sync timestamp", exc_info=True)
 
     return {"channels_synced": channels_synced, "messages_read": messages_read, "error": None}

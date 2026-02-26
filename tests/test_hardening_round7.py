@@ -2,7 +2,6 @@
 import inspect
 import re
 
-
 # ── 1. WhatsApp phone lookup has cache for performance ────────────────────
 
 def test_whatsapp_phone_lookup_has_cache():

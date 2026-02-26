@@ -6,7 +6,7 @@ from app.schemas.contact import ContactCreate
 
 
 async def create_contact(
-    db: AsyncSession, data: ContactCreate, organization_id: int = 1
+    db: AsyncSession, data: ContactCreate, organization_id: int
 ) -> Contact:
     contact = Contact(**data.model_dump(), organization_id=organization_id)
     db.add(contact)
@@ -16,7 +16,7 @@ async def create_contact(
 
 
 async def list_contacts(
-    db: AsyncSession, limit: int = 100, organization_id: int = 1
+    db: AsyncSession, organization_id: int, limit: int = 100
 ) -> list[Contact]:
     result = await db.execute(
         select(Contact)

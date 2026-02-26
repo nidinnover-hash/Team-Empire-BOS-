@@ -171,7 +171,10 @@ async def test_risks_invalid_range(client):
 
 # ── Governance Unit Tests ────────────────────────────────────────────────────
 
-async def test_governance_policy_has_correct_teams():
+async def test_governance_policy_has_correct_teams(monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "GITHUB_TECH_LEADS", "sharonempire,nidinempire")
+    monkeypatch.setattr(settings, "GITHUB_DEVELOPERS", "akshayempireoe,sanjayempire")
     from app.services.github_governance import build_empireoe_policy
     policy = build_empireoe_policy()
     team_names = {t.name for t in policy.teams}

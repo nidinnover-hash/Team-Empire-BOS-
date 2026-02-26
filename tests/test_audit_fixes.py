@@ -1,4 +1,5 @@
 """Tests for audit fix items: compose rate limit, OAuth state, scheduler timezone, health endpoint."""
+from datetime import UTC
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -72,6 +73,7 @@ def test_oauth_state_sign_and_verify():
 def test_oauth_state_rejects_tampered():
     """Tampered state should raise HTTPException."""
     from fastapi import HTTPException
+
     from app.core.oauth_state import sign_oauth_state, verify_oauth_state
 
     state = sign_oauth_state(org_id=1)
@@ -106,13 +108,13 @@ async def test_morning_briefing_uses_ist():
     """Verify _check_morning_briefing uses IST, not UTC."""
 
     # Mock datetime so UTC hour is 2 (= IST 7:30, before 8am IST window)
-    from datetime import datetime, timezone
+    from datetime import datetime
     from zoneinfo import ZoneInfo
 
     # UTC 2:30 = IST 8:00 — should be in the briefing window
     with patch("app.services.sync_scheduler.datetime") as mock_dt:
         ist = ZoneInfo("Asia/Kolkata")
-        utc_time = datetime(2026, 2, 24, 2, 30, 0, tzinfo=timezone.utc)
+        utc_time = datetime(2026, 2, 24, 2, 30, 0, tzinfo=UTC)
         mock_dt.now.return_value = utc_time
         mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
 
@@ -137,6 +139,7 @@ async def test_web_pages_redirect_without_cookie(client):
 def test_ai_router_uses_deque():
     """Verify _recent_calls is a deque with maxlen."""
     from collections import deque
+
     from app.services.ai_router import _recent_calls
     assert isinstance(_recent_calls, deque)
     assert _recent_calls.maxlen == 200
@@ -145,6 +148,7 @@ def test_ai_router_uses_deque():
 def test_compose_rate_limit_falls_back_when_redis_errors(monkeypatch):
     """Redis errors should fall back to in-memory compose rate limiting."""
     from fastapi import HTTPException
+
     from app.api.v1.endpoints import email as email_mod
 
     class _BrokenRedis:

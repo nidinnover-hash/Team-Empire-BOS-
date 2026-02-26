@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timezone, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import cast
 
 from sqlalchemy import func, select
@@ -48,7 +48,7 @@ async def upsert_identity_map(
     row.github_login = (github_login or None)
     row.clickup_user_id = (clickup_user_id or None)
     row.slack_user_id = (slack_user_id or None)
-    row.updated_at = datetime.now(timezone.utc)
+    row.updated_at = datetime.now(UTC)
     db.add(row)
     await db.commit()
     await db.refresh(row)
@@ -60,6 +60,7 @@ async def list_identity_maps(db: AsyncSession, *, organization_id: int) -> list[
         await db.execute(
             select(EmployeeIdentityMap).where(EmployeeIdentityMap.organization_id == organization_id)
             .order_by(EmployeeIdentityMap.employee_id.asc())
+            .limit(500)
         )
     ).scalars().all()
     return list(rows)
@@ -90,7 +91,7 @@ async def upsert_clone_profile(
     row.strengths_json = json.dumps(strengths[:20])
     row.weak_zones_json = json.dumps(weak_zones[:20])
     row.preferred_task_types_json = json.dumps(preferred_task_types[:20])
-    row.updated_at = datetime.now(timezone.utc)
+    row.updated_at = datetime.now(UTC)
     db.add(row)
     await db.commit()
     await db.refresh(row)
@@ -159,7 +160,7 @@ async def feedback_adjustment_for_employee(
     employee_id: int,
     lookback_days: int = 30,
 ) -> float:
-    cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, lookback_days))
+    cutoff = datetime.now(UTC) - timedelta(days=max(1, lookback_days))
     avg_score = (
         await db.execute(
             select(func.avg(CloneLearningFeedback.outcome_score)).where(
@@ -191,7 +192,7 @@ async def generate_role_training_plans(
     ).scalars().all()
     employees = (
         await db.execute(
-            select(Employee).where(Employee.organization_id == organization_id)
+            select(Employee).where(Employee.organization_id == organization_id).limit(1000)
         )
     ).scalars().all()
     employee_by_id = {e.id: e for e in employees}
@@ -242,7 +243,7 @@ async def generate_role_training_plans(
         else:
             existing.role_focus = role_focus
             existing.plan_markdown = plan
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             db.add(existing)
         created_or_updated += 1
     await db.commit()
@@ -281,7 +282,7 @@ async def update_role_training_plan_status(
     if row is None:
         return None
     row.status = status
-    row.updated_at = datetime.now(timezone.utc)
+    row.updated_at = datetime.now(UTC)
     db.add(row)
     await db.commit()
     await db.refresh(row)
@@ -367,7 +368,7 @@ async def data_quality_snapshot(db: AsyncSession, *, organization_id: int) -> di
     ).scalar_one()
 
     return {
-        "generated_at": datetime.now(timezone.utc),
+        "generated_at": datetime.now(UTC),
         "missing_identity_count": int(missing_identity),
         "stale_metrics_count": int(stale_metrics),
         "duplicate_identity_conflicts": int(duplicate_conflicts),
@@ -380,7 +381,7 @@ async def data_quality_snapshot(db: AsyncSession, *, organization_id: int) -> di
 
 
 async def manager_sla_snapshot(db: AsyncSession, *, organization_id: int) -> dict[str, object]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     cutoff = now - timedelta(hours=int(settings.APPROVAL_SLA_HOURS))
     pending_breached = (
         await db.execute(

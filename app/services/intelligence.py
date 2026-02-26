@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,7 +53,7 @@ async def build_executive_summary(
 ) -> ExecutiveSummaryRead:
     today = date.today()
     start_day = today - timedelta(days=max(window_days - 1, 0))
-    start_dt = datetime.combine(start_day, time.min, tzinfo=timezone.utc)
+    start_dt = datetime.combine(start_day, time.min, tzinfo=UTC)
 
     event_count_result = await db.execute(
         select(func.count(Event.id)).where(
@@ -133,7 +133,7 @@ async def build_executive_summary(
 
     return ExecutiveSummaryRead(
         organization_id=organization_id,
-        generated_at=datetime.now(timezone.utc),
+        generated_at=datetime.now(UTC),
         window_days=window_days,
         decision_summary=summary_text,
         confidence_score=confidence,
@@ -156,9 +156,9 @@ async def build_change_since_yesterday(db: AsyncSession, organization_id: int) -
     today = date.today()
     yesterday = today - timedelta(days=1)
 
-    today_start = datetime.combine(today, time.min, tzinfo=timezone.utc)
-    tomorrow_start = datetime.combine(today + timedelta(days=1), time.min, tzinfo=timezone.utc)
-    yesterday_start = datetime.combine(yesterday, time.min, tzinfo=timezone.utc)
+    today_start = datetime.combine(today, time.min, tzinfo=UTC)
+    tomorrow_start = datetime.combine(today + timedelta(days=1), time.min, tzinfo=UTC)
+    yesterday_start = datetime.combine(yesterday, time.min, tzinfo=UTC)
 
     events_today_result = await db.execute(
         select(func.count(Event.id)).where(

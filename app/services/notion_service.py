@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +25,8 @@ def _extract_title(page: dict) -> str:
         if prop.get("type") == "title":
             title_parts = prop.get("title", [])
             return "".join(t.get("plain_text", "") for t in title_parts if isinstance(t, dict))
-    return page.get("id", "untitled")
+    page_id = page.get("id")
+    return str(page_id) if page_id else "untitled"
 
 
 def _blocks_to_text(blocks: list[dict]) -> str:
@@ -94,7 +95,8 @@ async def sync_pages_to_notes(
         try:
             blocks = await notion_tool.get_page_content(token, page_id, page_size=50)
             content = _blocks_to_text(blocks)
-        except Exception:
+        except (RuntimeError, ValueError, TypeError, TimeoutError):
+            logger.warning("Failed to fetch Notion page %s", page_id, exc_info=True)
             content = ""
         if not content.strip():
             continue
@@ -103,7 +105,7 @@ async def sync_pages_to_notes(
             title=note_title,
             content=content[:6000],
             source="notion",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         db.add(note)
         notes_created += 1
@@ -113,7 +115,7 @@ async def sync_pages_to_notes(
     return {
         "pages_synced": len(pages),
         "notes_created": notes_created,
-        "last_sync_at": datetime.now(timezone.utc).isoformat(),
+        "last_sync_at": datetime.now(UTC).isoformat(),
     }
 
 

@@ -5,27 +5,26 @@ The most important function here is build_memory_context() which assembles
 everything into a single string that gets injected into every AI call.
 """
 
-from collections.abc import Mapping
-from typing import cast
-
-from datetime import date, datetime, timezone
 import logging
+from collections.abc import Mapping
+from datetime import UTC, date, datetime
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.memory.retrieval import (
+    DEFAULT_CONTEXT_CHAR_LIMIT,
+    build_focused_context,
+    build_typed_context,
+)
 from app.models.memory import AvatarMemory, DailyContext, ProfileMemory, TeamMember
 from app.schemas.memory import (
     DailyContextCreate,
     TeamMemberCreate,
     TeamMemberUpdate,
-)
-from app.memory.retrieval import (
-    DEFAULT_CONTEXT_CHAR_LIMIT,
-    build_focused_context,
-    build_typed_context,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,7 +34,7 @@ logger = logging.getLogger(__name__)
 async def get_profile_memory(
     db: AsyncSession, organization_id: int
 ) -> list[ProfileMemory]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     result = await db.execute(
         select(ProfileMemory)
         .where(
@@ -43,6 +42,7 @@ async def get_profile_memory(
             (ProfileMemory.expires_at.is_(None)) | (ProfileMemory.expires_at > now),
         )
         .order_by(ProfileMemory.category, ProfileMemory.key)
+        .limit(500)
     )
     return list(result.scalars().all())
 
@@ -61,6 +61,7 @@ async def get_avatar_memory(
             AvatarMemory.avatar_mode == mode,
         )
         .order_by(AvatarMemory.key)
+        .limit(500)
     )
     return list(result.scalars().all())
 
@@ -88,7 +89,7 @@ async def upsert_profile_memory(
     if existing:
         existing.value = value
         existing.category = category
-        existing.updated_at = datetime.now(timezone.utc)
+        existing.updated_at = datetime.now(UTC)
         try:
             await db.commit()
             await db.refresh(existing)
@@ -102,8 +103,8 @@ async def upsert_profile_memory(
         key=key,
         value=value,
         category=category,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db.add(new_entry)
     try:
@@ -123,7 +124,7 @@ async def upsert_profile_memory(
             raise  # re-raise IntegrityError if the winning row vanished
         existing.value = value
         existing.category = category
-        existing.updated_at = datetime.now(timezone.utc)
+        existing.updated_at = datetime.now(UTC)
         await db.commit()
         await db.refresh(existing)
         return existing
@@ -199,7 +200,7 @@ async def create_team_member(
         current_project=data.current_project,
         notes=data.notes,
         user_id=data.user_id,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(member)
     await db.commit()
@@ -238,6 +239,7 @@ async def get_daily_context(
             DailyContext.date == target,
         )
         .order_by(DailyContext.context_type, DailyContext.created_at)
+        .limit(500)
     )
     return list(result.scalars().all())
 
@@ -251,7 +253,7 @@ async def add_daily_context(
         context_type=data.context_type,
         content=data.content,
         related_to=data.related_to,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(entry)
     await db.commit()
@@ -330,7 +332,9 @@ async def build_memory_context(
         _memory_context_cache_stats["misses"] += 1
 
     import asyncio as _asyncio
+
     from sqlalchemy import select as _select
+
     from app.models.task import Task as _Task
     from app.services.integration import list_integrations as _list_integrations
 
@@ -423,7 +427,7 @@ async def build_memory_context(
             remaining = char_limit - len(base_context)
             if remaining > 200:
                 base_context = base_context + "\n\n" + patterns_block[:remaining]
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, TimeoutError, AttributeError) as exc:
         logger.warning(
             "Skipping work pattern context org=%s due to %s",
             organization_id,
@@ -452,7 +456,7 @@ async def build_memory_context(
             remaining = char_limit - len(base_context)
             if remaining > 150:
                 base_context = base_context + "\n\n" + threat_block[:remaining]
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, TimeoutError, AttributeError) as exc:
         logger.warning(
             "Skipping threat intelligence context org=%s due to %s",
             organization_id,
@@ -476,7 +480,7 @@ async def build_memory_context(
             remaining = char_limit - len(base_context)
             if remaining > 100:
                 base_context = base_context + "\n\n" + fin_block[:remaining]
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, TimeoutError, AttributeError) as exc:
         logger.warning(
             "Skipping stripe financial context org=%s due to %s",
             organization_id,
@@ -506,7 +510,7 @@ async def build_memory_context(
                 remaining = char_limit - len(base_context)
                 if remaining > 100:
                     base_context = base_context + "\n\n" + cal_block[:remaining]
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, TimeoutError, AttributeError) as exc:
         logger.warning(
             "Skipping calendly context org=%s due to %s",
             organization_id,

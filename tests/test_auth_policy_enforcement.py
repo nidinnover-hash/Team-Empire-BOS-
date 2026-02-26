@@ -6,14 +6,14 @@ from app.core.security import decode_access_token
 
 async def test_password_login_blocked_when_sso_required_on_token_endpoint(client, monkeypatch):
     monkeypatch.setattr(settings, "ACCOUNT_SSO_REQUIRED", True)
-    r = await client.post("/token", data={"username": "bad@example.com", "password": "wrong"})
+    r = await client.post("/token", data={"username": "bad@example.com", "password": "wrongpass1"})
     assert r.status_code == 403
     assert "SSO is required" in r.json()["detail"]
 
 
 async def test_password_login_blocked_when_sso_required_on_auth_router(client, monkeypatch):
     monkeypatch.setattr(settings, "ACCOUNT_SSO_REQUIRED", True)
-    r = await client.post("/api/v1/auth/login", data={"username": "bad@example.com", "password": "wrong"})
+    r = await client.post("/api/v1/auth/login", data={"username": "bad@example.com", "password": "wrongpass1"})
     assert r.status_code == 403
     assert "SSO is required" in r.json()["detail"]
 

@@ -25,7 +25,7 @@ async def perplexity_connect(
         info = await perplexity_service.connect_perplexity(
             db, org_id=int(actor["org_id"]), api_key=data.api_key,
         )
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"Perplexity connection failed: {type(exc).__name__}") from exc
     await record_action(
         db, event_type="integration_connected", actor_user_id=actor["id"],

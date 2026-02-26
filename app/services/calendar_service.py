@@ -5,12 +5,14 @@ Events are stored as context_type="calendar_event" entries so they automatically
 appear in the daily briefing and AI memory context without any schema changes.
 """
 import logging
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
+import httpx
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.resilience import run_with_retry
 from app.models.memory import DailyContext
 from app.services.integration import get_integration_by_type, mark_sync_time
 from app.tools.google_calendar import list_events_for_day, refresh_access_token
@@ -31,7 +33,7 @@ def _format_event_time(dt_str: str | None) -> str:
         if display_hour == 0:
             display_hour = 12
         return f"{display_hour}:{minute:02d} {period}"
-    except Exception:
+    except ValueError:
         return dt_str[:10] if dt_str else ""
 
 
@@ -78,15 +80,25 @@ async def sync_calendar_events(
     # Fetch events, auto-refresh token on failure
     events = None
     try:
-        events = await list_events_for_day(access_token, target, calendar_id)
-    except Exception as exc:
-        logger.warning("Calendar fetch failed (%s), trying token refresh", exc)
+        events = await run_with_retry(
+            lambda: list_events_for_day(access_token, target, calendar_id),
+            attempts=2,
+            timeout_seconds=25.0,
+            retry_exceptions=(httpx.HTTPError, TimeoutError),
+        )
+    except (httpx.HTTPError, TimeoutError) as exc:
+        logger.warning("Calendar fetch failed (%s), trying token refresh", type(exc).__name__)
         if refresh_token and settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET:
             try:
-                refreshed = await refresh_access_token(
-                    refresh_token=refresh_token,
-                    client_id=settings.GOOGLE_CLIENT_ID,
-                    client_secret=settings.GOOGLE_CLIENT_SECRET,
+                refreshed = await run_with_retry(
+                    lambda: refresh_access_token(
+                        refresh_token=refresh_token,
+                        client_id=settings.GOOGLE_CLIENT_ID,
+                        client_secret=settings.GOOGLE_CLIENT_SECRET,
+                    ),
+                    attempts=2,
+                    timeout_seconds=25.0,
+                    retry_exceptions=(httpx.HTTPError, TimeoutError),
                 )
                 new_token = refreshed.get("access_token")
                 if not new_token:
@@ -95,11 +107,16 @@ async def sync_calendar_events(
                 integration.config_json = {**integration.config_json, "access_token": new_token}
                 db.add(integration)
                 await mark_sync_time(db, integration)
-                events = await list_events_for_day(new_token, target, calendar_id)
-            except Exception as refresh_exc:
-                return {"synced": 0, "date": str(target), "error": f"Token refresh failed: {type(refresh_exc).__name__}"}
+                events = await run_with_retry(
+                    lambda: list_events_for_day(new_token, target, calendar_id),
+                    attempts=2,
+                    timeout_seconds=25.0,
+                    retry_exceptions=(httpx.HTTPError, TimeoutError),
+                )
+            except (httpx.HTTPError, TimeoutError):
+                return {"synced": 0, "date": str(target), "error": "Token refresh failed or provider unavailable"}
         else:
-            return {"synced": 0, "date": str(target), "error": f"Calendar fetch failed: {type(exc).__name__}"}
+            return {"synced": 0, "date": str(target), "error": "Calendar provider unavailable or timed out"}
 
     if events is None:
         return {"synced": 0, "date": str(target), "error": "No events returned"}
@@ -114,7 +131,7 @@ async def sync_calendar_events(
     )
 
     # Insert fresh entries
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for event in events:
         content = _event_to_content(event)
         location = event.get("location", "")

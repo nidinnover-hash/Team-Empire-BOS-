@@ -92,7 +92,7 @@ def _get_redis_client() -> _RedisLike | None:
         return None
     try:
         redis_module = import_module("redis")
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         logger.warning("Redis idempotency requested but redis package is not installed; using memory backend.")
         return None
     try:
@@ -108,7 +108,7 @@ def _get_redis_client() -> _RedisLike | None:
         client.get("__idempotency_healthcheck__")
         _redis_client = client
         return _redis_client
-    except Exception:
+    except (RuntimeError, OSError, TypeError, ValueError):
         logger.warning("Redis idempotency unavailable; using memory backend.", exc_info=True)
         return None
 
@@ -148,7 +148,8 @@ def get_cached_response(scope: str, key: str, fingerprint: str | None = None) ->
                     return _unpack_cached(payload, fingerprint)
                 except IdempotencyConflictError:
                     raise
-                except Exception:
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    logger.debug("Idempotency cache parse failed for %s", key, exc_info=True)
                     _idempotency_stats["redis_failures"] += 1
                     return None
             _idempotency_stats["misses"] += 1
@@ -191,8 +192,8 @@ def store_response(
                                 )
                         except IdempotencyConflictError:
                             raise
-                        except Exception:
-                            pass  # Malformed entry — safe to overwrite
+                        except (TypeError, ValueError, json.JSONDecodeError):
+                            logger.debug("Malformed idempotency entry for %s — overwriting", key, exc_info=True)
                 client.setex(
                     _redis_key(scope, key),
                     _ttl_seconds(),
@@ -202,7 +203,7 @@ def store_response(
                 return
             except IdempotencyConflictError:
                 raise
-            except Exception:
+            except (RuntimeError, OSError, TypeError, ValueError):
                 logger.warning("Redis idempotency write failed; falling back to memory backend.", exc_info=True)
                 _idempotency_stats["redis_failures"] += 1
     now = time.monotonic()

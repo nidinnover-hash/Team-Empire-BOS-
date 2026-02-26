@@ -1,6 +1,12 @@
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.core.config import settings
 
@@ -30,7 +36,7 @@ def _build_engine() -> AsyncEngine:
         )
     try:
         return create_async_engine(db_url, **engine_kwargs)
-    except Exception as exc:
+    except (SQLAlchemyError, TypeError, ValueError) as exc:
         raise RuntimeError(f"Invalid DATABASE_URL configuration: {db_url!r}") from exc
 
 

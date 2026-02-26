@@ -24,7 +24,7 @@ async def digitalocean_connect(
     request_id = get_current_request_id()
     try:
         await do_service.connect_digitalocean(db, org_id=int(actor["org_id"]), api_token=data.api_token)
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
         await record_action(
             db,
             event_type="integration_connected",

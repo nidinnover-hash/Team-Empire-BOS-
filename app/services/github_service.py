@@ -14,11 +14,12 @@ iterating stale/archived repos.
 
 from __future__ import annotations
 
-import logging
 import json
-from datetime import datetime, timedelta, timezone
+import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
+import httpx
 from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,7 +62,7 @@ def _parse_gh_ts(value: Any) -> datetime | None:
 async def _snapshot_from_installation_token(
     db: AsyncSession, org_id: int, org: str, token: str, repos: list[dict[str, Any]]
 ) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if not token or not org:
         return
 
@@ -106,7 +107,7 @@ async def _snapshot_from_installation_token(
             protection = await github_app_auth.github_get_json(
                 f"/repos/{owner}/{name}/branches/{branch}/protection", token
             )
-        except Exception as exc:
+        except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
             logger.debug(
                 "GitHub protection fetch skipped for %s/%s: %s",
                 owner,
@@ -218,7 +219,7 @@ async def connect_github(
         "user_id": user_info.get("id"),
         "name": user_info.get("name", ""),
         "repos_tracked": 0,
-        "connected_at": datetime.now(timezone.utc).isoformat(),
+        "connected_at": datetime.now(UTC).isoformat(),
     }
 
     item = await integration_service.connect_integration(
@@ -253,7 +254,7 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
     prs_synced = 0
     issues_synced = 0
     repos_tracked = 0
-    cutoff = datetime.now(timezone.utc) - timedelta(days=_MAX_REPO_AGE_DAYS)
+    cutoff = datetime.now(UTC) - timedelta(days=_MAX_REPO_AGE_DAYS)
 
     try:
         repos = await run_with_retry(lambda: list_repos(token, per_page=_MAX_REPOS))
@@ -291,7 +292,7 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     return cast(list[dict[str, Any]], await get_pull_requests(token, o, n))
 
                 prs = await run_with_retry(_load_prs)
-            except Exception as exc:
+            except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
                 logger.warning("GitHub PR fetch failed for %s/%s: %s", owner, name, type(exc).__name__)
                 continue
             for pr in prs:
@@ -313,7 +314,7 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     return cast(list[dict[str, Any]], await get_issues(token, o, n, labels="bug"))
 
                 issues = await run_with_retry(_load_issues)
-            except Exception as exc:
+            except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
                 logger.warning("GitHub issue fetch failed for %s/%s: %s", owner, name, type(exc).__name__)
                 continue
             for issue in issues:
@@ -388,7 +389,7 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
 
         await db.commit()
 
-    except Exception as exc:
+    except (httpx.HTTPError, SQLAlchemyError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
         logger.warning("GitHub sync failed: %s", type(exc).__name__)
         await db.rollback()
         return {"prs_synced": prs_synced, "issues_synced": issues_synced, "error": type(exc).__name__}
@@ -400,7 +401,7 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
             cfg["org_login"] = org_login
             cfg["installation_id"] = install_id
             await _snapshot_from_installation_token(db, org_id, org_login, install_token, repos)
-    except Exception as exc:
+    except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
         logger.warning("GitHub app snapshot skipped: %s", type(exc).__name__)
 
     # Update config with repos_tracked count + mark sync time

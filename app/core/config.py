@@ -52,14 +52,14 @@ class Settings(BaseSettings):
     GITHUB_ORG: str | None = None
     CRITICAL_GITHUB_REPOS: str = ""
     # Governance team members (comma-separated GitHub usernames)
-    GITHUB_TECH_LEADS: str = "sharonempire"
-    GITHUB_DEVELOPERS: str = "akshayempireoe,sanjayempire"
+    GITHUB_TECH_LEADS: str = ""
+    GITHUB_DEVELOPERS: str = ""
     # Compliance engine company emails (comma-separated)
-    COMPLIANCE_OWNER_EMAILS: str = "nidin@empireoe.com,admin@empireoe.com"
-    COMPLIANCE_TECH_LEAD_EMAIL: str = "sharon@empireoe.com"
-    COMPLIANCE_OPS_MANAGER_EMAIL: str = "mano@empireoe.com"
-    COMPLIANCE_DEV_EMAILS: str = "dev1@empireoe.com,dev2@empireoe.com,dev3@empireoe.com,dev4@empireoe.com"
-    COMPLIANCE_COMPANY_DOMAIN: str = "empireoe.com"
+    COMPLIANCE_OWNER_EMAILS: str = "owner@example.com"
+    COMPLIANCE_TECH_LEAD_EMAIL: str = ""
+    COMPLIANCE_OPS_MANAGER_EMAIL: str = ""
+    COMPLIANCE_DEV_EMAILS: str = ""
+    COMPLIANCE_COMPANY_DOMAIN: str = "example.com"
     # Optional exceptions for personal identities (comma-separated emails).
     # Keep empty for strict company-only mode.
     COMPLIANCE_ALLOWED_PERSONAL_EMAILS: str = ""
@@ -86,7 +86,7 @@ class Settings(BaseSettings):
 
     # Internal API and rate limiting
     WHATSAPP_APP_SECRET: str | None = None   # Used to verify X-Hub-Signature-256 on webhook POSTs
-    WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS: int = 300
+    WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS: int = 60
     CLONE_API_KEY: str | None = None
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_WINDOW_SECONDS: int = 60
@@ -143,6 +143,9 @@ class Settings(BaseSettings):
     # Ops Intelligence guardrails
     WORK_EMAIL_DOMAINS: str = ""  # Comma-separated: "empire.com,empireo.ai"
     GMAIL_LABEL_ALLOWLIST: str = ""  # Comma-separated: "INBOX,work"
+
+    # Global request body size limit (bytes). 0 = unlimited.
+    MAX_REQUEST_BODY_BYTES: int = 10 * 1024 * 1024  # 10 MB
 
     # Database connection pool (PostgreSQL only; ignored for SQLite)
     DB_POOL_SIZE: int = 10
@@ -255,7 +258,7 @@ def _settings_env_file_paths() -> list[Path]:
     raw = Settings.model_config.get("env_file")
     if raw is None:
         return []
-    values = raw if isinstance(raw, (list, tuple)) else [raw]
+    values = raw if isinstance(raw, list | tuple) else [raw]
     paths: list[Path] = []
     for value in values:
         path = Path(str(value))
@@ -295,10 +298,14 @@ def validate_startup_settings(s: Settings) -> list[str]:
     Enforcement is opt-in via ENFORCE_STARTUP_VALIDATION.
     """
     issues: list[str] = []
-    if not s.DEBUG:
-        unknown_env = _unknown_env_file_keys()
-        if unknown_env:
-            issues.append("Unknown .env keys detected (possible typos): " + ", ".join(unknown_env))
+    admin_email = (s.ADMIN_EMAIL or "").strip().lower()
+    if not admin_email or "@" not in admin_email:
+        issues.append("ADMIN_EMAIL must be a valid email address")
+    unknown_env = _unknown_env_file_keys()
+    if unknown_env:
+        issues.append("Unknown .env keys detected (possible typos): " + ", ".join(unknown_env))
+    if not s.DEBUG and admin_email in {"demo@ai.com", "demo@local.ai"}:
+        issues.append("ADMIN_EMAIL must not use demo addresses when DEBUG=false (production mode)")
 
     # --- Numeric bounds ---
     if s.ACCESS_TOKEN_EXPIRE_MINUTES < 5:

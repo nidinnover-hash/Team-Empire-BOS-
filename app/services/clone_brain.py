@@ -6,8 +6,8 @@ from typing import TypedDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.clone_performance import ClonePerformanceWeekly
 from app.models.clone_control import EmployeeCloneProfile
+from app.models.clone_performance import ClonePerformanceWeekly
 from app.models.employee import Employee
 from app.models.ops_metrics import CodeMetricWeekly, CommsMetricWeekly, TaskMetricWeekly
 from app.services import clone_control
@@ -47,7 +47,7 @@ async def train_weekly_clone_scores(
             select(Employee).where(
                 Employee.organization_id == organization_id,
                 Employee.is_active.is_(True),
-            )
+            ).limit(500)
         )
     ).scalars().all()
 
@@ -163,7 +163,7 @@ async def list_clone_scores(
     query = select(ClonePerformanceWeekly).where(ClonePerformanceWeekly.organization_id == organization_id)
     if week_start_date is not None:
         query = query.where(ClonePerformanceWeekly.week_start_date == week_start_date)
-    query = query.order_by(ClonePerformanceWeekly.overall_score.desc())
+    query = query.order_by(ClonePerformanceWeekly.overall_score.desc()).limit(500)
     result = await db.execute(query)
     return list(result.scalars().all())
 

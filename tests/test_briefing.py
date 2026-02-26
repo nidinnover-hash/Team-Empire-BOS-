@@ -28,7 +28,7 @@ async def test_executive_briefing_returns_expected_sections(client):
 
     approval_res = await client.post(
         "/api/v1/approvals/request",
-        json={"approval_type": "assign_task", "payload_json": {"team": "tech"}},
+        json={"organization_id": 1, "approval_type": "assign_task", "payload_json": {"team": "tech"}},
         headers=manager_headers,
     )
     assert approval_res.status_code == 201

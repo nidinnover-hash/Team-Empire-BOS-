@@ -3,7 +3,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 DataSource = Literal["manual", "whatsapp", "call", "meeting", "docs"]
 
 

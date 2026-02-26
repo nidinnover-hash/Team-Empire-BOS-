@@ -2,6 +2,11 @@
   var token = null;
   var integrations = [];
   var gmailHealth = null;
+  var integrationHealth = null;
+  var autoRefreshTimer = null;
+  var autoRefreshEnabled = false;
+  var AUTO_REFRESH_MS = 60000;
+  var AUTO_REFRESH_STORAGE_KEY = "pc.integrations.autoRefresh";
   var inflight = {};
   function byId(id) { return document.getElementById(id); }
   function bindClick(id, handler) {
@@ -70,6 +75,35 @@
     el.textContent = message;
     el.style.display = "block";
   }
+  function setLastUpdatedNow() {
+    var el = byId("integrations-last-updated");
+    if (!el) return;
+    var now = new Date();
+    el.textContent = "Last updated: " + now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+  function stopAutoRefresh() {
+    if (autoRefreshTimer) {
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
+  }
+  function syncAutoRefreshToggleUi() {
+    var input = byId("auto-refresh-toggle");
+    if (input) input.checked = autoRefreshEnabled;
+  }
+  function saveAutoRefreshPreference() {
+    try {
+      window.localStorage.setItem(AUTO_REFRESH_STORAGE_KEY, autoRefreshEnabled ? "1" : "0");
+    } catch (_err) {}
+  }
+  function loadAutoRefreshPreference() {
+    try {
+      autoRefreshEnabled = window.localStorage.getItem(AUTO_REFRESH_STORAGE_KEY) === "1";
+    } catch (_err) {
+      autoRefreshEnabled = false;
+    }
+    syncAutoRefreshToggleUi();
+  }
 
   async function fetchGmailHealth() {
     try {
@@ -78,6 +112,19 @@
       gmailHealth = { status: "error", code: "health_unavailable" };
     }
     renderHealthAlert();
+  }
+  async function refreshIntegrationPanels() {
+    await fetchIntegrations();
+    await fetchIntegrationHealth();
+    await fetchGmailHealth();
+    setLastUpdatedNow();
+  }
+  function startAutoRefresh() {
+    stopAutoRefresh();
+    if (!autoRefreshEnabled) return;
+    autoRefreshTimer = setInterval(function() {
+      refreshIntegrationPanels().catch(function(){});
+    }, AUTO_REFRESH_MS);
   }
 
   // ── config templates per type ──────────────────────────────────────────────
@@ -176,6 +223,76 @@
     if (ageMins >= 72 * 60) return { cls: "health-bad", label: "stale 72h+", rank: 3 };
     if (ageMins >= 24 * 60) return { cls: "health-warn", label: "stale 24h+", rank: 2 };
     return { cls: "health-ok", label: "healthy", rank: 1 };
+  }
+  function healthStateMeta(state) {
+    if (state === "healthy") return { cls: "health-ok", label: "healthy", rank: 1 };
+    if (state === "degraded") return { cls: "health-warn", label: "degraded", rank: 2 };
+    if (state === "stale") return { cls: "health-warn", label: "stale", rank: 3 };
+    return { cls: "health-bad", label: "down", rank: 4 };
+  }
+  function renderIntegrationHealthSummary() {
+    var host = byId("integrations-health-summary");
+    if (!host) return;
+    if (!integrationHealth) {
+      host.innerHTML = (
+        '<div class="integration-health-summary__title">Integration Health Summary</div>' +
+        '<div class="small">Health diagnostics are temporarily unavailable.</div>'
+      );
+      return;
+    }
+    var items = Array.isArray(integrationHealth.items) ? integrationHealth.items : [];
+    if (!items.length) {
+      host.innerHTML = (
+        '<div class="integration-health-summary__title">Integration Health Summary</div>' +
+        '<div class="small">No connected integrations yet. Connect one to enable diagnostics.</div>'
+      );
+      return;
+    }
+    var score = Number(integrationHealth.overall_health_score || 0);
+    var failing = Number(integrationHealth.failing_count || 0);
+    var stale = Number(integrationHealth.stale_count || 0);
+    var unhealthy = items.filter(function(item) { return item.state !== "healthy"; });
+    unhealthy.sort(function(a, b) {
+      return healthStateMeta(b.state).rank - healthStateMeta(a.state).rank;
+    });
+    var topItems = unhealthy.slice(0, 3).map(function(item) {
+      var meta = healthStateMeta(item.state);
+      var ageLabel = item.age_hours == null ? "age unknown" : (item.age_hours + "h old");
+      return (
+        '<li><span class="health-badge ' + meta.cls + '">' + esc(meta.label) + '</span> ' +
+        '<strong>' + esc(item.type) + '</strong> - ' + esc(ageLabel) + '</li>'
+      );
+    }).join("");
+    var actionSet = {};
+    unhealthy.forEach(function(item) {
+      (item.suggested_actions || []).forEach(function(action) {
+        if (action && !actionSet[action]) actionSet[action] = true;
+      });
+    });
+    var actions = Object.keys(actionSet).slice(0, 3);
+    var actionHtml = actions.length
+      ? ('<ul class="integration-health-summary__actions">' + actions.map(function(action) {
+          return '<li>' + esc(action) + '</li>';
+        }).join("") + '</ul>')
+      : '<div class="small">No action needed. All integrations are healthy.</div>';
+    host.innerHTML = (
+      '<div class="integration-health-summary__title">Integration Health Summary</div>' +
+      '<div class="integration-health-summary__metrics">' +
+        '<span class="metric-pill">Health score: <strong>' + esc(String(score)) + '/100</strong></span>' +
+        '<span class="metric-pill">Failing: <strong>' + esc(String(failing)) + '</strong></span>' +
+        '<span class="metric-pill">Stale: <strong>' + esc(String(stale)) + '</strong></span>' +
+      '</div>' +
+      (topItems ? ('<ul class="integration-health-summary__top">' + topItems + '</ul>') : "") +
+      actionHtml
+    );
+  }
+  async function fetchIntegrationHealth() {
+    try {
+      integrationHealth = await apiJson("/api/v1/control/integrations/health");
+    } catch (_err) {
+      integrationHealth = null;
+    }
+    renderIntegrationHealthSummary();
   }
 
   async function bootToken() {
@@ -612,7 +729,17 @@
     window.syncIntegration("digitalocean","sync-status");
   });
 
-  bindClick("refresh-integrations-btn", fetchIntegrations);
+  bindClick("refresh-integrations-btn", async function() {
+    await refreshIntegrationPanels();
+  });
+  var autoRefreshToggle = byId("auto-refresh-toggle");
+  if (autoRefreshToggle) {
+    autoRefreshToggle.addEventListener("change", function() {
+      autoRefreshEnabled = !!autoRefreshToggle.checked;
+      saveAutoRefreshPreference();
+      startAutoRefresh();
+    });
+  }
   bindClick("refresh-ai-btn", fetchAiStatus);
   bindClick("coding-discovery-btn", async function() {
     var project = (byId("coding-project-name") && byId("coding-project-name").value || "").trim();
@@ -672,10 +799,11 @@
 
   // ── Boot ───────────────────────────────────────────────────────────────────
   try {
+    loadAutoRefreshPreference();
     await bootToken();
-    await fetchIntegrations();
-    await fetchGmailHealth();
+    await refreshIntegrationPanels();
     await fetchAiStatus();
+    startAutoRefresh();
     // Show success toast if redirected from Gmail OAuth callback
     var params = new URLSearchParams(window.location.search);
     if (params.get("gmail") === "connected") {
@@ -683,6 +811,7 @@
       history.replaceState(null, "", window.location.pathname);
     }
   } catch (err) {
+    stopAutoRefresh();
     setStatus("integrations-status","Your web session expired. Sign in again.","err");
     setStatus("ai-status","Sign in again to load provider status.","warn");
     setStatus("connect-status","Sign in again before updating integrations.","warn");

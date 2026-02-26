@@ -1,3 +1,4 @@
+import logging
 import re
 
 from sqlalchemy import select
@@ -6,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.command import Command
 from app.schemas.command import CommandCreate
+
+logger = logging.getLogger(__name__)
 
 _UNUSUAL_ACTIVITY_TOKENS = (
     "delete",
@@ -96,12 +99,13 @@ async def _call_ai(
             provider = settings.DEFAULT_AI_PROVIDER
             return response, _get_model(provider)
         return None, None
-    except Exception:
+    except (TimeoutError, ConnectionError, ValueError) as exc:
+        logger.warning("AI call failed for command text: %s", type(exc).__name__)
         return None, None
 
 
 async def create_command(
-    db: AsyncSession, data: CommandCreate, organization_id: int = 1
+    db: AsyncSession, data: CommandCreate, organization_id: int
 ) -> Command:
     ai_response = data.ai_response
     model_used = None
@@ -140,7 +144,7 @@ async def create_command(
 
 
 async def list_commands(
-    db: AsyncSession, limit: int = 50, organization_id: int = 1
+    db: AsyncSession, organization_id: int, limit: int = 50
 ) -> list[Command]:
     result = await db.execute(
         select(Command)

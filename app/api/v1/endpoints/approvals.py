@@ -1,14 +1,18 @@
+import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.core.request_context import get_current_request_id
 from app.logs.audit import record_action
 from app.models.approval import Approval
+from app.models.employee import Employee
+from app.models.user import User
 from app.schemas.approval import (
     ApprovalDecision,
     ApprovalRead,
@@ -17,9 +21,10 @@ from app.schemas.approval import (
     ApprovalTimelineResponse,
 )
 from app.services import approval as approval_service
-from app.services import execution_engine
+from app.services import clone_control, execution_engine
 
 router = APIRouter(prefix="/approvals", tags=["Approvals"])
+logger = logging.getLogger(__name__)
 RISKY_APPROVAL_TYPES = {
     "send_message",
     "assign_task",
@@ -28,6 +33,73 @@ RISKY_APPROVAL_TYPES = {
     "spend_money",
     "spend",
 }
+
+
+async def _record_approval_feedback(
+    db: AsyncSession,
+    *,
+    approval: Approval,
+    outcome_score: float,
+    actor_user_id: int,
+    note: str,
+) -> None:
+    """Best-effort learning feedback record from approval outcomes."""
+    requester = (
+        await db.execute(
+            select(User).where(
+                User.id == approval.requested_by,
+                User.organization_id == approval.organization_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if requester is None:
+        return
+    employee = (
+        await db.execute(
+            select(Employee).where(
+                Employee.organization_id == approval.organization_id,
+                func.lower(Employee.email) == requester.email.lower(),
+            )
+        )
+    ).scalar_one_or_none()
+    if employee is None:
+        return
+    await clone_control.record_feedback(
+        db,
+        organization_id=approval.organization_id,
+        employee_id=int(employee.id),
+        source_type="approval",
+        source_id=approval.id,
+        outcome_score=max(0.0, min(1.0, float(outcome_score))),
+        notes=note[:2000],
+        created_by=actor_user_id,
+    )
+
+
+async def _record_feedback_telemetry_event(
+    *,
+    db: AsyncSession,
+    actor: dict,
+    approval: Approval,
+    path: str,
+    status: str,
+    error_type: str | None = None,
+) -> None:
+    payload = {"path": path, "status": status}
+    if error_type:
+        payload["error_type"] = error_type
+    try:
+        await record_action(
+            db=db,
+            event_type="approval_feedback_recorded" if status == "ok" else "approval_feedback_failed",
+            actor_user_id=actor["id"],
+            organization_id=actor["org_id"],
+            entity_type="approval",
+            entity_id=approval.id,
+            payload_json=payload,
+        )
+    except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
+        logger.debug("approval feedback telemetry event failed", exc_info=True)
 
 
 @router.post("/request", response_model=ApprovalRead, status_code=201)
@@ -57,17 +129,18 @@ async def list_approvals(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> list[ApprovalRead]:
-    return await approval_service.list_approvals(
+    rows = await approval_service.list_approvals(
         db,
         organization_id=actor["org_id"],
         status=status,
     )
+    return [ApprovalRead.model_validate(row, from_attributes=True) for row in rows]
 
 
 @router.get("/timeline", response_model=ApprovalTimelineResponse)
 async def approval_timeline(
     limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=10_000),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> ApprovalTimelineResponse:
@@ -158,6 +231,31 @@ async def approve(
             actor_user_id=actor["id"],
             actor_org_id=actor["org_id"],
         )
+    try:
+        await _record_approval_feedback(
+            db,
+            approval=approval,
+            outcome_score=1.0 if should_execute else 0.85,
+            actor_user_id=int(actor["id"]),
+            note=f"Approval {approval.approval_type} marked approved",
+        )
+        await _record_feedback_telemetry_event(
+            db=db,
+            actor=actor,
+            approval=approval,
+            path="approve",
+            status="ok",
+        )
+    except (SQLAlchemyError, ValueError, TypeError) as exc:
+        logger.warning("approval feedback write failed (approve path): %s", type(exc).__name__, exc_info=True)
+        await _record_feedback_telemetry_event(
+            db=db,
+            actor=actor,
+            approval=approval,
+            path="approve",
+            status="error",
+            error_type=type(exc).__name__,
+        )
     return approval
 
 
@@ -173,7 +271,11 @@ async def reject(
         approval_id,
         organization_id=actor["org_id"],
     )
-    if existing is None or existing.status != "pending":
+    if (
+        existing is None
+        or existing.organization_id != actor["org_id"]
+        or existing.status != "pending"
+    ):
         raise HTTPException(status_code=404, detail="Pending approval not found")
 
     approval = await approval_service.reject_approval(
@@ -193,4 +295,29 @@ async def reject(
         entity_id=approval.id,
         payload_json={"status": approval.status, "request_id": get_current_request_id()},
     )
+    try:
+        await _record_approval_feedback(
+            db,
+            approval=approval,
+            outcome_score=0.15,
+            actor_user_id=int(actor["id"]),
+            note=f"Approval {approval.approval_type} rejected",
+        )
+        await _record_feedback_telemetry_event(
+            db=db,
+            actor=actor,
+            approval=approval,
+            path="reject",
+            status="ok",
+        )
+    except (SQLAlchemyError, ValueError, TypeError) as exc:
+        logger.warning("approval feedback write failed (reject path): %s", type(exc).__name__, exc_info=True)
+        await _record_feedback_telemetry_event(
+            db=db,
+            actor=actor,
+            approval=approval,
+            path="reject",
+            status="error",
+            error_type=type(exc).__name__,
+        )
     return approval

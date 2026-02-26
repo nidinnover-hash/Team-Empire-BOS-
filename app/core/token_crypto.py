@@ -34,10 +34,16 @@ def _looks_like_fernet(value: str) -> bool:
 
 
 def _fernet() -> Fernet:
-    # Use a dedicated TOKEN_ENCRYPTION_KEY when available (key separation).
-    # Falls back to SECRET_KEY for backward compat but logs a warning.
+    # Use a dedicated TOKEN_ENCRYPTION_KEY (key separation from JWT SECRET_KEY).
+    # In production (DEBUG=False) this is mandatory; in development we fall back
+    # to SECRET_KEY with a warning so local dev isn't blocked.
     raw_key = settings.TOKEN_ENCRYPTION_KEY
     if not raw_key:
+        if not settings.DEBUG:
+            raise ValueError(
+                "TOKEN_ENCRYPTION_KEY is not configured. Set it in .env to a value "
+                'different from SECRET_KEY. Generate: python -c "import secrets; print(secrets.token_hex(32))"'
+            )
         logger.warning(
             "TOKEN_ENCRYPTION_KEY not set — falling back to SECRET_KEY. "
             "Set TOKEN_ENCRYPTION_KEY in .env for proper key separation."

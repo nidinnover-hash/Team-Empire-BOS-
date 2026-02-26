@@ -8,7 +8,7 @@ Tests for patterns introduced in the Feb 23 improvement round:
   - Idempotency key max_length enforcement
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
@@ -208,8 +208,8 @@ async def test_double_execution_skips_already_executed(client):
             payload_json={"count": 3},
             status="approved",
             approved_by=1,
-            approved_at=datetime.now(timezone.utc),
-            executed_at=datetime.now(timezone.utc),  # already executed
+            approved_at=datetime.now(UTC),
+            executed_at=datetime.now(UTC),  # already executed
         )
         db.add(approval)
         await db.commit()
@@ -243,7 +243,7 @@ async def test_execution_engine_rejects_cross_org(client):
             payload_json={"count": 3},
             status="approved",
             approved_by=1,
-            approved_at=datetime.now(timezone.utc),
+            approved_at=datetime.now(UTC),
         )
         db.add(approval)
         await db.commit()
@@ -317,7 +317,7 @@ async def test_execution_handler_timeout_records_failure(client, monkeypatch):
             payload_json={},
             status="approved",
             approved_by=1,
-            approved_at=datetime.now(timezone.utc),
+            approved_at=datetime.now(UTC),
         )
         db.add(approval)
         await db.commit()
@@ -365,7 +365,7 @@ async def test_execution_email_send_message_cross_org_blocked(client, monkeypatc
             payload_json={"email_id": 99},
             status="approved",
             approved_by=1,
-            approved_at=datetime.now(timezone.utc),
+            approved_at=datetime.now(UTC),
         )
         db.add(approval)
         await db.commit()
@@ -396,7 +396,7 @@ async def test_execution_unknown_handler_skipped(client):
             payload_json={},
             status="approved",
             approved_by=1,
-            approved_at=datetime.now(timezone.utc),
+            approved_at=datetime.now(UTC),
         )
         db.add(approval)
         await db.commit()

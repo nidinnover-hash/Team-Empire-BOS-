@@ -1,33 +1,35 @@
 from fastapi import APIRouter
+
 from app.api.v1.endpoints import (
     agents,
     approvals,
     auth,
     briefing,
-    email,
-    export,
-    github,
-    health,
     commands,
-    tasks,
-    notes,
-    projects,
-    goals,
     contacts,
     control,
     data_collection,
-    inbox,
-    intelligence,
+    email,
     executions,
+    export,
     finance,
+    github,
+    goals,
+    health,
+    inbox,
     integrations,
+    intelligence,
     layers,
     memory,
+    notes,
+    notifications,
     observability,
     ops,
     orgs,
+    projects,
     search,
     social,
+    tasks,
     users,
 )
 
@@ -62,3 +64,4 @@ api_router.include_router(export.router)
 api_router.include_router(search.router)
 api_router.include_router(github.router)
 api_router.include_router(social.router)
+api_router.include_router(notifications.router)

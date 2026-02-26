@@ -1,10 +1,12 @@
-from app.core.security import create_access_token
+from datetime import UTC, datetime
+
+from sqlalchemy import select
+
 from app.core.deps import get_db
+from app.core.security import create_access_token
 from app.main import app as fastapi_app
 from app.models.integration import Integration
 from app.services import integration as integration_service
-from datetime import datetime, timezone
-from sqlalchemy import select
 
 
 def _auth_headers(user_id: int, email: str, role: str, org_id: int) -> dict:
@@ -104,7 +106,7 @@ async def test_decrypted_read_does_not_persist_plaintext_tokens_on_commit(client
         item = await integration_service.get_integration_by_type(session, 1, "gmail")
         assert item is not None
         assert item.config_json.get("access_token") == "ghp_sensitive_token_123"
-        item.updated_at = datetime.now(timezone.utc)
+        item.updated_at = datetime.now(UTC)
         await session.commit()
     finally:
         await agen.aclose()

@@ -1,6 +1,6 @@
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
@@ -16,6 +16,7 @@ from app.logs.audit import record_action
 from app.schemas.integration import (
     SlackConnectRequest,
     SlackSendRequest,
+    SlackSendResult,
     SlackStatusRead,
     SlackSyncResult,
 )
@@ -35,7 +36,7 @@ async def slack_connect(
         info = await slack_service.connect_slack(
             db, org_id=int(actor["org_id"]), bot_token=data.bot_token
         )
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
         await record_action(
             db,
             event_type="integration_connected",
@@ -131,7 +132,7 @@ async def slack_sync(
     return response
 
 
-@router.post("/slack/send")
+@router.post("/slack/send", response_model=SlackSendResult)
 async def slack_send(
     data: SlackSendRequest,
     db: AsyncSession = Depends(get_db),
@@ -142,7 +143,7 @@ async def slack_send(
         result = await slack_service.send_to_slack(
             db, org_id=int(actor["org_id"]), channel_id=data.channel_id, text=data.text
         )
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
         await record_action(
             db,
             event_type="slack_message_sent",

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
 from app.memory.retrieval import build_typed_context, rank_context_layers
@@ -34,7 +34,7 @@ def test_build_typed_context_includes_integration_layer() -> None:
 
 
 def test_rank_context_layers_prefers_critical_daily_signal() -> None:
-    now = datetime(2026, 2, 24, 10, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 2, 24, 10, 0, tzinfo=UTC)
     ranked = rank_context_layers(
         [
             {
@@ -62,7 +62,7 @@ def test_rank_context_layers_prefers_critical_daily_signal() -> None:
 
 
 def test_rank_context_layers_applies_stale_decay() -> None:
-    now = datetime(2026, 2, 24, 10, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 2, 24, 10, 0, tzinfo=UTC)
     ranked = rank_context_layers(
         [
             {
@@ -140,7 +140,7 @@ async def test_build_memory_context_appends_integration_block(monkeypatch) -> No
             SimpleNamespace(
                 type="clickup",
                 status="connected",
-                last_sync_at=datetime(2026, 2, 23, 10, 0, 0, tzinfo=timezone.utc),
+                last_sync_at=datetime(2026, 2, 23, 10, 0, 0, tzinfo=UTC),
             )
         ]
 

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -21,6 +22,8 @@ from app.models.ceo_control import (
 )
 from app.services import integration as integration_service
 from app.tools import github_admin
+
+logger = logging.getLogger(__name__)
 
 
 def _owner_emails() -> set[str]:
@@ -86,7 +89,7 @@ def _repo_is_critical(repo_name: str | None) -> bool:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 async def ensure_company_directory(db: AsyncSession, org_id: int) -> None:
@@ -336,7 +339,8 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     github_token,
                     (settings.GITHUB_ORG or "").strip(),
                 )
-            except Exception:
+            except (TimeoutError, ConnectionError, ValueError) as exc:
+                logger.warning("Failed to list GitHub org invitations: %s", type(exc).__name__)
                 invitations = []
             seen_owner_invites: set[tuple[str, str, str]] = set()
             for invite in invitations:
@@ -429,7 +433,7 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 continue
             due = t.due_date
             if due and due.tzinfo is None:
-                due = due.replace(tzinfo=timezone.utc)
+                due = due.replace(tzinfo=UTC)
             if due and (now - due) > timedelta(days=7) and (t.status or "").lower() not in {"done", "complete", "closed"}:
                 violations.append(
                     PolicyViolation(
@@ -457,7 +461,7 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 )
             updated = t.updated_at_remote
             if updated and updated.tzinfo is None:
-                updated = updated.replace(tzinfo=timezone.utc)
+                updated = updated.replace(tzinfo=UTC)
             if "block" in (t.status or "").lower() and updated and (now - updated) > timedelta(days=3):
                 violations.append(
                     PolicyViolation(

@@ -1,6 +1,5 @@
+from datetime import UTC, datetime
 from typing import cast
-
-from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,7 +40,7 @@ async def complete_execution(
     execution.status = status
     execution.output_json = output_json or {}
     execution.error_text = error_text
-    execution.finished_at = datetime.now(timezone.utc)
+    execution.finished_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(execution)
     return execution

@@ -1,6 +1,6 @@
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
@@ -34,7 +34,7 @@ async def clickup_connect(
         info = await clickup_service.connect_clickup(
             db, org_id=int(actor["org_id"]), api_token=data.api_token
         )
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
         await record_action(
             db,
             event_type="integration_connected",

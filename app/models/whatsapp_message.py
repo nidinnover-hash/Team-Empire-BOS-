@@ -1,6 +1,6 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -37,5 +37,5 @@ class WhatsAppMessage(Base):
     raw_payload: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )

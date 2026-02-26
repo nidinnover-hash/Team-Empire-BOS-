@@ -1,7 +1,7 @@
 import pytest
 
-from app.core.config import settings
 from app.core import idempotency
+from app.core.config import settings
 
 
 @pytest.fixture(autouse=True)

@@ -30,7 +30,7 @@
     <a href="/web/ops-intel" class="sb-item"><i data-lucide="bar-chart-3"></i> Ops Intel</a>
     <a href="/web/tasks" class="sb-item"><i data-lucide="check-square"></i> Tasks</a>
     <div class="sb-divider"></div>
-    <a href="/docs" class="sb-item" target="_blank"><i data-lucide="book-open"></i> API Docs</a>
+    <a href="/docs" class="sb-item" target="_blank" rel="noopener noreferrer"><i data-lucide="book-open"></i> API Docs</a>
   </div>
   <div class="sb-footer">
     <button class="theme-toggle" type="button">
@@ -51,10 +51,21 @@
     <div class="card">
       <div class="card-head">
         <div class="card-title">Connected Integrations</div>
-        <button class="btn subtle" type="button" id="refresh-integrations-btn">Refresh</button>
+        <div class="integration-head-actions">
+          <label class="auto-refresh-toggle" for="auto-refresh-toggle">
+            <input id="auto-refresh-toggle" type="checkbox" />
+            Auto-refresh 60s
+          </label>
+          <button class="btn subtle" type="button" id="refresh-integrations-btn">Refresh</button>
+        </div>
       </div>
       <div class="card-body">
         <div class="status" id="integrations-status"></div>
+        <div class="small" id="integrations-last-updated">Last updated: --</div>
+        <div id="integrations-health-summary" class="integration-health-summary" aria-live="polite">
+          <div class="integration-health-summary__title">Integration Health Summary</div>
+          <div class="small">Loading integration health diagnostics...</div>
+        </div>
         <div id="integrations-list">
           <div class="empty">Loading integrations...</div>
         </div>

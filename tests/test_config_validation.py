@@ -1,5 +1,6 @@
-from app.core.config import Settings, format_startup_issues, validate_startup_settings
 from pydantic import ValidationError
+
+from app.core.config import Settings, format_startup_issues, validate_startup_settings
 
 
 def _base_settings(**overrides) -> Settings:
@@ -21,6 +22,8 @@ def _base_settings(**overrides) -> Settings:
         "WHATSAPP_APP_SECRET": None,
         "SECURITY_PREMIUM_MODE": True,
         "LEGAL_TERMS_VERSION": "2026-02-24",
+        "COMPLIANCE_OWNER_EMAILS": "owner@example.com,admin@example.com",
+        "COMPLIANCE_COMPANY_DOMAIN": "example.com",
         "LEGAL_DPA_REQUIRED": True,
         "ACCOUNT_MFA_REQUIRED": True,
         "ACCOUNT_SESSION_MAX_HOURS": 12,
@@ -248,6 +251,20 @@ def test_validate_startup_flags_unknown_env_keys(tmp_path, monkeypatch):
     monkeypatch.setitem(Settings.model_config, "env_file", str(env_file))
 
     s = _base_settings(DEBUG=False)
+    issues = validate_startup_settings(s)
+    assert any("UNKNOWN_CONFIG_FLAG" in i for i in issues)
+
+
+def test_validate_startup_flags_unknown_env_keys_even_when_debug_true(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/personal_clone_test\n"
+        "UNKNOWN_CONFIG_FLAG=true\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setitem(Settings.model_config, "env_file", str(env_file))
+
+    s = _base_settings(DEBUG=True)
     issues = validate_startup_settings(s)
     assert any("UNKNOWN_CONFIG_FLAG" in i for i in issues)
 

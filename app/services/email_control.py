@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TypedDict, cast
 
 from sqlalchemy import select
@@ -11,11 +11,10 @@ from app.models.approval import Approval
 from app.models.email import Email
 from app.models.task import Task
 from app.schemas.approval import ApprovalRequestCreate
+from app.schemas.task import TaskCreate
 from app.services import email_service
 from app.services.approval import request_approval
 from app.services.task import create_task
-from app.schemas.task import TaskCreate
-
 
 _REPORT_REQUIRED_FIELDS = ("owner", "date", "completed", "planned", "blockers")
 _ACTION_KEYWORDS = ("action required", "please", "follow up", "deadline", "todo", "next steps")
@@ -260,7 +259,9 @@ async def build_pending_actions_digest(
 ) -> _PendingDigest:
     open_tasks = (
         await db.execute(
-            select(Task).where(Task.organization_id == org_id, Task.is_done.is_(False)).order_by(Task.priority.desc(), Task.created_at.desc())
+            select(Task).where(Task.organization_id == org_id, Task.is_done.is_(False))
+            .order_by(Task.priority.desc(), Task.created_at.desc())
+            .limit(500)
         )
     ).scalars().all()
     pending_approvals = (
@@ -269,6 +270,7 @@ async def build_pending_actions_digest(
                 Approval.organization_id == org_id,
                 Approval.status == "pending",
             ).order_by(Approval.created_at.desc())
+            .limit(500)
         )
     ).scalars().all()
 
@@ -291,7 +293,7 @@ async def build_pending_actions_digest(
 
     return {
         "org_id": org_id,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "total_open_tasks": len(open_tasks),
         "total_pending_approvals": len(pending_approvals),
         "lines": lines,
@@ -306,7 +308,7 @@ async def draft_pending_actions_digest_email(
 ) -> dict[str, object]:
     digest: _PendingDigest = await build_pending_actions_digest(db, org_id=org_id)
     to_addr = (settings.EMAIL_CONTROL_DIGEST_TO or settings.ADMIN_EMAIL).strip()
-    subject = f"[Daily Pending Actions] Org {org_id} - {datetime.now(timezone.utc).date().isoformat()}"
+    subject = f"[Daily Pending Actions] Org {org_id} - {datetime.now(UTC).date().isoformat()}"
     body = "\n".join(
         [
             "Daily owner-wise pending actions summary:",

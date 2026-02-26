@@ -1,4 +1,5 @@
 import json
+from json import JSONDecodeError
 from typing import Any, cast
 
 from sqlalchemy import select
@@ -84,7 +85,7 @@ async def get_policy_config(db: AsyncSession, organization_id: int) -> dict[str,
         return default_policy_config()
     try:
         parsed = json.loads(raw)
-    except Exception:
+    except (JSONDecodeError, TypeError, ValueError):
         parsed = {}
     if not isinstance(parsed, dict):
         parsed = {}

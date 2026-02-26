@@ -12,7 +12,7 @@ Produces: structured text blocks for injection into build_memory_context().
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -217,7 +217,7 @@ async def _approval_behavior_summary(
     org_id: int,
 ) -> str:
     """Analyze recent approval/execution events to detect behavioral patterns."""
-    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    cutoff = datetime.now(UTC) - timedelta(days=14)
 
     result = await db.execute(
         select(Event.event_type, func.count(Event.id))

@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
+
 from app.core.sensitive_keys import is_sensitive_key
 
 IntegrationType = Literal[
@@ -161,6 +162,11 @@ class SlackStatusRead(BaseModel):
 class SlackSendRequest(BaseModel):
     channel_id: str = Field(..., min_length=1, max_length=100)
     text: str = Field(..., min_length=1, max_length=4000)
+
+
+class SlackSendResult(BaseModel):
+    ok: bool
+    ts: str | None = None
 
 
 class GitHubInstallationDiscoveryResult(BaseModel):

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,7 +69,7 @@ async def sync_hubspot_data(
             company=company[:200] if company else None,
             relationship="business",
             notes=f"Synced from HubSpot (lifecycle: {props.get('lifecyclestage', 'unknown')})",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         db.add(contact)
         contacts_synced += 1
@@ -83,5 +83,5 @@ async def sync_hubspot_data(
     return {
         "contacts_synced": contacts_synced,
         "deals_synced": len(deals),
-        "last_sync_at": datetime.now(timezone.utc).isoformat(),
+        "last_sync_at": datetime.now(UTC).isoformat(),
     }

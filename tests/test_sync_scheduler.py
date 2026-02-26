@@ -7,11 +7,10 @@ that on-demand sync fires exactly once within the throttle window.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from app.services import sync_scheduler
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -51,7 +50,7 @@ async def test_trigger_skips_within_throttle_window(monkeypatch):
     _reset_state()
 
     from app.services.sync_scheduler import _throttle_minutes
-    recent = datetime.now(timezone.utc) - timedelta(minutes=_throttle_minutes() - 2)
+    recent = datetime.now(UTC) - timedelta(minutes=_throttle_minutes() - 2)
     sync_scheduler._last_synced[1] = recent
 
     calls: list[str] = []
@@ -74,7 +73,7 @@ async def test_trigger_fires_after_throttle_window(monkeypatch):
     _reset_state()
 
     from app.services.sync_scheduler import _throttle_minutes
-    old = datetime.now(timezone.utc) - timedelta(minutes=_throttle_minutes() + 1)
+    old = datetime.now(UTC) - timedelta(minutes=_throttle_minutes() + 1)
     sync_scheduler._last_synced[2] = old
 
     async def _fake_run(db, org_id):

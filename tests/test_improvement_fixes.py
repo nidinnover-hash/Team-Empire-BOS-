@@ -19,6 +19,7 @@ def _staff_headers(org_id: int = 1) -> dict:
 def test_csrf_uses_hmac_compare_digest():
     """verify_csrf uses hmac.compare_digest, not ==."""
     import inspect
+
     from app.core import deps
     source = inspect.getsource(deps.verify_csrf)
     assert "hmac.compare_digest" in source
@@ -136,6 +137,7 @@ async def test_approval_timeline_pagination(client):
 def test_run_agent_does_not_call_extract_proposed_actions():
     """run_agent should not fire the expensive extract_proposed_actions call."""
     import inspect
+
     from app.agents import orchestrator
     source = inspect.getsource(orchestrator.run_agent)
     assert "extract_proposed_actions" not in source
@@ -154,10 +156,10 @@ def test_memory_context_cache_exists():
 # ── ARCH-6: Login authentication is deduplicated ──────────────────────────────
 
 def test_authenticate_user_helper_exists():
-    """_authenticate_user should be defined as a shared helper in main."""
-    from app.main import _authenticate_user, _create_jwt
-    assert callable(_authenticate_user)
-    assert callable(_create_jwt)
+    """authenticate_user should be defined as a shared helper."""
+    from app.web._helpers import authenticate_user, create_jwt
+    assert callable(authenticate_user)
+    assert callable(create_jwt)
 
 
 # ── PROD-6: Morning briefing uses IST date ───────────────────────────────────
@@ -165,6 +167,7 @@ def test_authenticate_user_helper_exists():
 def test_morning_briefing_uses_ist_date():
     """_check_morning_briefing should use local_now.date(), not date.today()."""
     import inspect
+
     from app.services import sync_scheduler
     source = inspect.getsource(sync_scheduler._check_morning_briefing)
     assert "today_ist = local_now.date()" in source
@@ -176,6 +179,7 @@ def test_morning_briefing_uses_ist_date():
 def test_scheduler_loop_isolates_sessions():
     """Scheduler loop should open a fresh session per org."""
     import inspect
+
     from app.services import sync_scheduler
     source = inspect.getsource(sync_scheduler._scheduler_loop)
     # Should have session-per-org pattern
@@ -189,6 +193,7 @@ def test_scheduler_loop_isolates_sessions():
 def test_chat_retention_cleanup_exists():
     """_cleanup_old_chat_messages function should exist and be called in loop."""
     import inspect
+
     from app.services import sync_scheduler
     assert hasattr(sync_scheduler, "_cleanup_old_chat_messages")
     loop_source = inspect.getsource(sync_scheduler._scheduler_loop)
@@ -200,6 +205,7 @@ def test_chat_retention_cleanup_exists():
 def test_log_ai_call_accepts_db_param():
     """_log_ai_call should accept an optional db parameter."""
     import inspect
+
     from app.services.ai_router import _log_ai_call
     sig = inspect.signature(_log_ai_call)
     assert "db" in sig.parameters

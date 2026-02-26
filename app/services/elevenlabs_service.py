@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -42,7 +43,7 @@ async def get_elevenlabs_status(db: AsyncSession, org_id: int) -> dict:
         usage = await elevenlabs_tool.get_usage(api_key)
         chars_used = usage.get("character_count", 0)
         chars_limit = usage.get("character_limit", 0)
-    except Exception as exc:
+    except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
         logger.warning("ElevenLabs status check degraded for org %s: %s", org_id, type(exc).__name__)
     return {
         "connected": True,

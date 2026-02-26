@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
 import hashlib
 import hmac
 import json
+from datetime import UTC, datetime
 from typing import cast
 
-from app.core.deps import get_db
 from app.core.config import settings
+from app.core.deps import get_db
 from app.main import app as fastapi_app
 from app.models.email import Email
 
@@ -27,10 +27,10 @@ async def _seed_email_for_org1(
             to_address="owner@example.com",
             subject="Need update",
             body_text="Please share the latest status.",
-            received_at=datetime.now(timezone.utc),
+            received_at=datetime.now(UTC),
             is_read=is_read,
             reply_sent=False,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         session.add(email)
         await session.commit()
@@ -86,7 +86,7 @@ async def test_unified_inbox_merges_email_and_whatsapp(client):
                                     {
                                         "from": "15551234567",
                                         "id": "wamid.TEST123",
-                                        "timestamp": str(int(datetime.now(timezone.utc).timestamp())),
+                                        "timestamp": str(int(datetime.now(UTC).timestamp())),
                                         "type": "text",
                                         "text": {"body": "Hi there"},
                                     }
@@ -141,7 +141,7 @@ async def test_unified_conversations_groups_items(client):
                                         {
                                             "from": "15551234567",
                                             "id": wa_id,
-                                            "timestamp": str(int(datetime.now(timezone.utc).timestamp())),
+                                            "timestamp": str(int(datetime.now(UTC).timestamp())),
                                             "type": "text",
                                             "text": {"body": f"Hi {wa_id}"},
                                         }

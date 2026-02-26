@@ -124,6 +124,11 @@ async def test_control_storage_metrics_endpoint(client):
     assert "memory_context_cache" in body
     for key in ("hits", "misses", "stale_pruned", "evictions", "size"):
         assert key in body["memory_context_cache"]
+    assert "ai_router_recent_calls_1h" in body
+    assert "ai_router_fallback_rate_1h" in body
+    assert "ai_router_errors_1h" in body
+    assert "ai_router_provider_counts_1h" in body
+    assert "approval_feedback_stats" in body
 
 
 async def test_control_scheduler_jobs_endpoints(client):
@@ -153,3 +158,19 @@ async def test_control_ceo_morning_brief(client):
     assert body["mode"] == "suggest_only"
     assert "priority_actions" in body
     assert "risk_snapshot" in body
+
+
+async def test_control_self_learning_train_endpoint(client):
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    resp = await client.post("/api/v1/control/brain/self-learning-train", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert "week_start_date" in body
+    assert "learning_signals_30d" in body
+
+    second = await client.post("/api/v1/control/brain/self-learning-train", headers=headers)
+    assert second.status_code == 200
+    second_body = second.json()
+    assert second_body["ok"] is True
+    assert second_body.get("skipped") is True

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import cast
 
 from sqlalchemy import select
@@ -28,7 +28,7 @@ async def create_or_update_employee(
         existing.github_username = data.github_username
         existing.clickup_user_id = data.clickup_user_id
         existing.is_active = data.is_active
-        existing.updated_at = datetime.now(timezone.utc)
+        existing.updated_at = datetime.now(UTC)
         await db.commit()
         await db.refresh(existing)
         return existing
@@ -88,7 +88,7 @@ async def update_employee(
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(emp, field, value)
-    emp.updated_at = datetime.now(timezone.utc)
+    emp.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(emp)
     return emp

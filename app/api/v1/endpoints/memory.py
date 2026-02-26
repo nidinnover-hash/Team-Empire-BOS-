@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
@@ -89,7 +89,7 @@ async def delete_profile_memory(
 
 @router.get("/team", response_model=list[TeamMemberRead])
 async def list_team_members(
-    team: str | None = None,
+    team: str | None = Query(None, max_length=50),
     db: AsyncSession = Depends(get_db),
     _user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> list[TeamMemberRead]:

@@ -1,5 +1,5 @@
-from app.core.config import settings
 from app.core import middleware
+from app.core.config import settings
 
 
 class _FakeRedis:

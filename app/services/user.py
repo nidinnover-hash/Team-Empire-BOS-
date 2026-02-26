@@ -42,7 +42,7 @@ async def list_users(
     return list(result.scalars().all())
 
 
-async def ensure_default_user(db: AsyncSession, organization_id: int = 1) -> None:
+async def ensure_default_user(db: AsyncSession, organization_id: int) -> None:
     demo = await get_user_by_email(db, settings.ADMIN_EMAIL)
     if demo is not None:
         return

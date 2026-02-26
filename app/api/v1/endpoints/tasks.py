@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
-from app.schemas.task import TaskCreate, TaskUpdate, TaskRead
+from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
 from app.services import task as task_service
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
@@ -31,10 +31,10 @@ async def list_tasks(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
     project_id: int | None = Query(None, description="Filter by project"),
-    category: str | None = Query(None, description="personal|business|health|finance|other"),
+    category: str | None = Query(None, description="personal|business|health|finance|other", max_length=50),
     is_done: bool | None = Query(None, description="true=done, false=open"),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=10_000),
 ) -> list[TaskRead]:
     """List tasks. Filter by project, category, or status. Sorted by priority."""
     return await task_service.list_tasks(

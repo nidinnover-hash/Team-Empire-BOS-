@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import date
 from typing import cast
 
@@ -20,6 +21,12 @@ from app.models.policy_rule import PolicyRule
 from app.schemas.ops import DecisionLogCreate
 
 logger = logging.getLogger(__name__)
+
+
+def _policy_signature(title: str, rule_text: str) -> str:
+    def normalize(value: str) -> str:
+        return re.sub(r"\s+", " ", (value or "").strip().lower())
+    return f"{normalize(title)}::{normalize(rule_text)}"
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +73,7 @@ async def list_decisions(
     if end_date:
         query = query.where(DecisionLog.created_at < str(end_date))
 
-    result = await db.execute(query)
+    result = await db.execute(query.limit(2000))
     return list(result.scalars().all())
 
 
@@ -82,7 +89,7 @@ async def list_policies(
     query = select(PolicyRule).where(PolicyRule.organization_id == org_id)
     if active_only:
         query = query.where(PolicyRule.is_active == True)  # noqa: E712
-    query = query.order_by(PolicyRule.created_at.desc())
+    query = query.order_by(PolicyRule.created_at.desc()).limit(500)
     result = await db.execute(query)
     return list(result.scalars().all())
 
@@ -140,6 +147,19 @@ async def generate_policy_drafts(
         by_type.setdefault(dec.decision_type, []).append(dec)
 
     drafts: list[PolicyRule] = []
+    existing = await list_policies(db, org_id, active_only=False)
+    signatures: set[str] = {
+        _policy_signature(p.title, p.rule_text)
+        for p in existing
+    }
+
+    def _maybe_add_policy(policy: PolicyRule) -> None:
+        sig = _policy_signature(policy.title, policy.rule_text)
+        if sig in signatures:
+            return
+        signatures.add(sig)
+        db.add(policy)
+        drafts.append(policy)
 
     # Pattern: repeated approvals with similar context → suggest policy
     approvals = by_type.get("approve", [])
@@ -158,8 +178,7 @@ async def generate_policy_drafts(
             examples_json=json.dumps(examples),
             is_active=False,
         )
-        db.add(policy)
-        drafts.append(policy)
+        _maybe_add_policy(policy)
 
     # Pattern: repeated rejections → suggest blocklist policy
     rejections = by_type.get("reject", [])
@@ -178,8 +197,7 @@ async def generate_policy_drafts(
             examples_json=json.dumps(examples),
             is_active=False,
         )
-        db.add(policy)
-        drafts.append(policy)
+        _maybe_add_policy(policy)
 
     # Pattern: deferred decisions → suggest escalation policy
     deferred = by_type.get("defer", [])
@@ -199,8 +217,7 @@ async def generate_policy_drafts(
             examples_json=json.dumps(examples),
             is_active=False,
         )
-        db.add(policy)
-        drafts.append(policy)
+        _maybe_add_policy(policy)
 
     if drafts:
         await db.commit()

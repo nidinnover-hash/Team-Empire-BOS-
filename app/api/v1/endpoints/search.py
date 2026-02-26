@@ -6,19 +6,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles
-from app.models.task import Task
-from app.models.note import Note
-from app.models.contact import Contact
-from app.models.project import Project
-from app.models.goal import Goal
 from app.models.command import Command
+from app.models.contact import Contact
+from app.models.goal import Goal
+from app.models.note import Note
+from app.models.project import Project
+from app.models.task import Task
+from app.schemas.search import SearchResponse
 
 router = APIRouter(prefix="/search", tags=["search"])
 
 MAX_PER_TYPE = 5
 
 
-@router.get("")
+@router.get("", response_model=SearchResponse)
 async def global_search(
     q: str = Query(..., min_length=1, max_length=200),
     db: AsyncSession = Depends(get_db),

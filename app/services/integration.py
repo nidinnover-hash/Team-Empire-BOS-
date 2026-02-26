@@ -1,12 +1,12 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
-from typing import cast
 
-from app.core.token_crypto import decrypt_config, encrypt_config
 from app.core.sensitive_keys import is_sensitive_key
+from app.core.token_crypto import decrypt_config, encrypt_config
 from app.models.integration import Integration
 
 
@@ -83,7 +83,7 @@ async def connect_integration(
         # get_integration_by_type returns decrypted object; re-encrypt for storage
         existing.config_json = encrypted
         existing.status = "connected"
-        existing.updated_at = datetime.now(timezone.utc)
+        existing.updated_at = datetime.now(UTC)
         await db.commit()
         await db.refresh(existing)
         return _decrypted(existing)
@@ -107,7 +107,7 @@ async def disconnect_integration(
     if item is None:
         return None
     item.status = "disconnected"
-    item.updated_at = datetime.now(timezone.utc)
+    item.updated_at = datetime.now(UTC)
     item.config_json = encrypt_config(item.config_json or {})
     await db.commit()
     await db.refresh(item)
@@ -117,7 +117,7 @@ async def disconnect_integration(
 async def mark_sync_time(
     db: AsyncSession, integration: Integration
 ) -> Integration:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     integration.last_sync_at = now
     integration.updated_at = now
     # Re-encrypt config before committing — _decrypted() may have mutated the ORM

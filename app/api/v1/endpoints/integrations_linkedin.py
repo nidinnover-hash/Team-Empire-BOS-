@@ -25,7 +25,7 @@ async def linkedin_connect(
         info = await linkedin_service.connect_linkedin(
             db, org_id=int(actor["org_id"]), access_token=data.access_token,
         )
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"LinkedIn connection failed: {type(exc).__name__}") from exc
     await record_action(
         db, event_type="integration_connected", actor_user_id=actor["id"],

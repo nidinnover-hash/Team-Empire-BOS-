@@ -1,6 +1,8 @@
-﻿from datetime import datetime, timezone, date
+﻿from datetime import UTC, date, datetime
+
 from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
+
 from app.db.base import Base
 
 
@@ -20,7 +22,6 @@ class Project(Base):
         Integer,
         ForeignKey("organizations.id", ondelete="RESTRICT"),
         nullable=False,
-        default=1,
         index=True,
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -32,6 +33,6 @@ class Project(Base):
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
 

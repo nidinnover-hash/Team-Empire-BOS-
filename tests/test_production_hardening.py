@@ -1,6 +1,6 @@
 """Tests for the 14-fix production hardening sweep."""
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 from sqlalchemy import select
@@ -10,7 +10,6 @@ from app.core.security import create_access_token, hash_password
 from app.main import app as fastapi_app
 from app.models.approval import Approval
 from app.models.user import User
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -40,7 +39,7 @@ async def _seed_user_and_login(client):
                     password_hash=hash_password("secret123"),
                     role="CEO",
                     is_active=True,
-                    created_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(UTC),
                 )
             )
             await session.commit()
@@ -106,7 +105,7 @@ async def test_concurrent_approval_race_exactly_one_succeeds(client):
             approval_type="task_execution",
             payload_json={"detail": "Test concurrent approval"},
             status="pending",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         session.add(approval)
         await session.commit()
@@ -133,9 +132,14 @@ async def test_concurrent_approval_race_exactly_one_succeeds(client):
 
 async def test_run_integrations_handles_clickup_error(client, monkeypatch):
     """ClickUp sync failure is caught and marks status as error, doesn't crash."""
-    from app.services import sync_scheduler
-    from app.services import clickup_service, github_service, do_service, slack_service
-    from app.services import compliance_engine
+    from app.services import (
+        clickup_service,
+        compliance_engine,
+        do_service,
+        github_service,
+        slack_service,
+        sync_scheduler,
+    )
 
     # Make ClickUp raise, others succeed
     monkeypatch.setattr(clickup_service, "sync_clickup_tasks", AsyncMock(side_effect=RuntimeError("ClickUp API down")))
@@ -160,9 +164,14 @@ async def test_run_integrations_handles_clickup_error(client, monkeypatch):
 
 async def test_run_integrations_handles_github_error(client, monkeypatch):
     """GitHub sync failure is caught and doesn't crash the scheduler."""
-    from app.services import sync_scheduler
-    from app.services import clickup_service, github_service, do_service, slack_service
-    from app.services import compliance_engine
+    from app.services import (
+        clickup_service,
+        compliance_engine,
+        do_service,
+        github_service,
+        slack_service,
+        sync_scheduler,
+    )
 
     monkeypatch.setattr(clickup_service, "sync_clickup_tasks", AsyncMock(return_value="ok"))
     monkeypatch.setattr(github_service, "sync_github", AsyncMock(side_effect=ConnectionError("GitHub unreachable")))
@@ -183,9 +192,14 @@ async def test_run_integrations_handles_github_error(client, monkeypatch):
 
 async def test_run_integrations_handles_slack_error(client, monkeypatch):
     """Slack sync failure is caught and doesn't crash the scheduler."""
-    from app.services import sync_scheduler
-    from app.services import clickup_service, github_service, do_service, slack_service
-    from app.services import compliance_engine
+    from app.services import (
+        clickup_service,
+        compliance_engine,
+        do_service,
+        github_service,
+        slack_service,
+        sync_scheduler,
+    )
 
     monkeypatch.setattr(clickup_service, "sync_clickup_tasks", AsyncMock(return_value="ok"))
     monkeypatch.setattr(github_service, "sync_github", AsyncMock(return_value="ok"))
@@ -209,6 +223,7 @@ async def test_run_integrations_handles_slack_error(client, monkeypatch):
 def test_csp_nonce_not_unsafe_inline_in_script_src():
     """Verify CSP header uses nonce, not unsafe-inline for scripts."""
     import inspect
+
     from app.core import middleware as mw
     source = inspect.getsource(mw.SecurityHeadersMiddleware)
     assert "nonce-{nonce}" in source or "nonce-" in source
@@ -219,6 +234,7 @@ def test_csp_nonce_not_unsafe_inline_in_script_src():
 def test_health_returns_503_on_db_failure():
     """Health endpoint source uses 503 for degraded state."""
     import inspect
+
     from app.api.v1.endpoints import health
     source = inspect.getsource(health.health_check)
     assert "503" in source
@@ -227,7 +243,8 @@ def test_health_returns_503_on_db_failure():
 def test_dashboard_timeout_configured():
     """Dashboard gather has asyncio.wait_for timeout."""
     import inspect
-    from app.main import dashboard
+
+    from app.web.pages import dashboard
     source = inspect.getsource(dashboard)
     assert "wait_for" in source
     assert "timeout=" in source
@@ -244,7 +261,7 @@ def test_shutdown_grace_seconds_configurable():
 
 def test_logging_config_exists():
     """Structured logging module exists with expected exports."""
-    from app.core.logging_config import configure_logging, JSONFormatter, TextFormatter
+    from app.core.logging_config import JSONFormatter, TextFormatter, configure_logging
     assert callable(configure_logging)
     assert JSONFormatter is not None
     assert TextFormatter is not None

@@ -27,7 +27,7 @@ async def ga_connect(
             access_token=data.access_token,
             property_id=data.property_id,
         )
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
         raise HTTPException(
             status_code=400,
             detail=f"Google Analytics connection failed ({type(exc).__name__}). Check token and GA4 property ID.",

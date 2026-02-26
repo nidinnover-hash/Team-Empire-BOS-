@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -28,7 +28,7 @@ class TaskMetricWeekly(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
 
 
@@ -54,7 +54,7 @@ class CodeMetricWeekly(Base):
     files_touched_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
 
 
@@ -78,5 +78,5 @@ class CommsMetricWeekly(Base):
     escalation_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )

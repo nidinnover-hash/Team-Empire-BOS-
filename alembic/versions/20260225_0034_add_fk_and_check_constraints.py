@@ -34,7 +34,7 @@ def upgrade() -> None:
     tables = set(inspector.get_table_names())
 
     # -- Approval.status CHECK -----------------------------------------------
-    if "approvals" in tables and not _has_constraint(inspector, "approvals", "ck_approval_status"):
+    if "approvals" in tables and dialect != "sqlite" and not _has_constraint(inspector, "approvals", "ck_approval_status"):
         op.create_check_constraint(
             "ck_approval_status",
             "approvals",
@@ -54,7 +54,7 @@ def upgrade() -> None:
             )
 
     # -- DailyTaskPlan.status CHECK ------------------------------------------
-    if "daily_task_plans" in tables and not _has_constraint(inspector, "daily_task_plans", "ck_daily_task_plan_status"):
+    if "daily_task_plans" in tables and dialect != "sqlite" and not _has_constraint(inspector, "daily_task_plans", "ck_daily_task_plan_status"):
         op.create_check_constraint(
             "ck_daily_task_plan_status",
             "daily_task_plans",
@@ -142,11 +142,12 @@ def downgrade() -> None:
             "is_done = 0 OR completed_at IS NOT NULL",
         )
 
-    try:
-        op.drop_constraint("ck_daily_task_plan_status", "daily_task_plans", type_="check")
-    except Exception:
-        pass
-    try:
-        op.drop_constraint("ck_approval_status", "approvals", type_="check")
-    except Exception:
-        pass
+    if dialect != "sqlite":
+        try:
+            op.drop_constraint("ck_daily_task_plan_status", "daily_task_plans", type_="check")
+        except Exception:
+            pass
+        try:
+            op.drop_constraint("ck_approval_status", "approvals", type_="check")
+        except Exception:
+            pass

@@ -1,11 +1,12 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.note import Note
 from app.schemas.note import NoteCreate
 
 
 async def create_note(
-    db: AsyncSession, data: NoteCreate, organization_id: int = 1
+    db: AsyncSession, data: NoteCreate, organization_id: int
 ) -> Note:
     note = Note(**data.model_dump(), organization_id=organization_id)
     db.add(note)
@@ -15,7 +16,7 @@ async def create_note(
 
 
 async def list_notes(
-    db: AsyncSession, limit: int = 50, offset: int = 0, organization_id: int = 1
+    db: AsyncSession, organization_id: int, limit: int = 50, offset: int = 0
 ) -> list[Note]:
     result = await db.execute(
         select(Note)

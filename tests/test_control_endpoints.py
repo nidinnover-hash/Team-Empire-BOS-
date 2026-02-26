@@ -26,7 +26,7 @@ async def test_scheduler_job_runs_empty(client):
     resp = await client.get("/api/v1/control/jobs/runs")
     assert resp.status_code == 200
     body = resp.json()
-    assert "items" in body or isinstance(body, (dict, list))
+    assert "items" in body or isinstance(body, dict | list)
 
 
 async def test_compliance_report_returns_shape(client):

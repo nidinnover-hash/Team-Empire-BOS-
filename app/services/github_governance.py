@@ -16,6 +16,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -219,7 +220,7 @@ async def apply_governance(
                         token, org, team.slug, member,
                     )
                     members_added.append(mr)
-                except Exception as exc:
+                except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
                     report.errors.append({
                         "step": "team_member",
                         "team": team.name,
@@ -227,7 +228,7 @@ async def apply_governance(
                         "error": str(exc),
                     })
             report.teams[-1]["members_added"] = members_added
-        except Exception as exc:
+        except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
             report.errors.append({
                 "step": "team_create",
                 "team": team.name,
@@ -237,7 +238,7 @@ async def apply_governance(
     # 2. List org repos and apply team permissions
     try:
         repos = await github_admin.list_org_repos(token, org)
-    except Exception as exc:
+    except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
         report.errors.append({"step": "list_repos", "error": str(exc)})
         repos = []
 
@@ -258,7 +259,7 @@ async def apply_governance(
                     token, org, team.slug, full_name, permission=team.repo_permission,
                 )
                 report.permissions.append(pr)
-            except Exception as exc:
+            except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
                 report.errors.append({
                     "step": "repo_permission",
                     "repo": full_name,
@@ -290,7 +291,7 @@ async def apply_governance(
             bpr["critical"] = is_critical
             bpr["approvals_required"] = approvals
             report.branch_protections.append(bpr)
-        except Exception as exc:
+        except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
             report.errors.append({
                 "step": "branch_protection",
                 "repo": full_name,
@@ -303,7 +304,7 @@ async def apply_governance(
                 token, full_name, policy.codeowners_content, branch=default_branch,
             )
             report.codeowners.append(cor)
-        except Exception as exc:
+        except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
             report.errors.append({
                 "step": "codeowners",
                 "repo": full_name,
@@ -322,7 +323,7 @@ async def apply_governance(
                     token, full_name, file_path, content, commit_msg, branch=default_branch,
                 )
                 report.templates.append(tr)
-            except Exception as exc:
+            except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
                 report.errors.append({
                     "step": "template",
                     "repo": full_name,

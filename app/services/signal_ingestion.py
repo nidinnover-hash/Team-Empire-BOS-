@@ -11,9 +11,10 @@ import asyncio
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, cast
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -179,7 +180,7 @@ async def ingest_clickup_signals(db: AsyncSession, org_id: int) -> dict[str, Any
 
     try:
         tasks = await clickup_tool.get_tasks(api_token, team_id, include_closed=True)
-    except Exception as exc:
+    except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
         logger.warning("ClickUp signal ingestion failed for org %d: %s", org_id, exc)
         _ingestion_stats["clickup_failed"] += 1
         return {"synced": 0, "error": _safe_ingestion_error(exc)}
@@ -201,9 +202,9 @@ async def ingest_clickup_signals(db: AsyncSession, org_id: int) -> dict[str, Any
 
         ts_str = task.get("date_updated") or task.get("date_created")
         try:
-            ts = datetime.fromtimestamp(int(ts_str) / 1000, tz=timezone.utc) if ts_str else datetime.now(timezone.utc)
+            ts = datetime.fromtimestamp(int(ts_str) / 1000, tz=UTC) if ts_str else datetime.now(UTC)
         except (ValueError, TypeError):
-            ts = datetime.now(timezone.utc)
+            ts = datetime.now(UTC)
 
         payload = {
             "name": task.get("name"),
@@ -244,7 +245,7 @@ async def ingest_github_signals(db: AsyncSession, org_id: int) -> dict[str, Any]
 
     try:
         repos = await github_tool.list_repos(token)
-    except Exception as exc:
+    except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
         logger.warning("GitHub signal ingestion failed for org %d: %s", org_id, exc)
         _ingestion_stats["github_failed"] += 1
         return {"synced": 0, "error": _safe_ingestion_error(exc)}
@@ -259,7 +260,8 @@ async def ingest_github_signals(db: AsyncSession, org_id: int) -> dict[str, Any]
         # PRs
         try:
             prs = await github_tool.get_pull_requests(token, owner, repo_name, state="all", per_page=30)
-        except Exception:
+        except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError):
+            logger.warning("Failed to fetch PRs for %s/%s", owner, repo_name, exc_info=True)
             prs = []
 
         for pr in prs:
@@ -269,9 +271,9 @@ async def ingest_github_signals(db: AsyncSession, org_id: int) -> dict[str, Any]
 
             ts_str = pr.get("updated_at") or pr.get("created_at")
             try:
-                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")) if ts_str else datetime.now(timezone.utc)
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")) if ts_str else datetime.now(UTC)
             except (ValueError, TypeError):
-                ts = datetime.now(timezone.utc)
+                ts = datetime.now(UTC)
 
             payload = {
                 "title": pr.get("title"),
@@ -291,7 +293,8 @@ async def ingest_github_signals(db: AsyncSession, org_id: int) -> dict[str, Any]
         # Issues (not PRs)
         try:
             issues = await github_tool.get_issues(token, owner, repo_name, state="all", per_page=30)
-        except Exception:
+        except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError):
+            logger.warning("Failed to fetch issues for %s/%s", owner, repo_name, exc_info=True)
             issues = []
 
         for issue in issues:
@@ -301,9 +304,9 @@ async def ingest_github_signals(db: AsyncSession, org_id: int) -> dict[str, Any]
 
             ts_str = issue.get("updated_at") or issue.get("created_at")
             try:
-                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")) if ts_str else datetime.now(timezone.utc)
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")) if ts_str else datetime.now(UTC)
             except (ValueError, TypeError):
-                ts = datetime.now(timezone.utc)
+                ts = datetime.now(UTC)
 
             payload = {
                 "title": issue.get("title"),
@@ -355,7 +358,7 @@ async def ingest_gmail_signals(db: AsyncSession, org_id: int) -> dict[str, Any]:
             expires_at=expires_at,
             max_results=50,
         )
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, TimeoutError) as exc:
         logger.warning("Gmail signal ingestion failed for org %d: %s", org_id, exc)
         _ingestion_stats["gmail_failed"] += 1
         return {"synced": 0, "error": _safe_ingestion_error(exc)}
@@ -387,11 +390,11 @@ async def ingest_gmail_signals(db: AsyncSession, org_id: int) -> dict[str, Any]:
         ts_raw: Any = email.get("received_at") or email.get("date")
         ts_str = str(ts_raw) if ts_raw else ""
         try:
-            ts = datetime.fromisoformat(ts_str) if ts_str else datetime.now(timezone.utc)
+            ts = datetime.fromisoformat(ts_str) if ts_str else datetime.now(UTC)
         except (ValueError, TypeError):
-            ts = datetime.now(timezone.utc)
+            ts = datetime.now(UTC)
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+            ts = ts.replace(tzinfo=UTC)
 
         # Store metadata only — NO body
         payload = {
@@ -437,7 +440,7 @@ async def ingest_github_cicd_signals(db: AsyncSession, org_id: int) -> dict[str,
 
     try:
         repos = await github_tool.list_repos(token)
-    except Exception as exc:
+    except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
         logger.warning("GitHub CI/CD ingestion failed for org %d: %s", org_id, exc)
         _ingestion_stats["github_cicd_failed"] += 1
         return {"workflow_runs": 0, "deployments": 0, "error": _safe_ingestion_error(exc)}
@@ -454,7 +457,7 @@ async def ingest_github_cicd_signals(db: AsyncSession, org_id: int) -> dict[str,
         # Workflow runs
         try:
             runs = await github_tool.get_workflow_runs(token, owner, repo_name, per_page=15)
-        except Exception as exc:
+        except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
             logger.warning(
                 "GitHub workflow fetch failed org=%d repo=%s/%s: %s",
                 org_id,
@@ -475,9 +478,9 @@ async def ingest_github_cicd_signals(db: AsyncSession, org_id: int) -> dict[str,
 
             ts_str = run.get("updated_at") or run.get("created_at")
             try:
-                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")) if ts_str else datetime.now(timezone.utc)
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")) if ts_str else datetime.now(UTC)
             except (ValueError, TypeError):
-                ts = datetime.now(timezone.utc)
+                ts = datetime.now(UTC)
 
             # Calculate duration if both timestamps available
             duration_seconds = None
@@ -523,7 +526,7 @@ async def ingest_github_cicd_signals(db: AsyncSession, org_id: int) -> dict[str,
         # Deployments
         try:
             deployments = await github_tool.get_deployments(token, owner, repo_name, per_page=10)
-        except Exception as exc:
+        except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
             logger.warning(
                 "GitHub deployment fetch failed org=%d repo=%s/%s: %s",
                 org_id,
@@ -544,9 +547,9 @@ async def ingest_github_cicd_signals(db: AsyncSession, org_id: int) -> dict[str,
 
             ts_str = deploy.get("updated_at") or deploy.get("created_at")
             try:
-                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")) if ts_str else datetime.now(timezone.utc)
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")) if ts_str else datetime.now(UTC)
             except (ValueError, TypeError):
-                ts = datetime.now(timezone.utc)
+                ts = datetime.now(UTC)
 
             payload = {
                 "environment": deploy.get("environment"),

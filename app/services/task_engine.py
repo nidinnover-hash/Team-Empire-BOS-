@@ -8,9 +8,8 @@ Flow:
   4. get_team_plans()      → shows all plans for today
 """
 
+from datetime import UTC, date, datetime
 from typing import Any, TypedDict, cast
-
-from datetime import date, datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -107,7 +106,7 @@ async def draft_plan_for_member(
         tasks_json=tasks,
         ai_reasoning=reasoning,
         status="draft",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(plan)
     await db.commit()
@@ -240,7 +239,7 @@ async def approve_plan(
 
     plan.status = "approved"
     plan.approved_by = approver_id
-    plan.approved_at = datetime.now(timezone.utc)
+    plan.approved_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(plan)
 

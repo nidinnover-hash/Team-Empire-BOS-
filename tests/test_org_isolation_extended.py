@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.core.deps import get_db
 from app.core.security import create_access_token
@@ -54,7 +54,7 @@ async def _seed_cross_org_rows() -> None:
                     entity_type="integration",
                     entity_id=1,
                     payload_json={"org": 1},
-                    created_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(UTC),
                 ),
                 Event(
                     organization_id=2,
@@ -63,7 +63,7 @@ async def _seed_cross_org_rows() -> None:
                     entity_type="integration",
                     entity_id=2,
                     payload_json={"org": 2},
-                    created_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(UTC),
                 ),
             ]
         )

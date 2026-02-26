@@ -1,10 +1,10 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import cast
 from unittest.mock import AsyncMock
 
 from app.core.deps import get_db
 from app.main import app as fastapi_app
 from app.models.email import Email
-from typing import cast
 
 
 async def _insert_email(
@@ -25,7 +25,7 @@ async def _insert_email(
             subject=subject,
             body_text=body,
             from_address=from_address,
-            received_at=datetime.now(timezone.utc),
+            received_at=datetime.now(UTC),
         )
         session.add(row)
         await session.commit()

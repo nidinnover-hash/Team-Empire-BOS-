@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.integration import (
@@ -45,7 +46,7 @@ async def sync_stripe_data(
     if not integration or integration.status != "connected":
         raise ValueError("Stripe not connected")
     key = (integration.config_json or {}).get("api_key", "")
-    since_ts = int((datetime.now(timezone.utc) - timedelta(days=days_back)).timestamp())
+    since_ts = int((datetime.now(UTC) - timedelta(days=days_back)).timestamp())
     charges = await stripe_api.list_charges(key, limit=100, created_gte=since_ts)
     refunds = await stripe_api.list_refunds(key, limit=100, created_gte=since_ts)
     disputes = await stripe_api.list_disputes(key, limit=50)
@@ -54,7 +55,7 @@ async def sync_stripe_data(
         "charges_synced": len(charges),
         "refunds_synced": len(refunds),
         "disputes_synced": len(disputes),
-        "last_sync_at": datetime.now(timezone.utc).isoformat(),
+        "last_sync_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -66,13 +67,14 @@ async def get_financial_summary(
     if not integration or integration.status != "connected":
         return {"connected": False}
     key = (integration.config_json or {}).get("api_key", "")
-    since_ts = int((datetime.now(timezone.utc) - timedelta(days=days_back)).timestamp())
+    since_ts = int((datetime.now(UTC) - timedelta(days=days_back)).timestamp())
     try:
         balance = await stripe_api.get_balance(key)
         charges = await stripe_api.list_charges(key, limit=100, created_gte=since_ts)
         refunds = await stripe_api.list_refunds(key, limit=50, created_gte=since_ts)
         disputes = await stripe_api.list_disputes(key, limit=25)
-    except Exception:
+    except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError):
+        logger.warning("Failed to fetch Stripe data for org %d", org_id, exc_info=True)
         return {"connected": True, "error": "Failed to fetch Stripe data"}
     total_revenue = sum(c.get("amount", 0) for c in charges if c.get("paid")) / 100
     total_refunded = sum(r.get("amount", 0) for r in refunds) / 100

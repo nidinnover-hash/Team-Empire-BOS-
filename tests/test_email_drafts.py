@@ -1,7 +1,6 @@
-from typing import cast
-
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
+from typing import cast
 
 from app.core.deps import get_db
 from app.core.security import create_access_token
@@ -29,10 +28,10 @@ async def _seed_email_for_org1(gmail_id: str = "draft-flow-gmail-id") -> int:
             to_address="owner@example.com",
             subject="Need fee details",
             body_text="Please share fees and timeline.",
-            received_at=datetime.now(timezone.utc),
+            received_at=datetime.now(UTC),
             is_read=False,
             reply_sent=False,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         session.add(email)
         await session.commit()

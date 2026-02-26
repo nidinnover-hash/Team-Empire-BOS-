@@ -12,7 +12,7 @@ Rules:
 import base64
 import email as email_lib
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.core.config import settings
 
@@ -21,12 +21,44 @@ logger = logging.getLogger(__name__)
 # Gmail scope - modify allows read + send + label
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
+_GMAIL_COMMON_EXC: tuple[type[BaseException], ...] = (
+    RuntimeError,
+    TimeoutError,
+    OSError,
+    ValueError,
+    TypeError,
+    AttributeError,
+    ImportError,
+    ModuleNotFoundError,
+)
+_GMAIL_AUTH_EXC: tuple[type[BaseException], ...] = _GMAIL_COMMON_EXC
+_GMAIL_API_EXC: tuple[type[BaseException], ...] = _GMAIL_COMMON_EXC
+
+try:
+    from google.auth import exceptions as _google_auth_exceptions
+
+    _GMAIL_AUTH_EXC = (
+        *_GMAIL_COMMON_EXC,
+        _google_auth_exceptions.RefreshError,
+        _google_auth_exceptions.TransportError,
+        _google_auth_exceptions.DefaultCredentialsError,
+    )
+except (ImportError, AttributeError):
+    pass
+
+try:
+    from googleapiclient.errors import HttpError as _GoogleHttpError
+
+    _GMAIL_API_EXC = (*_GMAIL_AUTH_EXC, _GoogleHttpError)
+except (ImportError, AttributeError):
+    _GMAIL_API_EXC = _GMAIL_AUTH_EXC
+
 
 class GmailAPIError(Exception):
     """Raised when a Gmail API call fails and should be surfaced to callers."""
 
 
-def _safe_exc_summary(exc: Exception) -> str:
+def _safe_exc_summary(exc: BaseException) -> str:
     """Short, non-sensitive exception summary for logs."""
     return type(exc).__name__
 
@@ -95,7 +127,7 @@ def exchange_code_for_tokens(code: str) -> dict:
             "refresh_token": creds.refresh_token,
             "expires_at": creds.expiry.isoformat() if creds.expiry else None,
         }
-    except Exception as exc:
+    except _GMAIL_AUTH_EXC as exc:
         logger.warning("Gmail OAuth token exchange failed (%s)", _safe_exc_summary(exc))
         return {"error": "token_exchange_failed"}
 
@@ -112,8 +144,8 @@ def refresh_access_token(refresh_token: str) -> dict:
     Returns {"error": "..."} on failure - never raises.
     """
     try:
-        from google.oauth2.credentials import Credentials
         from google.auth.transport.requests import Request
+        from google.oauth2.credentials import Credentials
 
         creds = Credentials(
             token=None,
@@ -128,7 +160,7 @@ def refresh_access_token(refresh_token: str) -> dict:
             "access_token": creds.token,
             "expires_at": creds.expiry.isoformat() if creds.expiry else None,
         }
-    except Exception as exc:
+    except _GMAIL_AUTH_EXC as exc:
         logger.warning("Gmail token refresh failed (%s)", _safe_exc_summary(exc))
         return {"error": "refresh_failed"}
 
@@ -156,7 +188,7 @@ def _build_gmail_service(
         try:
             expiry = datetime.fromisoformat(expires_at)
             if expiry.tzinfo is not None:
-                expiry = expiry.astimezone(timezone.utc).replace(tzinfo=None)
+                expiry = expiry.astimezone(UTC).replace(tzinfo=None)
         except ValueError:
             expiry = None
 
@@ -180,7 +212,7 @@ def _build_gmail_service(
                 "expires_at": creds.expiry.isoformat() if creds.expiry else None,
             }
             logger.info("Gmail access token auto-refreshed successfully")
-        except Exception as exc:
+        except _GMAIL_AUTH_EXC as exc:
             logger.warning(
                 "Gmail auto-refresh failed, proceeding with stored token (%s)",
                 _safe_exc_summary(exc),
@@ -253,7 +285,7 @@ def fetch_recent_emails(
             received_at = None
             if internal_date:
                 ts = int(internal_date) / 1000
-                received_at = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+                received_at = datetime.fromtimestamp(ts, tz=UTC).isoformat()
 
             emails.append({
                 "gmail_id": detail["id"],
@@ -268,7 +300,7 @@ def fetch_recent_emails(
         return emails, refreshed_tokens
     except GmailAPIError:
         raise
-    except Exception as exc:
+    except _GMAIL_API_EXC as exc:
         raise GmailAPIError(f"Gmail fetch failed: {exc}") from exc
 
 
@@ -285,7 +317,7 @@ def get_profile(
         service, refreshed_tokens = _build_gmail_service(access_token, refresh_token, expires_at)
         profile = service.users().getProfile(userId="me").execute()
         return profile, refreshed_tokens
-    except Exception as exc:
+    except _GMAIL_API_EXC as exc:
         raise GmailAPIError(f"Gmail profile fetch failed: {exc}") from exc
 
 
@@ -318,7 +350,7 @@ def create_draft(
         ).execute()
         draft_id = result.get("id")
         return draft_id if isinstance(draft_id, str) else None
-    except Exception as exc:
+    except _GMAIL_API_EXC as exc:
         logger.error(
             "Gmail create_draft failed (to=%s, subject=%s, error=%s)",
             to,
@@ -359,7 +391,7 @@ def send_email(
             body={"raw": encoded},
         ).execute()
         return True
-    except Exception as exc:
+    except _GMAIL_API_EXC as exc:
         logger.error(
             "Gmail send_email failed (to=%s, subject=%s, error=%s)",
             to,

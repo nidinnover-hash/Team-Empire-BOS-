@@ -7,6 +7,55 @@ DecisionType = Literal["approve", "reject", "defer"]
 ReportType = Literal["team_health", "project_risk", "founder_review"]
 
 
+# ---- Daily Run Response ----
+
+class DailyRunResponse(BaseModel):
+    """Response for POST /ops/daily-run."""
+    status: str
+    message: str
+    daily_run_id: int
+    run_date: str
+    team_filter: str
+    idempotent_reuse: bool
+    requires_approval: bool
+    executive_summary: dict | None = None
+    drafted_plan_count: int | None = None
+    drafted_plan_ids: list[int] | None = None
+    drafted_email_count: int | None = None
+    drafted_email_ids: list[int] | None = None
+    pending_approvals: int | None = None
+    decision_trace_id: int | None = None
+    confidence_score: float | None = None
+    risk_tier: str | None = None
+    confidence_reasoning: list[str] | None = None
+
+
+# ---- Weekly Metrics Response ----
+
+class WeeklyMetricsResponse(BaseModel):
+    """Response for POST /ops/compute/weekly-metrics."""
+    weeks_computed: int = 0
+    employees_processed: int = 0
+    task_metrics: int = 0
+    code_metrics: int = 0
+    comms_metrics: int = 0
+
+
+# ---- Sync Result ----
+
+class SyncResultRead(BaseModel):
+    """Standard response for /ops/sync/* endpoints."""
+    synced: int = 0
+    error: str | None = None
+
+
+class CicdSyncResultRead(BaseModel):
+    """Response for /ops/sync/github-cicd endpoint."""
+    workflow_runs: int = 0
+    deployments: int = 0
+    error: str | None = None
+
+
 # ---- Employee ----
 
 class EmployeeCreate(BaseModel):

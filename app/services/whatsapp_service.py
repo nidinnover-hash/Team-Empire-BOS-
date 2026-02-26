@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import cast
 
 from sqlalchemy import select
@@ -12,8 +12,8 @@ def _parse_ts(ts: str | int | None) -> datetime | None:
     if ts is None:
         return None
     try:
-        return datetime.fromtimestamp(int(ts), tz=timezone.utc)
-    except Exception:
+        return datetime.fromtimestamp(int(ts), tz=UTC)
+    except (TypeError, ValueError, OSError):
         return None
 
 

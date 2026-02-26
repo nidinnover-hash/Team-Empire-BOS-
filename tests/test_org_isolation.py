@@ -1,7 +1,7 @@
 from typing import cast
 
-from app.core.security import create_access_token
 from app.core.deps import get_db
+from app.core.security import create_access_token
 from app.main import app as fastapi_app
 from app.models.email import Email
 

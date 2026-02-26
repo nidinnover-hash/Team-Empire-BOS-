@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import cast
 
 from sqlalchemy import select
@@ -42,7 +42,7 @@ async def upsert_membership(
     role: str,
 ) -> OrganizationMembership:
     existing = await get_membership(db, organization_id=organization_id, user_id=user_id)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if existing is not None:
         existing.role = role
         existing.is_active = True

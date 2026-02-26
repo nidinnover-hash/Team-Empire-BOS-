@@ -3,6 +3,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles
+from app.schemas.data_collection import (
+    BrandingPowerReport,
+    EthicalBoundaryReport,
+    FraudLayerReport,
+    MediaEditingLayerReport,
+    SocialManagementLayerReport,
+    ThreatLayerReport,
+)
 from app.schemas.layers import (
     AISkillRoutingLayerReport,
     CloneMarketingSalesLayerReport,
@@ -17,7 +25,6 @@ from app.schemas.layers import (
     StudyLayerReport,
     TrainingLayerReport,
 )
-from app.schemas.data_collection import BrandingPowerReport, EthicalBoundaryReport, FraudLayerReport, MediaEditingLayerReport, SocialManagementLayerReport, ThreatLayerReport
 from app.services import layers as layers_service
 
 router = APIRouter(prefix="/layers", tags=["Layers"])

@@ -47,7 +47,7 @@ def _get_redis_client() -> _RedisLike | None:
                 socket_connect_timeout=0.25,
             ),
         )
-    except Exception:
+    except (ImportError, ModuleNotFoundError, AttributeError, TypeError, ValueError):
         _redis_client = None
     return _redis_client
 
@@ -68,7 +68,7 @@ def consume_oauth_nonce_once(namespace: str, nonce: str, *, max_age_seconds: int
         try:
             created = redis_client.set(name=key, value="1", ex=ttl, nx=True)
             return bool(created)
-        except Exception as exc:
+        except (RuntimeError, OSError, TypeError, ValueError) as exc:
             # Fall back to in-memory replay protection when Redis is unavailable.
             logger.warning("OAuth nonce Redis fallback engaged: %s", type(exc).__name__)
 

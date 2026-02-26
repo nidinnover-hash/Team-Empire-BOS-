@@ -1,9 +1,8 @@
+from datetime import UTC, datetime
 from typing import cast
 
-from datetime import datetime, timezone
-
-from app.core.security import create_access_token
 from app.core.deps import get_db
+from app.core.security import create_access_token
 from app.main import app as fastapi_app
 from app.models.email import Email
 
@@ -41,7 +40,7 @@ async def test_approval_request_and_approve_flow(client):
     staff_headers = _auth_headers(4, "staff@org1.com", "STAFF")
     req = await client.post(
         "/api/v1/approvals/request",
-        json={"approval_type": "assign_leads", "payload_json": {"count": 10}},
+        json={"organization_id": 1, "approval_type": "assign_leads", "payload_json": {"count": 10}},
         headers=staff_headers,
     )
     assert req.status_code == 201
@@ -62,7 +61,7 @@ async def test_risky_approval_requires_yes_execute(client):
     staff_headers = _auth_headers(4, "staff@org1.com", "STAFF")
     req = await client.post(
         "/api/v1/approvals/request",
-        json={"approval_type": "spend", "payload_json": {"amount": 50}},
+        json={"organization_id": 1, "approval_type": "spend", "payload_json": {"amount": 50}},
         headers=staff_headers,
     )
     assert req.status_code == 201
@@ -81,7 +80,7 @@ async def test_approval_timeline_returns_summary_and_items(client):
     staff_headers = _auth_headers(4, "staff@org1.com", "STAFF")
     req = await client.post(
         "/api/v1/approvals/request",
-        json={"approval_type": "assign_leads", "payload_json": {"count": 10}},
+        json={"organization_id": 1, "approval_type": "assign_leads", "payload_json": {"count": 10}},
         headers=staff_headers,
     )
     assert req.status_code == 201
@@ -110,10 +109,10 @@ async def _seed_email_for_org1() -> int:
             to_address="owner@example.com",
             subject="Need details about admissions",
             body_text="Hi, can you share details and next steps?",
-            received_at=datetime.now(timezone.utc),
+            received_at=datetime.now(UTC),
             is_read=False,
             reply_sent=False,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         session.add(email)
         await session.commit()

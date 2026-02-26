@@ -222,7 +222,7 @@ async def _generate_founder_review(db: AsyncSession, org_id: int, week_start: da
             DecisionLog.organization_id == org_id,
             DecisionLog.created_at >= str(week_start),
             DecisionLog.created_at < str(week_end),
-        )
+        ).limit(2000)
     )
     decisions = list(dec_result.scalars().all())
 
@@ -231,7 +231,7 @@ async def _generate_founder_review(db: AsyncSession, org_id: int, week_start: da
         select(PolicyRule).where(
             PolicyRule.organization_id == org_id,
             PolicyRule.is_active == True,  # noqa: E712
-        )
+        ).limit(500)
     )
     active_policies = list(policy_result.scalars().all())
 

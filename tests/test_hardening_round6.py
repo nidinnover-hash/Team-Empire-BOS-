@@ -3,7 +3,6 @@ import inspect
 
 import pytest
 
-
 # ── 1. CSRF cookie parsing uses slice(1).join in all JS files ─────────────
 
 def test_csrf_parsing_no_split_index_1():

@@ -7,6 +7,18 @@ from app.models.organization import Organization
 from app.models.user import User
 
 
+def _cookie_header(cookies) -> dict:
+    """Build a raw Cookie header dict from an httpx Cookies/response.cookies object.
+
+    httpx ASGI transport does not auto-forward Set-Cookie values on subsequent
+    requests because there is no real domain to match against.  Passing the
+    cookies as a raw ``Cookie`` header bypasses the jar entirely and ensures the
+    ASGI app receives them.
+    """
+    value = "; ".join(f"{k}={v}" for k, v in cookies.items())
+    return {"Cookie": value}
+
+
 async def _seed_web_user() -> None:
     override = fastapi_app.dependency_overrides[get_db]
     agen = override()
@@ -41,7 +53,7 @@ async def test_web_login_sets_session_and_session_endpoint(client):
     assert "pc_session" in login.cookies
     assert "pc_csrf" in login.cookies
 
-    session_info = await client.get("/web/session")
+    session_info = await client.get("/web/session", headers=_cookie_header(login.cookies))
     assert session_info.status_code == 200
     assert session_info.json()["logged_in"] is True
 
@@ -77,7 +89,7 @@ async def test_web_daily_run_with_csrf_succeeds(client):
 
     run = await client.post(
         "/web/ops/daily-run?draft_email_limit=0",
-        headers={"X-CSRF-Token": csrf},
+        headers={**_cookie_header(login.cookies), "X-CSRF-Token": csrf},
     )
     assert run.status_code == 200
     body = run.json()
@@ -125,7 +137,10 @@ async def test_web_logout_invalidates_only_current_user_session(client):
     csrf = login.cookies.get("pc_csrf")
     assert csrf
 
-    logout = await client.post("/web/logout", headers={"X-CSRF-Token": csrf})
+    logout = await client.post(
+        "/web/logout",
+        headers={**_cookie_header(login.cookies), "X-CSRF-Token": csrf},
+    )
     assert logout.status_code == 200
 
     me1 = await client.get("/me", headers={"Authorization": f"Bearer {token1}"})

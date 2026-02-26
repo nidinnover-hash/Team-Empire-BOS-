@@ -6,7 +6,6 @@ All provider HTTP calls are monkeypatched so no real API keys are needed.
 
 from app.services import ai_router
 
-
 # ── Provider selection ────────────────────────────────────────────────────────
 
 async def test_call_ai_returns_string(monkeypatch):
@@ -197,6 +196,13 @@ async def test_call_ai_falls_back_to_gemini(monkeypatch):
     assert result == "Gemini fallback"
     assert "openai" in calls
     assert "gemini" in calls
+
+
+def test_fallback_order_prioritizes_default_provider(monkeypatch):
+    monkeypatch.setattr(ai_router.settings, "DEFAULT_AI_PROVIDER", "anthropic")
+    order = ai_router._fallback_order("openai")
+    assert order[0] == "anthropic"
+    assert "openai" not in order
 
 
 async def test_gemini_in_configured_providers(monkeypatch):

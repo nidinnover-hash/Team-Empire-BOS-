@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import subprocess
 import sys
 
@@ -29,22 +30,25 @@ CHECKS: list[list[str]] = [
 def _ensure_tool(module_name: str, package_name: str) -> None:
     try:
         importlib.import_module(module_name)
-    except Exception:
+    except Exception as err:
         print(f"Installing missing tool: {package_name}")
         proc = subprocess.run(
             [sys.executable, "-m", "pip", "install", package_name],
             check=False,
         )
         if proc.returncode != 0:
-            raise RuntimeError(f"Failed to install required tool: {package_name}")
+            raise RuntimeError(f"Failed to install required tool: {package_name}") from err
 
 
 def main() -> int:
     _ensure_tool("pip_audit", "pip-audit")
     _ensure_tool("bandit", "bandit")
+    base_env = os.environ.copy()
+    base_env.setdefault("PYTHONUTF8", "1")
+    base_env.setdefault("PYTHONIOENCODING", "utf-8")
     for cmd in CHECKS:
         print(f"\n==> {' '.join(cmd)}")
-        proc = subprocess.run(cmd, check=False)
+        proc = subprocess.run(cmd, check=False, env=base_env)
         if proc.returncode != 0:
             return proc.returncode
     print("\nAll release checks passed.")

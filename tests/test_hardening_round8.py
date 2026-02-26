@@ -1,7 +1,6 @@
 """Tests for hardening round 8: CSP inline, rate limit, OAuth validation, cache control, audit."""
 import inspect
 
-
 # ── 1. dashboard-page.js has no inline onclick handlers ───────────────────
 
 def test_dashboard_no_inline_onclick():

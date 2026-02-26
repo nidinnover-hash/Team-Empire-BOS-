@@ -1,11 +1,11 @@
-from datetime import date
 import logging
+from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Header
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.privacy import sanitize_response_payload
 from app.core.deps import get_db
 from app.core.idempotency import (
     IdempotencyConflictError,
@@ -13,14 +13,16 @@ from app.core.idempotency import (
     get_cached_response,
     store_response,
 )
-from app.core.request_context import get_current_request_id
+from app.core.privacy import sanitize_response_payload
 from app.core.rbac import require_roles
+from app.core.request_context import get_current_request_id
 from app.logs.audit import record_action
 from app.models.approval import Approval
 from app.schemas.daily_run import DailyRunRead
 from app.schemas.event import EventRead
 from app.schemas.intelligence import DecisionTraceCreate
 from app.schemas.ops import (
+    CicdSyncResultRead,
     CloneDispatchItemRead,
     CloneDispatchRequest,
     CloneFeedbackCreate,
@@ -29,6 +31,7 @@ from app.schemas.ops import (
     CloneScoreRead,
     CloneSummaryRead,
     CloneTrainingRunRead,
+    DailyRunResponse,
     DecisionLogCreate,
     DecisionLogRead,
     EmployeeCreate,
@@ -39,25 +42,29 @@ from app.schemas.ops import (
     PolicyRuleRead,
     RoleTrainingPlanRead,
     RoleTrainingPlanStatusUpdate,
+    SyncResultRead,
+    WeeklyMetricsResponse,
     WeeklyReportRead,
 )
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectStatusUpdate
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
 from app.services import briefing as briefing_service
-from app.services import clone_brain
-from app.services import clone_control
+from app.services import (
+    clone_brain,
+    clone_control,
+    email_service,
+    metrics_service,
+    policy_service,
+    report_service,
+    signal_ingestion,
+    task_engine,
+)
 from app.services import daily_run as daily_run_service
 from app.services import employee as employee_service
-from app.services import email_service
 from app.services import event as event_service
 from app.services import intelligence as intelligence_service
-from app.services import metrics_service
-from app.services import policy_service
 from app.services import project as project_service
-from app.services import report_service
-from app.services import signal_ingestion
 from app.services import task as task_service
-from app.services import task_engine
 
 router = APIRouter(prefix="/ops", tags=["Ops"])
 logger = logging.getLogger(__name__)
@@ -235,7 +242,7 @@ async def run_daily_run_workflow(
             "requires_approval": True,
             **result_payload,
         }
-    except Exception:
+    except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
         try:
             await daily_run_service.complete_daily_run(
                 db=db,
@@ -247,7 +254,7 @@ async def run_daily_run_workflow(
                 pending_approvals=0,
                 result_json={},
             )
-        except Exception as exc:
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as exc:
             logger.warning(
                 "Failed to mark daily run as failed (run_id=%s org_id=%s): %s",
                 run.id,
@@ -368,10 +375,10 @@ async def list_events_ops(
     return safe_events
 
 
-@router.post("/daily-run")
+@router.post("/daily-run", response_model=DailyRunResponse)
 async def daily_run_ops(
     draft_email_limit: int = Query(5, ge=0, le=20),
-    team: str | None = Query(None),
+    team: str | None = Query(None, max_length=100),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
@@ -500,7 +507,7 @@ async def update_employee(
 # ---- Signal Ingestion Endpoints (draft-only, observer mode) ----
 
 
-@router.post("/sync/clickup")
+@router.post("/sync/clickup", response_model=SyncResultRead)
 async def sync_clickup_signals(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(require_roles("CEO", "ADMIN")),
@@ -520,7 +527,7 @@ async def sync_clickup_signals(
     return result
 
 
-@router.post("/sync/github")
+@router.post("/sync/github", response_model=SyncResultRead)
 async def sync_github_signals(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(require_roles("CEO", "ADMIN")),
@@ -540,7 +547,7 @@ async def sync_github_signals(
     return result
 
 
-@router.post("/sync/github-cicd")
+@router.post("/sync/github-cicd", response_model=CicdSyncResultRead)
 async def sync_github_cicd_signals(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(require_roles("CEO", "ADMIN")),
@@ -563,7 +570,7 @@ async def sync_github_cicd_signals(
     return result
 
 
-@router.post("/sync/gmail")
+@router.post("/sync/gmail", response_model=SyncResultRead)
 async def sync_gmail_signals(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(require_roles("CEO", "ADMIN")),
@@ -586,7 +593,7 @@ async def sync_gmail_signals(
 # ---- Metrics Computation ----
 
 
-@router.post("/compute/weekly-metrics")
+@router.post("/compute/weekly-metrics", response_model=WeeklyMetricsResponse)
 async def compute_weekly_metrics(
     weeks: int = Query(1, ge=1, le=12),
     db: AsyncSession = Depends(get_db),

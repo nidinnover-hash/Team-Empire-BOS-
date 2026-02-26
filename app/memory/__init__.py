@@ -7,13 +7,13 @@ to avoid flooding the AI with irrelevant or stale data.
 """
 
 from app.memory.retrieval import (
+    build_focused_context,
     filter_memory_by_category,
     trim_context_to_limit,
-    build_focused_context,
 )
 
 __all__ = [
+    "build_focused_context",
     "filter_memory_by_category",
     "trim_context_to_limit",
-    "build_focused_context",
 ]

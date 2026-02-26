@@ -1,6 +1,7 @@
+from typing import cast
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import cast
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles

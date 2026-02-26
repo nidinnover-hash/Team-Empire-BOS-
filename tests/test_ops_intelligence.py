@@ -1,6 +1,6 @@
 """Comprehensive tests for Ops Intelligence: signals, metrics, reports, decisions, policies."""
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import cast
 
 from sqlalchemy import func, select
@@ -75,7 +75,7 @@ async def _seed_signal(org_id: int, source: str, external_id: str, employee_id: 
             source=source,
             external_id=external_id,
             employee_id=employee_id,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             payload_json=payload_str,
             hash=hashlib.sha256(payload_str.encode()).hexdigest(),
         )

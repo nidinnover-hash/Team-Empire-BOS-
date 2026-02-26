@@ -33,9 +33,9 @@ class SyncResult(BaseModel):
 
 
 class ComposeRequest(BaseModel):
-    to: str = Field(max_length=500)
-    subject: str = Field(max_length=500)
-    instruction: str = Field(max_length=2000)
+    to: str = Field(min_length=1, max_length=500)
+    subject: str = Field(min_length=1, max_length=500)
+    instruction: str = Field(min_length=1, max_length=2000)
 
 
 class GmailAuthUrlRead(BaseModel):

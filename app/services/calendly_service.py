@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,7 +59,7 @@ async def sync_events(
     user_uri = cfg.get("user_uri", "")
     if not user_uri:
         raise ValueError("Calendly user URI missing — reconnect")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     max_time = now + timedelta(days=days_ahead)
     events = await calendly_tool.list_scheduled_events(
         token, user_uri,
@@ -103,7 +103,7 @@ async def sync_events(
             context_type="calendly_event",
             content=content[:2000],
             related_to=name[:100],
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         db.add(ctx)
         synced += 1
@@ -114,5 +114,5 @@ async def sync_events(
     return {
         "events_synced": synced,
         "upcoming_events": upcoming,
-        "last_sync_at": datetime.now(timezone.utc).isoformat(),
+        "last_sync_at": datetime.now(UTC).isoformat(),
     }

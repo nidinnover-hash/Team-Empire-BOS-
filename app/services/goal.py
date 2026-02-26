@@ -8,7 +8,7 @@ from app.schemas.goal import GoalCreate, GoalProgressUpdate, GoalStatusUpdate
 
 
 async def create_goal(
-    db: AsyncSession, data: GoalCreate, organization_id: int = 1
+    db: AsyncSession, data: GoalCreate, organization_id: int
 ) -> Goal:
     goal = Goal(**data.model_dump(), organization_id=organization_id)
     db.add(goal)
@@ -18,7 +18,7 @@ async def create_goal(
 
 
 async def list_goals(
-    db: AsyncSession, limit: int = 50, organization_id: int = 1
+    db: AsyncSession, organization_id: int, limit: int = 50
 ) -> list[Goal]:
     result = await db.execute(
         select(Goal)
@@ -33,7 +33,7 @@ async def update_goal_progress(
     db: AsyncSession,
     goal_id: int,
     data: GoalProgressUpdate,
-    organization_id: int = 1,
+    organization_id: int,
 ) -> Goal | None:
     result = await db.execute(
         select(Goal).where(Goal.id == goal_id, Goal.organization_id == organization_id)
@@ -53,7 +53,7 @@ async def update_goal_status(
     db: AsyncSession,
     goal_id: int,
     data: GoalStatusUpdate,
-    organization_id: int = 1,
+    organization_id: int,
 ) -> Goal | None:
     result = await db.execute(
         select(Goal).where(Goal.id == goal_id, Goal.organization_id == organization_id)

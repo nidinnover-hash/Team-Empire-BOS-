@@ -1,6 +1,5 @@
+from datetime import UTC, date, datetime
 from typing import cast
-
-from datetime import date, datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -69,7 +68,7 @@ async def complete_daily_run(
     run.drafted_email_count = drafted_email_count
     run.pending_approvals = pending_approvals
     run.result_json = result_json
-    run.completed_at = datetime.now(timezone.utc)
+    run.completed_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(run)
     return run

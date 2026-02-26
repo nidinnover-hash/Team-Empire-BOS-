@@ -193,3 +193,56 @@ async def test_agent_email_draft_blocked_for_manager(client, monkeypatch):
         headers=headers,
     )
     assert not draft_called
+
+
+async def test_agent_response_includes_memory_source_attribution(client, monkeypatch):
+    monkeypatch.setattr(agents_endpoint, "run_agent", _fake_run_agent_none)
+    async def _fake_memory_context(*_args, **_kwargs):
+        return (
+            "PROFILE:\n  - style: concise\n\n"
+            "TODAY'S CONTEXT:\n  [PRIORITY] Ship tests\n\n"
+            "[GITHUB DEV ACTIVITY]\nOpen PRs (1):\n  - Improve fallback\n[END GITHUB]\n"
+        )
+    monkeypatch.setattr(agents_endpoint, "build_memory_context", _fake_memory_context)
+
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    response = await client.post(
+        "/api/v1/agents/chat",
+        json={"message": "What should I focus on today?"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["memory_context_chars"] > 0
+    assert payload["memory_context_truncated"] is False
+    assert "profile" in payload["memory_sources"]
+    assert "daily_context" in payload["memory_sources"]
+    assert "github" in payload["memory_sources"]
+    assert "policy_score" in payload
+    assert "blocked_by_policy" in payload
+    assert "policy_reasons" in payload
+
+
+async def test_agent_unknown_action_blocked_by_default(client, monkeypatch):
+    async def _fake_run_agent_unknown(*_args, **_kwargs) -> AgentChatResponse:
+        return AgentChatResponse(
+            role="CEO Clone",
+            response="Attempting unknown action.",
+            requires_approval=False,
+            proposed_actions=[
+                ProposedAction(action_type="MAGIC_EXECUTE", params={"title": "bad"}),
+            ],
+        )
+
+    monkeypatch.setattr(agents_endpoint, "run_agent", _fake_run_agent_unknown)
+
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    response = await client.post(
+        "/api/v1/agents/chat",
+        json={"message": "Do something undefined"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["blocked_by_policy"] is True
+    assert "MAGIC_EXECUTE" in payload["policy_blocked_actions"]

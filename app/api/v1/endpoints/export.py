@@ -1,6 +1,6 @@
 """Full data export for backup/compliance."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -11,12 +11,26 @@ from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.services import (
     command as command_service,
+)
+from app.services import (
     contact as contact_service,
+)
+from app.services import (
     finance as finance_service,
+)
+from app.services import (
     goal as goal_service,
+)
+from app.services import (
     memory as memory_service,
+)
+from app.services import (
     note as note_service,
+)
+from app.services import (
     project as project_service,
+)
+from app.services import (
     task as task_service,
 )
 
@@ -63,7 +77,7 @@ async def export_all_data(
     team_members = await memory_service.get_team_members(db, organization_id=org_id)
 
     payload = {
-        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "exported_at": datetime.now(UTC).isoformat(),
         "organization_id": org_id,
         "tasks": [_serialize(t) for t in tasks],
         "projects": [_serialize(p) for p in projects],
@@ -79,6 +93,6 @@ async def export_all_data(
     return JSONResponse(
         content=payload,
         headers={
-            "Content-Disposition": f'attachment; filename="personal-clone-export-{datetime.now(timezone.utc).strftime("%Y%m%d")}.json"',
+            "Content-Disposition": f'attachment; filename="personal-clone-export-{datetime.now(UTC).strftime("%Y%m%d")}.json"',
         },
     )

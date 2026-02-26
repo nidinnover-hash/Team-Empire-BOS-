@@ -1,6 +1,8 @@
-﻿from datetime import datetime, timezone
+﻿from datetime import UTC, datetime
+
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
+
 from app.db.base import Base
 
 
@@ -14,7 +16,6 @@ class Command(Base):
         Integer,
         ForeignKey("organizations.id", ondelete="RESTRICT"),
         nullable=False,
-        default=1,
         index=True,
     )
     command_text: Mapped[str] = mapped_column(Text, nullable=False)
@@ -22,6 +23,6 @@ class Command(Base):
     model_used: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
 

@@ -1,9 +1,10 @@
-from app.api.v1.endpoints import integrations as integrations_endpoint
-from app.core import oauth_nonce
-from app.core.security import create_access_token
 import hmac
 import json
 from hashlib import sha256
+
+from app.api.v1.endpoints import integrations as integrations_endpoint
+from app.core import oauth_nonce
+from app.core.security import create_access_token
 
 
 def _auth_headers(user_id: int, email: str, role: str, org_id: int) -> dict:

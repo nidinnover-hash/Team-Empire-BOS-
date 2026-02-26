@@ -10,7 +10,7 @@ Flow:
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import cast
 
 from sqlalchemy import select, update
@@ -20,8 +20,8 @@ from app.core.config import settings
 from app.logs.audit import record_action
 from app.models.approval import Approval
 from app.models.email import Email
-from app.services.ai_router import call_ai
 from app.schemas.approval import ApprovalRequestCreate
+from app.services.ai_router import call_ai
 from app.services.approval import request_approval
 from app.services.integration import connect_integration, get_integration_by_type, mark_sync_time
 from app.tools import gmail as gmail_tool
@@ -30,6 +30,12 @@ logger = logging.getLogger(__name__)
 
 # Per-org lock to serialize concurrent OAuth token refreshes
 _refresh_locks: dict[int, asyncio.Lock] = {}
+
+# Timeout for Gmail API calls run in thread pool (seconds).
+# Prevents thread pool exhaustion if a blocking call hangs.
+_GMAIL_THREAD_TIMEOUT = 60
+# Longer timeout for irreversible send operations.
+_GMAIL_SEND_TIMEOUT = 120
 
 
 def _get_refresh_lock(org_id: int) -> asyncio.Lock:
@@ -126,7 +132,7 @@ async def _persist_refreshed_tokens(
             integration_type="gmail",
             config_json=cfg,
         )
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError) as exc:
         logger.error("Failed to persist refreshed Gmail tokens for org %d: %s", org_id, type(exc).__name__)
 
 
@@ -164,14 +170,17 @@ async def sync_emails(
             ),
         )
     try:
-        raw_emails, refreshed_tokens = await asyncio.to_thread(
-            gmail_tool.fetch_recent_emails,
-            access_token=access_token,
-            refresh_token=refresh_token,
-            expires_at=expires_at,
-            max_results=20,
+        raw_emails, refreshed_tokens = await asyncio.wait_for(
+            asyncio.to_thread(
+                gmail_tool.fetch_recent_emails,
+                access_token=access_token,
+                refresh_token=refresh_token,
+                expires_at=expires_at,
+                max_results=20,
+            ),
+            timeout=_GMAIL_THREAD_TIMEOUT,
         )
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, TimeoutError) as exc:
         code = _classify_gmail_error(str(exc))
         message_by_code = {
             "gmail_api_disabled": (
@@ -233,12 +242,12 @@ async def sync_emails(
                 subject=raw.get("subject"),
                 body_text=raw.get("body_text"),
                 received_at=received_at,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             db.add(email)
             existing_ids.add(gmail_id)
             new_count += 1
-        except Exception as exc:
+        except (TypeError, ValueError) as exc:
             logger.warning(
                 "Skipping email %s during sync (org %s): %s",
                 raw.get("gmail_id", "?"),
@@ -280,13 +289,16 @@ async def check_gmail_health(
         return {"status": "misconfigured", "code": "missing_access_token"}
 
     try:
-        profile, refreshed_tokens = await asyncio.to_thread(
-            gmail_tool.get_profile,
-            access_token=access_token,
-            refresh_token=refresh_token,
-            expires_at=expires_at,
+        profile, refreshed_tokens = await asyncio.wait_for(
+            asyncio.to_thread(
+                gmail_tool.get_profile,
+                access_token=access_token,
+                refresh_token=refresh_token,
+                expires_at=expires_at,
+            ),
+            timeout=_GMAIL_THREAD_TIMEOUT,
         )
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, TimeoutError) as exc:
         return {"status": "error", "code": _classify_gmail_error(str(exc))}
 
     if refreshed_tokens:
@@ -395,6 +407,26 @@ async def draft_reply(
     if not email or not email.body_text:
         return None
 
+    # Guard: prevent duplicate approvals if a draft already exists for this email.
+    # Use an atomic UPDATE to claim the slot, preventing a race between two
+    # concurrent draft_reply() calls that both see approval_id=None.
+    if email.approval_id is not None:
+        return cast(str | None, email.draft_reply)
+
+    from sqlalchemy import update as sa_update
+
+    from app.models.email import Email as EmailModel
+    claim = await db.execute(
+        sa_update(EmailModel)
+        .where(EmailModel.id == email_id, EmailModel.approval_id.is_(None))
+        .values(draft_reply="__drafting__")
+    )
+    await db.flush()
+    if claim.rowcount == 0:
+        # Another caller won the race — reload and return their draft.
+        await db.refresh(email)
+        return cast(str | None, email.draft_reply)
+
     user_prompt = (
         f"From: {email.from_address}\n"
         f"Subject: {email.subject}\n\n"
@@ -426,16 +458,19 @@ async def draft_reply(
     if integration:
         access_token, refresh_token, expires_at = _get_tokens(integration)
         try:
-            gmail_draft_id = await asyncio.to_thread(
-                gmail_tool.create_draft,
-                access_token=access_token,
-                to=email.from_address or "",
-                subject=f"Re: {email.subject or ''}",
-                body=draft,
-                refresh_token=refresh_token,
-                expires_at=expires_at,
+            gmail_draft_id = await asyncio.wait_for(
+                asyncio.to_thread(
+                    gmail_tool.create_draft,
+                    access_token=access_token,
+                    to=email.from_address or "",
+                    subject=f"Re: {email.subject or ''}",
+                    body=draft,
+                    refresh_token=refresh_token,
+                    expires_at=expires_at,
+                ),
+                timeout=_GMAIL_THREAD_TIMEOUT,
             )
-        except Exception as exc:
+        except (RuntimeError, ValueError, TypeError, TimeoutError) as exc:
             logger.warning("Gmail draft creation failed for email %d: %s", email_id, type(exc).__name__)
 
     # Create approval request first so we have its ID
@@ -571,16 +606,19 @@ async def compose_email(
     if integration:
         access_token, refresh_token, expires_at = _get_tokens(integration)
         try:
-            gmail_draft_id = await asyncio.to_thread(
-                gmail_tool.create_draft,
-                access_token=access_token,
-                to=to,
-                subject=subject,
-                body=draft,
-                refresh_token=refresh_token,
-                expires_at=expires_at,
+            gmail_draft_id = await asyncio.wait_for(
+                asyncio.to_thread(
+                    gmail_tool.create_draft,
+                    access_token=access_token,
+                    to=to,
+                    subject=subject,
+                    body=draft,
+                    refresh_token=refresh_token,
+                    expires_at=expires_at,
+                ),
+                timeout=_GMAIL_THREAD_TIMEOUT,
             )
-        except Exception as exc:
+        except (RuntimeError, ValueError, TypeError, TimeoutError) as exc:
             logger.warning("Gmail draft creation failed for compose to %s: %s", to, type(exc).__name__)
 
     # Require approval before anything can be sent
@@ -649,7 +687,7 @@ async def send_approved_compose(
         return False
 
     # Atomic claim — only proceeds if executed_at is still NULL
-    _claim_ts = datetime.now(timezone.utc)
+    _claim_ts = datetime.now(UTC)
     _claim_result = await db.execute(
         update(Approval)
         .where(Approval.id == approval.id, Approval.executed_at.is_(None))
@@ -673,15 +711,29 @@ async def send_approved_compose(
         return False
 
     access_token, refresh_token, expires_at = _get_tokens(integration)
-    sent = cast(bool, await asyncio.to_thread(
-        gmail_tool.send_email,
-        access_token=access_token,
-        to=str(to),
-        subject=str(subject),
-        body=str(draft_body),
-        refresh_token=refresh_token,
-        expires_at=expires_at,
-    ))
+    try:
+        sent = cast(bool, await asyncio.wait_for(
+            asyncio.to_thread(
+                gmail_tool.send_email,
+                access_token=access_token,
+                to=str(to),
+                subject=str(subject),
+                body=str(draft_body),
+                refresh_token=refresh_token,
+                expires_at=expires_at,
+            ),
+            timeout=_GMAIL_SEND_TIMEOUT,
+        ))
+    except TimeoutError:
+        # Ambiguous: email may have been sent. Do NOT rollback executed_at
+        # to avoid double-send. Log critical and let manual review resolve.
+        logger.critical(
+            "Gmail compose-send TIMED OUT for approval %d — email may have been sent, "
+            "manual verification required",
+            approval.id,
+        )
+        await _record_send_blocked("gmail_send_timeout_ambiguous")
+        return False
     if not sent:
         logger.warning("Gmail compose-send failed — rolled back approval %d", approval.id)
         await db.execute(
@@ -775,7 +827,7 @@ async def send_approved_reply(
     # Claim the send slot with an atomic UPDATE WHERE executed_at IS NULL.
     # Two concurrent requests could both pass a read-then-check; this ensures
     # only the first one proceeds (rowcount == 0 means someone else got there first).
-    _claim_ts = datetime.now(timezone.utc)
+    _claim_ts = datetime.now(UTC)
     _claim_result = await db.execute(
         update(Approval)
         .where(Approval.id == approval.id, Approval.executed_at.is_(None))
@@ -800,15 +852,30 @@ async def send_approved_reply(
         return False
 
     access_token, refresh_token, expires_at = _get_tokens(integration)
-    sent = await asyncio.to_thread(
-        gmail_tool.send_email,
-        access_token=access_token,
-        to=email.from_address or "",
-        subject=f"Re: {email.subject or ''}",
-        body=email.draft_reply,
-        refresh_token=refresh_token,
-        expires_at=expires_at,
-    )
+    try:
+        sent = await asyncio.wait_for(
+            asyncio.to_thread(
+                gmail_tool.send_email,
+                access_token=access_token,
+                to=email.from_address or "",
+                subject=f"Re: {email.subject or ''}",
+                body=email.draft_reply,
+                refresh_token=refresh_token,
+                expires_at=expires_at,
+            ),
+            timeout=_GMAIL_SEND_TIMEOUT,
+        )
+    except TimeoutError:
+        # Ambiguous: email may have been sent. Do NOT rollback executed_at
+        # to avoid double-send. Log critical and let manual review resolve.
+        logger.critical(
+            "Gmail reply-send TIMED OUT for email %d approval %d — email may have been "
+            "sent, manual verification required",
+            email_id,
+            approval.id,
+        )
+        await _record_send_blocked("gmail_send_timeout_ambiguous", approval_id=approval.id)
+        return False
 
     if sent:
         email.reply_sent = True

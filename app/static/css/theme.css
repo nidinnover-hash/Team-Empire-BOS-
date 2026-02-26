@@ -5,6 +5,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
+  color-scheme: light dark;
   /* ── Surface palette ─────────────────────────────────────────────────── */
   --bg:           #f4f4f5;      /* zinc-100: page background */
   --surface:      #ffffff;       /* cards, panels */
@@ -30,7 +31,7 @@
   /* ── Brand ───────────────────────────────────────────────────────────── */
   --brand:        #18181b;
   --brand-hover:  #27272a;
-  --focus-ring:   rgba(201, 206, 214, 0.9);
+  --focus-ring:   rgba(45, 212, 191, 0.9);
   --motion-fast:  120ms;
   --motion-base:  180ms;
 
@@ -76,7 +77,7 @@
   --text-faint:   #52525b;
   --brand:        #fafafa;
   --brand-hover:  #e4e4e7;
-  --focus-ring:   rgba(226, 232, 240, 0.9);
+  --focus-ring:   rgba(94, 234, 212, 0.9);
   --ok-soft:      #052e16;
   --ok-border:    #166534;
   --warn-soft:    #451a03;
@@ -663,12 +664,12 @@ textarea.input-error {
   --zip-accent-dark: #9ea5af;
   --zip-metal-sheen: linear-gradient(145deg, #2a2d33 0%, #17191d 45%, #0f1012 100%);
   /* ── Premium accent tokens ──────────────────────────────────────────── */
-  --premium-accent: #818cf8;
-  --premium-accent-dim: #6366f1;
-  --premium-glow: rgba(99, 102, 241, 0.08);
-  --premium-glow-md: rgba(99, 102, 241, 0.15);
-  --premium-glow-strong: rgba(99, 102, 241, 0.3);
-  --premium-border: rgba(129, 140, 248, 0.2);
+  --premium-accent: #14b8a6;
+  --premium-accent-dim: #0f766e;
+  --premium-glow: rgba(20, 184, 166, 0.08);
+  --premium-glow-md: rgba(20, 184, 166, 0.15);
+  --premium-glow-strong: rgba(20, 184, 166, 0.3);
+  --premium-border: rgba(45, 212, 191, 0.24);
   --glass-bg: rgba(17, 18, 20, 0.72);
   --glass-bg-heavy: rgba(17, 18, 20, 0.88);
   --glass-border: rgba(255, 255, 255, 0.06);
@@ -682,8 +683,8 @@ body {
   background:
     radial-gradient(1200px 420px at 20% -10%, rgba(201, 206, 214, 0.11), transparent 60%),
     radial-gradient(1000px 360px at 90% -20%, rgba(110, 115, 122, 0.08), transparent 60%),
-    radial-gradient(800px 500px at 10% 100%, rgba(99, 102, 241, 0.04), transparent 70%),
-    radial-gradient(600px 400px at 90% 80%, rgba(129, 140, 248, 0.03), transparent 70%),
+    radial-gradient(800px 500px at 10% 100%, rgba(20, 184, 166, 0.04), transparent 70%),
+    radial-gradient(600px 400px at 90% 80%, rgba(45, 212, 191, 0.03), transparent 70%),
     var(--zip-bg) !important;
   color: var(--zip-text) !important;
 }
@@ -953,7 +954,7 @@ h1,
 }
 
 :where(.btn, .btn-run, .chat-send, .role-btn, .ia-btn, .filter-btn, .btn-agent-action):focus-visible {
-  outline: 2px solid rgba(210, 216, 223, 0.82) !important;
+  outline: 2px solid var(--premium-accent) !important;
   outline-offset: 2px;
 }
 
@@ -1015,7 +1016,7 @@ html {
 }
 
 ::selection {
-  background: rgba(129, 140, 248, 0.28);
+  background: rgba(45, 212, 191, 0.26);
   color: #fff;
 }
 
@@ -1055,7 +1056,7 @@ main, .main-wrap {
 
 .sb-item.active {
   position: relative;
-  background: linear-gradient(90deg, rgba(129, 140, 248, 0.1), rgba(99, 102, 241, 0.03)) !important;
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.1), rgba(20, 184, 166, 0.03)) !important;
 }
 
 .sb-item.active::before {
@@ -1066,7 +1067,7 @@ main, .main-wrap {
   bottom: 18%;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: linear-gradient(180deg, #818cf8, #6366f1);
+  background: linear-gradient(180deg, #2dd4bf, #0f766e);
   box-shadow: 0 0 12px var(--premium-glow-strong);
 }
 
@@ -1118,7 +1119,7 @@ main, .main-wrap {
   border-color: var(--premium-border) !important;
   box-shadow:
     0 0 0 3px var(--premium-glow),
-    0 0 20px -4px rgba(99, 102, 241, 0.08) !important;
+    0 0 20px -4px rgba(20, 184, 166, 0.09) !important;
 }
 
 /* ── Premium section labels ───────────────────────────────────────────── */
@@ -1136,7 +1137,7 @@ main, .main-wrap {
 
 /* ── Progress bar premium ─────────────────────────────────────────────── */
 .prog-fill {
-  background: linear-gradient(90deg, #6366f1, #818cf8, #a5b4fc) !important;
+  background: linear-gradient(90deg, #0f766e, #14b8a6, #5eead4) !important;
   box-shadow: 0 0 14px var(--premium-glow-strong);
   position: relative;
   overflow: hidden;
@@ -1176,8 +1177,8 @@ main, .main-wrap {
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(ellipse 600px 200px at 0% -20%, rgba(99, 102, 241, 0.1), transparent 60%),
-    radial-gradient(ellipse 400px 200px at 100% 130%, rgba(129, 140, 248, 0.05), transparent 60%),
+    radial-gradient(ellipse 600px 200px at 0% -20%, rgba(20, 184, 166, 0.1), transparent 60%),
+    radial-gradient(ellipse 400px 200px at 100% 130%, rgba(45, 212, 191, 0.05), transparent 60%),
     linear-gradient(180deg, rgba(25, 27, 32, 0.94) 0%, rgba(18, 19, 23, 0.97) 100%) !important;
 }
 
@@ -1188,7 +1189,7 @@ main, .main-wrap {
   right: -15%;
   width: 450px;
   height: 450px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.035), transparent 70%);
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.04), transparent 70%);
   animation: premium-orb 18s ease-in-out infinite;
   pointer-events: none;
 }
@@ -1315,27 +1316,27 @@ tbody tr:hover {
 
 /* ── Button group polish ──────────────────────────────────────────────── */
 .btn.primary {
-  background: linear-gradient(145deg, #9ba3f7, #6e77e8) !important;
-  border-color: rgba(129, 140, 248, 0.4) !important;
+  background: linear-gradient(145deg, #2dd4bf, #0f766e) !important;
+  border-color: rgba(45, 212, 191, 0.42) !important;
   color: #fff !important;
-  box-shadow: 0 8px 24px -10px rgba(99, 102, 241, 0.4) !important;
+  box-shadow: 0 8px 24px -10px rgba(20, 184, 166, 0.38) !important;
 }
 
 .btn.primary:hover {
-  background: linear-gradient(145deg, #a8b0fa, #7c85ec) !important;
-  box-shadow: 0 10px 28px -8px rgba(99, 102, 241, 0.5) !important;
+  background: linear-gradient(145deg, #5eead4, #14b8a6) !important;
+  box-shadow: 0 10px 28px -8px rgba(20, 184, 166, 0.5) !important;
 }
 
 .chat-send {
-  background: linear-gradient(145deg, #9ba3f7, #6e77e8) !important;
-  border-color: rgba(129, 140, 248, 0.4) !important;
+  background: linear-gradient(145deg, #2dd4bf, #0f766e) !important;
+  border-color: rgba(45, 212, 191, 0.42) !important;
   color: #fff !important;
-  box-shadow: 0 8px 24px -10px rgba(99, 102, 241, 0.4) !important;
+  box-shadow: 0 8px 24px -10px rgba(20, 184, 166, 0.38) !important;
 }
 
 .chat-send:hover {
-  background: linear-gradient(145deg, #a8b0fa, #7c85ec) !important;
-  box-shadow: 0 10px 28px -8px rgba(99, 102, 241, 0.5) !important;
+  background: linear-gradient(145deg, #5eead4, #14b8a6) !important;
+  box-shadow: 0 10px 28px -8px rgba(20, 184, 166, 0.5) !important;
 }
 
 /* ── KPI value glow on hover ──────────────────────────────────────────── */
@@ -1355,7 +1356,7 @@ tbody tr:hover {
 .filter-btn:hover,
 .role-btn.active,
 .role-btn:hover {
-  background: linear-gradient(145deg, rgba(129, 140, 248, 0.15), rgba(99, 102, 241, 0.08)) !important;
+  background: linear-gradient(145deg, rgba(45, 212, 191, 0.15), rgba(20, 184, 166, 0.08)) !important;
   border-color: var(--premium-border) !important;
   color: #e8ebf0 !important;
 }
@@ -1365,4 +1366,11 @@ tbody tr:hover {
   main, .main-wrap { animation: none !important; }
   .hero::before { animation: none !important; }
   .prog-fill::after { animation: none !important; }
+}
+
+@media (forced-colors: active) {
+  :where(button, [type="button"], [type="submit"], a, input, textarea, select):focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px;
+  }
 }

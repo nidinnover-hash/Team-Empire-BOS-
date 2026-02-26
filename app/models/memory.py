@@ -1,6 +1,16 @@
 import datetime as dt
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -18,7 +28,6 @@ class ProfileMemory(Base):
         Integer,
         ForeignKey("organizations.id", ondelete="RESTRICT"),
         nullable=False,
-        default=1,
         index=True,
     )
     key: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -27,12 +36,12 @@ class ProfileMemory(Base):
     expires_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: dt.datetime.now(dt.timezone.utc),
+        default=lambda: dt.datetime.now(dt.UTC),
     )
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: dt.datetime.now(dt.timezone.utc),
-        onupdate=lambda: dt.datetime.now(dt.timezone.utc),
+        default=lambda: dt.datetime.now(dt.UTC),
+        onupdate=lambda: dt.datetime.now(dt.UTC),
     )
 
 
@@ -45,7 +54,6 @@ class TeamMember(Base):
         Integer,
         ForeignKey("organizations.id", ondelete="RESTRICT"),
         nullable=False,
-        default=1,
         index=True,
     )
     user_id: Mapped[int | None] = mapped_column(
@@ -68,29 +76,30 @@ class TeamMember(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: dt.datetime.now(dt.timezone.utc),
+        default=lambda: dt.datetime.now(dt.UTC),
     )
 
 
 class DailyContext(Base):
     """Short-term memory — today's priorities, meetings, blockers, decisions."""
     __tablename__ = "daily_context"
+    __table_args__ = (
+        Index("ix_daily_context_org_date", "organization_id", "date"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     organization_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("organizations.id", ondelete="RESTRICT"),
         nullable=False,
-        default=1,
-        index=True,
     )
-    date: Mapped[dt.date] = mapped_column(Date, nullable=False, index=True)
+    date: Mapped[dt.date] = mapped_column(Date, nullable=False)
     context_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     related_to: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: dt.datetime.now(dt.timezone.utc),
+        default=lambda: dt.datetime.now(dt.UTC),
     )
 
 
@@ -106,7 +115,6 @@ class AvatarMemory(Base):
         Integer,
         ForeignKey("organizations.id", ondelete="RESTRICT"),
         nullable=False,
-        default=1,
         index=True,
     )
     avatar_mode: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
@@ -114,12 +122,12 @@ class AvatarMemory(Base):
     value: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: dt.datetime.now(dt.timezone.utc),
+        default=lambda: dt.datetime.now(dt.UTC),
         index=True,
     )
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: dt.datetime.now(dt.timezone.utc),
-        onupdate=lambda: dt.datetime.now(dt.timezone.utc),
+        default=lambda: dt.datetime.now(dt.UTC),
+        onupdate=lambda: dt.datetime.now(dt.UTC),
         index=True,
     )

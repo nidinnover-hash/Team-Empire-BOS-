@@ -12,11 +12,11 @@ These helpers let callers:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import TypedDict
 
-from app.models.memory import ProfileMemory, TeamMember, DailyContext
+from app.models.memory import DailyContext, ProfileMemory, TeamMember
 
 
 class ContextLayer(TypedDict, total=False):
@@ -51,7 +51,7 @@ def _parse_iso_utc(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
     except ValueError:
         return None
 
@@ -69,7 +69,7 @@ def rank_context_layers(
     - ties are stable and deterministic
     - optional debug explanations make ranking transparent
     """
-    current = now or datetime.now(timezone.utc)
+    current = now or datetime.now(UTC)
     ranked: list[ContextLayer] = []
     for layer in layers:
         reasons: list[str] = []

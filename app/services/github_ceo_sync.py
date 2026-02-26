@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import Integer, func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -46,7 +47,7 @@ def _parse_ts(value: Any) -> datetime | None:
         return None
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except Exception:
+    except ValueError:
         return None
 
 
@@ -69,7 +70,7 @@ async def run_ceo_sync(db: AsyncSession, org_id: int) -> dict[str, Any]:
         return {"error": "GitHub not connected"}
 
     org = (settings.GITHUB_ORG or "").strip()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     since = (now - timedelta(days=30)).isoformat()
 
     # Record sync run
@@ -167,7 +168,15 @@ async def run_ceo_sync(db: AsyncSession, org_id: int) -> dict[str, Any]:
                             synced_at=now,
                         ))
                 await db.flush()
-            except Exception as exc:
+            except (
+                SQLAlchemyError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+                TimeoutError,
+                ConnectionError,
+                OSError,
+            ) as exc:
                 logger.warning("Failed to sync org members: %s", exc)
 
         # 3. Sync PRs (open + recently closed/merged) per repo
@@ -182,7 +191,15 @@ async def run_ceo_sync(db: AsyncSession, org_id: int) -> dict[str, Any]:
             for pr_state in ("open", "closed"):
                 try:
                     prs = await get_pull_requests(token, owner, name, state=pr_state, per_page=30)
-                except Exception:
+                except (
+                    RuntimeError,
+                    ValueError,
+                    TypeError,
+                    TimeoutError,
+                    ConnectionError,
+                    OSError,
+                ):
+                    logger.warning("Failed to fetch %s PRs for %s/%s", pr_state, owner, name, exc_info=True)
                     continue
 
                 for pr in prs:
@@ -195,9 +212,8 @@ async def run_ceo_sync(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     state = "merged" if merged_at else pr.get("state", "open")
 
                     # Skip old closed PRs (only care about last 30 days)
-                    if state == "closed" and not merged_at:
-                        if closed_at and closed_at < now - timedelta(days=30):
-                            continue
+                    if state == "closed" and (not merged_at) and closed_at and closed_at < now - timedelta(days=30):
+                        continue
 
                     existing_pr = await db.execute(
                         select(GitHubPullRequest).where(
@@ -269,7 +285,15 @@ async def run_ceo_sync(db: AsyncSession, org_id: int) -> dict[str, Any]:
                                     **rev_data,
                                 ))
                             stats["reviews_synced"] += 1
-                    except Exception as exc:
+                    except (
+                        SQLAlchemyError,
+                        RuntimeError,
+                        ValueError,
+                        TypeError,
+                        TimeoutError,
+                        ConnectionError,
+                        OSError,
+                    ) as exc:
                         logger.debug("Review fetch failed %s#%d: %s", full_name, pr_number, exc)
 
             # 4. Sync commits (last 30 days)
@@ -312,7 +336,15 @@ async def run_ceo_sync(db: AsyncSession, org_id: int) -> dict[str, Any]:
                             synced_at=now,
                         ))
                     stats["commits_synced"] += counts["count"]
-            except Exception as exc:
+            except (
+                SQLAlchemyError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+                TimeoutError,
+                ConnectionError,
+                OSError,
+            ) as exc:
                 logger.debug("Commit fetch failed %s: %s", full_name, exc)
 
             # 5. Sync workflow runs
@@ -360,13 +392,21 @@ async def run_ceo_sync(db: AsyncSession, org_id: int) -> dict[str, Any]:
                             **wr_data,
                         ))
                     stats["workflows_synced"] += 1
-            except Exception as exc:
+            except (
+                SQLAlchemyError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+                TimeoutError,
+                ConnectionError,
+                OSError,
+            ) as exc:
                 logger.debug("Workflow fetch failed %s: %s", full_name, exc)
 
         await db.commit()
 
         # Update sync run
-        sync_run.finished_at = datetime.now(timezone.utc)
+        sync_run.finished_at = datetime.now(UTC)
         sync_run.status = "ok"
         sync_run.repos_synced = stats["repos_synced"]
         sync_run.prs_synced = stats["prs_synced"]
@@ -375,15 +415,31 @@ async def run_ceo_sync(db: AsyncSession, org_id: int) -> dict[str, Any]:
         sync_run.workflows_synced = stats["workflows_synced"]
         await db.commit()
 
-    except Exception as exc:
+    except (
+        SQLAlchemyError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+        TimeoutError,
+        ConnectionError,
+        OSError,
+    ) as exc:
         logger.error("CEO GitHub sync failed: %s", exc)
         await db.rollback()
-        sync_run.finished_at = datetime.now(timezone.utc)
+        sync_run.finished_at = datetime.now(UTC)
         sync_run.status = "error"
         sync_run.error_message = str(exc)[:500]
         try:
             await db.commit()
-        except Exception as commit_exc:
+        except (
+            SQLAlchemyError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+            TimeoutError,
+            ConnectionError,
+            OSError,
+        ) as commit_exc:
             logger.error("Failed to persist CEO GitHub sync error status: %s", type(commit_exc).__name__)
         return {"error": str(exc), **stats}
 
@@ -401,7 +457,7 @@ async def get_ceo_summary(
     CEO weekly summary: PR throughput, review time, CI failure rate,
     top blocked repos, inactive dev alerts.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     since = now - timedelta(days=days)
 
     # PR throughput per dev (merged PRs in range)
@@ -568,7 +624,7 @@ async def get_risks(
     Risk detection: PRs without reviews, failing CI, long-open PRs,
     single-point-of-failure devs, force push indicators.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     since = now - timedelta(days=days)
 
     risks: list[dict[str, Any]] = []

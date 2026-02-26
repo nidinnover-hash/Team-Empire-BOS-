@@ -1,10 +1,13 @@
 """Tests for /api/v1/approvals endpoints."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from app.models.approval import Approval
+from sqlalchemy import select
 
 from app.core.deps import get_db
 from app.main import app as fastapi_app
+from app.models.approval import Approval
+from app.models.clone_control import CloneLearningFeedback
+from app.models.employee import Employee
 
 
 async def _get_session():
@@ -25,7 +28,7 @@ async def _seed_approval(client, **overrides):
             payload_json=overrides.get("payload_json", {}),
             status=_status,
             approved_by=overrides.get("approved_by", 1 if _status == "approved" else None),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         session.add(approval)
         await session.commit()
@@ -37,7 +40,7 @@ async def _seed_approval(client, **overrides):
 async def test_request_approval_returns_201(client):
     resp = await client.post(
         "/api/v1/approvals/request",
-        json={"approval_type": "task_execution", "payload_json": {"task": "test"}},
+        json={"organization_id": 1, "approval_type": "task_execution", "payload_json": {"task": "test"}},
     )
     assert resp.status_code == 201
     body = resp.json()
@@ -93,3 +96,40 @@ async def test_timeline_returns_shape(client):
     assert "pending_count" in body
     assert "approved_count" in body
     assert "items" in body
+
+
+async def test_approval_records_learning_feedback_when_employee_mapped(client):
+    session, agen = await _get_session()
+    try:
+        session.add(
+            Employee(
+                organization_id=1,
+                name="CEO Employee",
+                role="CEO",
+                email="ceo@org1.com",
+                is_active=True,
+            )
+        )
+        await session.commit()
+    finally:
+        await agen.aclose()
+
+    aid = await _seed_approval(client, requested_by=1)
+    resp = await client.post(f"/api/v1/approvals/{aid}/approve", json={"note": "ok"})
+    assert resp.status_code == 200
+
+    session, agen = await _get_session()
+    try:
+        rows = (
+            await session.execute(
+                select(CloneLearningFeedback).where(
+                    CloneLearningFeedback.organization_id == 1,
+                    CloneLearningFeedback.source_type == "approval",
+                    CloneLearningFeedback.source_id == aid,
+                )
+            )
+        ).scalars().all()
+        assert len(rows) >= 1
+        assert rows[0].outcome_score > 0.8
+    finally:
+        await agen.aclose()

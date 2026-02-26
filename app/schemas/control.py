@@ -196,6 +196,11 @@ class SystemHealthRead(BaseModel):
 class StorageMetricsRead(BaseModel):
     generated_at: datetime
     memory_context_cache: dict[str, int]
+    ai_router_recent_calls_1h: int = 0
+    ai_router_fallback_rate_1h: float = Field(default=0.0, ge=0.0, le=1.0)
+    ai_router_errors_1h: int = 0
+    ai_router_provider_counts_1h: dict[str, int] = Field(default_factory=dict)
+    approval_feedback_stats: dict[str, float | int] = Field(default_factory=dict)
 
 
 class SecurityPostureRead(BaseModel):

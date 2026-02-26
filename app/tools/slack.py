@@ -120,6 +120,6 @@ async def get_user_name(bot_token: str, user_id: str) -> str:
             if body.get("ok"):
                 user = body.get("user", {})
                 return user.get("real_name") or user.get("name") or user_id
-    except Exception as exc:
+    except (httpx.HTTPError, ValueError, TypeError) as exc:
         logger.debug("Slack users.info failed for %s: %s", user_id, type(exc).__name__)
     return user_id

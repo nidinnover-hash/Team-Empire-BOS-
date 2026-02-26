@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -12,7 +12,6 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-
 
 
 class Email(Base):
@@ -50,5 +49,5 @@ class Email(Base):
     reply_sent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )

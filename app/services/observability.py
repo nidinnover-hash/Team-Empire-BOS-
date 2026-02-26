@@ -2,12 +2,13 @@
 Observability service — aggregate AI call metrics, approval stats, and decision traces.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TypedDict
 
 from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.idempotency import get_idempotency_stats
 from app.core.middleware import get_rate_limit_stats
 from app.core.resilience import get_retry_stats
@@ -22,7 +23,6 @@ from app.models.memory import DailyContext, ProfileMemory
 from app.models.note import Note
 from app.models.project import Project
 from app.models.task import Task
-from app.core.config import settings
 from app.services.signal_ingestion import get_ingestion_stats
 
 
@@ -86,7 +86,7 @@ class StorageSummary(TypedDict):
 async def get_observability_summary(
     db: AsyncSession, org_id: int, days: int = 7
 ) -> ObservabilitySummary:
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
 
     # AI call stats + fallback/error counts in a single query (was 3 separate queries)
     ai_query = select(
@@ -212,7 +212,7 @@ async def get_storage_summary(db: AsyncSession, org_id: int) -> StorageSummary:
 
     return {
         "org_id": org_id,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "total_rows": total_rows,
         "retention_days_chat": int(settings.CHAT_HISTORY_RETENTION_DAYS),
         "tables": stats,

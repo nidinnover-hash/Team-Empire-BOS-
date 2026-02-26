@@ -1,7 +1,6 @@
 """Tests for task audit logging and model constraint enforcement."""
 from __future__ import annotations
 
-
 # ── Task CRUD creates audit events ──────────────────────────────────────────
 
 

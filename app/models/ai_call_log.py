@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -11,7 +11,7 @@ class AiCallLog(Base):
     __tablename__ = "ai_call_logs"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    organization_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, default=1, index=True)
+    organization_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
     provider: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     model_name: Mapped[str] = mapped_column(String(80), nullable=False)
     prompt_type: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
@@ -24,6 +24,6 @@ class AiCallLog(Base):
     error_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         index=True,
     )

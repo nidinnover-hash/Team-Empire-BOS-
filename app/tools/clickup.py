@@ -8,7 +8,7 @@ and return plain Python dicts / lists from the ClickUp REST API.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, cast
 
 import httpx
@@ -124,8 +124,8 @@ def parse_due_date(task: dict[str, Any]) -> str | None:
         return None
     try:
         ts = int(raw) / 1000
-        return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
-    except Exception:
+        return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d")
+    except (TypeError, ValueError, OSError):
         return None
 
 
@@ -139,9 +139,9 @@ def parse_priority(task: dict[str, Any]) -> int:
         raw = raw.strip()
         if not raw:
             return 2
-    if not isinstance(raw, (int, str)):
+    if not isinstance(raw, int | str):
         return 2
     try:
         return prio_map.get(int(raw), 2)
-    except Exception:
+    except (TypeError, ValueError):
         return 2

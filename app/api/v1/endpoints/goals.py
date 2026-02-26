@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles
-from app.schemas.goal import GoalCreate, GoalRead, GoalProgressUpdate, GoalStatusUpdate
+from app.schemas.goal import GoalCreate, GoalProgressUpdate, GoalRead, GoalStatusUpdate
 from app.services import goal as goal_service
 
 router = APIRouter(prefix="/goals", tags=["Goals"])
@@ -35,7 +35,7 @@ async def update_progress(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> GoalRead:
-    """Update goal progress (0–100). Auto-completes at 100."""
+    """Update goal progress (0-100). Auto-completes at 100."""
     goal = await goal_service.update_goal_progress(db, goal_id, data, organization_id=actor["org_id"])
     if goal is None:
         raise HTTPException(status_code=404, detail="Goal not found")

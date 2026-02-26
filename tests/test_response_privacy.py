@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.core.config import settings
 from app.core.deps import get_db
@@ -20,7 +20,7 @@ async def _insert_raw_event(payload_json: dict) -> None:
                 entity_type="integration",
                 entity_id=1,
                 payload_json=payload_json,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
         )
         await session.commit()

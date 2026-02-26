@@ -4,7 +4,6 @@ from urllib.parse import urlencode
 
 import httpx
 
-
 GOOGLE_AUTH_BASE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_CALENDAR_EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"

@@ -4,8 +4,24 @@ line-length = 100
 extend-exclude = [".venv", "alembic/versions"]
 
 [tool.ruff.lint]
-select = ["E", "F", "B"]
-ignore = ["E501", "B008"]
+select = [
+  "E",     # pycodestyle errors
+  "F",     # pyflakes
+  "B",     # flake8-bugbear
+  "I",     # isort
+  "UP",    # pyupgrade (modern Python syntax)
+  "SIM",   # flake8-simplify
+  "T20",   # flake8-print (no print statements)
+  "RUF",   # ruff-specific rules
+  "S110",  # flake8-bandit: try-except-pass
+  "S112",  # flake8-bandit: try-except-continue
+]
+ignore = [
+  "E501",   # line too long (handled by formatter)
+  "B008",   # function call in default arg (Depends())
+  "RUF012", # mutable class vars (SQLAlchemy models)
+  "UP007",  # X | Y syntax (already using it)
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app", "tests"]
@@ -25,6 +41,7 @@ files = [
   "app/core",
   "app/services/ai_router.py",
   "app/services/email_service.py",
+  "app/services/token_health.py",
   "app/tools/gmail.py",
   "app/api/v1/endpoints/email.py",
   "app/api/v1/endpoints/integrations.py",

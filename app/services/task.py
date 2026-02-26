@@ -1,6 +1,6 @@
+from datetime import UTC, datetime
 from typing import cast
 
-from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -59,7 +59,7 @@ async def update_task(
     # Apply all non-None fields from the update payload
     if data.is_done is not None:
         task.is_done = data.is_done
-        task.completed_at = datetime.now(timezone.utc) if data.is_done else None
+        task.completed_at = datetime.now(UTC) if data.is_done else None
     if data.title is not None:
         task.title = data.title
     if data.description is not None:

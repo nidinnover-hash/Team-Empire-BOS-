@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Awaitable, Callable, TypeVar
+from typing import TypeVar
 
 T = TypeVar("T")
 _retry_stats: dict[str, int] = {
@@ -56,7 +57,8 @@ async def run_with_retry(
                 raise
             _retry_stats["retries"] += 1
             await asyncio.sleep(backoff_seconds * (2**i))
-    assert last_exc is not None
+    if last_exc is None:
+        raise RuntimeError("run_with_retry exhausted all attempts without capturing an exception")
     raise last_exc
 
 

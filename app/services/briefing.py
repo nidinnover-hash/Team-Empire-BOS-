@@ -6,7 +6,7 @@ Two functions:
   get_daily_briefing()  → AI-generated morning summary for Nidin
 """
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any, TypedDict
 
 from sqlalchemy import func, select
@@ -241,7 +241,7 @@ Write a sharp, direct morning briefing. Structure it as:
 
     return {
         "date": str(today),
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "briefing": briefing_text,
         "raw_data": summary,
     }
@@ -289,7 +289,7 @@ async def get_executive_briefing(
 
     return {
         "date": str(today),
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         # Keep both keys for backward compatibility with scheduler/API clients.
         "summary": dashboard["summary"],
         "team_summary": dashboard["summary"],

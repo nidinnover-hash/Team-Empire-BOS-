@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field
 from app.services.ai_router import call_ai
 from app.services.confidence import assess_agent_confidence
 
-
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class AgentChatRequest(BaseModel):
@@ -38,6 +37,15 @@ class AgentChatResponse(BaseModel):
     confidence_level: str = "low"
     confidence_reasons: list[str] = []
     needs_human_review: bool = True
+    memory_context_chars: int = 0
+    memory_context_truncated: bool = False
+    memory_sources: list[str] = []
+    memory_source_counts: dict[str, int] = {}
+    policy_score: int = 100
+    blocked_by_policy: bool = False
+    policy_reasons: list[str] = []
+    policy_blocked_actions: list[str] = []
+    policy_matched_rule_ids: list[int] = []
 
 
 # ── Role System Prompts ───────────────────────────────────────────────────────

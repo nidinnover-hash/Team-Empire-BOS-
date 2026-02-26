@@ -40,7 +40,7 @@ async def test_button_backed_endpoints_exist_and_return_expected_status(
     # All responses must be valid JSON (not empty body except 204)
     if response.status_code != 204:
         body = response.json()
-        assert isinstance(body, (dict, list)), f"Unexpected response type {type(body)} from {path}"
+        assert isinstance(body, dict | list), f"Unexpected response type {type(body)} from {path}"
 
 
 # ── Response shape assertions for key GET endpoints ──────────────────────────

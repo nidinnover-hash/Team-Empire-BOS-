@@ -15,6 +15,7 @@ from app.core.middleware import (
 from app.core.purpose import resolve_login_profile
 from app.core.security import create_access_token, hash_password, verify_password
 from app.logs.audit import record_action
+from app.schemas.auth import TokenResponse, UserMeRead
 from app.services import user as user_service
 
 logger = logging.getLogger(__name__)
@@ -40,11 +41,11 @@ def _enforce_password_login_policy() -> None:
         )
 
 
-@router.post("/login")
+@router.post("/login", response_model=TokenResponse)
 async def login(
     request: Request,
-    username: str = Form(...),
-    password: str = Form(...),
+    username: str = Form(..., min_length=3, max_length=254),
+    password: str = Form(..., min_length=8, max_length=128),
     db: AsyncSession = Depends(get_db),
 ):
     _enforce_password_login_policy()
@@ -73,26 +74,26 @@ async def login(
                 db.add(user)
                 await db.commit()
                 logger.info("Rehashed password for user %d (%s → 600k iterations)", user.id, iter_str)
-        except Exception:
+        except (ValueError, TypeError, RuntimeError):
             logger.debug("Password rehash skipped for user %d", user.id, exc_info=True)
 
     if not valid:
         record_login_failure(client_ip)
         logger.warning("Failed login attempt for '%s' from %s", username, client_ip)
-        audit_kwargs: dict = {
-            "event_type": "login_failed",
-            "actor_user_id": user.id if user else None,
-            "entity_type": "user",
-            "entity_id": user.id if user else None,
-            "payload_json": {"username": username[:200], "ip": client_ip},
-        }
-        if user:
-            audit_kwargs["organization_id"] = user.organization_id
-        await record_action(db, **audit_kwargs)
+        await record_action(
+            db,
+            event_type="login_failed",
+            actor_user_id=user.id if user else None,
+            organization_id=user.organization_id if user else 0,
+            entity_type="user",
+            entity_id=user.id if user else None,
+            payload_json={"username": username[:200], "ip": client_ip},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username/password",
         )
+    assert user is not None
     purpose_profile = resolve_login_profile(user.email)
     access_token = create_access_token(
         {
@@ -120,6 +121,6 @@ async def login(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-@router.get("/me")
+@router.get("/me", response_model=UserMeRead)
 async def me(user: dict = Depends(get_current_api_user)):
     return user

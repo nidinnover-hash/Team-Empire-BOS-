@@ -1,14 +1,14 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import cast
 
 from app.models.conversation import Conversation
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 async def get_by_key(

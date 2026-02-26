@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -24,7 +24,7 @@ def create_app_jwt() -> str:
     import jwt
 
     app_id, pem, _ = _require_app_config()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "iat": int((now - timedelta(seconds=30)).timestamp()),
         "exp": int((now + timedelta(minutes=9)).timestamp()),

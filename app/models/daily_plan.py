@@ -1,6 +1,6 @@
 import datetime as dt
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import JSON, CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -41,5 +41,5 @@ class DailyTaskPlan(Base):
     approved_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: dt.datetime.now(dt.timezone.utc),
+        default=lambda: dt.datetime.now(dt.UTC),
     )

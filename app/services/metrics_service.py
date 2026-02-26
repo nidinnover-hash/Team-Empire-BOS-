@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,8 +47,8 @@ async def compute_weekly_metrics(
 
     for week_offset in range(weeks):
         week_start = current_monday - timedelta(weeks=week_offset)
-        week_end_dt = datetime(week_start.year, week_start.month, week_start.day, tzinfo=timezone.utc) + timedelta(days=7)
-        week_start_dt = datetime(week_start.year, week_start.month, week_start.day, tzinfo=timezone.utc)
+        week_end_dt = datetime(week_start.year, week_start.month, week_start.day, tzinfo=UTC) + timedelta(days=7)
+        week_start_dt = datetime(week_start.year, week_start.month, week_start.day, tzinfo=UTC)
 
         # Fetch all signals for this week
         sig_result = await db.execute(

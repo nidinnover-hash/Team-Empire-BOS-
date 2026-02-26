@@ -87,3 +87,22 @@ async def test_agent_chat_logs_memory_write_skipped_when_no_valid_action(client,
     events = await client.get("/api/v1/ops/events", headers=headers)
     assert events.status_code == 200
     assert any(item["event_type"] == "agent_memory_write_skipped" for item in events.json())
+
+
+async def test_agent_policy_blocks_secret_memory_write(client, monkeypatch):
+    monkeypatch.setattr(agents_endpoint, "run_agent", _fake_run_agent)
+
+    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    response = await client.post(
+        "/api/v1/agents/chat",
+        json={"message": "Remember this: my API key token is super-secret."},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["blocked_by_policy"] is True
+    assert "MEMORY_WRITE" in payload["policy_blocked_actions"]
+
+    profile = await client.get("/api/v1/memory/profile", headers=headers)
+    assert profile.status_code == 200
+    assert profile.json() == []

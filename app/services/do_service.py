@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.tenant import require_org_id
 from app.models.ceo_control import (
     DigitalOceanCostSnapshot,
     DigitalOceanDropletSnapshot,
     DigitalOceanTeamSnapshot,
 )
-from app.core.tenant import require_org_id
 from app.services import integration as integration_service
 from app.tools import digitalocean as do_tool
 
@@ -28,7 +29,7 @@ async def connect_digitalocean(db: AsyncSession, org_id: int, api_token: str) ->
         config_json={
             "access_token": api_token,
             "account_email": account.get("email"),
-            "connected_at": datetime.now(timezone.utc).isoformat(),
+            "connected_at": datetime.now(UTC).isoformat(),
         },
     )
     return {"id": item.id, "status": item.status, "email": account.get("email")}
@@ -52,12 +53,12 @@ async def sync_digitalocean(db: AsyncSession, org_id: int) -> dict[str, Any]:
     if not token:
         return {"droplets": 0, "members": 0, "error": "Missing access_token in DigitalOcean config"}
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     try:
         droplets = await do_tool.list_droplets(token)
         members = await do_tool.list_team_members(token)
         balance = await do_tool.get_balance(token)
-    except Exception as exc:
+    except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
         return {"droplets": 0, "members": 0, "error": type(exc).__name__}
 
     await db.execute(delete(DigitalOceanDropletSnapshot).where(DigitalOceanDropletSnapshot.organization_id == org_id))

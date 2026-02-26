@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import cast
 
 from sqlalchemy import func, select
@@ -99,7 +99,7 @@ async def update_social_post_status(
     if data.status == "approved":
         post.approved_by_user_id = actor_user_id
     if data.status == "published":
-        post.published_at = datetime.now(timezone.utc)
+        post.published_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(post)
     return post
@@ -158,7 +158,7 @@ async def publish_social_post(
     if post.status not in ("approved", "queued"):
         raise ValueError("Post must be approved or queued before publishing")
     post.status = "published"
-    post.published_at = datetime.now(timezone.utc)
+    post.published_at = datetime.now(UTC)
     if post.approved_by_user_id is None:
         post.approved_by_user_id = actor_user_id
     await db.commit()
@@ -167,7 +167,7 @@ async def publish_social_post(
 
 
 async def publish_due_queued_posts(db: AsyncSession, organization_id: int) -> int:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     result = await db.execute(
         select(SocialPost).where(
             SocialPost.organization_id == organization_id,
@@ -175,7 +175,7 @@ async def publish_due_queued_posts(db: AsyncSession, organization_id: int) -> in
             SocialPost.scheduled_for.is_not(None),
             SocialPost.scheduled_for <= now,
             SocialPost.approved_by_user_id.is_not(None),
-        )
+        ).limit(200)
     )
     rows = list(result.scalars().all())
     if not rows:

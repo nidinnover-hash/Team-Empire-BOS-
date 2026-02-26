@@ -1,4 +1,5 @@
 import base64
+import binascii
 import hashlib
 import hmac
 import os
@@ -56,7 +57,7 @@ def verify_password(password: str, stored_hash: str) -> bool:
         iterations = int(iter_str)
         salt = base64.b64decode(salt_b64.encode())
         expected = base64.b64decode(digest_b64.encode())
-    except Exception:
+    except (ValueError, TypeError, binascii.Error):
         return False
     candidate = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
     return hmac.compare_digest(candidate, expected)

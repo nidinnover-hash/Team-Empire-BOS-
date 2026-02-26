@@ -1,6 +1,5 @@
 from app.core.security import create_access_token
 
-
 _ROLE_USER = {
     "CEO": (1, "ceo@org1.com"),
     "MANAGER": (3, "manager@org1.com"),

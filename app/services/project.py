@@ -8,7 +8,7 @@ from app.schemas.project import ProjectCreate, ProjectStatusUpdate
 
 
 async def create_project(
-    db: AsyncSession, data: ProjectCreate, organization_id: int = 1
+    db: AsyncSession, data: ProjectCreate, organization_id: int
 ) -> Project:
     project = Project(**data.model_dump(), organization_id=organization_id)
     db.add(project)
@@ -18,13 +18,14 @@ async def create_project(
 
 
 async def list_projects(
-    db: AsyncSession, limit: int = 50, offset: int = 0, organization_id: int | None = None
+    db: AsyncSession, organization_id: int, limit: int = 50, offset: int = 0
 ) -> list[Project]:
-    query = select(Project)
-    if organization_id is not None:
-        query = query.where(Project.organization_id == organization_id)
     result = await db.execute(
-        query.order_by(Project.created_at.desc()).offset(offset).limit(limit)
+        select(Project)
+        .where(Project.organization_id == organization_id)
+        .order_by(Project.created_at.desc())
+        .offset(offset)
+        .limit(limit)
     )
     return list(result.scalars().all())
 
@@ -33,12 +34,14 @@ async def update_project_status(
     db: AsyncSession,
     project_id: int,
     data: ProjectStatusUpdate,
-    organization_id: int | None = None,
+    organization_id: int,
 ) -> Project | None:
-    query = select(Project).where(Project.id == project_id)
-    if organization_id is not None:
-        query = query.where(Project.organization_id == organization_id)
-    result = await db.execute(query)
+    result = await db.execute(
+        select(Project).where(
+            Project.id == project_id,
+            Project.organization_id == organization_id,
+        )
+    )
     project = cast(Project | None, result.scalar_one_or_none())
     if project is None:
         return None

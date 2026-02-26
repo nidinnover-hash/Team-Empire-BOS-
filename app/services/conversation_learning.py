@@ -35,9 +35,7 @@ def _looks_sensitive(text: str) -> bool:
     lowered = text.lower()
     if re.search(r"\b(password|passcode|otp|secret|api key|token|private key)\b", lowered):
         return True
-    if "@" in text:
-        return True
-    return False
+    return "@" in text
 
 
 def extract_learning_signals(message: str) -> list[LearnedSignal]:

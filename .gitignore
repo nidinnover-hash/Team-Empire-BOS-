@@ -3,6 +3,8 @@
 .env.*
 !.env.example
 !.env.production.example
+client_secret_*.json
+*googleusercontent.com.json
 
 # Database file (SQLite)
 *.db
@@ -43,3 +45,4 @@ nul
 _frontend_import/
 b_vQRsLDjjOMc-1771887990410.zip
 personal-clone-strategy-pack.zip
+personal-clone-strategy-pack/

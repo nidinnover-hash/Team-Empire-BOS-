@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class ApprovalRequestCreate(BaseModel):
-    organization_id: int = 1
+    organization_id: int
     approval_type: str = Field(..., max_length=100)
     payload_json: dict = Field(default_factory=dict)
 

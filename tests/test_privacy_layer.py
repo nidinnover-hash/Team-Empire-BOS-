@@ -1,5 +1,5 @@
-from app.core.privacy import REDACTED, sanitize_audit_payload
 from app.core.config import settings
+from app.core.privacy import REDACTED, sanitize_audit_payload
 from app.logs import audit as audit_log
 
 

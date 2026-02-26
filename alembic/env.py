@@ -33,6 +33,22 @@ import app.models.ops_metrics # noqa: F401
 import app.models.decision_log # noqa: F401
 import app.models.policy_rule # noqa: F401
 import app.models.weekly_report # noqa: F401
+import app.models.ai_call_log  # noqa: F401
+import app.models.chat_message  # noqa: F401
+import app.models.ceo_control  # noqa: F401
+import app.models.clone_control  # noqa: F401
+import app.models.clone_performance  # noqa: F401
+import app.models.conversation  # noqa: F401
+import app.models.daily_plan  # noqa: F401
+import app.models.decision_trace  # noqa: F401
+import app.models.github  # noqa: F401
+import app.models.media_project  # noqa: F401
+import app.models.org_membership  # noqa: F401
+import app.models.notification  # noqa: F401
+import app.models.social  # noqa: F401
+import app.models.threat_signal  # noqa: F401
+import app.models.whatsapp_message  # noqa: F401
+import app.models.self_learning_run  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

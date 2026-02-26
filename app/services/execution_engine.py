@@ -1,10 +1,12 @@
 import asyncio
 import inspect
 import logging
-from datetime import datetime, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.logs.audit import record_action
@@ -16,6 +18,17 @@ from app.tools.calendar import build_calendar_digest
 logger = logging.getLogger(__name__)
 
 HANDLER_TIMEOUT_SECONDS = 30
+_HANDLER_RUNTIME_EXC: tuple[type[BaseException], ...] = (
+    RuntimeError,
+    TimeoutError,
+    OSError,
+    ValueError,
+    TypeError,
+    AttributeError,
+    KeyError,
+    LookupError,
+    ArithmeticError,
+)
 
 
 # ── Handlers ──────────────────────────────────────────────────────────────────
@@ -49,7 +62,7 @@ async def _atomic_claim_executed_at(db: AsyncSession, approval_id: int) -> bool:
     result = await db.execute(
         update(Approval)
         .where(Approval.id == approval_id, Approval.executed_at.is_(None))
-        .values(executed_at=datetime.now(timezone.utc))
+        .values(executed_at=datetime.now(UTC))
     )
     await db.commit()
     return bool((result.rowcount or 0) == 1)
@@ -100,7 +113,7 @@ async def _finalize_execution(
             entity_id=execution_id,
             payload_json={"approval_id": approval_id, "output": output or {}},
         )
-    except Exception:
+    except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
         logger.exception(
             "Failed to finalize execution %d for approval %d",
             execution_id, approval_id,
@@ -182,7 +195,7 @@ async def execute_approval(
                 actor_user_id, approval.organization_id,
                 status=status, output=output, error_text=error_text,
             )
-        except Exception as exc:
+        except (RuntimeError, ValueError, TypeError, TimeoutError) as exc:
             _err = f"{type(exc).__name__}: {str(exc)[:200]}"
             await _finalize_execution(
                 db, execution.id, approval.id,
@@ -202,7 +215,8 @@ async def execute_approval(
         return
 
     try:
-        output = await _run_handler(handler, approval.payload_json or {})
+        # Claim the idempotency slot BEFORE running the handler to prevent
+        # concurrent approvers from both executing side-effects (e.g. spending).
         claimed = await _atomic_claim_executed_at(db, approval.id)
         if not claimed:
             logger.warning("Approval %d already claimed by concurrent request", approval.id)
@@ -212,19 +226,20 @@ async def execute_approval(
                 status="skipped", output={"reason": "already_executed"},
             )
             return
+        output = await _run_handler(handler, approval.payload_json or {})
         await _finalize_execution(
             db, execution.id, approval.id,
             actor_user_id, approval.organization_id,
             status="succeeded", output=output,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         await _finalize_execution(
             db, execution.id, approval.id,
             actor_user_id, approval.organization_id,
             status="failed",
             error_text=f"Handler '{approval.approval_type}' timed out after {HANDLER_TIMEOUT_SECONDS}s",
         )
-    except Exception as exc:
+    except _HANDLER_RUNTIME_EXC as exc:
         _err = f"{type(exc).__name__}: {str(exc)[:200]}"
         await _finalize_execution(
             db, execution.id, approval.id,

@@ -24,7 +24,7 @@ async def notion_connect(
         info = await notion_service.connect_notion(
             db, org_id=int(actor["org_id"]), api_token=data.api_token,
         )
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"Notion connection failed: {type(exc).__name__}") from exc
     await record_action(
         db, event_type="integration_connected", actor_user_id=actor["id"],

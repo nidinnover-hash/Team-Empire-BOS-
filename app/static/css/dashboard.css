@@ -455,13 +455,13 @@
 }
 
 .chat-msg-user {
-  background: linear-gradient(145deg, rgba(99, 102, 241, 0.08), rgba(129, 140, 248, 0.04)) !important;
-  border: 1px solid rgba(129, 140, 248, 0.12) !important;
+  background: linear-gradient(145deg, rgba(20, 184, 166, 0.09), rgba(45, 212, 191, 0.04)) !important;
+  border: 1px solid rgba(45, 212, 191, 0.15) !important;
 }
 
 .chat-role-tag {
   font-family: var(--font-display) !important;
-  color: rgba(129, 140, 248, 0.6) !important;
+  color: rgba(45, 212, 191, 0.62) !important;
 }
 
 .chat-hint {
@@ -520,7 +520,7 @@
 /* ── Memory editor premium ────────────────────────────────────────────── */
 .mem-key {
   font-family: var(--font-display) !important;
-  color: rgba(129, 140, 248, 0.7) !important;
+  color: rgba(45, 212, 191, 0.72) !important;
 }
 
 /* ── Card count badge premium ─────────────────────────────────────────── */

@@ -8,9 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.project import ProjectCreate
 from app.schemas.task import TaskCreate
-from app.services import clickup_service, do_service, github_service, project as project_service
+from app.services import clickup_service, do_service, github_service, slack_service
 from app.services import finance as finance_service
-from app.services import slack_service, task as task_service
+from app.services import project as project_service
+from app.services import task as task_service
 
 
 @dataclass(slots=True)

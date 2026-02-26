@@ -19,7 +19,8 @@ os.environ.setdefault("PURPOSE_PERSONAL_EMAILS", "nidinnover@gmail.com,purpose-l
 os.environ.setdefault("WHATSAPP_APP_SECRET", "test-whatsapp-secret")
 os.environ["DEBUG"] = "true"
 os.environ["ENFORCE_STARTUP_VALIDATION"] = "false"
-from httpx import AsyncClient, ASGITransport
+import pytest
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -27,51 +28,122 @@ from app.core.deps import get_db
 from app.core.security import create_access_token
 from app.db.base import Base
 from app.main import app as fastapi_app
-from app.models.organization import Organization
-from app.models.user import User
+from app.models import ai_call_log as _model_ai_call_log  # noqa: F401
 
 # Register all models so Base.metadata knows about the tables
 from app.models import approval as _model_approval  # noqa: F401
+from app.models import ceo_control as _model_ceo_control  # noqa: F401
+from app.models import chat_message as _model_chat_message  # noqa: F401
+from app.models import clone_control as _model_clone_control  # noqa: F401
+from app.models import clone_performance as _model_clone_performance  # noqa: F401
 from app.models import command as _model_command  # noqa: F401
-from app.models import conversation as _model_conversation  # noqa: F401
 from app.models import contact as _model_contact  # noqa: F401
+from app.models import conversation as _model_conversation  # noqa: F401
 from app.models import daily_plan as _model_daily_plan  # noqa: F401
 from app.models import daily_run as _model_daily_run  # noqa: F401
+from app.models import decision_log as _model_decision_log  # noqa: F401
 from app.models import decision_trace as _model_decision_trace  # noqa: F401
 from app.models import email as _model_email  # noqa: F401
+from app.models import employee as _model_employee  # noqa: F401
 from app.models import event as _model_event  # noqa: F401
 from app.models import execution as _model_execution  # noqa: F401
 from app.models import finance as _model_finance  # noqa: F401
+from app.models import github as _model_github  # noqa: F401
 from app.models import goal as _model_goal  # noqa: F401
 from app.models import integration as _model_integration  # noqa: F401
+from app.models import integration_signal as _model_integration_signal  # noqa: F401
+from app.models import media_project as _model_media_project  # noqa: F401
 from app.models import memory as _model_memory  # noqa: F401
 from app.models import note as _model_note  # noqa: F401
-from app.models import organization as _model_organization  # noqa: F401
-from app.models import project as _model_project  # noqa: F401
-from app.models import task as _model_task  # noqa: F401
-from app.models import user as _model_user  # noqa: F401
-from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
-from app.models import chat_message as _model_chat_message  # noqa: F401
-from app.models import ai_call_log as _model_ai_call_log  # noqa: F401
-from app.models import employee as _model_employee  # noqa: F401
-from app.models import integration_signal as _model_integration_signal  # noqa: F401
+from app.models import notification as _model_notification  # noqa: F401
 from app.models import ops_metrics as _model_ops_metrics  # noqa: F401
-from app.models import decision_log as _model_decision_log  # noqa: F401
-from app.models import policy_rule as _model_policy_rule  # noqa: F401
-from app.models import weekly_report as _model_weekly_report  # noqa: F401
-from app.models import ceo_control as _model_ceo_control  # noqa: F401
-from app.models import github as _model_github  # noqa: F401
-from app.models import social as _model_social  # noqa: F401
-from app.models import clone_control as _model_clone_control  # noqa: F401
-from app.models import clone_performance as _model_clone_performance  # noqa: F401
 from app.models import org_membership as _model_org_membership  # noqa: F401
-from app.models import org_role_permission as _model_org_role_permission  # noqa: F401
+from app.models import organization as _model_organization  # noqa: F401
+from app.models import policy_rule as _model_policy_rule  # noqa: F401
+from app.models import project as _model_project  # noqa: F401
+from app.models import self_learning_run as _model_self_learning_run  # noqa: F401
+from app.models import social as _model_social  # noqa: F401
+from app.models import task as _model_task  # noqa: F401
 from app.models import threat_signal as _model_threat_signal  # noqa: F401
-from app.models import media_project as _model_media_project  # noqa: F401
+from app.models import user as _model_user  # noqa: F401
+from app.models import weekly_report as _model_weekly_report  # noqa: F401
+from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
+from app.models.organization import Organization
+from app.models.user import User
 
 # StaticPool + check_same_thread=False makes all connections share one
 # in-memory SQLite database — required for :memory: to work across requests.
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@pytest.fixture(autouse=True)
+def _reset_redis_module_state():
+    """Force all Redis-backed modules to use in-memory fallback during tests.
+
+    The production .env file sets RATE_LIMIT_REDIS_URL and IDEMPOTENCY_REDIS_URL
+    to real Redis addresses.  Pydantic Settings reads these into the ``settings``
+    singleton at import time (and ``env_ignore_empty=True`` prevents us from
+    simply setting the env var to "").
+
+    This autouse fixture:
+      1. Blanks the two Redis URL settings so every ``_redis_url()`` / URL check
+         returns "" and the module skips Redis entirely.
+      2. Resets the ``_redis_initialized`` / ``_redis_client`` cached state in
+         every module that lazily creates a Redis connection, so stale clients
+         from a previous test are never reused.
+
+    Together this guarantees every module falls back to its in-memory code path
+    and no test ever attempts a real Redis connection.
+    """
+    from app.api.v1.endpoints import email as email_mod
+    from app.core import idempotency as idempotency_mod
+    from app.core import middleware as middleware_mod
+    from app.core import oauth_nonce as nonce_mod
+    from app.core.config import settings
+
+    # --- 1. Blank Redis URL settings ---
+    saved_settings = {
+        "rate_limit_redis_url": settings.RATE_LIMIT_REDIS_URL,
+        "idempotency_redis_url": settings.IDEMPOTENCY_REDIS_URL,
+    }
+    object.__setattr__(settings, "RATE_LIMIT_REDIS_URL", None)
+    object.__setattr__(settings, "IDEMPOTENCY_REDIS_URL", None)
+
+    # --- 2. Reset module-level Redis caches ---
+    saved_modules = {
+        "nonce_init": nonce_mod._redis_initialized,
+        "nonce_client": nonce_mod._redis_client,
+        "idem_init": idempotency_mod._redis_initialized,
+        "idem_client": idempotency_mod._redis_client,
+        "mw_init": middleware_mod._redis_initialized,
+        "mw_client": middleware_mod._redis_client,
+        "email_init": email_mod._compose_redis_initialized,
+        "email_client": email_mod._compose_redis_client,
+    }
+
+    nonce_mod._redis_initialized = False
+    nonce_mod._redis_client = None
+    idempotency_mod._redis_initialized = False
+    idempotency_mod._redis_client = None
+    middleware_mod._redis_initialized = False
+    middleware_mod._redis_client = None
+    email_mod._compose_redis_initialized = False
+    email_mod._compose_redis_client = None
+
+    yield
+
+    # --- Restore original state ---
+    object.__setattr__(settings, "RATE_LIMIT_REDIS_URL", saved_settings["rate_limit_redis_url"])
+    object.__setattr__(settings, "IDEMPOTENCY_REDIS_URL", saved_settings["idempotency_redis_url"])
+
+    nonce_mod._redis_initialized = saved_modules["nonce_init"]
+    nonce_mod._redis_client = saved_modules["nonce_client"]
+    idempotency_mod._redis_initialized = saved_modules["idem_init"]
+    idempotency_mod._redis_client = saved_modules["idem_client"]
+    middleware_mod._redis_initialized = saved_modules["mw_init"]
+    middleware_mod._redis_client = saved_modules["mw_client"]
+    email_mod._compose_redis_initialized = saved_modules["email_init"]
+    email_mod._compose_redis_client = saved_modules["email_client"]
 
 
 @pytest_asyncio.fixture

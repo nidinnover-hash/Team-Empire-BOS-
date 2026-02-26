@@ -3,19 +3,21 @@ Middleware stack:
 - SecurityHeadersMiddleware: adds security and contract headers.
 - CorrelationIDMiddleware: per-request correlation IDs.
 - RequestLogMiddleware: structured request logging with context.
+- RequestBodyLimitMiddleware: rejects oversized request bodies.
 - RateLimitMiddleware: in-memory/Redis sliding window throttling.
 """
 from __future__ import annotations
 
+import asyncio
 import ipaddress
+import logging
 import time
 import uuid
 from collections import defaultdict, deque
-import logging
 from importlib import import_module
 from threading import Lock
-from urllib.parse import parse_qsl, urlencode
 from typing import Protocol, cast
+from urllib.parse import parse_qsl, urlencode
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -151,7 +153,7 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
                     claims = decode_access_token(token)
                     org_id = claims.get("org_id")
                     user_id = claims.get("id")
-                except Exception as exc:
+                except ValueError as exc:
                     logger.debug("Failed to decode token for request log context: %s", type(exc).__name__)
             logger.info(
                 "request",
@@ -169,15 +171,32 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
             )
 
 
+class RequestBodyLimitMiddleware(BaseHTTPMiddleware):
+    """Reject requests whose Content-Length exceeds MAX_REQUEST_BODY_BYTES."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        max_bytes = settings.MAX_REQUEST_BODY_BYTES
+        if max_bytes and request.method in ("POST", "PUT", "PATCH"):
+            content_length = request.headers.get("content-length")
+            if content_length and int(content_length) > max_bytes:
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "detail": f"Request body too large. Max {max_bytes // (1024 * 1024)} MB."
+                    },
+                )
+        return cast(Response, await call_next(request))
+
+
 # -- Rate Limiter --------------------------------------------------------------
 # In-memory sliding window per client IP. Resets on server restart (by design
 # for a personal tool; use Redis for multi-instance deployments).
 
 _rate_buckets: dict[str, deque] = defaultdict(deque)
-_rate_limit_lock = Lock()
+_rate_limit_lock = asyncio.Lock()
 
 # Paths exempt from rate limiting (health checks, docs)
-_EXEMPT_PREFIXES = ("/health", "/docs", "/redoc", "/openapi.json", "/web/session", "/static/")
+_EXEMPT_PREFIXES = ("/health", "/docs", "/redoc", "/openapi.json", "/static/")
 
 # -- Login Failure Tracker -----------------------------------------------------
 # Sliding window per IP; resets on server restart (acceptable for a personal tool).
@@ -276,7 +295,7 @@ def _get_redis_client() -> _RedisLike | None:
         client.ping()
         _redis_client = client
         return _redis_client
-    except Exception:
+    except (ImportError, ModuleNotFoundError, AttributeError, TypeError, ValueError):
         logger.warning("Redis unavailable for rate limiting; using in-memory fallback.", exc_info=True)
         return None
 
@@ -314,7 +333,7 @@ def _mark_and_count_redis(key: str, window_seconds: int, add_event: bool) -> int
             client.zadd(key, {member: now_ms})
             client.expire(key, window_seconds + 10)
         return int(client.zcard(key))
-    except Exception:
+    except (RuntimeError, OSError, TypeError, ValueError):
         logger.warning("Redis rate-limit operation failed; using in-memory fallback.", exc_info=True)
         _rate_limit_stats["fallback_to_memory"] += 1
         return None
@@ -335,7 +354,11 @@ def check_login_allowed(ip: str) -> bool:
 
 
 def record_login_failure(ip: str) -> None:
-    """Record one failed login attempt for this IP."""
+    """Record one failed login attempt for this IP.
+
+    Includes a cap at LOGIN_FAIL_MAX to limit overshoot from concurrent
+    requests that both passed the pre-screen check_login_allowed() call.
+    """
     if _rate_backend() == "redis":
         count = _mark_and_count_redis(_login_key(ip), LOGIN_FAIL_WINDOW, add_event=True)
         if count is not None:
@@ -352,6 +375,11 @@ def record_login_failure(ip: str) -> None:
                 del _login_failures[k]
         if len(_login_failures) >= _LOGIN_MAX_IPS and ip not in _login_failures:
             return  # Hard cap reached; silently ignore new IPs
+        bucket = _login_failures[ip]
+        while bucket and now - bucket[0] > LOGIN_FAIL_WINDOW:
+            bucket.popleft()
+        if len(bucket) >= LOGIN_FAIL_MAX:
+            return  # Already at limit; concurrent request slipped through pre-screen
         _login_failures[ip].append(now)
 
 
@@ -362,7 +390,7 @@ def clear_login_failures(ip: str) -> None:
         if client is not None:
             try:
                 client.delete(_login_key(ip))
-            except Exception:
+            except (RuntimeError, OSError, TypeError, ValueError):
                 logger.warning("Redis login-failure clear failed; clearing memory fallback.", exc_info=True)
     with _login_lock:
         _login_failures.pop(ip, None)
@@ -381,9 +409,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         window = settings.RATE_LIMIT_WINDOW_SECONDS
         max_req = settings.RATE_LIMIT_MAX_REQUESTS
         if _rate_backend() == "redis":
-            count = _mark_and_count_redis(_rate_key(client_ip), window, add_event=False)
+            # Atomic add-then-check: add the event first, then check the
+            # count.  This eliminates the race window that existed when
+            # check and add were two separate calls.
+            count = _mark_and_count_redis(_rate_key(client_ip), window, add_event=True)
             if count is not None:
-                if count >= max_req:
+                if count > max_req:
                     _rate_limit_stats["blocked"] += 1
                     return JSONResponse(
                         status_code=429,
@@ -395,15 +426,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                         },
                         headers={"Retry-After": str(window)},
                     )
-                _ = _mark_and_count_redis(_rate_key(client_ip), window, add_event=True)
                 _rate_limit_stats["allowed"] += 1
                 return cast(Response, await call_next(request))
 
         now = time.monotonic()
-        acquired = _rate_limit_lock.acquire(timeout=1.0)
-        if not acquired:
-            # Lock contention — let the request through rather than deadlock
-            return cast(Response, await call_next(request))
+        try:
+            await asyncio.wait_for(_rate_limit_lock.acquire(), timeout=1.0)
+        except TimeoutError:
+            # Lock contention — reject instead of silently bypassing rate limit
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Service temporarily busy. Please retry."},
+                headers={"Retry-After": "2"},
+            )
         try:
             # Proactively evict stale IPs to prevent unbounded memory growth
             if len(_rate_buckets) > 1000:

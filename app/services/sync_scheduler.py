@@ -10,18 +10,20 @@ Two modes:
 from __future__ import annotations
 
 import asyncio
-import logging
-from datetime import datetime, timedelta, timezone
 import json
+import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import AsyncSessionLocal  # noqa: E402 - imported here so tests can patch it
-from app.models.ceo_control import SchedulerJobRun
+from app.core.contracts import LOG_DETAIL_MAX_CHARS
 from app.core.resilience import IntegrationSyncError, RetryPolicy, error_details, run_with_retry
+from app.db.session import AsyncSessionLocal
+from app.models.ceo_control import SchedulerJobRun
 
 logger = logging.getLogger(__name__)
 _SYNC_RETRY_POLICY = RetryPolicy(
@@ -35,9 +37,13 @@ _SYNC_RETRY_POLICY = RetryPolicy(
 # Default 15 — overridden by settings.SYNC_THROTTLE_MINUTES at runtime.
 _last_synced: dict[int, datetime] = {}
 _sync_locks: dict[int, asyncio.Lock] = {}  # prevent concurrent syncs for the same org
+_sync_failure_streak: dict[tuple[int, str], int] = {}
+# Circuit breaker: after N consecutive failures, pause sync for a cooldown period.
+_circuit_open_until: dict[tuple[int, str], datetime] = {}
+_CIRCUIT_BREAKER_COOLDOWN_MINUTES = 60
+# Per-org daily dedup: prevents running the same daily job twice in one day.
 _last_ceo_summary_date_by_org: dict[int, str] = {}
 _last_pending_digest_date_by_org: dict[int, str] = {}
-_sync_failure_streak: dict[tuple[int, str], int] = {}
 
 
 def get_last_synced_for_org(org_id: int) -> datetime | None:
@@ -148,10 +154,11 @@ async def _collect_stale_integrations(
     org_id: int,
 ) -> list[dict[str, object]]:
     from sqlalchemy import select
+
     from app.core.config import settings
     from app.models.integration import Integration
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=int(settings.SYNC_STALE_HOURS))
+    cutoff = datetime.now(UTC) - timedelta(hours=int(settings.SYNC_STALE_HOURS))
     rows = (
         await db.execute(
             select(Integration).where(
@@ -162,7 +169,7 @@ async def _collect_stale_integrations(
     ).scalars().all()
 
     alerts: list[dict[str, object]] = []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for item in rows:
         if item.last_sync_status == "error":
             alerts.append(
@@ -247,7 +254,18 @@ async def _maybe_send_daily_ceo_slack_summary(
         await slack_service.send_to_slack(db, org_id=org_id, channel_id=channel_id, text=message)
     except asyncio.CancelledError:
         raise
-    except Exception as exc:
+    except (
+        SQLAlchemyError,
+        IntegrationSyncError,
+        TimeoutError,
+        ConnectionError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+        OSError,
+        ImportError,
+        AttributeError,
+    ) as exc:
         logger.warning("Daily CEO Slack digest failed for org=%d: %s", org_id, type(exc).__name__)
 
 
@@ -256,11 +274,23 @@ async def _maybe_send_daily_ceo_slack_summary(
 async def _run_integrations(db: AsyncSession, org_id: int) -> None:
     """Sync all connected integrations for org_id. Logs but never raises."""
     from sqlalchemy import update
+
     from app.core.config import settings
     from app.models.integration import Integration
-    from app.services import clickup_service, do_service, email_control, email_service, github_service, slack_service
-    from app.services import calendly_service, google_analytics_service, hubspot_service, notion_service, stripe_service
-    from app.services import compliance_engine
+    from app.services import (
+        calendly_service,
+        clickup_service,
+        compliance_engine,
+        do_service,
+        email_control,
+        email_service,
+        github_service,
+        google_analytics_service,
+        hubspot_service,
+        notion_service,
+        slack_service,
+        stripe_service,
+    )
     from app.services.calendar_service import sync_calendar_events
     failure_alert_threshold = max(1, int(getattr(settings, "SYNC_FAILURE_ALERT_THRESHOLD", 3)))
     async def _mark_status(int_type: str, status: str) -> None:
@@ -301,7 +331,14 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
         ("stripe", stripe_service.sync_stripe_data),
         ("hubspot", hubspot_service.sync_hubspot_data),
     ]:
-        started = datetime.now(timezone.utc)
+        # Circuit breaker: skip integration if in cooldown after repeated failures
+        cb_key = (org_id, name)
+        cb_until = _circuit_open_until.get(cb_key)
+        if cb_until and datetime.now(UTC) < cb_until:
+            logger.info("Circuit breaker open for %s org=%d until %s, skipping", name, org_id, cb_until.isoformat())
+            continue
+
+        started = datetime.now(UTC)
         try:
             async def _op(_name: str = name, _fn: Any = fn) -> dict[str, object]:
                 return await _run_sync_operation(_name, _fn)
@@ -315,6 +352,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             )
             logger.debug("Sync %s org=%d -> %s", name, org_id, result)
             _sync_failure_streak[(org_id, name)] = 0
+            _circuit_open_until.pop((org_id, name), None)  # close circuit breaker
             await _mark_status(name, "ok")
             await _record_job_run(
                 db,
@@ -322,24 +360,51 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
                 job_name=f"{name}_sync",
                 status="ok",
                 started_at=started,
-                finished_at=datetime.now(timezone.utc),
+                finished_at=datetime.now(UTC),
                 details={"result": result if isinstance(result, dict) else {"ok": True}},
             )
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except (
+            SQLAlchemyError,
+            IntegrationSyncError,
+            TimeoutError,
+            ConnectionError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+            OSError,
+            ImportError,
+            AttributeError,
+        ) as exc:
             key = (org_id, name)
             current = _sync_failure_streak.get(key, 0) + 1
             _sync_failure_streak[key] = current
-            logger.warning("Background %s sync failed org=%d: %s: %s", name, org_id, type(exc).__name__, str(exc)[:500])
+            logger.warning("Background %s sync failed org=%d: %s: %s", name, org_id, type(exc).__name__, str(exc)[:LOG_DETAIL_MAX_CHARS])
             if current >= failure_alert_threshold:
+                cooldown = timedelta(minutes=_CIRCUIT_BREAKER_COOLDOWN_MINUTES)
+                _circuit_open_until[key] = datetime.now(UTC) + cooldown
                 logger.error(
-                    "Integration sync failure threshold reached org=%d integration=%s streak=%d threshold=%d",
-                    org_id,
+                    "Circuit breaker opened for %s org=%d (streak=%d, cooldown=%dmin)",
                     name,
+                    org_id,
                     current,
-                    failure_alert_threshold,
+                    _CIRCUIT_BREAKER_COOLDOWN_MINUTES,
                 )
+                try:
+                    from app.services.notification import create_notification
+                    await create_notification(
+                        db,
+                        organization_id=org_id,
+                        type="integration_error",
+                        severity="warning",
+                        title=f"{name} sync circuit breaker activated",
+                        message=f"{name} failed {current} times. Paused for {_CIRCUIT_BREAKER_COOLDOWN_MINUTES}min.",
+                        source="sync_scheduler",
+                        entity_type="integration",
+                    )
+                except Exception:
+                    logger.debug("Failed to create circuit breaker notification for %s org=%d", name, org_id)
             await _mark_status(name, "error")
             details = error_details(exc)
             await _record_job_run(
@@ -348,30 +413,81 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
                 job_name=f"{name}_sync",
                 status="error",
                 started_at=started,
-                finished_at=datetime.now(timezone.utc),
+                finished_at=datetime.now(UTC),
                 details=details,
-                error=f"{type(exc).__name__}: {str(exc)[:500]}",
+                error=f"{type(exc).__name__}: {str(exc)[:LOG_DETAIL_MAX_CHARS]}",
             )
 
+    # Resolve the org's admin/CEO user for audit attribution instead of
+    # hardcoding user-id 1.  Falls back to None (scheduler context) if no
+    # admin user exists or DB is unavailable.
+    _actor_uid: int | None = None
+    try:
+        from app.models.user import User
+        _admin_result = await db.execute(
+            select(User).where(
+                User.organization_id == org_id,
+                User.role.in_(["CEO", "ADMIN"]),
+                User.is_active.is_(True),
+            ).order_by(User.id).limit(1)
+        )
+        _admin_user = _admin_result.scalar_one_or_none()
+        _actor_uid = int(_admin_user.id) if _admin_user else None
+    except (SQLAlchemyError, AttributeError, TypeError, ValueError):
+        logger.debug("Could not resolve admin user for org=%d, using actor_uid=None", org_id)
+
     # Email sync + control classification loop (best effort)
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     try:
         if getattr(settings, "FEATURE_EMAIL_SYNC", True):
-            try:
-                await email_service.sync_emails(db, org_id=org_id, actor_user_id=1)
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                logger.warning(
-                    "Email sync failed org=%d: %s: %s",
-                    org_id,
-                    type(exc).__name__,
-                    str(exc)[:300],
-                )
+            # Circuit breaker check for email
+            email_cb_key = (org_id, "email")
+            email_cb_until = _circuit_open_until.get(email_cb_key)
+            if email_cb_until and datetime.now(UTC) < email_cb_until:
+                logger.info("Circuit breaker open for email org=%d until %s, skipping", org_id, email_cb_until.isoformat())
+            else:
+                try:
+                    async def _email_sync_op() -> dict[str, object]:
+                        await email_service.sync_emails(db, org_id=org_id, actor_user_id=_actor_uid)
+                        return {"ok": True}
+
+                    await run_with_retry(
+                        _email_sync_op,
+                        attempts=_SYNC_RETRY_POLICY.attempts,
+                        timeout_seconds=_SYNC_RETRY_POLICY.timeout_seconds,
+                        backoff_seconds=_SYNC_RETRY_POLICY.backoff_seconds,
+                        retry_exceptions=_SYNC_RETRY_POLICY.retry_exceptions,
+                    )
+                    _sync_failure_streak[email_cb_key] = 0
+                    _circuit_open_until.pop(email_cb_key, None)
+                except asyncio.CancelledError:
+                    raise
+                except (
+                    SQLAlchemyError,
+                    IntegrationSyncError,
+                    TimeoutError,
+                    ConnectionError,
+                    RuntimeError,
+                    ValueError,
+                    TypeError,
+                    OSError,
+                    ImportError,
+                    AttributeError,
+                ) as exc:
+                    email_streak = _sync_failure_streak.get(email_cb_key, 0) + 1
+                    _sync_failure_streak[email_cb_key] = email_streak
+                    if email_streak >= failure_alert_threshold:
+                        _circuit_open_until[email_cb_key] = datetime.now(UTC) + timedelta(minutes=_CIRCUIT_BREAKER_COOLDOWN_MINUTES)
+                    logger.warning(
+                        "Email sync failed org=%d: %s: %s",
+                        org_id,
+                        type(exc).__name__,
+                        str(exc)[:300],
+                    )
             control_result = await email_control.process_inbox_controls(
                 db,
                 org_id=org_id,
-                actor_user_id=1,
+                actor_user_id=_actor_uid,
                 limit=100,
             )
             processed = control_result.get("processed", 0)
@@ -383,7 +499,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
                 job_name="email_control_loop",
                 status="ok",
                 started_at=started,
-                finished_at=datetime.now(timezone.utc),
+                finished_at=datetime.now(UTC),
                 details={
                     "processed": processed if isinstance(processed, int) else 0,
                     "tasks_created": tasks_created if isinstance(tasks_created, int) else 0,
@@ -392,19 +508,30 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             )
     except asyncio.CancelledError:
         raise
-    except Exception as exc:
+    except (
+        SQLAlchemyError,
+        IntegrationSyncError,
+        TimeoutError,
+        ConnectionError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+        OSError,
+        ImportError,
+        AttributeError,
+    ) as exc:
         await _record_job_run(
             db,
             org_id=org_id,
             job_name="email_control_loop",
             status="error",
             started_at=started,
-            finished_at=datetime.now(timezone.utc),
-            error=f"{type(exc).__name__}: {str(exc)[:500]}",
+            finished_at=datetime.now(UTC),
+            error=f"{type(exc).__name__}: {str(exc)[:LOG_DETAIL_MAX_CHARS]}",
         )
 
     # Google Calendar sync - stored as DailyContext, auto-included in memory
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     try:
         result = await run_with_retry(
             lambda: sync_calendar_events(db, organization_id=org_id),
@@ -421,13 +548,24 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             job_name="google_calendar_sync",
             status="ok",
             started_at=started,
-            finished_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(UTC),
             details={"result": result if isinstance(result, dict) else {"ok": True}},
         )
     except asyncio.CancelledError:
         raise
-    except Exception as exc:
-        logger.warning("Background calendar sync failed org=%d: %s: %s", org_id, type(exc).__name__, str(exc)[:500])
+    except (
+        SQLAlchemyError,
+        IntegrationSyncError,
+        TimeoutError,
+        ConnectionError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+        OSError,
+        ImportError,
+        AttributeError,
+    ) as exc:
+        logger.warning("Background calendar sync failed org=%d: %s: %s", org_id, type(exc).__name__, str(exc)[:LOG_DETAIL_MAX_CHARS])
         await _mark_status("google_calendar", "error")
         details = error_details(exc)
         await _record_job_run(
@@ -436,12 +574,12 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             job_name="google_calendar_sync",
             status="error",
             started_at=started,
-            finished_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(UTC),
             details=details,
-            error=f"{type(exc).__name__}: {str(exc)[:500]}",
+            error=f"{type(exc).__name__}: {str(exc)[:LOG_DETAIL_MAX_CHARS]}",
         )
 
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     try:
         # Suggest-only compliance scan: records violations, blocks nothing.
         report = await compliance_engine.run_compliance(db, org_id)
@@ -451,14 +589,25 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             job_name="compliance_run",
             status="ok",
             started_at=started,
-            finished_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(UTC),
             details={"compliance_score": report.get("compliance_score")},
         )
         if hasattr(db, "commit"):
             await db.commit()
     except asyncio.CancelledError:
         raise
-    except Exception as exc:
+    except (
+        SQLAlchemyError,
+        IntegrationSyncError,
+        TimeoutError,
+        ConnectionError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+        OSError,
+        ImportError,
+        AttributeError,
+    ) as exc:
         details = error_details(exc)
         await _record_job_run(
             db,
@@ -466,9 +615,9 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             job_name="compliance_run",
             status="error",
             started_at=started,
-            finished_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(UTC),
             details=details,
-            error=f"{type(exc).__name__}: {str(exc)[:500]}",
+            error=f"{type(exc).__name__}: {str(exc)[:LOG_DETAIL_MAX_CHARS]}",
         )
         if hasattr(db, "commit"):
             await db.commit()
@@ -476,11 +625,16 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
 
 async def replay_job_for_org(db: AsyncSession, org_id: int, job_name: str) -> dict[str, object]:
     """Manually replay a scheduler job for one organization."""
-    from app.services import clickup_service, do_service, github_service, slack_service
-    from app.services import compliance_engine
+    from app.services import (
+        clickup_service,
+        compliance_engine,
+        do_service,
+        github_service,
+        slack_service,
+    )
     from app.services.calendar_service import sync_calendar_events
 
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     try:
         if job_name == "clickup_sync":
             result = await clickup_service.sync_clickup_tasks(db, org_id)
@@ -515,25 +669,36 @@ async def replay_job_for_org(db: AsyncSession, org_id: int, job_name: str) -> di
             job_name=f"manual_{job_name}",
             status="ok",
             started_at=started,
-            finished_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(UTC),
             details={"result": result if isinstance(result, dict) else {"ok": True}},
         )
         await db.commit()
         return {"ok": True, "job_name": job_name, "result": result}
     except asyncio.CancelledError:
         raise
-    except Exception as exc:
+    except (
+        SQLAlchemyError,
+        IntegrationSyncError,
+        TimeoutError,
+        ConnectionError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+        OSError,
+        ImportError,
+        AttributeError,
+    ) as exc:
         await _record_job_run(
             db,
             org_id=org_id,
             job_name=f"manual_{job_name}",
             status="error",
             started_at=started,
-            finished_at=datetime.now(timezone.utc),
-            error=f"{type(exc).__name__}: {str(exc)[:500]}",
+            finished_at=datetime.now(UTC),
+            error=f"{type(exc).__name__}: {str(exc)[:LOG_DETAIL_MAX_CHARS]}",
         )
         await db.commit()
-        return {"ok": False, "job_name": job_name, "error": f"{type(exc).__name__}: {str(exc)[:500]}"}
+        return {"ok": False, "job_name": job_name, "error": f"{type(exc).__name__}: {str(exc)[:LOG_DETAIL_MAX_CHARS]}"}
 
 async def trigger_sync_for_org(org_id: int) -> None:
     """
@@ -541,7 +706,7 @@ async def trigger_sync_for_org(org_id: int) -> None:
     Skips silently if the same org was synced within THROTTLE_MINUTES.
     Safe to call from login/dashboard without awaiting.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     last = _last_synced.get(org_id)
     if last and (now - last).total_seconds() < _throttle_minutes() * 60:
         logger.debug("Sync throttled for org=%d (last=%s)", org_id, last.isoformat())
@@ -567,7 +732,18 @@ async def trigger_sync_for_org(org_id: int) -> None:
                     await _run_integrations(db, org_id)
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:
+            except (
+                SQLAlchemyError,
+                IntegrationSyncError,
+                TimeoutError,
+                ConnectionError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+                OSError,
+                ImportError,
+                AttributeError,
+            ) as exc:
                 logger.error("On-demand sync error org=%d: %s", org_id, exc)
 
     task = asyncio.create_task(_do())
@@ -580,10 +756,11 @@ async def trigger_sync_for_org(org_id: int) -> None:
 async def _check_morning_briefing(db: AsyncSession, org_id: int) -> None:
     """Generate daily briefing at 8-9am IST if not already created today."""
     from sqlalchemy import select
+
     from app.models.memory import DailyContext
 
     tz = ZoneInfo("Asia/Kolkata")
-    local_now = datetime.now(timezone.utc).astimezone(tz)
+    local_now = datetime.now(UTC).astimezone(tz)
     if local_now.hour < 8 or local_now.hour >= 9:
         return
 
@@ -601,9 +778,9 @@ async def _check_morning_briefing(db: AsyncSession, org_id: int) -> None:
         return
 
     try:
+        from app.schemas.memory import DailyContextCreate
         from app.services import briefing as briefing_service
         from app.services import memory as memory_service
-        from app.schemas.memory import DailyContextCreate
 
         executive = await briefing_service.get_executive_briefing(db, org_id=org_id)
         summary = executive.get("summary") or executive.get("team_summary") or "No briefing data."
@@ -622,28 +799,39 @@ async def _check_morning_briefing(db: AsyncSession, org_id: int) -> None:
         logger.info("Morning briefing generated for org=%d", org_id)
     except asyncio.CancelledError:
         raise
-    except Exception as exc:
+    except (
+        SQLAlchemyError,
+        IntegrationSyncError,
+        TimeoutError,
+        ConnectionError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+        OSError,
+        ImportError,
+        AttributeError,
+    ) as exc:
         logger.warning("Morning briefing failed for org=%d: %s", org_id, type(exc).__name__)
 
 
 async def _maybe_generate_daily_ceo_summary(db: AsyncSession, org_id: int) -> None:
+    from app.core.config import settings
     from app.models.ceo_control import CEOSummary
     from app.services import compliance_engine
-    from app.core.config import settings
 
     tz = ZoneInfo(settings.CEO_SUMMARY_TIMEZONE)
-    local_now = datetime.now(timezone.utc).astimezone(tz)
+    local_now = datetime.now(UTC).astimezone(tz)
     # Run once per local day after 09:00 in the configured timezone.
     if local_now.hour < 9:
         return
     day_key = local_now.strftime("%Y-%m-%d")
     if _last_ceo_summary_date_by_org.get(org_id) == day_key:
         return
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     report = await compliance_engine.latest_report(db, org_id)
     top_risks = _extract_top_risks(report, limit=5)
     stale_integrations = await _collect_stale_integrations(db, org_id)
-    generated_at = datetime.now(timezone.utc).isoformat()
+    generated_at = datetime.now(UTC).isoformat()
     db.add(
         CEOSummary(
             organization_id=org_id,
@@ -655,7 +843,7 @@ async def _maybe_generate_daily_ceo_summary(db: AsyncSession, org_id: int) -> No
                     "stale_integrations": stale_integrations,
                 }
             ),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
     )
     _last_ceo_summary_date_by_org[org_id] = day_key
@@ -665,7 +853,7 @@ async def _maybe_generate_daily_ceo_summary(db: AsyncSession, org_id: int) -> No
         job_name="daily_ceo_summary",
         status="ok",
         started_at=started,
-        finished_at=datetime.now(timezone.utc),
+        finished_at=datetime.now(UTC),
         details={"top_risks_count": len(top_risks), "stale_integrations_count": len(stale_integrations)},
     )
     await db.commit()
@@ -685,7 +873,7 @@ async def _maybe_generate_daily_pending_digest(db: AsyncSession, org_id: int) ->
     if not settings.EMAIL_CONTROL_DIGEST_ENABLED:
         return
     tz = ZoneInfo("Asia/Kolkata")
-    local_now = datetime.now(timezone.utc).astimezone(tz)
+    local_now = datetime.now(UTC).astimezone(tz)
     if local_now.hour < settings.EMAIL_CONTROL_DIGEST_HOUR_IST:
         return
     if (
@@ -696,19 +884,27 @@ async def _maybe_generate_daily_pending_digest(db: AsyncSession, org_id: int) ->
     day_key = local_now.strftime("%Y-%m-%d")
     if _last_pending_digest_date_by_org.get(org_id) == day_key:
         return
+    from app.models.user import User
+    _adm = (await db.execute(
+        select(User).where(
+            User.organization_id == org_id,
+            User.role.in_(["CEO", "ADMIN"]),
+            User.is_active.is_(True),
+        ).order_by(User.id).limit(1)
+    )).scalar_one_or_none()
     await email_control.draft_pending_actions_digest_email(
         db=db,
         org_id=org_id,
-        actor_user_id=1,
+        actor_user_id=int(_adm.id) if _adm else None,
     )
     _last_pending_digest_date_by_org[org_id] = day_key
 
 
 async def _publish_due_social_posts(db: AsyncSession, org_id: int) -> None:
-    from app.services import social as social_service
     from app.logs.audit import record_action
+    from app.services import social as social_service
 
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     try:
         published = await social_service.publish_due_queued_posts(db, organization_id=org_id)
         if published > 0:
@@ -727,21 +923,32 @@ async def _publish_due_social_posts(db: AsyncSession, org_id: int) -> None:
             job_name="social_publish_queue",
             status="ok",
             started_at=started,
-            finished_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(UTC),
             details={"published_count": published},
         )
         await db.commit()
     except asyncio.CancelledError:
         raise
-    except Exception as exc:
+    except (
+        SQLAlchemyError,
+        IntegrationSyncError,
+        TimeoutError,
+        ConnectionError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+        OSError,
+        ImportError,
+        AttributeError,
+    ) as exc:
         await _record_job_run(
             db,
             org_id=org_id,
             job_name="social_publish_queue",
             status="error",
             started_at=started,
-            finished_at=datetime.now(timezone.utc),
-            error=f"{type(exc).__name__}: {str(exc)[:500]}",
+            finished_at=datetime.now(UTC),
+            error=f"{type(exc).__name__}: {str(exc)[:LOG_DETAIL_MAX_CHARS]}",
         )
         await db.commit()
 
@@ -749,11 +956,13 @@ async def _publish_due_social_posts(db: AsyncSession, org_id: int) -> None:
 async def _cleanup_old_chat_messages(db: AsyncSession, org_id: int) -> None:
     """Delete chat messages older than CHAT_HISTORY_RETENTION_DAYS."""
     from datetime import timedelta
+
     from sqlalchemy import delete
+
     from app.core.config import settings
     from app.models.chat_message import ChatMessage
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=settings.CHAT_HISTORY_RETENTION_DAYS)
+    cutoff = datetime.now(UTC) - timedelta(days=settings.CHAT_HISTORY_RETENTION_DAYS)
     try:
         result = await db.execute(
             delete(ChatMessage).where(
@@ -771,11 +980,13 @@ async def _cleanup_old_chat_messages(db: AsyncSession, org_id: int) -> None:
 async def _cleanup_old_logs(db: AsyncSession, org_id: int) -> None:
     """Delete AI call logs and decision traces older than 90 days."""
     from datetime import timedelta
+
     from sqlalchemy import delete
+
     from app.models.ai_call_log import AiCallLog
     from app.models.decision_trace import DecisionTrace
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+    cutoff = datetime.now(UTC) - timedelta(days=90)
     try:
         for model, name in [(AiCallLog, "ai_call_logs"), (DecisionTrace, "decision_traces")]:
             result = await db.execute(
@@ -794,19 +1005,21 @@ async def _cleanup_old_logs(db: AsyncSession, org_id: int) -> None:
 async def _cleanup_old_job_runs_and_snapshots(db: AsyncSession, org_id: int) -> None:
     """Delete scheduler_job_runs and integration snapshots older than 90 days."""
     from datetime import timedelta
+
     from sqlalchemy import delete
+
     from app.models.ceo_control import (
-        SchedulerJobRun,
-        GitHubRoleSnapshot,
-        GitHubRepoSnapshot,
-        GitHubPRSnapshot,
         ClickUpTaskSnapshot,
+        DigitalOceanCostSnapshot,
         DigitalOceanDropletSnapshot,
         DigitalOceanTeamSnapshot,
-        DigitalOceanCostSnapshot,
+        GitHubPRSnapshot,
+        GitHubRepoSnapshot,
+        GitHubRoleSnapshot,
+        SchedulerJobRun,
     )
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+    cutoff = datetime.now(UTC) - timedelta(days=90)
     tables: list[tuple[type, str, str]] = [
         (SchedulerJobRun, "scheduler_job_runs", "started_at"),
         (GitHubRoleSnapshot, "github_role_snapshot", "synced_at"),
@@ -854,15 +1067,37 @@ async def _scheduler_loop(interval_minutes: int) -> None:
                         await _cleanup_old_chat_messages(db, org.id)
                         await _cleanup_old_logs(db, org.id)
                         await _cleanup_old_job_runs_and_snapshots(db, org.id)
-                        _last_synced[org.id] = datetime.now(timezone.utc)
+                        _last_synced[org.id] = datetime.now(UTC)
                 except asyncio.CancelledError:
                     raise
-                except Exception as exc:
+                except (
+                    SQLAlchemyError,
+                    IntegrationSyncError,
+                    TimeoutError,
+                    ConnectionError,
+                    RuntimeError,
+                    ValueError,
+                    TypeError,
+                    OSError,
+                    ImportError,
+                    AttributeError,
+                ) as exc:
                     logger.warning("Sync failed for org=%d: %s", org.id, exc)
             logger.info("Scheduled sync complete (%d org(s))", len(orgs))
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except (
+            SQLAlchemyError,
+            IntegrationSyncError,
+            TimeoutError,
+            ConnectionError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+            OSError,
+            ImportError,
+            AttributeError,
+        ) as exc:
             logger.error("Scheduled sync loop error: %s", exc)
 
 

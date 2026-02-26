@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from sqlalchemy import select
@@ -32,7 +32,7 @@ async def test_execute_send_message_compose_payload_succeeds(client, monkeypatch
             },
             status="approved",
             approved_by=1,
-            approved_at=datetime.now(timezone.utc),
+            approved_at=datetime.now(UTC),
         )
         db.add(approval)
         await db.commit()
@@ -84,7 +84,7 @@ async def test_execute_send_message_compose_payload_missing_body_fails(client, m
             },
             status="approved",
             approved_by=1,
-            approved_at=datetime.now(timezone.utc),
+            approved_at=datetime.now(UTC),
         )
         db.add(approval)
         await db.commit()

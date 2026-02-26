@@ -1,14 +1,31 @@
 import hmac
+import json
 import logging
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from hashlib import sha256
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Header
+import httpx
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.endpoints import (
+    integrations_calendly,
+    integrations_clickup,
+    integrations_digitalocean,
+    integrations_elevenlabs,
+    integrations_github,
+    integrations_google_analytics,
+    integrations_hubspot,
+    integrations_linkedin,
+    integrations_notion,
+    integrations_perplexity,
+    integrations_slack,
+    integrations_stripe,
+)
 from app.core.config import PLACEHOLDER_AI_KEYS, settings
+from app.core.deps import get_db
 from app.core.idempotency import (
     IdempotencyConflictError,
     build_fingerprint,
@@ -18,7 +35,6 @@ from app.core.idempotency import (
 from app.core.oauth_nonce import consume_oauth_nonce_once
 from app.core.oauth_state import sign_oauth_state, verify_oauth_state
 from app.core.privacy import sanitize_response_payload
-from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
 from app.schemas.integration import (
@@ -26,13 +42,13 @@ from app.schemas.integration import (
     AITestResult,
     CalendarEventRead,
     CalendarSyncResult,
+    CodingProjectDiscoveryRead,
     GoogleAuthUrlRead,
     GoogleOAuthCallbackRequest,
     IntegrationConnectRequest,
-    IntegrationSetupGuideRead,
     IntegrationRead,
+    IntegrationSetupGuideRead,
     IntegrationTestResult,
-    CodingProjectDiscoveryRead,
     WhatsAppSendRequest,
     WhatsAppSendResult,
 )
@@ -42,6 +58,7 @@ from app.services.calendar_service import (
     get_calendar_events_from_context,
     sync_calendar_events,
 )
+from app.services.token_health import get_rotation_report, rotate_oauth_token
 from app.tools.google_calendar import (
     build_google_auth_url,
     exchange_code_for_tokens,
@@ -49,20 +66,6 @@ from app.tools.google_calendar import (
     refresh_access_token,
 )
 from app.tools.whatsapp_business import get_phone_number_details, send_text_message
-from app.api.v1.endpoints import (
-    integrations_clickup,
-    integrations_digitalocean,
-    integrations_github,
-    integrations_slack,
-    integrations_perplexity,
-    integrations_linkedin,
-    integrations_notion,
-    integrations_stripe,
-    integrations_google_analytics,
-    integrations_calendly,
-    integrations_elevenlabs,
-    integrations_hubspot,
-)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
@@ -154,7 +157,7 @@ async def integration_setup_guide(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> IntegrationSetupGuideRead:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     org_id = int(actor["org_id"])
     connected_by_type = {
         row.type: (row.status == "connected")
@@ -273,7 +276,7 @@ async def google_calendar_oauth_callback(
         "scope": tokens.get("scope"),
         "expires_in": tokens.get("expires_in"),
         "calendar_id": data.calendar_id,
-        "connected_at": datetime.now(timezone.utc).isoformat(),
+        "connected_at": datetime.now(UTC).isoformat(),
     }
     item = await integration_service.connect_integration(
         db,
@@ -309,16 +312,8 @@ async def google_calendar_oauth_callback_redirect(
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET or not redir:
         raise HTTPException(status_code=400, detail="Google OAuth is not configured")
 
-    # Extract org_id from signed state (same pattern as Gmail callback)
-    try:
-        parts = state.split(":", 3)
-        if len(parts) != 4:
-            raise ValueError("Invalid state format")
-        org_id = int(parts[0])
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
-
-    _verify_google_calendar_state(state, expected_org_id=org_id)
+    # Verify signed state and extract org_id (validates signature + expiry)
+    org_id = verify_oauth_state(state, namespace="gcal_oauth", max_age_seconds=600)
     if not consume_oauth_nonce_once(namespace="gcal_oauth", nonce=state, max_age_seconds=600):
         raise HTTPException(status_code=409, detail="OAuth callback already processed (replay rejected)")
 
@@ -340,7 +335,7 @@ async def google_calendar_oauth_callback_redirect(
         "scope": tokens.get("scope"),
         "expires_in": tokens.get("expires_in"),
         "calendar_id": "primary",
-        "connected_at": datetime.now(timezone.utc).isoformat(),
+        "connected_at": datetime.now(UTC).isoformat(),
     }
     await integration_service.connect_integration(
         db,
@@ -610,6 +605,8 @@ async def whatsapp_send_test_message(
     )
     if item is None or item.status != "connected":
         raise HTTPException(status_code=400, detail="WhatsApp Business is not connected")
+    if item.organization_id != actor["org_id"]:
+        raise HTTPException(status_code=403, detail="Organization mismatch")
 
     access_token = item.config_json.get("access_token")
     phone_number_id = item.config_json.get("phone_number_id")
@@ -626,7 +623,7 @@ async def whatsapp_send_test_message(
             to=data.to,
             body=data.body,
         )
-    except Exception as exc:
+    except (httpx.HTTPError, RuntimeError, ValueError, TypeError) as exc:
         raise HTTPException(
             status_code=502,
             detail=_safe_provider_error("WhatsApp message send failed"),
@@ -656,9 +653,9 @@ async def whatsapp_send_test_message(
 
 @router.get("/whatsapp/webhook", include_in_schema=False)
 async def whatsapp_webhook_verify(
-    hub_mode: str | None = Query(None, alias="hub.mode"),
-    hub_verify_token: str | None = Query(None, alias="hub.verify_token"),
-    hub_challenge: str | None = Query(None, alias="hub.challenge"),
+    hub_mode: str | None = Query(None, alias="hub.mode", max_length=50),
+    hub_verify_token: str | None = Query(None, alias="hub.verify_token", max_length=500),
+    hub_challenge: str | None = Query(None, alias="hub.challenge", max_length=5000),
 ) -> PlainTextResponse:
     expected = (settings.WHATSAPP_WEBHOOK_VERIFY_TOKEN or "").strip()
     if (
@@ -683,7 +680,28 @@ async def whatsapp_webhook_receive(
     Acks quickly — processing pipelines can be added behind this endpoint.
     """
     import json as _json
+
+    _MAX_WEBHOOK_BODY = 1_048_576  # 1 MB guard against oversized payloads
+
+    # Reject obviously oversized payloads before buffering the body
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > _MAX_WEBHOOK_BODY:
+                raise HTTPException(status_code=413, detail="Webhook payload too large")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length header") from exc
+
+    # Validate Content-Type before parsing
+    content_type = (request.headers.get("content-type") or "").lower()
+    if content_type and "application/json" not in content_type:
+        raise HTTPException(status_code=415, detail="Webhook expects application/json")
+
     raw_body = await request.body()
+
+    # Post-read size check (Content-Length can be spoofed or absent)
+    if len(raw_body) > _MAX_WEBHOOK_BODY:
+        raise HTTPException(status_code=413, detail="Webhook payload too large")
 
     # Verify HMAC signature — reject entirely when secret is not configured
     app_secret = (settings.WHATSAPP_APP_SECRET or "").strip()
@@ -709,13 +727,9 @@ async def whatsapp_webhook_receive(
         ):
             raise HTTPException(status_code=409, detail="Webhook replay detected")
 
-    _MAX_WEBHOOK_BODY = 1_048_576  # 1 MB guard against oversized payloads
-    if len(raw_body) > _MAX_WEBHOOK_BODY:
-        raise HTTPException(status_code=413, detail="Webhook payload too large")
-
     try:
         payload = _json.loads(raw_body)
-    except Exception as exc:
+    except json.JSONDecodeError as exc:
         raise HTTPException(status_code=400, detail="Invalid JSON payload") from exc
 
     if not isinstance(payload, dict):
@@ -742,6 +756,23 @@ router.include_router(integrations_google_analytics.router)
 router.include_router(integrations_calendly.router)
 router.include_router(integrations_elevenlabs.router)
 router.include_router(integrations_hubspot.router)
+
+@router.get("/token-health")
+async def token_health(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict[str, object]:
+    return await get_rotation_report(db, int(actor["org_id"]))
+
+
+@router.post("/token-rotate/{integration_type}")
+async def token_rotate(
+    integration_type: str,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict[str, object]:
+    return await rotate_oauth_token(db, int(actor["org_id"]), integration_type)
+
 
 @router.post("/{integration_id}/disconnect", response_model=IntegrationRead)
 async def disconnect_integration(
@@ -798,10 +829,10 @@ async def test_integration(
             try:
                 await list_events_for_day(
                     access_token=access_token,
-                    day=datetime.now(timezone.utc).date(),
+                    day=datetime.now(UTC).date(),
                     calendar_id=calendar_id,
                 )
-            except Exception as exc:
+            except (httpx.HTTPError, RuntimeError, ValueError, TypeError) as exc:
                 logger.warning(
                     "Google Calendar connection test failed org=%s integration_id=%s: %s: %s",
                     actor["org_id"],
@@ -824,7 +855,7 @@ async def test_integration(
                         await integration_service.mark_sync_time(db, item)
                         status = "ok"
                         message = "Connection test passed after token refresh"
-                    except Exception as refresh_exc:
+                    except (httpx.HTTPError, RuntimeError, ValueError, TypeError) as refresh_exc:
                         logger.warning(
                             "Google Calendar token refresh failed org=%s integration_id=%s: %s: %s",
                             actor["org_id"],
@@ -849,7 +880,7 @@ async def test_integration(
                     access_token=str(access_token),
                     phone_number_id=str(phone_number_id),
                 )
-            except Exception as exc:
+            except (httpx.HTTPError, RuntimeError, ValueError, TypeError) as exc:
                 logger.warning(
                     "WhatsApp Business connection test failed org=%s integration_id=%s: %s: %s",
                     actor["org_id"],

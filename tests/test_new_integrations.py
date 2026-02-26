@@ -8,14 +8,14 @@ All external API calls are monkeypatched to avoid real network calls.
 import pytest
 
 from app.services import (
-    perplexity_service,
-    linkedin_service,
-    notion_service,
-    stripe_service,
-    google_analytics_service,
     calendly_service,
     elevenlabs_service,
+    google_analytics_service,
     hubspot_service,
+    linkedin_service,
+    notion_service,
+    perplexity_service,
+    stripe_service,
 )
 
 

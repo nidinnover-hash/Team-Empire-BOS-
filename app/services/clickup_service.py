@@ -7,16 +7,17 @@ automatically encrypted/decrypted by token_crypto.encrypt_config / decrypt_confi
 
 from __future__ import annotations
 
-import logging
 import json
-from datetime import datetime, timezone
+import logging
+from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.resilience import run_with_retry
 from app.core.config import settings
+from app.core.resilience import run_with_retry
 from app.core.tenant import require_org_id
 from app.models.ceo_control import ClickUpFolder, ClickUpList, ClickUpSpace, ClickUpTaskSnapshot
 from app.models.task import Task
@@ -70,7 +71,7 @@ async def connect_clickup(
         "username": user_info.get("username", ""),
         "email": user_info.get("email", ""),
         "team_id": team_id,
-        "connected_at": datetime.now(timezone.utc).isoformat(),
+        "connected_at": datetime.now(UTC).isoformat(),
     }
 
     item = await integration_service.connect_integration(
@@ -109,7 +110,7 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
     critical_synced = 0
     page = 0
     try:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         critical_folder = settings.CLICKUP_CRITICAL_FOLDER_NAME.strip().lower()
         critical_tag = settings.CLICKUP_CEO_PRIORITY_TAG.strip().lower()
 
@@ -171,7 +172,7 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     )
 
         # Collect all ClickUp tasks first (capped to prevent runaway pagination)
-        _MAX_PAGES = 50  # 50 pages × 100 tasks = 5,000 tasks max
+        _MAX_PAGES = 50  # 50 pages x 100 tasks = 5,000 tasks max
         all_cu_tasks: list[dict[str, Any]] = []
         while page < _MAX_PAGES:
             async def _load_tasks(p: int = page) -> list[dict[str, Any]]:
@@ -205,7 +206,7 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 from datetime import date
                 try:
                     due_date = date.fromisoformat(due_date_str)
-                except Exception as exc:
+                except ValueError as exc:
                     logger.debug(
                         "ClickUp due_date parse failed for task %s: %s",
                         external_id,
@@ -242,8 +243,8 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     updated_remote = None
                     if updated_ms:
                         try:
-                            updated_remote = datetime.fromtimestamp(int(updated_ms) / 1000, tz=timezone.utc)
-                        except Exception as exc:
+                            updated_remote = datetime.fromtimestamp(int(updated_ms) / 1000, tz=UTC)
+                        except (TypeError, ValueError, OSError) as exc:
                             logger.debug(
                                 "ClickUp updated_at parse failed for task %s: %s",
                                 p["external_id"],
@@ -257,7 +258,7 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
                     existing.due_date = p["due_date"]
                     existing.is_done = p["is_done"]
                     if p["is_done"] and not existing.completed_at:
-                        existing.completed_at = datetime.now(timezone.utc)
+                        existing.completed_at = datetime.now(UTC)
                 else:
                     task = Task(
                         organization_id=org_id,
@@ -280,8 +281,8 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 updated_ms = raw.get("date_updated")
                 if updated_ms:
                     try:
-                        updated_remote = datetime.fromtimestamp(int(updated_ms) / 1000, tz=timezone.utc)
-                    except Exception:
+                        updated_remote = datetime.fromtimestamp(int(updated_ms) / 1000, tz=UTC)
+                    except (TypeError, ValueError, OSError):
                         updated_remote = None
 
                 db.add(
@@ -291,7 +292,7 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
                         name=p["title"],
                         status=str((raw.get("status") or {}).get("status", "")) if isinstance(raw.get("status"), dict) else "",
                         assignees=json.dumps([x for x in assignees if x]),
-                        due_date=p["due_date"] and datetime.combine(p["due_date"], datetime.min.time(), tzinfo=timezone.utc),
+                        due_date=p["due_date"] and datetime.combine(p["due_date"], datetime.min.time(), tzinfo=UTC),
                         priority=str((raw.get("priority") or {}).get("priority", "")) if isinstance(raw.get("priority"), dict) else None,
                         tags=json.dumps([x for x in tags if x]),
                         list_id=list_id,
@@ -306,13 +307,13 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 if is_critical:
                     critical_synced += 1
                 synced += 1
-            except Exception as exc:
+            except (TypeError, ValueError, KeyError) as exc:
                 logger.warning("ClickUp upsert skipped %s: %s", p["external_id"], exc)
                 continue
 
         await db.commit()
 
-    except Exception as exc:
+    except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
         logger.warning("ClickUp sync failed: %s", exc)
         await db.rollback()
         return {"synced": synced, "error": type(exc).__name__}
