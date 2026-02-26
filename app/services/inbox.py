@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -134,7 +133,7 @@ async def get_conversation_by_id(
         sla_due_at=record.sla_due_at,
         message_count=len(items),
         unread_count=unread_count,
-        last_message=cast(UnifiedInboxItem, last_item),
+        last_message=last_item,
     )
 
 
@@ -200,7 +199,7 @@ async def get_unified_conversations(
                 sla_due_at=record.sla_due_at,
                 message_count=len(items),
                 unread_count=unread_count,
-                last_message=cast(UnifiedInboxItem, last_item),
+                last_message=last_item,
             )
         )
 

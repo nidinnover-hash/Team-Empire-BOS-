@@ -352,7 +352,7 @@ async def get_email(db: AsyncSession, email_id: int, org_id: int) -> Email | Non
     result = await db.execute(
         select(Email).where(Email.id == email_id, Email.organization_id == org_id)
     )
-    return cast(Email | None, result.scalar_one_or_none())
+    return result.scalar_one_or_none()
 
 
 # -- AI Summarize -------------------------------------------------------------
@@ -424,7 +424,7 @@ async def draft_reply(
     # Use an atomic UPDATE to claim the slot, preventing a race between two
     # concurrent draft_reply() calls that both see approval_id=None.
     if email.approval_id is not None:
-        return cast(str | None, email.draft_reply)
+        return email.draft_reply
 
     from sqlalchemy import update as sa_update
 
@@ -438,7 +438,7 @@ async def draft_reply(
     if claim.rowcount == 0:
         # Another caller won the race — reload and return their draft.
         await db.refresh(email)
-        return cast(str | None, email.draft_reply)
+        return email.draft_reply
 
     user_prompt = (
         f"From: {email.from_address}\n"

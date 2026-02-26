@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TypedDict, cast
+from typing import TypedDict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -105,7 +105,7 @@ async def _find_existing_task_for_email(db: AsyncSession, org_id: int, email_id:
             Task.external_id == f"email:{email_id}",
         )
     )
-    return cast(Task | None, result.scalar_one_or_none())
+    return result.scalar_one_or_none()
 
 
 async def _create_task_from_email(
@@ -117,7 +117,7 @@ async def _create_task_from_email(
 ) -> int | None:
     existing = await _find_existing_task_for_email(db, org_id, email.id)
     if existing is not None:
-        return cast(int, existing.id)
+        return existing.id
     owner = (email.from_address or "unknown@sender").strip()
     title_prefix = "[Escalation] " if escalation else "[Action] "
     task = await create_task(
@@ -141,7 +141,7 @@ async def _create_task_from_email(
     db.add(task)
     await db.commit()
     await db.refresh(task)
-    return cast(int, task.id)
+    return task.id
 
 
 async def _ensure_approval_draft(
@@ -152,7 +152,7 @@ async def _ensure_approval_draft(
     actor_user_id: int,
 ) -> int | None:
     if email.approval_id:
-        return cast(int, email.approval_id)
+        return email.approval_id
     draft = await email_service.draft_reply(
         db=db,
         email_id=email.id,

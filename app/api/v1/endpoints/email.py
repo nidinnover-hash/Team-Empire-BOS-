@@ -200,14 +200,11 @@ def _oauth_error_detail(error_code: str) -> str:
 
 
 def _sign_email_state(org_id: int) -> str:
-    return cast(str, sign_oauth_state(org_id))
+    return sign_oauth_state(org_id)
 
 
 def _verify_email_state(state: str, max_age_seconds: int = 600) -> int:
-    return cast(
-        int,
-        verify_oauth_state(state, namespace="gmail_oauth", max_age_seconds=max_age_seconds),
-    )
+    return verify_oauth_state(state, namespace="gmail_oauth", max_age_seconds=max_age_seconds)
 
 
 @router.get("/auth-url", response_model=GmailAuthUrlRead)
@@ -282,7 +279,7 @@ async def sync_emails(
         try:
             cached = get_cached_response(scope, idempotency_key, fingerprint=fingerprint)
             if cached:
-                return cast(SyncResult, SyncResult.model_validate(cached))
+                return SyncResult.model_validate(cached)
         except IdempotencyConflictError as exc:
             raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
     try:
@@ -314,7 +311,7 @@ async def gmail_health(
     """Return Gmail integration health for the current org."""
     org_id = int(current_user["org_id"])
     payload = cast(dict[str, Any], await email_service.check_gmail_health(db=db, org_id=org_id))
-    return cast(GmailHealthRead, GmailHealthRead.model_validate(payload))
+    return GmailHealthRead.model_validate(payload)
 
 
 @router.get("/inbox", response_model=list[EmailRead])
@@ -375,7 +372,7 @@ async def draft_reply(
         try:
             cached = get_cached_response(scope, idempotency_key, fingerprint=fingerprint)
             if cached:
-                return cast(EmailDraftResponse, EmailDraftResponse.model_validate(cached))
+                return EmailDraftResponse.model_validate(cached)
         except IdempotencyConflictError as exc:
             raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
     draft = await email_service.draft_reply(
@@ -417,7 +414,7 @@ async def send_email(
         try:
             cached = get_cached_response(scope, idempotency_key, fingerprint=fingerprint)
             if cached:
-                return cast(EmailSendResponse, EmailSendResponse.model_validate(cached))
+                return EmailSendResponse.model_validate(cached)
         except IdempotencyConflictError as exc:
             raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
     sent = await email_service.send_approved_reply(
@@ -504,7 +501,7 @@ async def compose_email(
         try:
             cached = get_cached_response(scope, idempotency_key, fingerprint=fingerprint)
             if cached:
-                return cast(EmailComposeResponse, EmailComposeResponse.model_validate(cached))
+                return EmailComposeResponse.model_validate(cached)
         except IdempotencyConflictError as exc:
             raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
     draft = await email_service.compose_email(
