@@ -295,7 +295,11 @@ def _get_redis_client() -> _RedisLike | None:
         client.ping()
         _redis_client = client
         return _redis_client
-    except (ImportError, ModuleNotFoundError, AttributeError, TypeError, ValueError):
+    except (ImportError, ModuleNotFoundError, AttributeError, TypeError, ValueError, OSError, ConnectionError, TimeoutError):
+        logger.warning("Redis unavailable for rate limiting; using in-memory fallback.", exc_info=True)
+        return None
+    except Exception:
+        # Catch Redis-specific exceptions (redis.exceptions.TimeoutError etc.)
         logger.warning("Redis unavailable for rate limiting; using in-memory fallback.", exc_info=True)
         return None
 
