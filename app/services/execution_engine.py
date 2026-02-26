@@ -13,6 +13,7 @@ from app.logs.audit import record_action
 from app.models.approval import Approval
 from app.services import execution as execution_service
 from app.services.email_service import send_approved_compose, send_approved_reply
+from app.services.notification import create_notification
 from app.tools.calendar import build_calendar_digest
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,18 @@ async def _finalize_execution(
             entity_type="execution",
             entity_id=execution_id,
             payload_json={"approval_id": approval_id, "output": output or {}},
+        )
+        sev = "error" if status == "failed" else "info"
+        await create_notification(
+            db,
+            organization_id=organization_id,
+            type="execution_completed",
+            severity=sev,
+            title=f"Execution {status}",
+            message=error_text or f"Approval #{approval_id} execution {status}.",
+            source="execution",
+            entity_type="execution",
+            entity_id=execution_id,
         )
     except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
         logger.exception(

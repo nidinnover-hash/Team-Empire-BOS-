@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.approval import Approval
 from app.schemas.approval import ApprovalRequestCreate
+from app.services.notification import create_notification
 
 
 async def request_approval(
@@ -19,6 +20,18 @@ async def request_approval(
         status="pending",
     )
     db.add(approval)
+    await db.flush()
+    await create_notification(
+        db,
+        organization_id=data.organization_id,
+        type="approval_created",
+        severity="info",
+        title=f"New Approval: {data.approval_type}",
+        message="Approval request awaiting decision.",
+        source="approval",
+        entity_type="approval",
+        entity_id=approval.id,
+    )
     await db.commit()
     await db.refresh(approval)
     return approval
@@ -75,7 +88,22 @@ async def approve_approval(
     await db.commit()
     if result.rowcount == 0:
         return None
-    return await get_approval(db, approval_id, organization_id=organization_id)
+    approved = await get_approval(db, approval_id, organization_id=organization_id)
+    if approved:
+        await create_notification(
+            db,
+            organization_id=organization_id,
+            type="approval_approved",
+            severity="info",
+            title=f"Approved: {approved.approval_type}",
+            message="Approval granted. Execution may follow.",
+            source="approval",
+            entity_type="approval",
+            entity_id=approval_id,
+            user_id=approved.requested_by,
+        )
+        await db.commit()
+    return approved
 
 
 async def reject_approval(
@@ -101,4 +129,19 @@ async def reject_approval(
     await db.commit()
     if result.rowcount == 0:
         return None
-    return await get_approval(db, approval_id, organization_id=organization_id)
+    rejected = await get_approval(db, approval_id, organization_id=organization_id)
+    if rejected:
+        await create_notification(
+            db,
+            organization_id=organization_id,
+            type="approval_rejected",
+            severity="warning",
+            title=f"Rejected: {rejected.approval_type}",
+            message="Approval request has been rejected.",
+            source="approval",
+            entity_type="approval",
+            entity_id=approval_id,
+            user_id=rejected.requested_by,
+        )
+        await db.commit()
+    return rejected

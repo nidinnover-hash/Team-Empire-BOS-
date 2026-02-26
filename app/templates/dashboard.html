@@ -83,6 +83,21 @@
       ${{ finance.balance | round(2) }}
     </strong>
   </div>
+  <div class="notif-bell-container">
+    <button id="notif-bell-btn" class="notif-bell" type="button" aria-label="Notifications">
+      <i data-lucide="bell"></i>
+      <span id="notif-badge" class="notif-badge">0</span>
+    </button>
+    <div id="notif-dropdown" class="notif-dropdown" style="display:none">
+      <div class="notif-header">
+        <span class="notif-title">Notifications</span>
+        <button id="notif-mark-all-btn" class="notif-action-btn" type="button">Mark all read</button>
+      </div>
+      <div id="notif-list" class="notif-list">
+        <div class="notif-empty">No notifications</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <main>
@@ -628,6 +643,7 @@
 <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/notifications.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/dashboard-page.js"></script>
 </body>
 </html>

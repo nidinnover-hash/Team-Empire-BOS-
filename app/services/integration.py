@@ -8,6 +8,7 @@ from sqlalchemy.orm.attributes import set_committed_value
 from app.core.sensitive_keys import is_sensitive_key
 from app.core.token_crypto import decrypt_config, encrypt_config
 from app.models.integration import Integration
+from app.services.notification import create_notification
 
 
 def _validate_token_fields(config_json: dict) -> None:
@@ -95,6 +96,18 @@ async def connect_integration(
         status="connected",
     )
     db.add(item)
+    await db.flush()
+    await create_notification(
+        db,
+        organization_id=organization_id,
+        type="integration_connected",
+        severity="info",
+        title=f"{integration_type} Connected",
+        message=f"Integration {integration_type} is now active.",
+        source="integrations",
+        entity_type="integration",
+        entity_id=item.id,
+    )
     await db.commit()
     await db.refresh(item)
     return _decrypted(item)
@@ -109,6 +122,17 @@ async def disconnect_integration(
     item.status = "disconnected"
     item.updated_at = datetime.now(UTC)
     item.config_json = encrypt_config(item.config_json or {})
+    await create_notification(
+        db,
+        organization_id=organization_id,
+        type="integration_disconnected",
+        severity="warning",
+        title=f"{item.type} Disconnected",
+        message=f"Integration {item.type} has been disconnected.",
+        source="integrations",
+        entity_type="integration",
+        entity_id=item.id,
+    )
     await db.commit()
     await db.refresh(item)
     return _decrypted(item)

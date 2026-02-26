@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.task import Task
 from app.schemas.task import TaskCreate, TaskUpdate
+from app.services.notification import create_notification
 
 
 async def create_task(
@@ -57,6 +58,7 @@ async def update_task(
         return None
 
     # Apply all non-None fields from the update payload
+    was_done = task.is_done
     if data.is_done is not None:
         task.is_done = data.is_done
         task.completed_at = datetime.now(UTC) if data.is_done else None
@@ -75,6 +77,19 @@ async def update_task(
 
     await db.commit()
     await db.refresh(task)
+    if task.is_done and not was_done and organization_id is not None:
+        await create_notification(
+            db,
+            organization_id=organization_id,
+            type="task_completed",
+            severity="info",
+            title=f"Task Done: {task.title}",
+            message=f"Task \"{task.title}\" has been completed.",
+            source="tasks",
+            entity_type="task",
+            entity_id=task.id,
+        )
+        await db.commit()
     return task
 
 

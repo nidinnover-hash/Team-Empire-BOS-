@@ -1046,6 +1046,45 @@ async def _cleanup_old_job_runs_and_snapshots(db: AsyncSession, org_id: int) -> 
         logger.debug("Job run / snapshot cleanup failed for org=%d: %s", org_id, exc)
 
 
+async def _check_token_health_job(db: AsyncSession, org_id: int) -> None:
+    """Check integration token health and emit notifications for unhealthy tokens."""
+    from app.services.notification import create_notification
+    from app.services.token_health import check_token_health
+
+    started = datetime.now(UTC)
+    try:
+        results = await check_token_health(db, org_id)
+        unhealthy = [r for r in results if r.get("status") != "healthy"]
+        for item in unhealthy:
+            await create_notification(
+                db,
+                organization_id=org_id,
+                type="token_health_warning",
+                severity="warning" if item.get("status") != "expired" else "high",
+                title=f"Token {item.get('status', 'issue')}: {item.get('type', 'unknown')}",
+                message=str(item.get("recommendation", "Check integration token.")),
+                source="token_health",
+            )
+        if unhealthy:
+            await db.commit()
+        await _record_job_run(
+            db, org_id=org_id, job_name="token_health_check", status="ok",
+            started_at=started, finished_at=datetime.now(UTC),
+            details={"checked": len(results), "unhealthy": len(unhealthy)},
+        )
+        await db.commit()
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning("Token health check failed org=%d: %s", org_id, exc)
+        await _record_job_run(
+            db, org_id=org_id, job_name="token_health_check", status="error",
+            started_at=started, finished_at=datetime.now(UTC),
+            error=f"{type(exc).__name__}: {str(exc)[:200]}",
+        )
+        await db.commit()
+
+
 async def _scheduler_loop(interval_minutes: int) -> None:
     """Runs forever; wakes up every interval_minutes and syncs all orgs."""
     from app.services.organization import list_organizations
@@ -1060,6 +1099,7 @@ async def _scheduler_loop(interval_minutes: int) -> None:
                 try:
                     async with AsyncSessionLocal() as db:
                         await _run_integrations(db, org.id)
+                        await _check_token_health_job(db, org.id)
                         await _check_morning_briefing(db, org.id)
                         await _maybe_generate_daily_ceo_summary(db, org.id)
                         await _maybe_generate_daily_pending_digest(db, org.id)

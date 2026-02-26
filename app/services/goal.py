@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.goal import Goal
 from app.schemas.goal import GoalCreate, GoalProgressUpdate, GoalStatusUpdate
+from app.services.notification import create_notification
 
 
 async def create_goal(
@@ -41,11 +42,25 @@ async def update_goal_progress(
     goal = cast(Goal | None, result.scalar_one_or_none())
     if goal is None:
         return None
+    was_completed = goal.status == "completed"
     goal.progress = data.progress
     if data.progress == 100:
         goal.status = "completed"
     await db.commit()
     await db.refresh(goal)
+    if goal.status == "completed" and not was_completed:
+        await create_notification(
+            db,
+            organization_id=organization_id,
+            type="goal_completed",
+            severity="info",
+            title=f"Goal Completed: {goal.title}",
+            message=f"Goal \"{goal.title}\" reached 100% and is complete.",
+            source="goals",
+            entity_type="goal",
+            entity_id=goal.id,
+        )
+        await db.commit()
     return goal
 
 

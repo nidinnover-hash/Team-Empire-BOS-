@@ -1,7 +1,11 @@
-"""Notification endpoints — list, count, mark read."""
+"""Notification endpoints — list, count, mark read, SSE stream."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+import asyncio
+import json
+
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
@@ -62,3 +66,32 @@ async def mark_notifications_read(
         updated = await notification_service.mark_all_read(db, org_id, user_id)
     await db.commit()
     return {"ok": True, "marked_read": updated}
+
+
+@router.get("/stream")
+async def notification_stream(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "EMPLOYEE")),
+) -> StreamingResponse:
+    """SSE stream that pushes unread count every 5 seconds."""
+    org_id = int(actor["org_id"])
+    user_id = int(actor["id"])
+
+    async def event_generator():
+        last_count = -1
+        while True:
+            if await request.is_disconnected():
+                break
+            count = await notification_service.get_unread_count(db, org_id, user_id)
+            if count != last_count:
+                data = json.dumps({"unread_count": count})
+                yield f"data: {data}\n\n"
+                last_count = count
+            await asyncio.sleep(5)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
