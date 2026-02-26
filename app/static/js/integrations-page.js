@@ -667,6 +667,16 @@
         if (p.active) roles.push("default");
         if (p.email_active) roles.push("email");
         var roleTag = roles.length ? ' <span style="color:var(--brand);font-size:.65rem;font-weight:600">' + roles.join(" + ").toUpperCase() + '</span>' : '';
+        var connectRow = p.configured
+          ? ''
+          : (
+            '<div class="qc-token-row" style="margin-top:0.4rem">' +
+              '<input class="input" type="password" id="ai-key-' + esc(p.provider) + '" placeholder="API key" autocomplete="off" style="font-size:.78rem" />' +
+            '</div>'
+          );
+        var connectBtn = p.configured
+          ? '<button class="btn subtle" type="button" onclick="window.disconnectAI(\'' + esc(p.provider) + '\')">Clear Key</button>'
+          : '<button class="btn success" type="button" onclick="window.connectAI(\'' + esc(p.provider) + '\')">Connect</button>';
         return (
           '<div class="ai-card">' +
             '<div class="ai-head">' +
@@ -675,7 +685,10 @@
             '</div>' +
             '<div class="small">Configured: ' + (p.configured?"Yes":"No") + '</div>' +
             '<div class="small">Model: ' + esc(p.model||"-") + '</div>' +
-            '<div class="row" style="margin-top:0.5rem;margin-bottom:0">' +
+            connectRow +
+            '<div class="qc-status" id="ai-status-' + esc(p.provider) + '"></div>' +
+            '<div class="row" style="margin-top:0.5rem;margin-bottom:0;gap:0.35rem">' +
+              connectBtn +
               '<button class="btn subtle" type="button" onclick="window.testAI(\'' + esc(p.provider) + '\')">Test</button>' +
             '</div>' +
           '</div>'
@@ -698,6 +711,45 @@
         method: "POST",
       });
       setStatus("ai-status", body.message || "Provider test complete.", body.status==="ok"?"ok":"warn");
+    } catch (err) {
+      setStatus("ai-status", mapUiError(err), "err");
+    }
+  };
+
+  window.connectAI = async function(provider) {
+    var input = byId("ai-key-" + provider);
+    var statusEl = "ai-status-" + provider;
+    if (!input || !input.value.trim()) {
+      setQcStatus(statusEl, "Enter an API key first.", "err");
+      return;
+    }
+    setQcStatus(statusEl, "Connecting " + providerLabel(provider) + "...", "info");
+    try {
+      var body = await apiJson("/api/v1/integrations/ai/" + encodeURIComponent(provider) + "/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: input.value.trim() }),
+      });
+      setQcStatus(statusEl, body.message || "Connected!", "ok");
+      input.value = "";
+      await fetchAiStatus();
+    } catch (err) {
+      setQcStatus(statusEl, mapUiError(err), "err");
+    }
+  };
+
+  window.disconnectAI = async function(provider) {
+    var ok = window.PCUI && window.PCUI.confirmDanger
+      ? await window.PCUI.confirmDanger("Clear " + providerLabel(provider) + " key?", "The cached API key will be removed.")
+      : window.confirm("Clear " + providerLabel(provider) + " API key?");
+    if (!ok) return;
+    setStatus("ai-status", "Clearing " + provider + " key...");
+    try {
+      await apiJson("/api/v1/integrations/ai/" + encodeURIComponent(provider) + "/disconnect", {
+        method: "POST",
+      });
+      setStatus("ai-status", providerLabel(provider) + " key cleared.", "ok");
+      await fetchAiStatus();
     } catch (err) {
       setStatus("ai-status", mapUiError(err), "err");
     }

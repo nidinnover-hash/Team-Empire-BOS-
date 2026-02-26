@@ -41,7 +41,7 @@ async def list_entries(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> list[FinanceEntryRead]:
     """List all finance entries, newest date first."""
-    return await finance_service.list_entries(db, organization_id=actor["org_id"], limit=limit)
+    return await finance_service.list_entries(db, organization_id=actor["org_id"], limit=limit, offset=offset)
 
 
 @router.get("/efficiency", response_model=FinanceEfficiencyReport)

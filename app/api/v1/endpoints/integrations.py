@@ -534,6 +534,37 @@ async def ai_provider_connect(
     )
 
 
+@router.post("/ai/{provider}/disconnect")
+async def ai_provider_disconnect(
+    provider: AIProviderName,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict[str, str]:
+    """Clear a cached AI provider key and disconnect the integration record."""
+    from app.services.ai_router import clear_ai_key_cache
+
+    clear_ai_key_cache(provider)
+
+    integration_type = _AI_CONNECT_TYPE_MAP[provider]
+    existing = await integration_service.get_integration_by_type(
+        db, actor["org_id"], integration_type,
+    )
+    if existing:
+        await integration_service.disconnect_integration(
+            db, integration_id=existing.id, organization_id=actor["org_id"],
+        )
+    await record_action(
+        db,
+        event_type="ai_provider_disconnected",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="integration",
+        entity_id=existing.id if existing else None,
+        payload_json={"provider": provider},
+    )
+    return {"status": "disconnected", "provider": provider}
+
+
 @router.post("/ai/test", response_model=AITestResult)
 async def test_ai_provider(
     provider: str | None = None,

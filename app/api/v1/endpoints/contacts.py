@@ -27,4 +27,4 @@ async def list_contacts(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> list[ContactRead]:
     """List all contacts, alphabetically by name."""
-    return await contact_service.list_contacts(db, organization_id=actor["org_id"], limit=limit)
+    return await contact_service.list_contacts(db, organization_id=actor["org_id"], limit=limit, offset=offset)

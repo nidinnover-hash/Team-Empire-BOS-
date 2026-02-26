@@ -213,5 +213,6 @@ async def test_gemini_in_configured_providers(monkeypatch):
 
 async def test_gemini_not_in_configured_when_no_key(monkeypatch):
     monkeypatch.setattr(ai_router.settings, "GEMINI_API_KEY", None)
+    ai_router.clear_ai_key_cache("gemini")
     configured = ai_router._configured_providers()
     assert "gemini" not in configured
