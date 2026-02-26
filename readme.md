@@ -35,4 +35,5 @@
 - [User onboarding guide](docs/USER_ONBOARDING.md)
 - [7-day training curriculum](docs/TRAINING_CURRICULUM_7_DAYS.md)
 - [Day-1 onboarding run (Feb 27, 2026)](docs/ONBOARDING_DAY1_2026-02-27.md)
+- [Day-1 metrics tracker (Feb 27, 2026)](docs/DAY1_METRICS_2026-02-27.md)
 
