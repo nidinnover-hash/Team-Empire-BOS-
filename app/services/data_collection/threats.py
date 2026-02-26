@@ -197,8 +197,9 @@ async def detect_threats(
     await db.commit()
 
     severity_breakdown: dict[str, int] = {}
-    for sig in signal_records:
-        severity_breakdown[sig.severity] = severity_breakdown.get(sig.severity, 0) + 1
+    out_sig: ThreatSignalOut
+    for out_sig in signal_records:
+        severity_breakdown[out_sig.severity] = severity_breakdown.get(out_sig.severity, 0) + 1
 
     return ThreatDetectionResult(
         scope=scope,

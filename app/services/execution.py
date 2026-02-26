@@ -32,8 +32,12 @@ async def complete_execution(
     status: str,
     output_json: dict | None = None,
     error_text: str | None = None,
+    organization_id: int | None = None,
 ) -> Execution | None:
-    result = await db.execute(select(Execution).where(Execution.id == execution_id))
+    query = select(Execution).where(Execution.id == execution_id)
+    if organization_id is not None:
+        query = query.where(Execution.organization_id == organization_id)
+    result = await db.execute(query)
     execution = cast(Execution | None, result.scalar_one_or_none())
     if execution is None:
         return None

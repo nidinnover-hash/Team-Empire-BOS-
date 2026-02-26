@@ -230,7 +230,7 @@ async def sync_clickup_tasks(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 )
             )
             for task in result.scalars().all():
-                existing_map[task.external_id] = task
+                existing_map[task.external_id] = task  # type: ignore[index]
 
         # Upsert with per-item error handling
         for p in parsed:

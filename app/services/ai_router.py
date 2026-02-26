@@ -406,7 +406,7 @@ async def _call_openai(
             model=settings.AGENT_MODEL_OPENAI,
             messages=[
                 {"role": "system", "content": system_prompt},
-                *(conversation_history or []),
+                *(conversation_history or []),  # type: ignore[list-item]
                 {"role": "user", "content": user_message},
             ],
             max_tokens=max_tokens,
@@ -439,12 +439,12 @@ async def _call_anthropic(
             max_tokens=max_tokens,
             system=system_prompt,
             messages=[
-                *(conversation_history or []),
+                *(conversation_history or []),  # type: ignore[list-item]
                 {"role": "user", "content": user_message},
             ],
         )
         text_parts = [
-            block.text for block in result.content if getattr(block, "type", None) == "text"
+            block.text for block in result.content if getattr(block, "type", None) == "text"  # type: ignore[union-attr]
         ]
         return ("\n".join(text_parts) if text_parts else "No response from Anthropic."), False
     except _ANTHROPIC_EXC as e:
@@ -470,7 +470,7 @@ async def _call_groq(
             model=settings.AGENT_MODEL_GROQ,
             messages=[
                 {"role": "system", "content": system_prompt},
-                *(conversation_history or []),
+                *(conversation_history or []),  # type: ignore[list-item]
                 {"role": "user", "content": user_message},
             ],
             max_tokens=max_tokens,

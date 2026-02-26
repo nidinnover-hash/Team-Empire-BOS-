@@ -104,6 +104,7 @@ async def _finalize_execution(
         await execution_service.complete_execution(
             db, execution_id, status=status,
             output_json=output, error_text=error_text,
+            organization_id=organization_id,
         )
         await record_action(
             db,

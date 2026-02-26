@@ -164,8 +164,9 @@ async def detect_fraud(
     ]
 
     risk_breakdown: dict[str, int] = {}
-    for sig in signal_records:
-        risk_breakdown[sig.category] = risk_breakdown.get(sig.category, 0) + 1
+    out_sig: FraudSignalOut
+    for out_sig in signal_records:
+        risk_breakdown[out_sig.category] = risk_breakdown.get(out_sig.category, 0) + 1
 
     return FraudDetectionResult(
         scope=scope,

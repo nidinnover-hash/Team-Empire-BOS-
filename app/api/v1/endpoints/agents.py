@@ -168,7 +168,7 @@ async def agent_chat(
             if isinstance(title, str) and title.strip():
                 new_task = await task_service.create_task(
                     db,
-                    TaskCreate(title=title.strip()),
+                    TaskCreate(title=title.strip()),  # type: ignore[call-arg]
                     organization_id=org_id,
                 )
                 await record_action(

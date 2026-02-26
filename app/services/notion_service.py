@@ -78,7 +78,7 @@ async def sync_pages_to_notes(
     existing_result = await db.execute(
         select(Note.title).where(
             Note.organization_id == org_id,
-            Note.source == "notion",
+            Note.source == "notion",  # type: ignore[attr-defined]  # dynamic attr
         ).limit(1000)
     )
     existing_titles = {row.title for row in existing_result}

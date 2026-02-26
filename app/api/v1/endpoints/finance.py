@@ -35,11 +35,13 @@ async def create_entry(
 
 @router.get("", response_model=list[FinanceEntryRead])
 async def list_entries(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0, le=10_000),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> list[FinanceEntryRead]:
     """List all finance entries, newest date first."""
-    return await finance_service.list_entries(db, organization_id=actor["org_id"])
+    return await finance_service.list_entries(db, organization_id=actor["org_id"], limit=limit)
 
 
 @router.get("/efficiency", response_model=FinanceEfficiencyReport)

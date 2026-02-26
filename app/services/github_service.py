@@ -341,7 +341,7 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 )
             )
             for task in result.scalars().all():
-                existing_map[(task.external_source, task.external_id)] = task
+                existing_map[(task.external_source, task.external_id)] = task  # type: ignore[index]
 
         # Upsert all items with per-item error handling
         for upsert_item in upsert_batch:

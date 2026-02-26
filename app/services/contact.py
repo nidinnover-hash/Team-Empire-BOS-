@@ -16,12 +16,13 @@ async def create_contact(
 
 
 async def list_contacts(
-    db: AsyncSession, organization_id: int, limit: int = 100
+    db: AsyncSession, organization_id: int, limit: int = 100, offset: int = 0
 ) -> list[Contact]:
     result = await db.execute(
         select(Contact)
         .where(Contact.organization_id == organization_id)
         .order_by(Contact.name)
+        .offset(offset)
         .limit(limit)
     )
     return list(result.scalars().all())

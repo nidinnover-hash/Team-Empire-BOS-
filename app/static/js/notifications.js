@@ -6,6 +6,12 @@
   var markAllBtn = document.getElementById("notif-mark-all-btn");
   if (!bellBtn || !dropdown) return;
 
+  var baseTitle = document.title;
+
+  function setTitleBadge(count) {
+    document.title = count > 0 ? "(" + count + ") " + baseTitle : baseTitle;
+  }
+
   function escapeHtml(s) {
     return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
@@ -57,6 +63,7 @@
       var count = data.unread_count || 0;
       badge.textContent = count;
       badge.classList.toggle("active", count > 0);
+      setTitleBadge(count);
     } catch (err) { /* silent */ }
   }
 
@@ -86,6 +93,7 @@
           var d = JSON.parse(event.data);
           badge.textContent = d.unread_count;
           badge.classList.toggle("active", d.unread_count > 0);
+          setTitleBadge(d.unread_count);
         } catch (e) { /* ignore */ }
       };
       es.onerror = function () {

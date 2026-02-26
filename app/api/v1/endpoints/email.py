@@ -99,7 +99,7 @@ def _get_compose_redis_client() -> _ComposeRedisLike | None:
 async def report_template(
     _user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> ManagerReportTemplateRead:
-    return ManagerReportTemplateRead(**email_control.manager_report_template())
+    return ManagerReportTemplateRead(**email_control.manager_report_template())  # type: ignore[arg-type]
 
 
 @router.post("/control/process", response_model=EmailControlRunResponse)
@@ -114,7 +114,7 @@ async def process_email_control(
         actor_user_id=int(user["id"]),
         limit=limit,
     )
-    return EmailControlRunResponse(**result)
+    return EmailControlRunResponse(**result)  # type: ignore[arg-type]
 
 
 @router.get("/control/pending-digest", response_model=PendingActionsDigestRead)
@@ -136,7 +136,7 @@ async def draft_pending_actions_digest(
         org_id=int(user["org_id"]),
         actor_user_id=int(user["id"]),
     )
-    return PendingActionsDigestDraftRead(**drafted)
+    return PendingActionsDigestDraftRead(**drafted)  # type: ignore[arg-type]
 
 
 def _check_compose_rate(org_id: int) -> None:
@@ -475,7 +475,7 @@ async def strategize_email(
         raise HTTPException(status_code=404, detail="Email not found or not accessible") from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail="Email strategy generation failed — try again later") from exc
-    return EmailStrategyResponse(email_id=email_id, strategy=analysis)
+    return EmailStrategyResponse(email_id=email_id, strategy=analysis or "")  # type: ignore[arg-type]
 
 
 @router.post("/compose", response_model=EmailComposeResponse)

@@ -78,9 +78,10 @@ async def get_clone_training_layer(
     )
     plans = list(plan_result.scalars().all())
     latest_plan_by_emp: dict[int, RoleTrainingPlan] = {}
-    for row in sorted(plans, key=lambda x: x.week_start_date, reverse=True):
-        if row.employee_id not in latest_plan_by_emp:
-            latest_plan_by_emp[row.employee_id] = row
+    plan_row: RoleTrainingPlan
+    for plan_row in sorted(plans, key=lambda x: x.week_start_date, reverse=True):
+        if plan_row.employee_id not in latest_plan_by_emp:
+            latest_plan_by_emp[plan_row.employee_id] = plan_row
     open_training_plans = len(
         [
             row

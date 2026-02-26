@@ -93,8 +93,8 @@ async def sync_calendar_events(
                 refreshed = await run_with_retry(
                     lambda: refresh_access_token(
                         refresh_token=refresh_token,
-                        client_id=settings.GOOGLE_CLIENT_ID,
-                        client_secret=settings.GOOGLE_CLIENT_SECRET,
+                        client_id=settings.GOOGLE_CLIENT_ID or "",
+                        client_secret=settings.GOOGLE_CLIENT_SECRET or "",
                     ),
                     attempts=2,
                     timeout_seconds=25.0,

@@ -89,20 +89,30 @@ async def mark_read(
     db: AsyncSession,
     organization_id: int,
     notification_ids: list[int],
+    *,
+    user_id: int | None = None,
 ) -> int:
-    """Mark specific notifications as read. Returns number updated."""
+    """Mark specific notifications as read. Returns number updated.
+
+    When user_id is provided, only marks notifications belonging to that user
+    (or broadcast notifications with user_id=NULL).
+    """
     if not notification_ids:
         return 0
     safe_ids = notification_ids[:100]
-    result = await db.execute(
+    query = (
         update(Notification)
         .where(
             Notification.organization_id == organization_id,
             Notification.id.in_(safe_ids),
             Notification.is_read.is_(False),
         )
-        .values(is_read=True)
     )
+    if user_id is not None:
+        query = query.where(
+            (Notification.user_id == user_id) | (Notification.user_id.is_(None))
+        )
+    result = await db.execute(query.values(is_read=True))
     return int(result.rowcount or 0)
 
 

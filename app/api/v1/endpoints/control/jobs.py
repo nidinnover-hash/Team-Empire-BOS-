@@ -81,7 +81,7 @@ async def scheduler_job_runs(
                 "dead_letter_candidate": dead_letter_candidate,
             }
         )
-    return SchedulerJobRunListRead(count=len(items), items=items)
+    return SchedulerJobRunListRead(count=len(items), items=items)  # type: ignore[arg-type]
 
 
 @router.post("/jobs/replay", response_model=SchedulerReplayRead)
@@ -95,7 +95,7 @@ async def scheduler_job_replay(
     return SchedulerReplayRead(
         ok=bool(result.get("ok")),
         job_name=str(result.get("job_name") or payload.job_name),
-        result=result.get("result") if isinstance(result.get("result"), dict) else None,
+        result=result.get("result") if isinstance(result.get("result"), dict) else None,  # type: ignore[arg-type]
         error=str(result.get("error")) if result.get("error") else None,
     )
 
@@ -129,7 +129,7 @@ async def execute_plan(
         sync=sync_result,
         email_control=email_result,
         compliance={"score": compliance.get("compliance_score"), "violations": len(compliance.get("violations", []))},
-        dispatch_plan=dispatch,
+        dispatch_plan=dispatch,  # type: ignore[arg-type]
         data_quality={
             "missing_identity_count": quality["missing_identity_count"],
             "stale_metrics_count": quality["stale_metrics_count"],

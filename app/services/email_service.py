@@ -322,15 +322,10 @@ async def list_emails(
     offset: int = 0,
     unread_only: bool = False,
 ) -> list[Email]:
-    query = (
-        select(Email)
-        .where(Email.organization_id == org_id)
-        .order_by(Email.received_at.desc())
-        .offset(offset)
-        .limit(limit)
-    )
+    query = select(Email).where(Email.organization_id == org_id)
     if unread_only:
         query = query.where(Email.is_read.is_(False))
+    query = query.order_by(Email.received_at.desc()).offset(offset).limit(limit)
     result = await db.execute(query)
     return list(result.scalars().all())
 

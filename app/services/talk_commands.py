@@ -196,7 +196,7 @@ async def maybe_handle_talk_command(
     if project_title:
         project = await project_service.create_project(
             db,
-            ProjectCreate(title=project_title),
+            ProjectCreate(title=project_title),  # type: ignore[call-arg]
             organization_id=org_id,
         )
         return TalkCommandResult(
@@ -205,10 +205,10 @@ async def maybe_handle_talk_command(
         )
 
     if text.startswith("list tasks") or text == "tasks":
-        items = await task_service.list_tasks(db, limit=10, organization_id=org_id, is_done=False)
-        if not items:
+        tasks = await task_service.list_tasks(db, limit=10, organization_id=org_id, is_done=False)
+        if not tasks:
             return TalkCommandResult(handled=True, response="No open tasks found.")
-        rows = [f"- #{t.id} {t.title} (priority {t.priority})" for t in items]
+        rows = [f"- #{t.id} {t.title} (priority {t.priority})" for t in tasks]
         return TalkCommandResult(handled=True, response="Open tasks:\n" + "\n".join(rows))
 
     task_title = _extract_after(message, ("create task", "add task", "new task"))
@@ -217,7 +217,7 @@ async def maybe_handle_talk_command(
     if task_title:
         task = await task_service.create_task(
             db,
-            TaskCreate(title=task_title, category="business"),
+            TaskCreate(title=task_title, category="business"),  # type: ignore[call-arg]
             organization_id=org_id,
         )
         return TalkCommandResult(

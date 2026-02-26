@@ -88,7 +88,7 @@ async def check_token_health(
 
         elif row.type in _PAT_TYPES:
             # PAT tokens don't expire but should be rotated periodically
-            age_days = entry.get("days_since_update")
+            age_days = entry.get("days_since_update")  # type: ignore[assignment]
             if isinstance(age_days, int | float) and age_days > _PAT_ROTATION_WARNING_DAYS:
                 entry["status"] = "stale"
                 entry["recommendation"] = f"Token is {int(age_days)} days old. Consider rotating for security."

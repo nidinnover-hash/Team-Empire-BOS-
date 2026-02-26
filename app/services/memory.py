@@ -447,8 +447,8 @@ async def build_memory_context(
             ]
             if threat_report.top_threats:
                 threat_lines.append("Top threats:")
-                for t in threat_report.top_threats[:3]:
-                    threat_lines.append(f"  - [{t.severity}] {t.title}")
+                for threat in threat_report.top_threats[:3]:
+                    threat_lines.append(f"  - [{threat.severity}] {threat.title}")
             if threat_report.recommendations:
                 threat_lines.append(f"Action: {threat_report.recommendations[0]}")
             threat_lines.append("[END SECURITY]")

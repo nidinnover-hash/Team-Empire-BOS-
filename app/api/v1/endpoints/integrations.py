@@ -200,7 +200,7 @@ async def integration_setup_guide(
         generated_at=now,
         ready_count=ready_count,
         total_count=len(items),
-        items=items,
+        items=items,  # type: ignore[arg-type]
     )
 
 
@@ -710,22 +710,21 @@ async def whatsapp_webhook_receive(
             status_code=503,
             detail="WhatsApp webhook disabled: WHATSAPP_APP_SECRET not configured",
         )
-    if app_secret:
-        sig_header = request.headers.get("X-Hub-Signature-256", "")
-        expected_sig = "sha256=" + hmac.new(
-            app_secret.encode("utf-8"),
-            raw_body,
-            sha256,
-        ).hexdigest()
-        if not sig_header or not hmac.compare_digest(sig_header, expected_sig):
-            raise HTTPException(status_code=403, detail="Webhook signature verification failed")
-        window = max(30, int(settings.WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS))
-        if not consume_oauth_nonce_once(
-            namespace="whatsapp_webhook_sig",
-            nonce=sig_header,
-            max_age_seconds=window,
-        ):
-            raise HTTPException(status_code=409, detail="Webhook replay detected")
+    sig_header = request.headers.get("X-Hub-Signature-256", "")
+    expected_sig = "sha256=" + hmac.new(
+        app_secret.encode("utf-8"),
+        raw_body,
+        sha256,
+    ).hexdigest()
+    if not sig_header or not hmac.compare_digest(sig_header, expected_sig):
+        raise HTTPException(status_code=403, detail="Webhook signature verification failed")
+    window = max(30, int(settings.WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS))
+    if not consume_oauth_nonce_once(
+        namespace="whatsapp_webhook_sig",
+        nonce=sig_header,
+        max_age_seconds=window,
+    ):
+        raise HTTPException(status_code=409, detail="Webhook replay detected")
 
     try:
         payload = _json.loads(raw_body)
@@ -905,6 +904,6 @@ async def test_integration(
     )
     return IntegrationTestResult(
         integration_id=item.id,
-        status=status,
+        status=status,  # type: ignore[arg-type]
         message=message,
     )

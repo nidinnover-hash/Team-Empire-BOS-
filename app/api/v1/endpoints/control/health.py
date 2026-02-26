@@ -144,7 +144,7 @@ async def integrations_health(
         total_connected=len(items),
         failing_count=sum(1 for x in items if x.get("last_sync_status") == "error"),
         stale_count=sum(1 for x in items if x.get("stale")),
-        items=items,
+        items=items,  # type: ignore[arg-type]
     )
 
 
@@ -255,7 +255,7 @@ async def system_health(
     )
     return SystemHealthRead(
         generated_at=now,
-        overall_status=overall_status,
+        overall_status=overall_status,  # type: ignore[arg-type]
         dependencies=dependencies,
         integrations=integration_health,
     )
@@ -333,7 +333,7 @@ async def data_quality(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> DataQualityRead:
     data = await clone_control.data_quality_snapshot(db, organization_id=int(actor["org_id"]))
-    return DataQualityRead(**data)
+    return DataQualityRead(**data)  # type: ignore[arg-type]
 
 
 @router.get("/sla/manager", response_model=ManagerSLARead)
@@ -342,4 +342,4 @@ async def manager_sla(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> ManagerSLARead:
     data = await clone_control.manager_sla_snapshot(db, organization_id=int(actor["org_id"]))
-    return ManagerSLARead(**data)
+    return ManagerSLARead(**data)  # type: ignore[arg-type]

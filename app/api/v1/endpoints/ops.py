@@ -764,7 +764,7 @@ async def train_clone_brain(
         entity_id=None,
         payload_json={"week_start": str(week_start), "employees_scored": result["employees_scored"]},
     )
-    return CloneTrainingRunRead(**result)
+    return CloneTrainingRunRead(**result)  # type: ignore[arg-type]
 
 
 @router.get("/clones/scores", response_model=list[CloneScoreRead])
@@ -792,7 +792,7 @@ async def clone_score_summary(
         organization_id=int(user["org_id"]),
         week_start_date=week_start,
     )
-    return CloneSummaryRead(**summary)
+    return CloneSummaryRead(**summary)  # type: ignore[arg-type]
 
 
 @router.post("/clones/dispatch-plan", response_model=list[CloneDispatchItemRead])
@@ -851,7 +851,7 @@ async def upsert_clone_profile(
         weak_zones=data.weak_zones,
         preferred_task_types=data.preferred_task_types,
     )
-    return CloneProfileRead(**clone_control.profile_to_payload(row))
+    return CloneProfileRead(**clone_control.profile_to_payload(row))  # type: ignore[arg-type]
 
 
 @router.get("/clones/profile/{employee_id}", response_model=CloneProfileRead)
@@ -867,7 +867,7 @@ async def get_clone_profile(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Clone profile not found")
-    return CloneProfileRead(**clone_control.profile_to_payload(row))
+    return CloneProfileRead(**clone_control.profile_to_payload(row))  # type: ignore[arg-type]
 
 
 @router.post("/clones/feedback", response_model=dict)

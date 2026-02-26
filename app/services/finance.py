@@ -1,3 +1,4 @@
+import logging
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -13,6 +14,8 @@ from app.schemas.finance import (
     FinanceSummary,
 )
 
+logger = logging.getLogger(__name__)
+
 
 async def create_entry(
     db: AsyncSession, data: FinanceEntryCreate, organization_id: int
@@ -25,12 +28,13 @@ async def create_entry(
 
 
 async def list_entries(
-    db: AsyncSession, organization_id: int, limit: int = 100
+    db: AsyncSession, organization_id: int, limit: int = 100, offset: int = 0
 ) -> list[FinanceEntry]:
     result = await db.execute(
         select(FinanceEntry)
         .where(FinanceEntry.organization_id == organization_id)
         .order_by(FinanceEntry.entry_date.desc())
+        .offset(offset)
         .limit(limit)
     )
     return list(result.scalars().all())
@@ -114,7 +118,13 @@ async def get_expenditure_efficiency(
             FinanceEntry.entry_date <= end_date,
         ).limit(5000)
     )
+    _EFFICIENCY_LIMIT = 5000
     rows = list(result.scalars().all())
+    if len(rows) >= _EFFICIENCY_LIMIT:
+        logger.warning(
+            "Finance efficiency query hit %d-row limit for org=%d window=%d days — results may be truncated",
+            _EFFICIENCY_LIMIT, organization_id, window_days,
+        )
     income = sum((Decimal(str(x.amount)) for x in rows if x.type == "income"), Decimal("0"))
     expenses = [x for x in rows if x.type == "expense"]
     total_expense = sum((Decimal(str(x.amount)) for x in expenses), Decimal("0"))

@@ -141,11 +141,11 @@ async def _fetch_ceo_status_data(db: AsyncSession, org_id: int) -> CEOStatusRead
                 )
 
     return CEOStatusRead(
-        top_overdue_critical_tasks=overdue[:10],
-        prs_waiting_sharon_review=_top_prs_waiting_sharon(prs),
-        branch_protection_issues=branch_issues,
-        infra_risks=infra_risks,
-        cost_alerts=cost_alerts,
+        top_overdue_critical_tasks=overdue[:10],  # type: ignore[arg-type]
+        prs_waiting_sharon_review=_top_prs_waiting_sharon(prs),  # type: ignore[arg-type]
+        branch_protection_issues=branch_issues,  # type: ignore[arg-type]
+        infra_risks=infra_risks,  # type: ignore[arg-type]
+        cost_alerts=cost_alerts,  # type: ignore[arg-type]
         mode="suggest_only",
     )
 

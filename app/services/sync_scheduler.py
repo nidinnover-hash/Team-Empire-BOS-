@@ -448,7 +448,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             else:
                 try:
                     async def _email_sync_op() -> dict[str, object]:
-                        await email_service.sync_emails(db, org_id=org_id, actor_user_id=_actor_uid)
+                        await email_service.sync_emails(db, org_id=org_id, actor_user_id=_actor_uid)  # type: ignore[arg-type]
                         return {"ok": True}
 
                     await run_with_retry(
@@ -487,7 +487,7 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             control_result = await email_control.process_inbox_controls(
                 db,
                 org_id=org_id,
-                actor_user_id=_actor_uid,
+                actor_user_id=_actor_uid,  # type: ignore[arg-type]
                 limit=100,
             )
             processed = control_result.get("processed", 0)
@@ -656,6 +656,9 @@ async def replay_job_for_org(db: AsyncSession, org_id: int, job_name: str) -> di
             result = {"ok": True}
         elif job_name == "cleanup_snapshots":
             await _cleanup_old_job_runs_and_snapshots(db, org_id)
+            result = {"ok": True}
+        elif job_name == "goal_deadline_check":
+            await _check_goal_deadlines(db, org_id)
             result = {"ok": True}
         elif job_name == "full_sync":
             await _run_integrations(db, org_id)
@@ -895,7 +898,7 @@ async def _maybe_generate_daily_pending_digest(db: AsyncSession, org_id: int) ->
     await email_control.draft_pending_actions_digest_email(
         db=db,
         org_id=org_id,
-        actor_user_id=int(_adm.id) if _adm else None,
+        actor_user_id=int(_adm.id) if _adm else None,  # type: ignore[arg-type]
     )
     _last_pending_digest_date_by_org[org_id] = day_key
 
@@ -991,8 +994,8 @@ async def _cleanup_old_logs(db: AsyncSession, org_id: int) -> None:
         for model, name in [(AiCallLog, "ai_call_logs"), (DecisionTrace, "decision_traces")]:
             result = await db.execute(
                 delete(model).where(
-                    model.organization_id == org_id,
-                    model.created_at < cutoff,
+                    model.organization_id == org_id,  # type: ignore[attr-defined]
+                    model.created_at < cutoff,  # type: ignore[attr-defined]
                 )
             )
             if result.rowcount:
@@ -1044,6 +1047,61 @@ async def _cleanup_old_job_runs_and_snapshots(db: AsyncSession, org_id: int) -> 
         await db.commit()
     except SQLAlchemyError as exc:
         logger.debug("Job run / snapshot cleanup failed for org=%d: %s", org_id, exc)
+
+
+async def _check_goal_deadlines(db: AsyncSession, org_id: int) -> None:
+    """Emit warnings for active goals whose target_date is within 3 days or overdue."""
+    from app.models.goal import Goal
+    from app.services.notification import create_notification
+
+    started = datetime.now(UTC)
+    try:
+        today = datetime.now(UTC).date()
+        warn_horizon = today + timedelta(days=3)
+        result = await db.execute(
+            select(Goal).where(
+                Goal.organization_id == org_id,
+                Goal.status == "active",
+                Goal.target_date.isnot(None),
+                Goal.target_date <= warn_horizon,
+            )
+        )
+        goals = list(result.scalars().all())
+        for goal in goals:
+            if goal.target_date is None:
+                continue
+            overdue = goal.target_date < today
+            sev = "error" if overdue else "warning"
+            label = "OVERDUE" if overdue else "Due Soon"
+            await create_notification(
+                db,
+                organization_id=org_id,
+                type="goal_deadline",
+                severity=sev,
+                title=f"Goal {label}: {goal.title}",
+                message=f"Target date {goal.target_date.isoformat()} — progress {goal.progress}%.",
+                source="scheduler",
+                entity_type="goal",
+                entity_id=goal.id,
+            )
+        if goals:
+            await db.commit()
+        await _record_job_run(
+            db, org_id=org_id, job_name="goal_deadline_check", status="ok",
+            started_at=started, finished_at=datetime.now(UTC),
+            details={"checked": len(goals), "overdue": sum(1 for g in goals if g.target_date and g.target_date < today)},
+        )
+        await db.commit()
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning("Goal deadline check failed org=%d: %s", org_id, exc)
+        await _record_job_run(
+            db, org_id=org_id, job_name="goal_deadline_check", status="error",
+            started_at=started, finished_at=datetime.now(UTC),
+            error=f"{type(exc).__name__}: {str(exc)[:200]}",
+        )
+        await db.commit()
 
 
 async def _check_token_health_job(db: AsyncSession, org_id: int) -> None:
@@ -1100,6 +1158,7 @@ async def _scheduler_loop(interval_minutes: int) -> None:
                     async with AsyncSessionLocal() as db:
                         await _run_integrations(db, org.id)
                         await _check_token_health_job(db, org.id)
+                        await _check_goal_deadlines(db, org.id)
                         await _check_morning_briefing(db, org.id)
                         await _maybe_generate_daily_ceo_summary(db, org.id)
                         await _maybe_generate_daily_pending_digest(db, org.id)

@@ -72,17 +72,17 @@ async def ingest_data(
             raise ValueError("context_type must be one of: priority, meeting, blocker, decision")
         ctx_date = data.for_date or date.today()
         for item in items:
-            entry = await memory_service.add_daily_context(
+            ctx_entry = await memory_service.add_daily_context(
                 db=db,
                 organization_id=org_id,
                 data=DailyContextCreate(
                     date=ctx_date,
-                    context_type=ctx_type,
+                    context_type=ctx_type,  # type: ignore[arg-type]  # validated above
                     content=item,
                     related_to=data.related_to,
                 ),
             )
-            created_ids.append(entry.id)
+            created_ids.append(ctx_entry.id)
 
     else:  # notes
         tags = f"ingested,{data.source}".strip(",")

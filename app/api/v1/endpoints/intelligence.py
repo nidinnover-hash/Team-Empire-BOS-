@@ -67,7 +67,7 @@ async def list_traces(
                 title=row.title,
                 summary=row.summary,
                 confidence_score=score,
-                risk_tier=risk_tier,
+                risk_tier=risk_tier,  # type: ignore[arg-type]
                 reasoning=reasoning,
                 signals_json=signals,
                 actor_user_id=row.actor_user_id,

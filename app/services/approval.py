@@ -85,9 +85,10 @@ async def approve_approval(
             approved_at=datetime.now(UTC),
         )
     )
-    await db.commit()
     if result.rowcount == 0:
+        await db.rollback()
         return None
+    await db.flush()
     approved = await get_approval(db, approval_id, organization_id=organization_id)
     if approved:
         await create_notification(
@@ -102,7 +103,7 @@ async def approve_approval(
             entity_id=approval_id,
             user_id=approved.requested_by,
         )
-        await db.commit()
+    await db.commit()
     return approved
 
 
@@ -126,9 +127,10 @@ async def reject_approval(
             approved_at=datetime.now(UTC),
         )
     )
-    await db.commit()
     if result.rowcount == 0:
+        await db.rollback()
         return None
+    await db.flush()
     rejected = await get_approval(db, approval_id, organization_id=organization_id)
     if rejected:
         await create_notification(
@@ -143,5 +145,5 @@ async def reject_approval(
             entity_id=approval_id,
             user_id=rejected.requested_by,
         )
-        await db.commit()
+    await db.commit()
     return rejected

@@ -18,7 +18,7 @@ async def list_orgs(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> list[OrganizationRead]:
     org = await organization_service.get_organization_by_id(db, actor["org_id"])
-    return [org] if org else []
+    return [org] if org else []  # type: ignore[list-item]
 
 
 @router.post("", response_model=OrganizationRead, status_code=201)

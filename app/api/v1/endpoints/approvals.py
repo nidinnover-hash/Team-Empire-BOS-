@@ -126,6 +126,8 @@ async def request_approval(
 @router.get("", response_model=list[ApprovalRead])
 async def list_approvals(
     status: Literal["pending", "approved", "rejected"] | None = Query(None),
+    limit: int = Query(200, ge=1, le=500),
+    offset: int = Query(0, ge=0, le=10_000),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> list[ApprovalRead]:
@@ -133,6 +135,8 @@ async def list_approvals(
         db,
         organization_id=actor["org_id"],
         status=status,
+        limit=limit,
+        offset=offset,
     )
     return [ApprovalRead.model_validate(row, from_attributes=True) for row in rows]
 
@@ -170,7 +174,7 @@ async def approval_timeline(
         .where(Approval.organization_id == actor["org_id"])
         .group_by(Approval.status)
     )
-    counts = {status: count for status, count in counts_result.all()}
+    counts = {s: c for s, c in counts_result.all()}
 
     return ApprovalTimelineResponse(
         pending_count=int(counts.get("pending", 0)),

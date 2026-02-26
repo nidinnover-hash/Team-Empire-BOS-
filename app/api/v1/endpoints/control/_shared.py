@@ -48,7 +48,7 @@ def _append_limitation(
     limitations.append(
         CloneLimitationRead(
             name=name,
-            severity=severity,
+            severity=severity,  # type: ignore[arg-type]
             impact=impact,
             evidence=evidence,
         )

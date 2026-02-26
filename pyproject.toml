@@ -36,15 +36,11 @@ disallow_untyped_defs = false
 check_untyped_defs = true
 no_implicit_optional = true
 exclude = ["alembic/versions/"]
-follow_imports = "skip"
+follow_imports = "normal"
 files = [
   "app/core",
-  "app/services/ai_router.py",
-  "app/services/email_service.py",
-  "app/services/token_health.py",
-  "app/tools/gmail.py",
-  "app/api/v1/endpoints/email.py",
-  "app/api/v1/endpoints/integrations.py",
+  "app/services",
+  "app/api",
 ]
 
 [[tool.mypy.overrides]]
@@ -55,6 +51,8 @@ module = [
   "jwt",
   "anthropic",
   "groq",
+  "httpx",
+  "httpx.*",
 ]
 ignore_missing_imports = true
 
@@ -69,3 +67,12 @@ module = [
 disallow_untyped_defs = true
 disallow_any_generics = true
 warn_return_any = true
+
+# FastAPI endpoints return ORM models that are serialised via response_model;
+# mypy sees a type mismatch (Model vs Schema) which is correct at the type
+# level but handled at runtime by Pydantic's from_attributes.
+[[tool.mypy.overrides]]
+module = [
+  "app.api.v1.endpoints.*",
+]
+disable_error_code = ["return-value"]

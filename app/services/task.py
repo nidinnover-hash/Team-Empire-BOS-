@@ -75,9 +75,8 @@ async def update_task(
     if data.due_date is not None:
         task.due_date = data.due_date
 
-    await db.commit()
-    await db.refresh(task)
     if task.is_done and not was_done and organization_id is not None:
+        await db.flush()
         await create_notification(
             db,
             organization_id=organization_id,
@@ -89,7 +88,8 @@ async def update_task(
             entity_type="task",
             entity_id=task.id,
         )
-        await db.commit()
+    await db.commit()
+    await db.refresh(task)
     return task
 
 

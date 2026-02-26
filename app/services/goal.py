@@ -46,9 +46,8 @@ async def update_goal_progress(
     goal.progress = data.progress
     if data.progress == 100:
         goal.status = "completed"
-    await db.commit()
-    await db.refresh(goal)
     if goal.status == "completed" and not was_completed:
+        await db.flush()
         await create_notification(
             db,
             organization_id=organization_id,
@@ -60,7 +59,8 @@ async def update_goal_progress(
             entity_type="goal",
             entity_id=goal.id,
         )
-        await db.commit()
+    await db.commit()
+    await db.refresh(goal)
     return goal
 
 

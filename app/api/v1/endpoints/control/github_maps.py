@@ -35,7 +35,7 @@ async def github_identity_map_list(
     return GitHubIdentityMapListRead(
         count=len(rows),
         items=[
-            {
+            {  # type: ignore[misc]
                 "company_email": row.company_email,
                 "github_login": row.github_login,
                 "updated_at": row.updated_at.isoformat(),

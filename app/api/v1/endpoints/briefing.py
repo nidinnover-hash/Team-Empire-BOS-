@@ -147,7 +147,7 @@ async def approve_task_plan(
     return ApprovePlanResponse(
         plan_id=plan_id,
         status="approved",
-        approved_at=plan.approved_at.isoformat(),
+        approved_at=plan.approved_at.isoformat() if plan.approved_at else "",
     )
 
 

@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, time, timedelta
+from typing import Literal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,15 +9,22 @@ from app.models.daily_run import DailyRun
 from app.models.decision_trace import DecisionTrace
 from app.models.event import Event
 from app.models.finance import FinanceEntry
-from app.schemas.intelligence import DecisionTraceCreate, ExecutiveDiffRead, ExecutiveSummaryRead
+from app.schemas.intelligence import (
+    DailyChangeItem,
+    DecisionTraceCreate,
+    ExecutiveDiffRead,
+    ExecutiveSummaryRead,
+)
 from app.services import finance as finance_service
+
+RiskTier = Literal["low", "medium", "high"]
 
 
 def _bounded_score(score: float) -> float:
     return max(0.0, min(1.0, score))
 
 
-def _risk_tier_from_confidence(confidence_score: float) -> str:
+def _risk_tier_from_confidence(confidence_score: float) -> RiskTier:
     if confidence_score >= 0.8:
         return "low"
     if confidence_score >= 0.55:
@@ -220,25 +228,25 @@ async def build_change_since_yesterday(db: AsyncSession, organization_id: int) -
     income_yesterday = float(income_yesterday_result.scalar() or 0)
     pending_approvals = float(pending_approvals_result.scalar() or 0)
 
-    changes = [
-        {
-            "metric": "auditable_events",
-            "yesterday": events_yesterday,
-            "today": events_today,
-            "delta": events_today - events_yesterday,
-        },
-        {
-            "metric": "completed_daily_runs",
-            "yesterday": runs_yesterday,
-            "today": runs_today,
-            "delta": runs_today - runs_yesterday,
-        },
-        {
-            "metric": "income_logged",
-            "yesterday": income_yesterday,
-            "today": income_today,
-            "delta": income_today - income_yesterday,
-        },
+    changes: list[DailyChangeItem] = [
+        DailyChangeItem(
+            metric="auditable_events",
+            yesterday=events_yesterday,
+            today=events_today,
+            delta=events_today - events_yesterday,
+        ),
+        DailyChangeItem(
+            metric="completed_daily_runs",
+            yesterday=runs_yesterday,
+            today=runs_today,
+            delta=runs_today - runs_yesterday,
+        ),
+        DailyChangeItem(
+            metric="income_logged",
+            yesterday=income_yesterday,
+            today=income_today,
+            delta=income_today - income_yesterday,
+        ),
     ]
 
     narrative = (

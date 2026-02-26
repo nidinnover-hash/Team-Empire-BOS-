@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
@@ -21,11 +21,12 @@ async def create_goal(
 
 @router.get("", response_model=list[GoalRead])
 async def list_goals(
+    limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> list[GoalRead]:
     """List all goals, newest first."""
-    return await goal_service.list_goals(db, organization_id=actor["org_id"])
+    return await goal_service.list_goals(db, organization_id=actor["org_id"], limit=limit)
 
 
 @router.patch("/{goal_id}/progress", response_model=GoalRead)

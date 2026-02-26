@@ -24,7 +24,7 @@ async def create_or_update_employee(
 
     if existing:
         existing.name = data.name
-        existing.role = data.role
+        existing.role = data.role  # type: ignore[assignment]  # SQLAlchemy mapped col
         existing.github_username = data.github_username
         existing.clickup_user_id = data.clickup_user_id
         existing.is_active = data.is_active

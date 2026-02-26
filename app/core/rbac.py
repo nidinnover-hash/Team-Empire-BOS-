@@ -14,6 +14,7 @@ Role = Literal[
     "OPS_MANAGER",
     "DEVELOPER",
     "VIEWER",
+    "EMPLOYEE",
 ]
 
 

@@ -344,15 +344,15 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                 invitations = []
             seen_owner_invites: set[tuple[str, str, str]] = set()
             for invite in invitations:
-                role = str(invite.get("role") or "").strip().lower()
-                if role not in {"admin", "owner"}:
+                invite_role = str(invite.get("role") or "").strip().lower()
+                if invite_role not in {"admin", "owner"}:
                     continue
                 inviter_login = str((invite.get("inviter") or {}).get("login") or "").strip().lower()
                 invitee_email = str(invite.get("email") or "").strip().lower()
                 inviter_email = login_to_email.get(inviter_login, "")
                 if _is_authorized_owner_email(inviter_email):
                     continue
-                dedupe_key = (inviter_login, invitee_email, role)
+                dedupe_key = (inviter_login, invitee_email, invite_role)
                 if dedupe_key in seen_owner_invites:
                     continue
                 seen_owner_invites.add(dedupe_key)
@@ -367,7 +367,7 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
                                 "inviter_login": inviter_login,
                                 "inviter_mapped_email": inviter_email or None,
                                 "invitee_email": invitee_email or None,
-                                "invitation_role": role,
+                                "invitation_role": invite_role,
                             }
                         ),
                         status="OPEN",

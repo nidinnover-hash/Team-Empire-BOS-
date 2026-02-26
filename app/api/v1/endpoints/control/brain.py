@@ -395,5 +395,5 @@ async def scenario_simulate(
         baseline_risk_score=round(baseline, 2),
         projected_risk_score=round(projected, 2),
         projected_risk_drop_percent=drop_pct,
-        recommended_dispatch=dispatch,
+        recommended_dispatch=dispatch,  # type: ignore[arg-type]
     )

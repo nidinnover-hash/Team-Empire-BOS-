@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,7 +37,7 @@ def _extract_character_traits(text: str) -> list[str]:
     return [t for t, _ in scored[:6]]
 
 
-def _character_confidence(traits: list[str], text_len: int) -> str:
+def _character_confidence(traits: list[str], text_len: int) -> Literal["low", "medium", "high"]:
     if len(traits) >= 4 and text_len >= 200:
         return "high"
     if len(traits) >= 2 and text_len >= 80:
