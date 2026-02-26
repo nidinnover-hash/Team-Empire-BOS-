@@ -12,7 +12,6 @@ from app.main import app
 from app.models.organization import Organization
 from app.models.user import User
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -69,8 +68,9 @@ async def client():
 
 def test_generate_secret_is_base32():
     pytest.importorskip("pyotp")
-    from app.services.mfa import generate_secret
     import re
+
+    from app.services.mfa import generate_secret
     secret = generate_secret()
     assert len(secret) >= 16
     assert re.match(r"^[A-Z2-7]+=*$", secret), "Secret must be valid base32"
@@ -79,6 +79,7 @@ def test_generate_secret_is_base32():
 def test_verify_code_valid():
     pytest.importorskip("pyotp")
     import pyotp
+
     from app.services.mfa import generate_secret, verify_code
     secret = generate_secret()
     code = pyotp.TOTP(secret).now()
@@ -252,7 +253,6 @@ async def test_mfa_setup_conflict_when_already_enabled(client):
 async def mfa_enabled_client():
     """Client fixture where the CEO user has a real password + MFA enabled."""
     pytest.importorskip("pyotp")
-    import pyotp
     from app.core.security import hash_password
 
     engine = create_async_engine(
