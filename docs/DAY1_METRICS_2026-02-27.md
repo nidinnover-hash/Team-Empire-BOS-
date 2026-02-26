@@ -3,10 +3,10 @@
 Use this during the onboarding run to measure impact.
 
 ## Baseline (Before Session)
-- Timestamp:
-- Open tasks:
-- Pending approvals:
-- Unread inbox:
+- Timestamp: Thursday, February 26, 2026 23:42:00
+- Open tasks: 13
+- Pending approvals: 1
+- Unread inbox: 26
 
 ## End of Session (After Session)
 - Timestamp:
