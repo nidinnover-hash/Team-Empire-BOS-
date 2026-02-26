@@ -341,7 +341,12 @@ async def train_threats(
         )
     except ValueError as exc:
         logger.warning("request failed: %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        error_text = str(exc).strip().lower()
+        if "no matching" in error_text:
+            detail = "No matching threat signals found."
+        else:
+            detail = "Invalid request"
+        raise HTTPException(status_code=400, detail=detail) from exc
 
     await record_action(
         db=db,
