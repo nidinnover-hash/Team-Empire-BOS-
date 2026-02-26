@@ -38,6 +38,9 @@ from app.core.privacy import sanitize_response_payload
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
 from app.schemas.integration import (
+    AIProviderConnectRequest,
+    AIProviderConnectResult,
+    AIProviderName,
     AIProviderStatus,
     AITestResult,
     CalendarEventRead,
@@ -84,6 +87,10 @@ _GENERIC_CONNECT_BLOCKED_ROUTES = {
     "calendly": "/api/v1/integrations/calendly/connect",
     "elevenlabs": "/api/v1/integrations/elevenlabs/connect",
     "hubspot": "/api/v1/integrations/hubspot/connect",
+    "ai_openai": "/api/v1/integrations/ai/openai/connect",
+    "ai_anthropic": "/api/v1/integrations/ai/anthropic/connect",
+    "ai_groq": "/api/v1/integrations/ai/groq/connect",
+    "ai_gemini": "/api/v1/integrations/ai/gemini/connect",
 }
 
 
@@ -431,41 +438,100 @@ async def ai_provider_status(
     _actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> list[AIProviderStatus]:
     """
-    Check which AI providers (OpenAI, Anthropic) are configured and active.
-    Does NOT make a live API call — just inspects the current settings.
+    Check which AI providers are configured and active.
+    Checks both .env keys and dashboard-saved keys.
     """
+    from app.services.ai_router import _get_key, _key_ok
+
     active = settings.DEFAULT_AI_PROVIDER
     email = settings.EMAIL_AI_PROVIDER or active
+    providers = [
+        ("openai", settings.AGENT_MODEL_OPENAI),
+        ("anthropic", settings.AGENT_MODEL_ANTHROPIC),
+        ("groq", settings.AGENT_MODEL_GROQ),
+        ("gemini", settings.AGENT_MODEL_GEMINI),
+    ]
     return [
         AIProviderStatus(
-            provider="openai",
-            configured=_key_is_configured(settings.OPENAI_API_KEY),
-            active=(active == "openai"),
-            email_active=(email == "openai"),
-            model=settings.AGENT_MODEL_OPENAI,
-        ),
-        AIProviderStatus(
-            provider="anthropic",
-            configured=_key_is_configured(settings.ANTHROPIC_API_KEY),
-            active=(active == "anthropic"),
-            email_active=(email == "anthropic"),
-            model=settings.AGENT_MODEL_ANTHROPIC,
-        ),
-        AIProviderStatus(
-            provider="groq",
-            configured=_key_is_configured(settings.GROQ_API_KEY),
-            active=(active == "groq"),
-            email_active=(email == "groq"),
-            model=settings.AGENT_MODEL_GROQ,
-        ),
-        AIProviderStatus(
-            provider="gemini",
-            configured=_key_is_configured(settings.GEMINI_API_KEY),
-            active=(active == "gemini"),
-            email_active=(email == "gemini"),
-            model=settings.AGENT_MODEL_GEMINI,
-        ),
+            provider=name,
+            configured=_key_ok(_get_key(name)),
+            active=(active == name),
+            email_active=(email == name),
+            model=model,
+        )
+        for name, model in providers
     ]
+
+
+_AI_CONNECT_TYPE_MAP: dict[str, str] = {
+    "openai": "ai_openai",
+    "anthropic": "ai_anthropic",
+    "groq": "ai_groq",
+    "gemini": "ai_gemini",
+}
+
+
+@router.post("/ai/{provider}/connect", response_model=AIProviderConnectResult, status_code=201)
+async def ai_provider_connect(
+    provider: AIProviderName,
+    data: AIProviderConnectRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> AIProviderConnectResult:
+    """
+    Save an AI provider API key. Validates with a live test call, then stores
+    encrypted in the integration table and updates the in-memory cache.
+    """
+    from app.services.ai_router import call_ai, set_ai_key_cache
+
+    # Temporarily cache the key so call_ai can use it for the test
+    set_ai_key_cache(provider, data.api_key)
+
+    response = await call_ai(
+        system_prompt="You are a connection test. Respond with exactly: 'Connected.'",
+        user_message="ping",
+        provider=provider,
+        max_tokens=20,
+        organization_id=actor["org_id"],
+    )
+
+    if response.startswith("Error:"):
+        # Rollback cache on failure
+        from app.services.ai_router import clear_ai_key_cache
+        clear_ai_key_cache(provider)
+        await record_action(
+            db,
+            event_type="ai_provider_connect_failed",
+            actor_user_id=actor["id"],
+            organization_id=actor["org_id"],
+            entity_type="integration",
+            entity_id=None,
+            payload_json={"provider": provider, "error": response[:200]},
+        )
+        raise HTTPException(status_code=400, detail=response)
+
+    # Test passed — persist to integration table
+    integration_type = _AI_CONNECT_TYPE_MAP[provider]
+    item = await integration_service.connect_integration(
+        db,
+        organization_id=actor["org_id"],
+        integration_type=integration_type,
+        config_json={"api_key": data.api_key, "connected_at": datetime.now(UTC).isoformat()},
+    )
+    await record_action(
+        db,
+        event_type="ai_provider_connected",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="integration",
+        entity_id=item.id,
+        payload_json={"provider": provider},
+    )
+    return AIProviderConnectResult(
+        provider=provider,
+        status="connected",
+        message=f"{provider.capitalize()} API key validated and saved.",
+    )
 
 
 @router.post("/ai/test", response_model=AITestResult)
@@ -475,12 +541,12 @@ async def test_ai_provider(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> AITestResult:
     """
-    Make a live test call to OpenAI, Anthropic, or Groq.
+    Make a live test call to OpenAI, Anthropic, Groq, or Gemini.
 
-    - provider: "openai", "anthropic", or "groq". Defaults to DEFAULT_AI_PROVIDER.
+    - provider: "openai", "anthropic", "groq", or "gemini". Defaults to DEFAULT_AI_PROVIDER.
     - Returns the provider's response to a simple ping prompt.
     """
-    from app.services.ai_router import call_ai
+    from app.services.ai_router import _get_key, _key_ok, call_ai
 
     chosen = (provider or settings.DEFAULT_AI_PROVIDER or "").strip().lower()
     if chosen == "claude":
@@ -492,29 +558,11 @@ async def test_ai_provider(
             message="Unsupported provider. Use one of: openai, claude, anthropic, groq, gemini.",
         )
 
-    if chosen == "openai" and not _key_is_configured(settings.OPENAI_API_KEY):
+    if not _key_ok(_get_key(chosen)):
         return AITestResult(
-            provider="openai",
+            provider=chosen,
             status="not_configured",
-            message="OPENAI_API_KEY is missing or is still a placeholder in .env",
-        )
-    if chosen == "anthropic" and not _key_is_configured(settings.ANTHROPIC_API_KEY):
-        return AITestResult(
-            provider="anthropic",
-            status="not_configured",
-            message="ANTHROPIC_API_KEY is missing or is still a placeholder in .env",
-        )
-    if chosen == "groq" and not _key_is_configured(settings.GROQ_API_KEY):
-        return AITestResult(
-            provider="groq",
-            status="not_configured",
-            message="GROQ_API_KEY is missing or is still a placeholder in .env",
-        )
-    if chosen == "gemini" and not _key_is_configured(settings.GEMINI_API_KEY):
-        return AITestResult(
-            provider="gemini",
-            status="not_configured",
-            message="GEMINI_API_KEY is missing or is still a placeholder in .env (free at aistudio.google.com)",
+            message=f"{chosen.upper()} API key is missing. Add it via .env or POST /ai/{chosen}/connect.",
         )
 
     response = await call_ai(

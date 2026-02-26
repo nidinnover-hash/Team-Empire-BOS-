@@ -76,3 +76,7 @@ module = [
   "app.api.v1.endpoints.*",
 ]
 disable_error_code = ["return-value"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = "-q -p no:cacheprovider"

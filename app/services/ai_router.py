@@ -124,6 +124,60 @@ _INJECTION_RE = re.compile(
 # In-memory ring buffer for recent AI calls (last 200) — avoids DB dependency in hot path
 _recent_calls: deque[dict] = deque(maxlen=200)
 
+# ── AI key cache (populated from integration table, checked before env vars) ──
+# Maps provider name ("openai", "anthropic", "groq", "gemini") to API key string.
+# Updated when an AI provider connect endpoint is called. Checked first by _get_key().
+_ai_key_cache: dict[str, str] = {}
+
+_AI_PROVIDER_TO_INTEGRATION_TYPE = {
+    "openai": "ai_openai",
+    "anthropic": "ai_anthropic",
+    "groq": "ai_groq",
+    "gemini": "ai_gemini",
+}
+
+
+def set_ai_key_cache(provider: str, api_key: str) -> None:
+    """Update the in-memory AI key cache (called from connect endpoint)."""
+    _ai_key_cache[provider] = api_key
+
+
+def clear_ai_key_cache(provider: str) -> None:
+    """Remove a provider from the in-memory AI key cache."""
+    _ai_key_cache.pop(provider, None)
+
+
+async def load_ai_keys_from_db() -> None:
+    """Load AI provider keys from integration table into the in-memory cache.
+
+    Called once at startup so dashboard-saved keys are available immediately.
+    """
+    try:
+        from sqlalchemy import select as sa_select
+
+        from app.core.token_crypto import decrypt_config
+        from app.db.session import AsyncSessionLocal
+        from app.models.integration import Integration
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                sa_select(Integration).where(
+                    Integration.type.in_(list(_AI_PROVIDER_TO_INTEGRATION_TYPE.values())),
+                    Integration.status == "connected",
+                )
+            )
+            for row in result.scalars().all():
+                cfg = decrypt_config(row.config_json or {})
+                key = cfg.get("api_key") or cfg.get("access_token") or ""
+                if key and isinstance(key, str):
+                    # Reverse lookup: integration type -> provider name
+                    for prov, itype in _AI_PROVIDER_TO_INTEGRATION_TYPE.items():
+                        if itype == row.type:
+                            _ai_key_cache[prov] = key
+                            break
+    except Exception as exc:
+        logger.warning("Failed to load AI keys from DB: %s", type(exc).__name__)
+
 
 async def _log_ai_call(
     provider: str,
@@ -351,6 +405,10 @@ def _get_model(provider: str) -> str:
 
 
 def _get_key(provider: str) -> str | None:
+    # Check in-memory cache first (dashboard-saved keys override env vars)
+    cached = _ai_key_cache.get(provider)
+    if cached and cached not in PLACEHOLDER_AI_KEYS:
+        return cached
     if provider == "openai":
         return cast(str | None, settings.OPENAI_API_KEY)
     if provider == "anthropic":

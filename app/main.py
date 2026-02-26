@@ -147,6 +147,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             org = await organization_service.ensure_default_organization(db)
             await user_service.ensure_default_user(db, organization_id=org.id)
 
+    # Load dashboard-saved AI provider keys into in-memory cache
+    from app.services.ai_router import load_ai_keys_from_db
+    await load_ai_keys_from_db()
+
     from app.services.sync_scheduler import start_scheduler, stop_scheduler
     run_scheduler = settings.RUN_SCHEDULER
     if settings.SYNC_ENABLED and run_scheduler:

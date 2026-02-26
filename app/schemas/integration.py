@@ -10,6 +10,7 @@ IntegrationType = Literal[
     "slack", "whatsapp_business", "digitalocean",
     "perplexity", "linkedin", "notion", "stripe",
     "google_analytics", "calendly", "elevenlabs", "hubspot",
+    "ai_openai", "ai_anthropic", "ai_groq", "ai_gemini",
 ]
 IntegrationStatus = Literal["connected", "disconnected", "error"]
 IntegrationTestStatus = Literal["ok", "failed", "not_configured"]
@@ -84,6 +85,19 @@ class AITestResult(BaseModel):
     status: IntegrationTestStatus
     message: str
     sample_response: str | None = None
+
+
+AIProviderName = Literal["openai", "anthropic", "groq", "gemini"]
+
+
+class AIProviderConnectRequest(BaseModel):
+    api_key: str = Field(..., min_length=2, max_length=300)
+
+
+class AIProviderConnectResult(BaseModel):
+    provider: str
+    status: str
+    message: str
 
 
 class CodingProjectDiscoveryRead(BaseModel):
