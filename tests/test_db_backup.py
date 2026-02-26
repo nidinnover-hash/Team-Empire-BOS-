@@ -74,11 +74,17 @@ async def test_postgres_backup_pg_dump_not_found(tmp_path):
     with patch.object(db_backup, "_db_is_sqlite", return_value=False), \
          patch.object(db_backup.settings, "DATABASE_URL", "postgresql://localhost/testdb"), \
          patch.object(db_backup, "BACKUP_DIR", tmp_path), \
-         patch("asyncio.create_subprocess_shell", side_effect=FileNotFoundError):
+         patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError):
         result = await db_backup.create_backup()
 
     assert result["ok"] is False
     assert "pg_dump" in result["error"]
+
+
+async def test_normalize_pg_dump_url_strips_sqlalchemy_driver_suffix():
+    assert db_backup._normalize_pg_dump_url("postgresql+asyncpg://user:pw@localhost/db") == "postgresql://user:pw@localhost/db"
+    assert db_backup._normalize_pg_dump_url("postgresql+psycopg://user:pw@localhost/db") == "postgresql://user:pw@localhost/db"
+    assert db_backup._normalize_pg_dump_url("postgresql://user:pw@localhost/db") == "postgresql://user:pw@localhost/db"
 
 
 async def test_db_is_sqlite():

@@ -15,3 +15,5 @@ node_modules
 .venv
 venv
 *.egg-info
+client_secret_*.json
+*googleusercontent.com.json

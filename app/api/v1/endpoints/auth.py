@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
@@ -30,6 +31,11 @@ _DUMMY_HASH = "pbkdf2_sha256$600000$w7gXiGr39+vmLFhN19GF2g==$2Fr/fvindUecCaX736N
 def _effective_token_expiry_minutes() -> int:
     session_cap_minutes = max(1, int(settings.ACCOUNT_SESSION_MAX_HOURS)) * 60
     return min(int(settings.ACCESS_TOKEN_EXPIRE_MINUTES), session_cap_minutes)
+
+
+def _username_fingerprint(username: str) -> str:
+    normalized = (username or "").strip().lower()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
 
 
 def _enforce_password_login_policy() -> None:
@@ -79,7 +85,8 @@ async def login(
 
     if not valid:
         record_login_failure(client_ip)
-        logger.warning("Failed login attempt for '%s' from %s", username, client_ip)
+        username_fp = _username_fingerprint(username)
+        logger.warning("Failed login attempt username_fp=%s from %s", username_fp, client_ip)
         await record_action(
             db,
             event_type="login_failed",
@@ -87,7 +94,7 @@ async def login(
             organization_id=user.organization_id if user else 0,
             entity_type="user",
             entity_id=user.id if user else None,
-            payload_json={"username": username[:200], "ip": client_ip},
+            payload_json={"username_fingerprint": username_fp, "ip": client_ip},
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

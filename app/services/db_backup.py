@@ -6,6 +6,7 @@ Backups are stored in Data/backups/ with rotation to prevent disk bloat.
 from __future__ import annotations
 
 import asyncio
+import gzip
 import logging
 import shutil
 from datetime import UTC, datetime
@@ -42,6 +43,14 @@ def _rotate_old_backups(prefix: str) -> int:
         old.unlink(missing_ok=True)
         removed += 1
     return removed
+
+
+def _normalize_pg_dump_url(url: str) -> str:
+    return (
+        url
+        .replace("postgresql+asyncpg://", "postgresql://", 1)
+        .replace("postgresql+psycopg://", "postgresql://", 1)
+    )
 
 
 async def create_backup() -> dict:
@@ -88,24 +97,35 @@ async def _backup_postgres(ts: str) -> dict:
 
     backup_name = f"postgres_{ts}.sql.gz"
     backup_path = BACKUP_DIR / backup_name
+    plain_dump_path = BACKUP_DIR / f"postgres_{ts}.sql"
 
-    # pg_dump piped through gzip
-    cmd = f'pg_dump "{url}" | gzip > "{backup_path}"'
+    # Normalize SQLAlchemy driver URL for pg_dump.
+    pg_dump_url = _normalize_pg_dump_url(url)
+    cmd = ["pg_dump", "--dbname", pg_dump_url, "--file", str(plain_dump_path)]
     try:
-        proc = await asyncio.create_subprocess_shell(
-            cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         _, stderr = await asyncio.wait_for(proc.communicate(), timeout=settings.BACKUP_TIMEOUT_SECONDS)
         if proc.returncode != 0:
             err_msg = (stderr or b"").decode()[:200]
             logger.error("pg_dump failed (rc=%d): %s", proc.returncode, err_msg)
+            plain_dump_path.unlink(missing_ok=True)
             backup_path.unlink(missing_ok=True)
             return {"ok": False, "error": "pg_dump failed"}
+        with plain_dump_path.open("rb") as src, gzip.open(backup_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        plain_dump_path.unlink(missing_ok=True)
     except TimeoutError:
         logger.error("pg_dump timed out after %ds", settings.BACKUP_TIMEOUT_SECONDS)
+        plain_dump_path.unlink(missing_ok=True)
         backup_path.unlink(missing_ok=True)
         return {"ok": False, "error": "pg_dump timed out"}
     except FileNotFoundError:
+        plain_dump_path.unlink(missing_ok=True)
+        backup_path.unlink(missing_ok=True)
         return {"ok": False, "error": "pg_dump not found on PATH"}
 
     size_mb = round(backup_path.stat().st_size / (1024 * 1024), 2) if backup_path.exists() else 0

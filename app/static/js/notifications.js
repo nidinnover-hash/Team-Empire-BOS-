@@ -84,25 +84,19 @@
 
   // SSE real-time badge updates
   function connectSSE() {
-    if (!window.PCAPI) return;
-    window.PCAPI.getApiToken().then(function (token) {
-      if (!token) return;
-      var es = new EventSource("/api/v1/notifications/stream?token=" + encodeURIComponent(token));
-      es.onmessage = function (event) {
-        try {
-          var d = JSON.parse(event.data);
-          badge.textContent = d.unread_count;
-          badge.classList.toggle("active", d.unread_count > 0);
-          setTitleBadge(d.unread_count);
-        } catch (e) { /* ignore */ }
-      };
-      es.onerror = function () {
-        es.close();
-        setTimeout(connectSSE, 30000);
-      };
-    }).catch(function () {
+    var es = new EventSource("/api/v1/notifications/stream");
+    es.onmessage = function (event) {
+      try {
+        var d = JSON.parse(event.data);
+        badge.textContent = d.unread_count;
+        badge.classList.toggle("active", d.unread_count > 0);
+        setTitleBadge(d.unread_count);
+      } catch (e) { /* ignore */ }
+    };
+    es.onerror = function () {
+      es.close();
       setTimeout(connectSSE, 30000);
-    });
+    };
   }
 
   // Initial load

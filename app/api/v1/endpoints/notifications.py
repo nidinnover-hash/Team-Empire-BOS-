@@ -5,11 +5,11 @@ import asyncio
 import json
 import logging
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_db
+from app.core.deps import get_current_api_user, get_current_web_user, get_db
 from app.core.rbac import require_roles
 from app.db.session import AsyncSessionLocal
 from app.schemas.notification import (
@@ -23,6 +23,30 @@ from app.services import notification as notification_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
+_ALLOWED_NOTIFICATION_ROLES = {"CEO", "ADMIN", "MANAGER", "EMPLOYEE"}
+
+
+def _ensure_notification_role(actor: dict) -> None:
+    role = str(actor.get("role", ""))
+    if role not in _ALLOWED_NOTIFICATION_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Role '{role}' does not have access",
+        )
+
+
+async def _get_notification_stream_actor(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    auth_header = (request.headers.get("Authorization") or "").strip()
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+        return await get_current_api_user(token=token, db=db)
+    session_token = request.cookies.get("pc_session")
+    if session_token:
+        return await get_current_web_user(session_token=session_token, db=db)
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not logged in")
 
 
 @router.get("", response_model=NotificationListRead)
@@ -76,13 +100,14 @@ async def mark_notifications_read(
 @router.get("/stream")
 async def notification_stream(
     request: Request,
-    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "EMPLOYEE")),
+    actor: dict = Depends(_get_notification_stream_actor),
 ) -> StreamingResponse:
     """SSE stream that pushes unread count every 5 seconds.
 
     Uses fresh DB sessions per poll to avoid holding a stale request-scoped
     session open for the lifetime of the SSE connection.
     """
+    _ensure_notification_role(actor)
     org_id = int(actor["org_id"])
     user_id = int(actor["id"])
 

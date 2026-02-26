@@ -29,6 +29,7 @@ from app.core.request_context import reset_current_request_id, set_current_reque
 from app.core.security import decode_access_token
 
 logger = logging.getLogger("request")
+_LUCIDE_CDN_SOURCE = "https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"
 _rate_limit_stats: dict[str, int] = {
     "allowed": 0,
     "blocked": 0,
@@ -95,7 +96,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-API-Contract-Version"] = API_CONTRACT_VERSION
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            f"script-src 'self' 'nonce-{nonce}' https://unpkg.com; "
+            f"script-src 'self' 'nonce-{nonce}' {_LUCIDE_CDN_SOURCE}; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data:; "
@@ -178,13 +179,21 @@ class RequestBodyLimitMiddleware(BaseHTTPMiddleware):
         max_bytes = settings.MAX_REQUEST_BODY_BYTES
         if max_bytes and request.method in ("POST", "PUT", "PATCH"):
             content_length = request.headers.get("content-length")
-            if content_length and int(content_length) > max_bytes:
-                return JSONResponse(
-                    status_code=413,
-                    content={
-                        "detail": f"Request body too large. Max {max_bytes // (1024 * 1024)} MB."
-                    },
-                )
+            if content_length:
+                try:
+                    content_length_value = int(content_length)
+                except ValueError:
+                    return JSONResponse(
+                        status_code=400,
+                        content={"detail": "Invalid Content-Length header."},
+                    )
+                if content_length_value > max_bytes:
+                    return JSONResponse(
+                        status_code=413,
+                        content={
+                            "detail": f"Request body too large. Max {max_bytes // (1024 * 1024)} MB."
+                        },
+                    )
         return cast(Response, await call_next(request))
 
 
