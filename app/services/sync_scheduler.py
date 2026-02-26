@@ -1143,6 +1143,27 @@ async def _check_token_health_job(db: AsyncSession, org_id: int) -> None:
         await db.commit()
 
 
+_last_backup_date: str | None = None
+
+
+async def _maybe_run_daily_backup() -> None:
+    """Run DB backup once per calendar day."""
+    global _last_backup_date
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    if _last_backup_date == today:
+        return
+    try:
+        from app.services.db_backup import create_backup
+        result = await create_backup()
+        if result.get("ok"):
+            _last_backup_date = today
+            logger.info("Daily backup completed: %s", result.get("file"))
+        else:
+            logger.warning("Daily backup failed: %s", result.get("error"))
+    except Exception as exc:
+        logger.warning("Daily backup error: %s", type(exc).__name__)
+
+
 async def _scheduler_loop(interval_minutes: int) -> None:
     """Runs forever; wakes up every interval_minutes and syncs all orgs."""
     from app.services.organization import list_organizations
@@ -1182,6 +1203,8 @@ async def _scheduler_loop(interval_minutes: int) -> None:
                     AttributeError,
                 ) as exc:
                     logger.warning("Sync failed for org=%d: %s", org.id, exc)
+            # Daily database backup (once per day)
+            await _maybe_run_daily_backup()
             logger.info("Scheduled sync complete (%d org(s))", len(orgs))
         except asyncio.CancelledError:
             raise

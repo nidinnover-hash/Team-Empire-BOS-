@@ -343,3 +343,41 @@ async def manager_sla(
 ) -> ManagerSLARead:
     data = await clone_control.manager_sla_snapshot(db, organization_id=int(actor["org_id"]))
     return ManagerSLARead(**data)  # type: ignore[arg-type]
+
+
+# ── Database backup ──────────────────────────────────────────────────────────
+
+
+@router.post("/backup")
+async def create_backup(
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Create a database backup (SQLite file copy or pg_dump)."""
+    from app.services.db_backup import create_backup as run_backup
+
+    return await run_backup()
+
+
+@router.get("/backup/list")
+async def list_backups(
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """List existing database backups."""
+    from app.services.db_backup import list_backups as get_backups
+
+    items = get_backups()
+    return {"count": len(items), "backups": items}
+
+
+# ── Cron dead-man switch ─────────────────────────────────────────────────────
+
+
+@router.get("/cron/health")
+async def cron_health(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> dict:
+    """Dead-man switch: detect silent or failing cron jobs."""
+    from app.services.cron_monitor import get_cron_health
+
+    return await get_cron_health(db, org_id=int(actor["org_id"]))
