@@ -234,6 +234,62 @@ async def test_rotate_no_refresh_token(client):
         await agen.aclose()
 
 
+async def test_rotate_oauth_success(client, monkeypatch):
+    """Successful OAuth token refresh updates integration config."""
+    from unittest.mock import MagicMock
+
+    session, agen = await _get_session()
+    try:
+        row = Integration(
+            organization_id=1,
+            type="gmail",
+            status="connected",
+            config_json={"access_token": "old_tok", "refresh_token": "rft_123"},
+        )
+        session.add(row)
+        await session.commit()
+
+        fake_refresh = MagicMock(return_value={
+            "access_token": "new_tok",
+            "expires_in": 3600,
+            "expires_at": "2026-02-27T00:00:00+00:00",
+        })
+        monkeypatch.setattr("app.tools.gmail.refresh_access_token", fake_refresh)
+
+        result = await rotate_oauth_token(session, 1, "gmail")
+        assert result["ok"] is True
+        assert result["type"] == "gmail"
+        assert "refreshed_at" in result
+        fake_refresh.assert_called_once_with("rft_123")
+    finally:
+        await agen.aclose()
+
+
+async def test_rotate_oauth_refresh_fails(client, monkeypatch):
+    """OAuth refresh that raises exception returns error gracefully."""
+    session, agen = await _get_session()
+    try:
+        row = Integration(
+            organization_id=1,
+            type="gmail",
+            status="connected",
+            config_json={"access_token": "old_tok", "refresh_token": "rft_bad"},
+        )
+        session.add(row)
+        await session.commit()
+
+        def _fail_refresh(rt):
+            raise RuntimeError("Google API error")
+
+        monkeypatch.setattr("app.tools.gmail.refresh_access_token", _fail_refresh)
+
+        result = await rotate_oauth_token(session, 1, "gmail")
+        assert result["ok"] is False
+        assert "failed" in result["error"].lower() or "rotation" in result["error"].lower()
+    finally:
+        await agen.aclose()
+
+
 # ── get_rotation_report ───────────────────────────────────────────────────────
 
 

@@ -8,6 +8,7 @@ Flow:
   4. get_team_plans()      → shows all plans for today
 """
 
+import copy
 from datetime import UTC, date, datetime
 from typing import Any, TypedDict, cast
 
@@ -272,7 +273,7 @@ async def mark_task_done(
     if not plan:
         return None
 
-    tasks = list(plan.tasks_json)
+    tasks = copy.deepcopy(plan.tasks_json)
     if task_index < 0 or task_index >= len(tasks):
         return None
 
