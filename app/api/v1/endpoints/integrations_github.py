@@ -64,7 +64,7 @@ async def github_connect(
         )
         raise HTTPException(
             status_code=400,
-            detail=f"GitHub connection failed.{status_hint} ({type(exc).__name__}). Check your token and scopes.",
+            detail=f"GitHub connection failed.{status_hint} Check your token and scopes.",
         ) from exc
 
     await record_action(

@@ -217,8 +217,13 @@ async def update_team_member(
     member = await get_team_member(db, member_id, organization_id)
     if not member:
         return None
+    _ALLOWED_FIELDS = {
+        "role_title", "team", "reports_to_id", "skills",
+        "ai_level", "current_project", "notes", "is_active",
+    }
     for field, val in data.model_dump(exclude_unset=True).items():
-        setattr(member, field, val)
+        if field in _ALLOWED_FIELDS:
+            setattr(member, field, val)
     await db.commit()
     await db.refresh(member)
     return member

@@ -125,9 +125,10 @@ _INJECTION_RE = re.compile(
 _recent_calls: deque[dict] = deque(maxlen=200)
 
 # ── AI key cache (populated from integration table, checked before env vars) ──
-# Maps provider name ("openai", "anthropic", "groq", "gemini") to API key string.
+# Maps (provider, org_id) to API key string. Scoped per organization to prevent
+# cross-tenant key leakage in multi-org deployments.
 # Updated when an AI provider connect endpoint is called. Checked first by _get_key().
-_ai_key_cache: dict[str, str] = {}
+_ai_key_cache: dict[tuple[str, int], str] = {}
 
 _AI_PROVIDER_TO_INTEGRATION_TYPE = {
     "openai": "ai_openai",
@@ -137,14 +138,14 @@ _AI_PROVIDER_TO_INTEGRATION_TYPE = {
 }
 
 
-def set_ai_key_cache(provider: str, api_key: str) -> None:
+def set_ai_key_cache(provider: str, api_key: str, org_id: int = 1) -> None:
     """Update the in-memory AI key cache (called from connect endpoint)."""
-    _ai_key_cache[provider] = api_key
+    _ai_key_cache[(provider, org_id)] = api_key
 
 
-def clear_ai_key_cache(provider: str) -> None:
+def clear_ai_key_cache(provider: str, org_id: int = 1) -> None:
     """Remove a provider from the in-memory AI key cache."""
-    _ai_key_cache.pop(provider, None)
+    _ai_key_cache.pop((provider, org_id), None)
 
 
 async def load_ai_keys_from_db() -> None:
@@ -173,7 +174,7 @@ async def load_ai_keys_from_db() -> None:
                     # Reverse lookup: integration type -> provider name
                     for prov, itype in _AI_PROVIDER_TO_INTEGRATION_TYPE.items():
                         if itype == row.type:
-                            _ai_key_cache[prov] = key
+                            _ai_key_cache[(prov, row.organization_id)] = key
                             break
     except Exception as exc:
         logger.warning("Failed to load AI keys from DB: %s", type(exc).__name__)
@@ -349,8 +350,9 @@ async def call_ai(
     effective_request_id = request_id or get_current_request_id()
 
     # Try primary provider
+    effective_org_id = organization_id or 1
     t0 = time.monotonic()
-    result, is_transient = await _call_provider(chosen, full_system, user_message, max_tokens, conversation_history)
+    result, is_transient = await _call_provider(chosen, full_system, user_message, max_tokens, conversation_history, org_id=effective_org_id)
     latency = int((time.monotonic() - t0) * 1000)
 
     if not result.startswith("Error:"):
@@ -371,7 +373,7 @@ async def call_ai(
                 continue
             logger.info("Primary '%s' failed transiently, trying fallback '%s'", chosen, fallback)
             t1 = time.monotonic()
-            fb_result, _ = await _call_provider(fallback, full_system, user_message, max_tokens, conversation_history)
+            fb_result, _ = await _call_provider(fallback, full_system, user_message, max_tokens, conversation_history, org_id=effective_org_id)
             fb_latency = int((time.monotonic() - t1) * 1000)
             if not fb_result.startswith("Error:"):
                 await _log_ai_call(
@@ -404,9 +406,9 @@ def _get_model(provider: str) -> str:
     return "unknown"
 
 
-def _get_key(provider: str) -> str | None:
+def _get_key(provider: str, org_id: int = 1) -> str | None:
     # Check in-memory cache first (dashboard-saved keys override env vars)
-    cached = _ai_key_cache.get(provider)
+    cached = _ai_key_cache.get((provider, org_id))
     if cached and cached not in PLACEHOLDER_AI_KEYS:
         return cached
     if provider == "openai":
@@ -426,18 +428,19 @@ async def _call_provider(
     user_message: str,
     max_tokens: int,
     conversation_history: list[dict] | None = None,
+    org_id: int = 1,
 ) -> tuple[str, bool]:
     """Call a specific provider with one retry for transient errors."""
     import asyncio as _aio
 
     async def _single_call() -> tuple[str, bool]:
         if provider == "anthropic":
-            return await _call_anthropic(system_prompt, user_message, max_tokens, conversation_history)
+            return await _call_anthropic(system_prompt, user_message, max_tokens, conversation_history, org_id=org_id)
         if provider == "groq":
-            return await _call_groq(system_prompt, user_message, max_tokens, conversation_history)
+            return await _call_groq(system_prompt, user_message, max_tokens, conversation_history, org_id=org_id)
         if provider == "gemini":
-            return await _call_gemini(system_prompt, user_message, max_tokens, conversation_history)
-        return await _call_openai(system_prompt, user_message, max_tokens, conversation_history)
+            return await _call_gemini(system_prompt, user_message, max_tokens, conversation_history, org_id=org_id)
+        return await _call_openai(system_prompt, user_message, max_tokens, conversation_history, org_id=org_id)
 
     result, is_transient = await _single_call()
     if not result.startswith("Error:") or not is_transient:
@@ -453,8 +456,9 @@ async def _call_openai(
     user_message: str,
     max_tokens: int,
     conversation_history: list[dict] | None = None,
+    org_id: int = 1,
 ) -> tuple[str, bool]:
-    key = settings.OPENAI_API_KEY
+    key = _get_key("openai", org_id)
     if not _key_ok(key):
         return "Error: OpenAI not configured. Add OPENAI_API_KEY to your .env file.", False
     try:
@@ -485,8 +489,9 @@ async def _call_anthropic(
     user_message: str,
     max_tokens: int,
     conversation_history: list[dict] | None = None,
+    org_id: int = 1,
 ) -> tuple[str, bool]:
-    key = settings.ANTHROPIC_API_KEY
+    key = _get_key("anthropic", org_id)
     if not _key_ok(key):
         return "Error: Anthropic not configured. Add ANTHROPIC_API_KEY to your .env file.", False
     try:
@@ -517,8 +522,9 @@ async def _call_groq(
     user_message: str,
     max_tokens: int,
     conversation_history: list[dict] | None = None,
+    org_id: int = 1,
 ) -> tuple[str, bool]:
-    key = settings.GROQ_API_KEY
+    key = _get_key("groq", org_id)
     if not _key_ok(key):
         return "Error: Groq not configured. Add GROQ_API_KEY to your .env (free at console.groq.com).", False
     try:
@@ -585,8 +591,9 @@ async def _call_gemini(
     user_message: str,
     max_tokens: int,
     conversation_history: list[dict] | None = None,
+    org_id: int = 1,
 ) -> tuple[str, bool]:
-    key = settings.GEMINI_API_KEY
+    key = _get_key("gemini", org_id)
     if not _key_ok(key):
         return "Error: Gemini not configured. Add GEMINI_API_KEY to your .env file (free at aistudio.google.com).", False
     try:

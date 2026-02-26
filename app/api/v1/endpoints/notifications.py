@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
@@ -18,6 +19,8 @@ from app.schemas.notification import (
     NotificationRead,
 )
 from app.services import notification as notification_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
@@ -92,6 +95,7 @@ async def notification_stream(
                 async with AsyncSessionLocal() as db:
                     count = await notification_service.get_unread_count(db, org_id, user_id)
             except Exception:
+                logger.debug("SSE unread-count probe failed, keeping last value")
                 count = last_count  # keep last known value on transient DB errors
             if count != last_count:
                 data = json.dumps({"unread_count": count})

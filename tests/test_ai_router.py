@@ -9,7 +9,7 @@ from app.services import ai_router
 # ── Provider selection ────────────────────────────────────────────────────────
 
 async def test_call_ai_returns_string(monkeypatch):
-    async def _fake_call(provider, system, user, max_tokens, history):
+    async def _fake_call(provider, system, user, max_tokens, history, org_id=1):
         return "AI response", False
 
     monkeypatch.setattr(ai_router, "_call_provider", _fake_call)
@@ -32,7 +32,7 @@ async def test_call_ai_no_providers_returns_error(monkeypatch):
 async def test_call_ai_falls_back_on_transient_error(monkeypatch):
     calls = []
 
-    async def _fake_call(provider, system, user, max_tokens, history):
+    async def _fake_call(provider, system, user, max_tokens, history, org_id=1):
         calls.append(provider)
         if provider == "groq":
             return "Error: Groq timed out.", True  # transient
@@ -50,7 +50,7 @@ async def test_call_ai_falls_back_on_transient_error(monkeypatch):
 async def test_call_ai_no_fallback_on_auth_error(monkeypatch):
     calls = []
 
-    async def _fake_call(provider, system, user, max_tokens, history):
+    async def _fake_call(provider, system, user, max_tokens, history, org_id=1):
         calls.append(provider)
         return "Error: auth", False  # is_transient=False
 
@@ -67,7 +67,7 @@ async def test_call_ai_no_fallback_on_auth_error(monkeypatch):
 async def test_memory_context_injection_patterns_are_escaped(monkeypatch):
     captured = {}
 
-    async def _fake_call(provider, system, user, max_tokens, history):
+    async def _fake_call(provider, system, user, max_tokens, history, org_id=1):
         captured["system"] = system
         return "ok", False
 
@@ -91,7 +91,7 @@ async def test_memory_context_injection_patterns_are_escaped(monkeypatch):
 async def test_memory_context_end_memory_tag_escaped(monkeypatch):
     captured = {}
 
-    async def _fake_call(provider, system, user, max_tokens, history):
+    async def _fake_call(provider, system, user, max_tokens, history, org_id=1):
         captured["system"] = system
         return "ok", False
 
@@ -112,7 +112,7 @@ async def test_memory_context_end_memory_tag_escaped(monkeypatch):
 async def test_memory_context_truncated_at_4000_chars(monkeypatch):
     captured = {}
 
-    async def _fake_call(provider, system, user, max_tokens, history):
+    async def _fake_call(provider, system, user, max_tokens, history, org_id=1):
         captured["system"] = system
         return "ok", False
 
@@ -131,7 +131,7 @@ async def test_memory_context_truncated_at_4000_chars(monkeypatch):
 async def test_no_memory_context_skips_injection(monkeypatch):
     captured = {}
 
-    async def _fake_call(provider, system, user, max_tokens, history):
+    async def _fake_call(provider, system, user, max_tokens, history, org_id=1):
         captured["system"] = system
         return "ok", False
 
@@ -144,7 +144,7 @@ async def test_no_memory_context_skips_injection(monkeypatch):
 
 
 async def test_call_ai_logs_org_and_request_correlation(monkeypatch):
-    async def _fake_call(provider, system, user, max_tokens, history):
+    async def _fake_call(provider, system, user, max_tokens, history, org_id=1):
         return "ok", False
 
     monkeypatch.setattr(ai_router, "_call_provider", _fake_call)
@@ -167,7 +167,7 @@ async def test_call_ai_logs_org_and_request_correlation(monkeypatch):
 # ── Gemini provider ─────────────────────────────────────────────────────────
 
 async def test_call_ai_uses_gemini(monkeypatch):
-    async def _fake_call(provider, system, user, max_tokens, history):
+    async def _fake_call(provider, system, user, max_tokens, history, org_id=1):
         assert provider == "gemini"
         return "Gemini response", False
 
@@ -183,7 +183,7 @@ async def test_call_ai_uses_gemini(monkeypatch):
 async def test_call_ai_falls_back_to_gemini(monkeypatch):
     calls = []
 
-    async def _fake_call(provider, system, user, max_tokens, history):
+    async def _fake_call(provider, system, user, max_tokens, history, org_id=1):
         calls.append(provider)
         if provider == "openai":
             return "Error: OpenAI quota exceeded.", True

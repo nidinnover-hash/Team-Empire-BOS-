@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles
+from app.logs.audit import record_action
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectStatusUpdate
 from app.services import project as project_service
 
@@ -16,7 +17,17 @@ async def create_project(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> ProjectRead:
     """Create a project — business or personal."""
-    return await project_service.create_project(db, data, organization_id=actor["org_id"])
+    project = await project_service.create_project(db, data, organization_id=actor["org_id"])
+    await record_action(
+        db,
+        event_type="project_created",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="project",
+        entity_id=project.id,
+        payload_json={"title": data.title},
+    )
+    return project
 
 
 @router.get("", response_model=list[ProjectRead])

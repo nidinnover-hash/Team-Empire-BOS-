@@ -53,7 +53,7 @@ async def slack_connect(
         )
         raise HTTPException(
             status_code=400,
-            detail=f"Slack connection failed ({type(exc).__name__}). Check your bot token and scopes.",
+            detail="Slack connection failed. Check your bot token and scopes.",
         ) from exc
 
     await record_action(
@@ -160,7 +160,7 @@ async def slack_send(
         )
         raise HTTPException(
             status_code=400,
-            detail=f"Slack send failed ({type(exc).__name__}).",
+            detail="Slack send failed. Check connection and try again.",
         ) from exc
 
     await record_action(

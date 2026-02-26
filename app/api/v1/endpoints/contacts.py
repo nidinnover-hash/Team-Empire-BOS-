@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles
+from app.logs.audit import record_action
 from app.schemas.contact import ContactCreate, ContactRead
 from app.services import contact as contact_service
 
@@ -16,7 +17,17 @@ async def create_contact(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> ContactRead:
     """Add a person to your network."""
-    return await contact_service.create_contact(db, data, organization_id=actor["org_id"])
+    contact = await contact_service.create_contact(db, data, organization_id=actor["org_id"])
+    await record_action(
+        db,
+        event_type="contact_created",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="contact",
+        entity_id=contact.id,
+        payload_json={"name": data.name},
+    )
+    return contact
 
 
 @router.get("", response_model=list[ContactRead])

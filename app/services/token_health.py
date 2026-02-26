@@ -156,7 +156,7 @@ async def rotate_oauth_token(
 
     except Exception as exc:
         logger.warning("Token rotation failed for %s: %s", integration_type, type(exc).__name__)
-        return {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:200]}"}
+        return {"ok": False, "error": "Token rotation failed. Check integration configuration."}
 
 
 async def get_rotation_report(

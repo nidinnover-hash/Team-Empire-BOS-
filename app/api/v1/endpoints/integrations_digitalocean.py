@@ -41,7 +41,7 @@ async def digitalocean_connect(
         )
         raise HTTPException(
             status_code=400,
-            detail=f"DigitalOcean connection failed ({type(exc).__name__}). Check your API token.",
+            detail="DigitalOcean connection failed. Check your API token.",
         ) from exc
     status = await do_service.get_digitalocean_status(db, org_id=int(actor["org_id"]))
     await record_action(

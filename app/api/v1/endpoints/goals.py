@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles
+from app.logs.audit import record_action
 from app.schemas.goal import GoalCreate, GoalProgressUpdate, GoalRead, GoalStatusUpdate
 from app.services import goal as goal_service
 
@@ -16,7 +17,17 @@ async def create_goal(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> GoalRead:
     """Create a long-term goal with a target date."""
-    return await goal_service.create_goal(db, data, organization_id=actor["org_id"])
+    goal = await goal_service.create_goal(db, data, organization_id=actor["org_id"])
+    await record_action(
+        db,
+        event_type="goal_created",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="goal",
+        entity_id=goal.id,
+        payload_json={"title": data.title},
+    )
+    return goal
 
 
 @router.get("", response_model=list[GoalRead])

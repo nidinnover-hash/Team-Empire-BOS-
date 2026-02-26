@@ -37,13 +37,21 @@ from app.services import (
 router = APIRouter(prefix="/export", tags=["export"])
 
 
+_EXPORT_EXCLUDE = {
+    "password_hash", "hashed_password", "config_json", "access_token",
+    "refresh_token", "token", "secret", "api_key", "encrypted_config",
+}
+
+
 def _serialize(obj: object) -> dict:
-    """Convert a SQLAlchemy model to a JSON-safe dict."""
+    """Convert a SQLAlchemy model to a JSON-safe dict, excluding sensitive columns."""
     d: dict[str, Any] = {}
     table = getattr(obj, "__table__", None)
     if table is None:
         return d
     for col in table.columns:
+        if col.name in _EXPORT_EXCLUDE:
+            continue
         val = getattr(obj, col.name, None)
         if isinstance(val, datetime):
             val = val.isoformat()

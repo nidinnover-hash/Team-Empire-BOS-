@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +13,8 @@ from app.schemas.integration import (
     PerplexityStatusRead,
 )
 from app.services import perplexity_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Integrations"])
 
@@ -26,7 +30,8 @@ async def perplexity_connect(
             db, org_id=int(actor["org_id"]), api_key=data.api_key,
         )
     except (RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
-        raise HTTPException(status_code=400, detail=f"Perplexity connection failed: {type(exc).__name__}") from exc
+        logger.warning("request failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Connection failed. Check credentials and try again.") from exc
     await record_action(
         db, event_type="integration_connected", actor_user_id=actor["id"],
         organization_id=actor["org_id"], entity_type="integration",
@@ -55,5 +60,6 @@ async def perplexity_search(
             db, org_id=int(actor["org_id"]), query=data.query, max_tokens=data.max_tokens,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("request failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Connection failed. Check credentials and try again.") from exc
     return PerplexitySearchResult(content=result["content"], citations=result["citations"])

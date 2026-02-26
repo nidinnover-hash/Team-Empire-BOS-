@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +12,8 @@ from app.schemas.integration import (
     CalendlySyncResult,
 )
 from app.services import calendly_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Integrations"])
 
@@ -25,7 +29,8 @@ async def calendly_connect(
             db, org_id=int(actor["org_id"]), api_token=data.api_token,
         )
     except (RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
-        raise HTTPException(status_code=400, detail=f"Calendly connection failed: {type(exc).__name__}") from exc
+        logger.warning("request failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Connection failed. Check credentials and try again.") from exc
     await record_action(
         db, event_type="integration_connected", actor_user_id=actor["id"],
         organization_id=actor["org_id"], entity_type="integration",
@@ -51,7 +56,8 @@ async def calendly_sync(
     try:
         result = await calendly_service.sync_events(db, org_id=int(actor["org_id"]))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("request failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Connection failed. Check credentials and try again.") from exc
     await record_action(
         db, event_type="calendly_synced", actor_user_id=actor["id"],
         organization_id=actor["org_id"], entity_type="integration",

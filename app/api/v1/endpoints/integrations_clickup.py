@@ -51,7 +51,7 @@ async def clickup_connect(
         )
         raise HTTPException(
             status_code=400,
-            detail=f"ClickUp connection failed ({type(exc).__name__}). Check your API token.",
+            detail="ClickUp connection failed. Check your API token.",
         ) from exc
 
     await record_action(

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +13,8 @@ from app.schemas.integration import (
     ElevenLabsTTSResult,
 )
 from app.services import elevenlabs_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Integrations"])
 
@@ -26,7 +30,8 @@ async def elevenlabs_connect(
             db, org_id=int(actor["org_id"]), api_key=data.api_key,
         )
     except (RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
-        raise HTTPException(status_code=400, detail=f"ElevenLabs connection failed: {type(exc).__name__}") from exc
+        logger.warning("request failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Connection failed. Check credentials and try again.") from exc
     await record_action(
         db, event_type="integration_connected", actor_user_id=actor["id"],
         organization_id=actor["org_id"], entity_type="integration",
@@ -55,7 +60,8 @@ async def elevenlabs_tts(
             db, org_id=int(actor["org_id"]), text=data.text, voice_id=data.voice_id,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("request failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Connection failed. Check credentials and try again.") from exc
     await record_action(
         db, event_type="elevenlabs_tts", actor_user_id=actor["id"],
         organization_id=actor["org_id"], entity_type="integration",

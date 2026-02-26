@@ -379,7 +379,7 @@ async def list_events_ops(
 async def daily_run_ops(
     draft_email_limit: int = Query(5, ge=0, le=20),
     team: str | None = Query(None, max_length=100),
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=128),
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> dict:

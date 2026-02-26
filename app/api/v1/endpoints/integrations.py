@@ -443,6 +443,7 @@ async def ai_provider_status(
     """
     from app.services.ai_router import _get_key, _key_ok
 
+    org_id = int(_actor["org_id"])
     active = settings.DEFAULT_AI_PROVIDER
     email = settings.EMAIL_AI_PROVIDER or active
     providers = [
@@ -454,7 +455,7 @@ async def ai_provider_status(
     return [
         AIProviderStatus(
             provider=name,
-            configured=_key_ok(_get_key(name)),
+            configured=_key_ok(_get_key(name, org_id=org_id)),
             active=(active == name),
             email_active=(email == name),
             model=model,
@@ -485,20 +486,21 @@ async def ai_provider_connect(
     from app.services.ai_router import call_ai, set_ai_key_cache
 
     # Temporarily cache the key so call_ai can use it for the test
-    set_ai_key_cache(provider, data.api_key)
+    org_id = int(actor["org_id"])
+    set_ai_key_cache(provider, data.api_key, org_id=org_id)
 
     response = await call_ai(
         system_prompt="You are a connection test. Respond with exactly: 'Connected.'",
         user_message="ping",
         provider=provider,
         max_tokens=20,
-        organization_id=actor["org_id"],
+        organization_id=org_id,
     )
 
     if response.startswith("Error:"):
         # Rollback cache on failure
         from app.services.ai_router import clear_ai_key_cache
-        clear_ai_key_cache(provider)
+        clear_ai_key_cache(provider, org_id=org_id)
         await record_action(
             db,
             event_type="ai_provider_connect_failed",
@@ -543,7 +545,7 @@ async def ai_provider_disconnect(
     """Clear a cached AI provider key and disconnect the integration record."""
     from app.services.ai_router import clear_ai_key_cache
 
-    clear_ai_key_cache(provider)
+    clear_ai_key_cache(provider, org_id=int(actor["org_id"]))
 
     integration_type = _AI_CONNECT_TYPE_MAP[provider]
     existing = await integration_service.get_integration_by_type(
@@ -589,7 +591,8 @@ async def test_ai_provider(
             message="Unsupported provider. Use one of: openai, claude, anthropic, groq, gemini.",
         )
 
-    if not _key_ok(_get_key(chosen)):
+    org_id = int(actor["org_id"])
+    if not _key_ok(_get_key(chosen, org_id=org_id)):
         return AITestResult(
             provider=chosen,
             status="not_configured",

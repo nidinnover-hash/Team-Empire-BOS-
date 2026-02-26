@@ -108,7 +108,7 @@ async def test_ai_connect_clears_cache_on_failure(client, monkeypatch):
     monkeypatch.setattr(ai_router, "call_ai", _fake_call_ai)
 
     # Pre-seed cache
-    ai_router.set_ai_key_cache("openai", "bad-key")
+    ai_router.set_ai_key_cache("openai", "bad-key", org_id=1)
 
     resp = await client.post(
         "/api/v1/integrations/ai/openai/connect",
@@ -117,7 +117,7 @@ async def test_ai_connect_clears_cache_on_failure(client, monkeypatch):
     )
     assert resp.status_code == 400
     # Cache should be cleared after failure
-    assert ai_router._ai_key_cache.get("openai") is None
+    assert ai_router._ai_key_cache.get(("openai", 1)) is None
 
 
 # ── Invalid provider ──────────────────────────────────────────────────────────
@@ -169,27 +169,27 @@ async def test_ai_connect_key_too_short_returns_422(client):
 
 
 async def test_set_and_clear_ai_key_cache():
-    ai_router.set_ai_key_cache("test_provider", "test_key")
-    assert ai_router._ai_key_cache["test_provider"] == "test_key"
+    ai_router.set_ai_key_cache("test_provider", "test_key", org_id=1)
+    assert ai_router._ai_key_cache[("test_provider", 1)] == "test_key"
 
-    ai_router.clear_ai_key_cache("test_provider")
-    assert "test_provider" not in ai_router._ai_key_cache
+    ai_router.clear_ai_key_cache("test_provider", org_id=1)
+    assert ("test_provider", 1) not in ai_router._ai_key_cache
 
 
 async def test_get_key_checks_cache_first(monkeypatch):
     monkeypatch.setattr(ai_router.settings, "OPENAI_API_KEY", "env-key")
-    ai_router.set_ai_key_cache("openai", "cached-key")
+    ai_router.set_ai_key_cache("openai", "cached-key", org_id=1)
     try:
-        key = ai_router._get_key("openai")
+        key = ai_router._get_key("openai", org_id=1)
         assert key == "cached-key"
     finally:
-        ai_router.clear_ai_key_cache("openai")
+        ai_router.clear_ai_key_cache("openai", org_id=1)
 
 
 async def test_get_key_falls_back_to_env(monkeypatch):
     monkeypatch.setattr(ai_router.settings, "OPENAI_API_KEY", "env-key")
-    ai_router.clear_ai_key_cache("openai")
-    key = ai_router._get_key("openai")
+    ai_router.clear_ai_key_cache("openai", org_id=1)
+    key = ai_router._get_key("openai", org_id=1)
     assert key == "env-key"
 
 
@@ -198,7 +198,7 @@ async def test_get_key_falls_back_to_env(monkeypatch):
 
 async def test_ai_status_shows_cached_key_as_configured(client, monkeypatch):
     monkeypatch.setattr(ai_router.settings, "OPENAI_API_KEY", None)
-    ai_router.set_ai_key_cache("openai", "cached-real-key")
+    ai_router.set_ai_key_cache("openai", "cached-real-key", org_id=1)
     try:
         resp = await client.get(
             "/api/v1/integrations/ai/status",
@@ -208,7 +208,7 @@ async def test_ai_status_shows_cached_key_as_configured(client, monkeypatch):
         providers = {p["provider"]: p for p in resp.json()}
         assert providers["openai"]["configured"] is True
     finally:
-        ai_router.clear_ai_key_cache("openai")
+        ai_router.clear_ai_key_cache("openai", org_id=1)
 
 
 # ── /ai/test uses unified key resolution ─────────────────────────────────────
@@ -216,7 +216,7 @@ async def test_ai_status_shows_cached_key_as_configured(client, monkeypatch):
 
 async def test_ai_test_not_configured_message_includes_connect_hint(client, monkeypatch):
     monkeypatch.setattr(ai_router.settings, "OPENAI_API_KEY", None)
-    ai_router.clear_ai_key_cache("openai")
+    ai_router.clear_ai_key_cache("openai", org_id=1)
 
     resp = await client.post(
         "/api/v1/integrations/ai/test?provider=openai",

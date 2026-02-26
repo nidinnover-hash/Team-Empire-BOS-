@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +34,8 @@ from app.schemas.data_collection import (
 )
 from app.services import data_collection as data_collection_service
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/data", tags=["Data Collection"])
 
 
@@ -49,6 +53,7 @@ async def collect_data(
             data=data,
         )
     except ValueError as exc:
+        logger.warning("request failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     await record_action(
@@ -81,6 +86,7 @@ async def train_clone_pro(
             data=data,
         )
     except ValueError as exc:
+        logger.warning("request failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     await record_action(
@@ -114,6 +120,7 @@ async def meeting_coach(
             data=data,
         )
     except ValueError as exc:
+        logger.warning("request failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     await record_action(
@@ -146,6 +153,7 @@ async def mobile_capture_analyze(
             data=data,
         )
     except ValueError as exc:
+        logger.warning("request failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     await record_action(
@@ -193,6 +201,7 @@ async def mobile_capture_upload_analyze(
     try:
         extracted_text, ocr_engine = data_collection_service.extract_text_from_image_bytes(file_bytes)
     except ValueError as exc:
+        logger.warning("request failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail="Failed to extract text from image") from exc
@@ -212,6 +221,7 @@ async def mobile_capture_upload_analyze(
             ),
         )
     except ValueError as exc:
+        logger.warning("request failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     await record_action(
@@ -257,6 +267,7 @@ async def photo_character_upload_analyze(
     try:
         extracted_text, ocr_engine = data_collection_service.extract_text_from_image_bytes(file_bytes)
     except ValueError as exc:
+        logger.warning("request failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail="Failed to extract text from image") from exc
@@ -270,6 +281,7 @@ async def photo_character_upload_analyze(
             filename=file.filename or "unknown",
         )
     except ValueError as exc:
+        logger.warning("request failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     await record_action(
@@ -328,6 +340,7 @@ async def train_threats(
             data=data,
         )
     except ValueError as exc:
+        logger.warning("request failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     await record_action(

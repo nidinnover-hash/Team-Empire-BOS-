@@ -85,9 +85,11 @@ async def update_employee(
     if emp is None:
         return None
 
+    _ALLOWED_FIELDS = {"name", "role", "email", "github_username", "clickup_user_id", "is_active"}
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
-        setattr(emp, field, value)
+        if field in _ALLOWED_FIELDS:
+            setattr(emp, field, value)
     emp.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(emp)

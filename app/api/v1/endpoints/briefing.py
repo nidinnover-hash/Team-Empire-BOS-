@@ -1,7 +1,7 @@
 from datetime import date
-from typing import cast
+from typing import Literal, cast
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
@@ -112,7 +112,7 @@ async def draft_plans(
 @router.get("/plans", response_model=list[TeamPlanRead])
 async def list_plans(
     plan_date: date | None = None,
-    status: str | None = None,
+    status: Literal["draft", "approved", "sent"] | None = Query(None),
     db: AsyncSession = Depends(get_db),
     _user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> list[TeamPlanRead]:
