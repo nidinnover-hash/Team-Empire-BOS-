@@ -387,6 +387,29 @@ def record_login_failure(ip: str) -> None:
         _login_failures[ip].append(now)
 
 
+def check_per_route_rate_limit(ip: str, route_key: str, max_requests: int, window_seconds: int) -> bool:
+    """
+    Enforce a tighter per-route rate limit independent of the global middleware.
+    Returns True if the request is allowed, False if the limit is exceeded.
+    Uses a separate in-memory bucket keyed by (route_key, ip).
+    """
+    if _rate_backend() == "redis":
+        redis_key = f"{(settings.RATE_LIMIT_REDIS_PREFIX or 'pc:ratelimit').strip()}:{route_key}:{ip}"
+        count = _mark_and_count_redis(redis_key, window_seconds, add_event=True)
+        if count is not None:
+            return count <= max_requests
+    now = time.monotonic()
+    bucket_key = f"{route_key}:{ip}"
+    with _login_lock:
+        bucket = _rate_buckets[bucket_key]
+        while bucket and now - bucket[0] > window_seconds:
+            bucket.popleft()
+        if len(bucket) >= max_requests:
+            return False
+        bucket.append(now)
+    return True
+
+
 def clear_login_failures(ip: str) -> None:
     """Clear failed-login history for this IP after successful authentication."""
     if _rate_backend() == "redis":

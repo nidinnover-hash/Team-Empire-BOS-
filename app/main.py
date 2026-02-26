@@ -111,6 +111,12 @@ if settings.TOKEN_ENCRYPTION_KEY and settings.TOKEN_ENCRYPTION_KEY == settings.S
         "TOKEN_ENCRYPTION_KEY must differ from SECRET_KEY for proper key separation. "
         'Generate a new one: python -c "import secrets; print(secrets.token_hex(32))"'
     )
+if not settings.OAUTH_STATE_KEY:
+    raise RuntimeError(
+        "OAUTH_STATE_KEY must be set in .env for secure OAuth state signing. "
+        "Using SECRET_KEY as fallback couples JWT and OAuth signing keys. "
+        'Generate one: python -c "import secrets; print(secrets.token_hex(32))"'
+    )
 if settings.ENFORCE_STARTUP_VALIDATION or not settings.DEBUG:
     startup_issues = validate_startup_settings(settings)
     if startup_issues:
@@ -146,6 +152,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         async with AsyncSession(engine) as db:
             org = await organization_service.ensure_default_organization(db)
             await user_service.ensure_default_user(db, organization_id=org.id)
+
+    # Warn if session cookies are not secure (acceptable in dev, dangerous in prod)
+    if not settings.COOKIE_SECURE and not settings.DEBUG:
+        logger.warning(
+            "COOKIE_SECURE=false in non-debug mode. Session cookies will be sent over HTTP. "
+            "Set COOKIE_SECURE=true when running behind HTTPS."
+        )
+
+    # Warn if MFA is required by config but not yet enforced in code
+    if settings.ACCOUNT_MFA_REQUIRED:
+        logger.warning(
+            "ACCOUNT_MFA_REQUIRED=true but TOTP enforcement is not implemented. "
+            "Users can log in without MFA. Set ACCOUNT_MFA_REQUIRED=false or implement TOTP."
+        )
+
+    # Optional OpenTelemetry tracing (no-op when OTEL_EXPORTER_OTLP_ENDPOINT is unset)
+    from app.core.telemetry import setup as setup_telemetry
+    setup_telemetry(app=app)
 
     # Load dashboard-saved AI provider keys into in-memory cache
     from app.services.ai_router import load_ai_keys_from_db
@@ -266,11 +290,12 @@ async def login(
     request: Request,
     username: str = Form(..., min_length=3, max_length=254),
     password: str = Form(..., min_length=8, max_length=128),
+    totp_code: str | None = Form(None, min_length=6, max_length=6),
     db: AsyncSession = Depends(get_db),
 ):
     enforce_password_login_policy()
     client_ip = get_client_ip(request)
-    user = await authenticate_user(db, username, password, client_ip, "/token")
+    user = await authenticate_user(db, username, password, client_ip, "/token", totp_code=totp_code)
     return {"access_token": create_jwt(user), "token_type": "bearer"}
 
 

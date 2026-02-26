@@ -21,6 +21,7 @@ from app.api.v1.endpoints import (
     intelligence,
     layers,
     memory,
+    mfa,
     notes,
     notifications,
     observability,
@@ -65,3 +66,4 @@ api_router.include_router(search.router)
 api_router.include_router(github.router)
 api_router.include_router(social.router)
 api_router.include_router(notifications.router)
+api_router.include_router(mfa.router)

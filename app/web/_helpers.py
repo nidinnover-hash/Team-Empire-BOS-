@@ -40,12 +40,22 @@ def enforce_password_login_policy() -> None:
 
 
 async def authenticate_user(
-    db: AsyncSession, username: str, password: str, client_ip: str, endpoint: str,
+    db: AsyncSession,
+    username: str,
+    password: str,
+    client_ip: str,
+    endpoint: str,
+    totp_code: str | None = None,
 ):
     """Shared authentication logic for /token and /web/login.
 
     Runs PBKDF2 in a thread to avoid blocking the event loop.
     Returns the User ORM object on success, raises HTTPException on failure.
+
+    If the user has MFA enabled:
+      - totp_code=None  → raises 401 with X-MFA-Required: true header
+      - totp_code wrong → raises 401
+      - totp_code valid → proceeds normally
     """
     from app.logs.audit import record_action
 
@@ -92,7 +102,34 @@ async def authenticate_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username/password",
         )
+
     assert user is not None
+
+    # MFA check: if user has TOTP enabled, require a valid code
+    if getattr(user, "mfa_enabled", False):
+        if not totp_code:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="MFA code required",
+                headers={"X-MFA-Required": "true"},
+            )
+        from app.services.mfa import verify_code as verify_totp
+        if not verify_totp(user.totp_secret or "", totp_code):
+            record_login_failure(client_ip)
+            await record_action(
+                db,
+                event_type="login_failed_mfa",
+                actor_user_id=user.id,
+                organization_id=user.organization_id,
+                entity_type="user",
+                entity_id=user.id,
+                payload_json={"ip": client_ip, "endpoint": endpoint},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid MFA code",
+            )
+
     clear_login_failures(client_ip)
     await record_action(
         db,
@@ -101,7 +138,7 @@ async def authenticate_user(
         organization_id=user.organization_id,
         entity_type="user",
         entity_id=user.id,
-        payload_json={"ip": client_ip, "endpoint": endpoint},
+        payload_json={"ip": client_ip, "endpoint": endpoint, "mfa": getattr(user, "mfa_enabled", False)},
     )
     return user
 

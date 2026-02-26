@@ -294,6 +294,18 @@ def _configured_providers() -> list[str]:
     return [p for p in ordered if _key_ok(_get_key(p))]
 
 
+def _normalize_provider_result(raw: object) -> tuple[str, bool, int | None, int | None]:
+    """Accept legacy/provider-mocked return shapes from _call_provider."""
+    if isinstance(raw, tuple):
+        if len(raw) == 4:
+            result, is_transient, in_tok, out_tok = raw
+            return str(result), bool(is_transient), cast(int | None, in_tok), cast(int | None, out_tok)
+        if len(raw) == 2:
+            result, is_transient = raw
+            return str(result), bool(is_transient), None, None
+    return str(raw), False, None, None
+
+
 async def call_ai(
     system_prompt: str,
     user_message: str,
@@ -352,7 +364,15 @@ async def call_ai(
     # Try primary provider
     effective_org_id = organization_id or 1
     t0 = time.monotonic()
-    result, is_transient = await _call_provider(chosen, full_system, user_message, max_tokens, conversation_history, org_id=effective_org_id)
+    primary_raw = await _call_provider(
+        chosen,
+        full_system,
+        user_message,
+        max_tokens,
+        conversation_history,
+        org_id=effective_org_id,
+    )
+    result, is_transient, in_tok, out_tok = _normalize_provider_result(primary_raw)
     latency = int((time.monotonic() - t0) * 1000)
 
     if not result.startswith("Error:"):
@@ -360,6 +380,8 @@ async def call_ai(
             provider=chosen,
             model_name=_get_model(chosen),
             latency_ms=latency,
+            input_tokens=in_tok,
+            output_tokens=out_tok,
             organization_id=organization_id,
             request_id=effective_request_id,
             db=db,
@@ -373,12 +395,21 @@ async def call_ai(
                 continue
             logger.info("Primary '%s' failed transiently, trying fallback '%s'", chosen, fallback)
             t1 = time.monotonic()
-            fb_result, _ = await _call_provider(fallback, full_system, user_message, max_tokens, conversation_history, org_id=effective_org_id)
+            fb_raw = await _call_provider(
+                fallback,
+                full_system,
+                user_message,
+                max_tokens,
+                conversation_history,
+                org_id=effective_org_id,
+            )
+            fb_result, _, fb_in_tok, fb_out_tok = _normalize_provider_result(fb_raw)
             fb_latency = int((time.monotonic() - t1) * 1000)
             if not fb_result.startswith("Error:"):
                 await _log_ai_call(
                     provider=fallback, model_name=_get_model(fallback),
                     latency_ms=fb_latency, used_fallback=True, fallback_from=chosen,
+                    input_tokens=fb_in_tok, output_tokens=fb_out_tok,
                     organization_id=organization_id, request_id=effective_request_id,
                     db=db,
                 )
@@ -429,11 +460,11 @@ async def _call_provider(
     max_tokens: int,
     conversation_history: list[dict] | None = None,
     org_id: int = 1,
-) -> tuple[str, bool]:
+) -> tuple[str, bool, int | None, int | None]:
     """Call a specific provider with one retry for transient errors."""
     import asyncio as _aio
 
-    async def _single_call() -> tuple[str, bool]:
+    async def _single_call() -> tuple[str, bool, int | None, int | None]:
         if provider == "anthropic":
             return await _call_anthropic(system_prompt, user_message, max_tokens, conversation_history, org_id=org_id)
         if provider == "groq":
@@ -442,9 +473,9 @@ async def _call_provider(
             return await _call_gemini(system_prompt, user_message, max_tokens, conversation_history, org_id=org_id)
         return await _call_openai(system_prompt, user_message, max_tokens, conversation_history, org_id=org_id)
 
-    result, is_transient = await _single_call()
+    result, is_transient, in_tok, out_tok = await _single_call()
     if not result.startswith("Error:") or not is_transient:
-        return result, is_transient
+        return result, is_transient, in_tok, out_tok
     # One retry with 2s delay for transient errors before giving up
     logger.info("Retrying %s after transient error", provider)
     await _aio.sleep(2.0)
@@ -457,10 +488,10 @@ async def _call_openai(
     max_tokens: int,
     conversation_history: list[dict] | None = None,
     org_id: int = 1,
-) -> tuple[str, bool]:
+) -> tuple[str, bool, int | None, int | None]:
     key = _get_key("openai", org_id)
     if not _key_ok(key):
-        return "Error: OpenAI not configured. Add OPENAI_API_KEY to your .env file.", False
+        return "Error: OpenAI not configured. Add OPENAI_API_KEY to your .env file.", False, None, None
     try:
         from openai import AsyncOpenAI
         client = AsyncOpenAI(api_key=key)
@@ -475,13 +506,15 @@ async def _call_openai(
             timeout=settings.AI_TIMEOUT_SECONDS,
         )
         if not result.choices:
-            return "No response from OpenAI.", True
-        return result.choices[0].message.content or "No response from OpenAI.", False
+            return "No response from OpenAI.", True, None, None
+        in_tok = getattr(getattr(result, "usage", None), "prompt_tokens", None)
+        out_tok = getattr(getattr(result, "usage", None), "completion_tokens", None)
+        return result.choices[0].message.content or "No response from OpenAI.", False, in_tok, out_tok
     except _OPENAI_EXC as e:
         error_type = type(e).__name__
         is_transient = error_type not in _NO_FALLBACK_ERRORS
         logger.warning("OpenAI call failed (%s): %s", error_type, e)
-        return f"Error: {_openai_error_message(error_type)}", is_transient
+        return f"Error: {_openai_error_message(error_type)}", is_transient, None, None
 
 
 async def _call_anthropic(
@@ -490,10 +523,10 @@ async def _call_anthropic(
     max_tokens: int,
     conversation_history: list[dict] | None = None,
     org_id: int = 1,
-) -> tuple[str, bool]:
+) -> tuple[str, bool, int | None, int | None]:
     key = _get_key("anthropic", org_id)
     if not _key_ok(key):
-        return "Error: Anthropic not configured. Add ANTHROPIC_API_KEY to your .env file.", False
+        return "Error: Anthropic not configured. Add ANTHROPIC_API_KEY to your .env file.", False, None, None
     try:
         import anthropic
         client = anthropic.AsyncAnthropic(api_key=key, timeout=settings.AI_TIMEOUT_SECONDS)
@@ -509,12 +542,14 @@ async def _call_anthropic(
         text_parts = [
             block.text for block in result.content if getattr(block, "type", None) == "text"  # type: ignore[union-attr]
         ]
-        return ("\n".join(text_parts) if text_parts else "No response from Anthropic."), False
+        in_tok = getattr(getattr(result, "usage", None), "input_tokens", None)
+        out_tok = getattr(getattr(result, "usage", None), "output_tokens", None)
+        return ("\n".join(text_parts) if text_parts else "No response from Anthropic."), False, in_tok, out_tok
     except _ANTHROPIC_EXC as e:
         error_type = type(e).__name__
         is_transient = error_type not in _NO_FALLBACK_ERRORS
         logger.warning("Anthropic call failed (%s): %s", error_type, e)
-        return f"Error: {_anthropic_error_message(error_type)}", is_transient
+        return f"Error: {_anthropic_error_message(error_type)}", is_transient, None, None
 
 
 async def _call_groq(
@@ -523,10 +558,10 @@ async def _call_groq(
     max_tokens: int,
     conversation_history: list[dict] | None = None,
     org_id: int = 1,
-) -> tuple[str, bool]:
+) -> tuple[str, bool, int | None, int | None]:
     key = _get_key("groq", org_id)
     if not _key_ok(key):
-        return "Error: Groq not configured. Add GROQ_API_KEY to your .env (free at console.groq.com).", False
+        return "Error: Groq not configured. Add GROQ_API_KEY to your .env (free at console.groq.com).", False, None, None
     try:
         from groq import AsyncGroq
         client = AsyncGroq(api_key=key)
@@ -541,13 +576,15 @@ async def _call_groq(
             timeout=settings.AI_TIMEOUT_SECONDS,
         )
         if not result.choices:
-            return "No response from Groq.", True
-        return result.choices[0].message.content or "No response from Groq.", False
+            return "No response from Groq.", True, None, None
+        in_tok = getattr(getattr(result, "usage", None), "prompt_tokens", None)
+        out_tok = getattr(getattr(result, "usage", None), "completion_tokens", None)
+        return result.choices[0].message.content or "No response from Groq.", False, in_tok, out_tok
     except _GROQ_EXC as e:
         error_type = type(e).__name__
         is_transient = error_type not in _NO_FALLBACK_ERRORS
         logger.warning("Groq call failed (%s): %s", error_type, e)
-        return f"Error: {_groq_error_message(error_type)}", is_transient
+        return f"Error: {_groq_error_message(error_type)}", is_transient, None, None
 
 
 def _openai_error_message(error_type: str) -> str:
@@ -592,10 +629,10 @@ async def _call_gemini(
     max_tokens: int,
     conversation_history: list[dict] | None = None,
     org_id: int = 1,
-) -> tuple[str, bool]:
+) -> tuple[str, bool, int | None, int | None]:
     key = _get_key("gemini", org_id)
     if not _key_ok(key):
-        return "Error: Gemini not configured. Add GEMINI_API_KEY to your .env file (free at aistudio.google.com).", False
+        return "Error: Gemini not configured. Add GEMINI_API_KEY to your .env file (free at aistudio.google.com).", False, None, None
     try:
         from google import genai
         from google.genai import types
@@ -618,13 +655,16 @@ async def _call_gemini(
         )
         text = response.text or ""
         if not text:
-            return "No response from Gemini.", True
-        return text, False
+            return "No response from Gemini.", True, None, None
+        usage = getattr(response, "usage_metadata", None)
+        in_tok = getattr(usage, "prompt_token_count", None)
+        out_tok = getattr(usage, "candidates_token_count", None)
+        return text, False, in_tok, out_tok
     except _GEMINI_EXC as e:
         error_type = type(e).__name__
         is_transient = error_type not in _NO_FALLBACK_ERRORS
         logger.warning("Gemini call failed (%s): %s", error_type, e)
-        return f"Error: {_gemini_error_message(error_type)}", is_transient
+        return f"Error: {_gemini_error_message(error_type)}", is_transient, None, None
 
 
 def _gemini_error_message(error_type: str) -> str:

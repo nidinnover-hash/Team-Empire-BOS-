@@ -173,13 +173,13 @@ def extract_text_from_image_bytes(image_bytes: bytes) -> tuple[str, str]:
     if not image_bytes:
         raise ValueError("empty image payload")
     try:
-        from PIL import Image  # type: ignore[import-not-found]
+        from PIL import Image
     except (ImportError, ModuleNotFoundError) as exc:  # pragma: no cover - dependency availability
         raise RuntimeError(
             "Pillow is required for image OCR. Install with: pip install pillow"
         ) from exc
     try:
-        import pytesseract  # type: ignore[import-not-found,import-untyped]
+        import pytesseract
     except (ImportError, ModuleNotFoundError) as exc:  # pragma: no cover - dependency availability
         raise RuntimeError(
             "pytesseract is required for OCR. Install with: pip install pytesseract "

@@ -24,6 +24,15 @@ from app.api.v1.endpoints import (
     integrations_slack,
     integrations_stripe,
 )
+from app.api.v1.endpoints.integrations_shared import (
+    GENERIC_CONNECT_ALLOWED_TYPES,
+    GENERIC_CONNECT_BLOCKED_ROUTES,
+    calendar_redirect_uri,
+    redact_integration,
+    safe_provider_error,
+    sign_google_calendar_state,
+    verify_google_calendar_state,
+)
 from app.core.config import PLACEHOLDER_AI_KEYS, settings
 from app.core.deps import get_db
 from app.core.idempotency import (
@@ -33,8 +42,7 @@ from app.core.idempotency import (
     store_response,
 )
 from app.core.oauth_nonce import consume_oauth_nonce_once
-from app.core.oauth_state import sign_oauth_state, verify_oauth_state
-from app.core.privacy import sanitize_response_payload
+from app.core.oauth_state import verify_oauth_state
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
 from app.schemas.integration import (
@@ -73,46 +81,20 @@ from app.tools.whatsapp_business import get_phone_number_details, send_text_mess
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
 
-_GENERIC_CONNECT_ALLOWED_TYPES = {"gmail", "google_calendar", "whatsapp_business"}
-_GENERIC_CONNECT_BLOCKED_ROUTES = {
-    "github": "/api/v1/integrations/github/connect",
-    "clickup": "/api/v1/integrations/clickup/connect",
-    "digitalocean": "/api/v1/integrations/digitalocean/connect",
-    "slack": "/api/v1/integrations/slack/connect",
-    "perplexity": "/api/v1/integrations/perplexity/connect",
-    "linkedin": "/api/v1/integrations/linkedin/connect",
-    "notion": "/api/v1/integrations/notion/connect",
-    "stripe": "/api/v1/integrations/stripe/connect",
-    "google_analytics": "/api/v1/integrations/google-analytics/connect",
-    "calendly": "/api/v1/integrations/calendly/connect",
-    "elevenlabs": "/api/v1/integrations/elevenlabs/connect",
-    "hubspot": "/api/v1/integrations/hubspot/connect",
-    "ai_openai": "/api/v1/integrations/ai/openai/connect",
-    "ai_anthropic": "/api/v1/integrations/ai/anthropic/connect",
-    "ai_groq": "/api/v1/integrations/ai/groq/connect",
-    "ai_gemini": "/api/v1/integrations/ai/gemini/connect",
-}
-
-
-def _safe_provider_error(prefix: str) -> str:
-    return f"{prefix}. Reconnect integration and retry."
+_GENERIC_CONNECT_ALLOWED_TYPES = GENERIC_CONNECT_ALLOWED_TYPES
+_GENERIC_CONNECT_BLOCKED_ROUTES = GENERIC_CONNECT_BLOCKED_ROUTES
+safe_provider_error_fn = safe_provider_error
+sign_google_calendar_state_fn = sign_google_calendar_state
+verify_google_calendar_state_fn = verify_google_calendar_state
+redact_integration_fn = redact_integration
 
 
 def _sign_google_calendar_state(org_id: int) -> str:
-    return str(sign_oauth_state(org_id))
+    """Compatibility wrapper used by legacy tests/callers."""
+    return sign_google_calendar_state_fn(org_id)
 
 
-def _verify_google_calendar_state(state: str, expected_org_id: int, max_age_seconds: int = 600) -> None:
-    verify_oauth_state(state, namespace="gcal_oauth", max_age_seconds=max_age_seconds, expected_org_id=expected_org_id)
-
-
-def _redact_integration(item: IntegrationRead | object) -> IntegrationRead:
-    data = IntegrationRead.model_validate(item).model_dump()
-    data["config_json"] = sanitize_response_payload(dict(data["config_json"]))
-    return IntegrationRead(**data)
-
-
-# ── Collection endpoints (no path params) ─────────────────────────────────────
+# Collection endpoints (no path params)
 
 @router.get("", response_model=list[IntegrationRead])
 async def list_integrations(
@@ -120,7 +102,7 @@ async def list_integrations(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> list[IntegrationRead]:
     items = await integration_service.list_integrations(db, organization_id=actor["org_id"])
-    return [_redact_integration(item) for item in items]
+    return [redact_integration_fn(item) for item in items]
 
 
 @router.post("/connect", response_model=IntegrationRead, status_code=201)
@@ -156,7 +138,7 @@ async def connect_integration(
         entity_id=item.id,
         payload_json={"type": item.type, "status": item.status},
     )
-    return _redact_integration(item)
+    return redact_integration_fn(item)
 
 
 @router.get("/setup-guide", response_model=IntegrationSetupGuideRead)
@@ -213,37 +195,14 @@ async def integration_setup_guide(
 
 # ── Google Calendar (literal prefix — must be before /{integration_id}/…) ─────
 
-def _calendar_redirect_uri() -> str:
-    direct = (settings.GOOGLE_CALENDAR_REDIRECT_URI or "").strip()
-    if direct:
-        return direct
-    # Backward-compatible fallback: derive calendar callback from GOOGLE_REDIRECT_URI host/scheme.
-    gmail_redirect = (settings.GOOGLE_REDIRECT_URI or "").strip()
-    if not gmail_redirect:
-        return ""
-    from urllib.parse import urlsplit, urlunsplit
-    parsed = urlsplit(gmail_redirect)
-    if not parsed.scheme or not parsed.netloc:
-        return ""
-    return urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            "/api/v1/integrations/google-calendar/oauth/callback",
-            "",
-            "",
-        )
-    )
-
-
 @router.get("/google-calendar/auth-url", response_model=GoogleAuthUrlRead)
 async def google_calendar_auth_url(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> GoogleAuthUrlRead:
-    redir = _calendar_redirect_uri()
+    redir = calendar_redirect_uri()
     if not settings.GOOGLE_CLIENT_ID or not redir:
         raise HTTPException(status_code=400, detail="Google OAuth is not configured")
-    state = _sign_google_calendar_state(int(actor["org_id"]))
+    state = sign_google_calendar_state_fn(int(actor["org_id"]))
     return GoogleAuthUrlRead(
         auth_url=build_google_auth_url(
             client_id=settings.GOOGLE_CLIENT_ID,
@@ -260,10 +219,10 @@ async def google_calendar_oauth_callback(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> IntegrationRead:
-    redir = _calendar_redirect_uri()
+    redir = calendar_redirect_uri()
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET or not redir:
         raise HTTPException(status_code=400, detail="Google OAuth is not configured")
-    _verify_google_calendar_state(data.state, expected_org_id=int(actor["org_id"]))
+    verify_google_calendar_state_fn(data.state, expected_org_id=int(actor["org_id"]))
     if not consume_oauth_nonce_once(namespace="gcal_oauth", nonce=data.state, max_age_seconds=600):
         raise HTTPException(status_code=409, detail="OAuth callback already processed (replay rejected)")
     tokens = await exchange_code_for_tokens(
@@ -300,7 +259,7 @@ async def google_calendar_oauth_callback(
         entity_id=item.id,
         payload_json={"type": item.type, "status": item.status, "oauth": True},
     )
-    return _redact_integration(item)
+    return redact_integration_fn(item)
 
 
 @router.get("/google-calendar/oauth/callback", include_in_schema=False, response_model=None)
@@ -315,7 +274,7 @@ async def google_calendar_oauth_callback_redirect(
     Google redirects here with ?code=XXX&state=YYY after user grants permission.
     No Bearer token required — org_id is extracted from the signed state.
     """
-    redir = _calendar_redirect_uri()
+    redir = calendar_redirect_uri()
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET or not redir:
         raise HTTPException(status_code=400, detail="Google OAuth is not configured")
 
@@ -708,7 +667,7 @@ async def whatsapp_send_test_message(
     except (httpx.HTTPError, RuntimeError, ValueError, TypeError) as exc:
         raise HTTPException(
             status_code=502,
-            detail=_safe_provider_error("WhatsApp message send failed"),
+            detail=safe_provider_error_fn("WhatsApp message send failed"),
         ) from exc
 
     await integration_service.mark_sync_time(db, item)
@@ -877,7 +836,7 @@ async def disconnect_integration(
         entity_id=item.id,
         payload_json={"type": item.type, "status": item.status},
     )
-    return _redact_integration(item)
+    return redact_integration_fn(item)
 
 
 @router.post("/{integration_id}/test", response_model=IntegrationTestResult)
@@ -945,7 +904,7 @@ async def test_integration(
                             str(refresh_exc)[:300],
                         )
                         status = "failed"
-                        message = _safe_provider_error("Google Calendar test failed after token refresh")
+                        message = safe_provider_error_fn("Google Calendar test failed after token refresh")
                 else:
                     status = "failed"
                     message = "Google Calendar test failed and no refresh token is available"
@@ -970,7 +929,7 @@ async def test_integration(
                     str(exc)[:300],
                 )
                 status = "failed"
-                message = _safe_provider_error("WhatsApp Business test failed")
+                message = safe_provider_error_fn("WhatsApp Business test failed")
 
     if status == "ok":
         await integration_service.mark_sync_time(db, item)
@@ -989,3 +948,6 @@ async def test_integration(
         status=status,  # type: ignore[arg-type]
         message=message,
     )
+
+
+

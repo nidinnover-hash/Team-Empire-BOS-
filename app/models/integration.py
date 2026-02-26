@@ -24,6 +24,7 @@ class Integration(Base):
     status: Mapped[str] = mapped_column(String(30), default="connected", index=True)
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     last_sync_status: Mapped[str | None] = mapped_column(String(30), nullable=True)  # ok | error
+    sync_error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

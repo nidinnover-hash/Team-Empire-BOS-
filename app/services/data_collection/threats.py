@@ -69,7 +69,7 @@ def _scan_text_for_threats(text: str) -> list[dict[str, str]]:
     found: list[dict[str, str]] = []
     for category, meta in _THREAT_PATTERNS.items():
         keywords = meta["keywords"]
-        hits = [kw for kw in keywords if kw in lowered]  # type: ignore[union-attr]
+        hits = [kw for kw in keywords if kw in lowered]
         if hits:
             found.append({
                 "category": category,

@@ -32,3 +32,7 @@
 - One-command local start (PowerShell): `.\start-local.ps1`
 - Owner hardening (PowerShell): `.\.venv\Scripts\python.exe scripts/harden_owner_account.py`
 - Week-1 quality sprint (PowerShell): `.\scripts\quality_week1.ps1`
+- [User onboarding guide](docs/USER_ONBOARDING.md)
+- [7-day training curriculum](docs/TRAINING_CURRICULUM_7_DAYS.md)
+- [Day-1 onboarding run (Feb 27, 2026)](docs/ONBOARDING_DAY1_2026-02-27.md)
+

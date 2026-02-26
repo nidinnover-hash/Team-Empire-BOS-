@@ -324,6 +324,67 @@
     })();
   })();
 
+  // First-login onboarding checklist (client-side persistence)
+  (function () {
+    var list = document.getElementById("onboarding-list");
+    var progress = document.getElementById("onboarding-progress");
+    if (!list || !progress) return;
+
+    var storageKey = "pc_onboarding_checklist_v1";
+    var steps = [
+      { id: "login", label: "Sign in and load Dashboard, Talk, Integrations, Tasks" },
+      { id: "integrations", label: "Connect at least one active integration" },
+      { id: "talk_prompts", label: "Run 3 Talk prompts (priority, approvals, 2-hour plan)" },
+      { id: "tasks", label: "Add 3 high-impact tasks and close stale tasks" },
+      { id: "memory", label: "Save 3 profile memory preferences" }
+    ];
+
+    function getState() {
+      try {
+        var raw = localStorage.getItem(storageKey);
+        var parsed = raw ? JSON.parse(raw) : {};
+        return (parsed && typeof parsed === "object") ? parsed : {};
+      } catch (_e) {
+        return {};
+      }
+    }
+
+    function setState(state) {
+      try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch (_e) {}
+    }
+
+    function render() {
+      var state = getState();
+      var done = 0;
+      list.innerHTML = steps.map(function (s) {
+        var checked = !!state[s.id];
+        if (checked) done += 1;
+        return (
+          '<label class="onboarding-row' + (checked ? ' done' : '') + '">' +
+          '<input type="checkbox" data-onboarding-id="' + s.id + '"' + (checked ? ' checked' : '') + ' />' +
+          '<span>' + s.label + '</span>' +
+          '</label>'
+        );
+      }).join("");
+      progress.textContent = done + "/" + steps.length;
+      if (done === steps.length) {
+        var card = document.getElementById("first-login-card");
+        if (card) card.style.display = "none";
+      }
+    }
+
+    list.addEventListener("change", function (e) {
+      var target = e.target;
+      if (!target || !target.matches("[data-onboarding-id]")) return;
+      var state = getState();
+      state[target.getAttribute("data-onboarding-id")] = !!target.checked;
+      setState(state);
+      render();
+    });
+
+    render();
+  })();
+
   // ── Gmail Inbox Panel ──────────────────────────────────────────────────────
   (function () {
     const list    = document.getElementById("inbox-list");

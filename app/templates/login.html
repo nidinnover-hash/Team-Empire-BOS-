@@ -30,6 +30,13 @@
       <label for="password">Password</label>
       <input id="password" name="password" type="password" autocomplete="current-password" required />
 
+      <div id="mfa-field" style="display:none">
+        <label for="totp_code">Authenticator Code</label>
+        <input id="totp_code" name="totp_code" type="text" inputmode="numeric"
+               pattern="\d{6}" maxlength="6" autocomplete="one-time-code"
+               placeholder="6-digit code" />
+      </div>
+
       <button type="submit">Sign in</button>
     </form>
   </div>

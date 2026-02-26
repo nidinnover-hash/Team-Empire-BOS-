@@ -475,7 +475,7 @@ async def strategize_email(
         raise HTTPException(status_code=404, detail="Email not found or not accessible") from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail="Email strategy generation failed — try again later") from exc
-    return EmailStrategyResponse(email_id=email_id, strategy=analysis or "")  # type: ignore[arg-type]
+    return EmailStrategyResponse(email_id=email_id, strategy=analysis or "")
 
 
 @router.post("/compose", response_model=EmailComposeResponse)

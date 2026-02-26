@@ -173,7 +173,7 @@ async def system_health(
         )
     else:
         try:
-            import redis.asyncio as redis  # type: ignore[import-untyped]
+            import redis.asyncio as redis
 
             client = redis.from_url(redis_url, encoding="utf-8", decode_responses=True)
             pong = await client.ping()

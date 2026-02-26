@@ -122,9 +122,13 @@ async def _persist_refreshed_tokens(
     cfg["access_token"] = refreshed_tokens["access_token"]
     if refreshed_tokens.get("expires_at"):
         cfg["expires_at"] = refreshed_tokens["expires_at"]
-    # Keep the existing refresh_token (Google only returns it on first consent)
-    if old_refresh_token and not cfg.get("refresh_token"):
+    # Persist new refresh_token if provider returns one (token rotation support)
+    if refreshed_tokens.get("refresh_token"):
+        cfg["refresh_token"] = refreshed_tokens["refresh_token"]
+    elif old_refresh_token and not cfg.get("refresh_token"):
+        # Google only returns refresh_token on first consent; preserve the existing one
         cfg["refresh_token"] = old_refresh_token
+    refresh_rotated = bool(refreshed_tokens.get("refresh_token"))
     try:
         await connect_integration(
             db=db,
@@ -132,6 +136,20 @@ async def _persist_refreshed_tokens(
             integration_type="gmail",
             config_json=cfg,
         )
+        # Audit log every token refresh so a stolen+used token is visible
+        try:
+            from app.logs.audit import record_action
+            await record_action(
+                db=db,
+                event_type="oauth_token_refreshed",
+                actor_user_id=None,
+                organization_id=org_id,
+                entity_type="integration",
+                entity_id=None,
+                payload_json={"integration": "gmail", "refresh_rotated": refresh_rotated},
+            )
+        except Exception:
+            logger.debug("Failed to audit-log Gmail token refresh for org=%d", org_id)
     except (RuntimeError, ValueError, TypeError) as exc:
         logger.error("Failed to persist refreshed Gmail tokens for org %d: %s", org_id, type(exc).__name__)
 

@@ -65,7 +65,7 @@ def _scan_for_fraud(text: str) -> list[dict[str, str | int]]:
     found: list[dict[str, str | int]] = []
     for category, meta in _FRAUD_PATTERNS.items():
         keywords = meta["keywords"]
-        hits = [kw for kw in keywords if kw in lowered]  # type: ignore[union-attr]
+        hits = [kw for kw in keywords if kw in lowered]
         if hits:
             risk_score = 70
             if meta["severity"] == "critical":

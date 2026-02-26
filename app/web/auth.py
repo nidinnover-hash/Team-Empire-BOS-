@@ -3,7 +3,7 @@
 import logging
 import secrets
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, status
 from sqlalchemy import update as sa_update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,13 +37,14 @@ async def web_login(
     response: Response,
     username: str = Form(..., min_length=3, max_length=254),
     password: str = Form(..., min_length=8, max_length=128),
+    totp_code: str | None = Form(None, min_length=6, max_length=6),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     from app.core.middleware import get_client_ip
 
     enforce_password_login_policy()
     client_ip = get_client_ip(request)
-    user = await authenticate_user(db, username, password, client_ip, "/web/login")
+    user = await authenticate_user(db, username, password, client_ip, "/web/login", totp_code=totp_code)
     access_token = create_jwt(user)
     purpose_profile = resolve_login_profile_cached(user.email)
     csrf_token = secrets.token_urlsafe(32)
@@ -102,8 +103,12 @@ async def web_logout(
 
 
 @router.get("/web/api-token", include_in_schema=False, response_model=WebApiTokenResponse)
-async def web_api_token(user: dict = Depends(get_current_web_user)) -> dict:
+async def web_api_token(request: Request, user: dict = Depends(get_current_web_user)) -> dict:
     """Return a fresh Bearer token for the current web session. Used by dashboard JS."""
+    from app.core.middleware import check_per_route_rate_limit, get_client_ip
+    client_ip = get_client_ip(request)
+    if not check_per_route_rate_limit(client_ip, "web_api_token", max_requests=10, window_seconds=60):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many token requests. Please wait.")
     purpose_profile = resolve_login_profile_cached(str(user.get("email", "")))
     purpose = str(user.get("purpose") or purpose_profile["purpose"])
     default_theme = str(user.get("default_theme") or purpose_profile["default_theme"])

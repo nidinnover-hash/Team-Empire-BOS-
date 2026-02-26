@@ -32,6 +32,9 @@ pretty = true
 show_error_codes = true
 warn_return_any = true
 warn_unused_configs = true
+warn_redundant_casts = false
+warn_unused_ignores = true
+strict_equality = true
 disallow_untyped_defs = false
 check_untyped_defs = true
 no_implicit_optional = true
@@ -41,6 +44,7 @@ files = [
   "app/core",
   "app/services",
   "app/api",
+  "app/models",
 ]
 
 [[tool.mypy.overrides]]
@@ -48,6 +52,11 @@ module = [
   "google.*",
   "google_auth_oauthlib.*",
   "googleapiclient.*",
+  "opentelemetry.*",
+  "pytesseract",
+  "PIL.*",
+  "pyotp",
+  "qrcode",
   "jwt",
   "anthropic",
   "groq",

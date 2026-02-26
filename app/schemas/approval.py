@@ -1,12 +1,22 @@
+import json
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+_MAX_PAYLOAD_BYTES = 64 * 1024  # 64 KB
 
 
 class ApprovalRequestCreate(BaseModel):
     organization_id: int
     approval_type: str = Field(..., max_length=100)
     payload_json: dict = Field(default_factory=dict)
+
+    @field_validator("payload_json")
+    @classmethod
+    def _check_payload_size(cls, v: dict) -> dict:
+        if len(json.dumps(v, separators=(",", ":"))) > _MAX_PAYLOAD_BYTES:
+            raise ValueError("payload_json exceeds 64 KB maximum size")
+        return v
 
 
 class ApprovalDecision(BaseModel):
@@ -23,6 +33,7 @@ class ApprovalRead(BaseModel):
     approved_by: int | None
     approved_at: datetime | None
     executed_at: datetime | None = None
+    expires_at: datetime | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 from sqlalchemy import select, update
@@ -12,12 +12,16 @@ from app.services.notification import create_notification
 async def request_approval(
     db: AsyncSession, requested_by: int, data: ApprovalRequestCreate
 ) -> Approval:
+    from app.core.config import settings
+    from app.models.approval import _DEFAULT_EXPIRY_HOURS
+    sla_hours = max(1, int(getattr(settings, "APPROVAL_SLA_HOURS", _DEFAULT_EXPIRY_HOURS)))
     approval = Approval(
         organization_id=data.organization_id,
         requested_by=requested_by,
         approval_type=data.approval_type,
         payload_json=data.payload_json,
         status="pending",
+        expires_at=datetime.now(UTC) + timedelta(hours=sla_hours),
     )
     db.add(approval)
     await db.flush()

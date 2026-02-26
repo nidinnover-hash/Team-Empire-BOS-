@@ -191,6 +191,13 @@ class Settings(BaseSettings):
     LOGIN_FAIL_WINDOW_SECONDS: int = 900   # sliding window for login failure tracking
     LOGIN_FAIL_MAX_ATTEMPTS: int = 10      # max failures before IP lockout
 
+    # Optional OpenTelemetry tracing (set OTEL_EXPORTER_OTLP_ENDPOINT to activate)
+    # Packages required: opentelemetry-api opentelemetry-sdk
+    #   opentelemetry-instrumentation-fastapi opentelemetry-instrumentation-sqlalchemy
+    #   opentelemetry-exporter-otlp-proto-http
+    OTEL_EXPORTER_OTLP_ENDPOINT: str | None = None
+    OTEL_SERVICE_NAME: str = "personal-clone"
+
     # Feature flags — disable expensive features without redeploying
     FEATURE_AI_COMMANDS: bool = True     # AI responses in command input
     FEATURE_EMAIL_SYNC: bool = True      # Gmail sync + email AI

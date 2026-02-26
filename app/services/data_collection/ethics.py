@@ -90,7 +90,7 @@ async def get_ethical_boundary_report(
         lowered = text.lower()
         for category, meta in _ETHICAL_PATTERNS.items():
             keywords = meta["keywords"]
-            hits = [kw for kw in keywords if kw in lowered]  # type: ignore[union-attr]
+            hits = [kw for kw in keywords if kw in lowered]
             if hits:
                 violations.append(EthicalViolation(
                     category=category,

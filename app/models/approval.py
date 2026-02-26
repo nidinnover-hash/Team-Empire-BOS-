@@ -1,9 +1,11 @@
-﻿from datetime import UTC, datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+
+_DEFAULT_EXPIRY_HOURS = 72  # auto-reject pending approvals after 72 hours
 
 
 class Approval(Base):
@@ -33,6 +35,7 @@ class Approval(Base):
     approved_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
@@ -40,4 +43,3 @@ class Approval(Base):
 
     def __repr__(self) -> str:
         return f"<Approval id={self.id} type={self.approval_type!r} status={self.status!r}>"
-
