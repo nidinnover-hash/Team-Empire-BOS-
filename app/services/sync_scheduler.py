@@ -1161,6 +1161,7 @@ def start_scheduler(interval_minutes: int = 30) -> asyncio.Task:
     """
     global _scheduler_task
     _scheduler_task = asyncio.create_task(_scheduler_loop(interval_minutes))
+    _scheduler_task.add_done_callback(_task_error_handler)
     return _scheduler_task
 
 

@@ -160,12 +160,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "Set COOKIE_SECURE=true when running behind HTTPS."
         )
 
-    # Warn if MFA is required by config but not yet enforced in code
     if settings.ACCOUNT_MFA_REQUIRED:
-        logger.warning(
-            "ACCOUNT_MFA_REQUIRED=true but TOTP enforcement is not implemented. "
-            "Users can log in without MFA. Set ACCOUNT_MFA_REQUIRED=false or implement TOTP."
-        )
+        logger.info("ACCOUNT_MFA_REQUIRED=true — TOTP MFA is enforced on login.")
 
     # Optional OpenTelemetry tracing (no-op when OTEL_EXPORTER_OTLP_ENDPOINT is unset)
     from app.core.telemetry import setup as setup_telemetry

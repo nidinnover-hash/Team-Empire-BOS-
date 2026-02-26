@@ -82,13 +82,13 @@ async def authenticate_user(
                 user.password_hash = await asyncio.to_thread(hash_password, password)
                 db.add(user)
                 await db.commit()
-                logger.info("Rehashed password for user %d (%s -> 600k iterations)", user.id, iter_str)
+                logger.info("Rehashed password for user %d", user.id)
         except (ValueError, TypeError, SQLAlchemyError):
             logger.debug("Password rehash skipped for user %d", user.id, exc_info=True)
 
     if not valid:
         record_login_failure(client_ip)
-        logger.warning("Failed login for '%s' from %s on %s", username, client_ip, endpoint)
+        logger.warning("Failed login from %s on %s", client_ip, endpoint)
         await record_action(
             db,
             event_type="login_failed",
