@@ -7,9 +7,18 @@ Related controls:
 
 ## Deploy
 1. Confirm release gate: `python scripts/check_ready.py`
-2. Run deploy:
+2. Confirm production config smoke check:
+   - `python scripts/smoke_prod_config.py --import-app`
+   - Must pass with production-like env (`DEBUG=false`, `COOKIE_SECURE=true`, `AUTO_CREATE_SCHEMA=false`, `AUTO_SEED_DEFAULTS=false`).
+3. Confirm critical regression suite is green in CI fast-checks:
+   - `tests/test_api_smoke_fast.py`
+   - `tests/test_super_admin.py`
+   - `tests/test_integrations.py`
+   - `tests/test_talk_mode.py`
+   - `tests/test_config_validation.py`
+4. Run deploy:
    - `bash deploy/deploy.sh /opt/nidin-nover-ai nidin-nover-ai /opt/nidin-nover-ai/.env`
-3. Verify:
+5. Verify:
    - `curl -fsS http://127.0.0.1:8000/health`
    - `journalctl -u nidin-nover-ai --since "10 minutes ago"`
    - `journalctl -u nidin-nover-ai-scheduler --since "10 minutes ago"`
@@ -45,6 +54,17 @@ Otherwise `X-Forwarded-For` can be spoofed and weaken rate-limits/login lockout.
 2. Integration outage: inspect provider token validity and API rate limits.
 3. Database errors: verify connectivity, migrations, pool settings.
 4. High error rate: check recent deploy diff and roll back if needed.
+
+## CI failure triage
+1. `Critical regression suite` fails:
+   - Treat as product-path regression.
+   - Reproduce locally with the same subset and fix before merge.
+2. `Production config smoke` fails:
+   - Run `python scripts/smoke_prod_config.py --import-app` locally with production-like env.
+   - Fix invalid env values first (startup validation), then import/runtime issues.
+3. `check_ready.py` fails:
+   - Follow failing stage order (`ruff`, `mypy`, migrations, tests, security tools).
+   - Do not deploy with a red readiness gate.
 
 ## Credential rotation
 1. Rotate one provider token/key at a time.

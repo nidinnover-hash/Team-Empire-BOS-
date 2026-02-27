@@ -123,3 +123,46 @@ async def test_whatsapp_webhook_replay_detected_when_signature_reused(client, mo
 
     second = await client.post("/api/v1/integrations/whatsapp/webhook", content=raw, headers=headers)
     assert second.status_code == 409
+
+
+async def test_whatsapp_webhook_rejects_missing_content_type(client, monkeypatch):
+    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
+
+    payload = {"entry": [{"changes": [{"value": {"messages": [{"id": "wamid.CT1"}]}}]}]}
+    raw = json.dumps(payload, separators=(",", ":"))
+    signature = "sha256=" + hmac.new(
+        b"wa-app-secret",
+        raw.encode("utf-8"),
+        sha256,
+    ).hexdigest()
+
+    response = await client.post(
+        "/api/v1/integrations/whatsapp/webhook",
+        content=raw,
+        headers={"X-Hub-Signature-256": signature},
+    )
+    assert response.status_code == 415
+    assert response.json()["detail"] == "Webhook expects application/json"
+
+
+async def test_whatsapp_webhook_rejects_non_json_content_type(client, monkeypatch):
+    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
+
+    payload = {"entry": [{"changes": [{"value": {"messages": [{"id": "wamid.CT2"}]}}]}]}
+    raw = json.dumps(payload, separators=(",", ":"))
+    signature = "sha256=" + hmac.new(
+        b"wa-app-secret",
+        raw.encode("utf-8"),
+        sha256,
+    ).hexdigest()
+
+    response = await client.post(
+        "/api/v1/integrations/whatsapp/webhook",
+        content=raw,
+        headers={
+            "X-Hub-Signature-256": signature,
+            "Content-Type": "text/plain",
+        },
+    )
+    assert response.status_code == 415
+    assert response.json()["detail"] == "Webhook expects application/json"
