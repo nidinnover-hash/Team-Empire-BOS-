@@ -764,8 +764,8 @@ async def can_execute_post_approval(
     rollout = await evaluate_rollout_for_execution(db, org=org)
     if not rollout["allowed"]:
         return False, rollout["reason"]
-    evaluation = await evaluate_autonomy_modes(db, org=org)
-    if "approved_execution" in evaluation["allowed_modes"] or "autonomous" in evaluation["allowed_modes"]:
+    policy = await get_autonomy_policy(db, int(org.id))
+    mode_rank = _MODE_RANK.get(policy["current_mode"], 0)
+    if mode_rank >= _MODE_RANK["approved_execution"]:
         return True, ""
-    reason = evaluation["reasons"][0] if evaluation["reasons"] else "Execution denied by autonomy policy."
-    return False, reason
+    return False, "Execution denied by autonomy policy."
