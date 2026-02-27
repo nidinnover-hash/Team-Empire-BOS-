@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,7 +79,7 @@ async def cleanup_old_job_runs_and_snapshots(db: AsyncSession, org_id: int) -> N
     )
 
     cutoff = datetime.now(UTC) - timedelta(days=90)
-    tables: list[tuple[type, str, str]] = [
+    tables: list[tuple[Any, str, str]] = [
         (SchedulerJobRun, "scheduler_job_runs", "started_at"),
         (GitHubRoleSnapshot, "github_role_snapshot", "synced_at"),
         (GitHubRepoSnapshot, "github_repo_snapshot", "synced_at"),

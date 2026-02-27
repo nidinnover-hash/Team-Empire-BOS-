@@ -32,29 +32,13 @@ sudo -u deploy bash -c "
 "
 
 # 3. Validate production profile and startup settings before migrations/restart.
-echo "[3/6] Validating environment and startup settings..."
+echo "[3/6] Running preflight checks..."
 sudo -u deploy bash -c "
     set -a
     source \"$ENV_FILE\"
     set +a
     source \"$APP_DIR/venv/bin/activate\"
-    if [[ \"\${DEBUG:-false}\" != \"false\" ]]; then
-        echo 'ERROR: DEBUG must be false in production'
-        exit 1
-    fi
-    if [[ \"\${ENFORCE_STARTUP_VALIDATION:-false}\" != \"true\" ]]; then
-        echo 'ERROR: ENFORCE_STARTUP_VALIDATION must be true in production'
-        exit 1
-    fi
-    if [[ \"\${COOKIE_SECURE:-false}\" != \"true\" ]]; then
-        echo 'ERROR: COOKIE_SECURE must be true in production'
-        exit 1
-    fi
-    if [[ \"\${DATABASE_URL:-}\" == sqlite* ]]; then
-        echo 'ERROR: DATABASE_URL cannot use sqlite in production'
-        exit 1
-    fi
-    python -c \"from app.core.config import settings, validate_startup_settings, format_startup_issues; issues=validate_startup_settings(settings); print('startup validation passed' if not issues else format_startup_issues(issues)); raise SystemExit(1 if issues else 0)\"
+    python scripts/preflight_deploy.py
 "
 
 # 4. Run migrations
