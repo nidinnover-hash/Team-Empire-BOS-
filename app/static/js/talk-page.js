@@ -376,8 +376,8 @@ function getCookie(name) {
       await loadHistoryOrWelcome();
       await loadBootstrap();
     } catch (e) {
-      setStatus(mapUiError(e) || "Failed to initialize Talk Mode", "err");
-      notifyError(mapUiError(e) || "Failed to initialize Talk Mode");
+      setStatus(mapUiError(e) || "Failed to initialize Agent Chat", "err");
+      notifyError(mapUiError(e) || "Failed to initialize Agent Chat");
     }
   })();
 
@@ -397,3 +397,4 @@ window.showToast = function(msg, type) {
     }, 4000);
   };
   if (typeof lucide !== "undefined") lucide.createIcons();
+
