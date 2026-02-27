@@ -166,3 +166,78 @@ async def test_whatsapp_webhook_rejects_non_json_content_type(client, monkeypatc
     )
     assert response.status_code == 415
     assert response.json()["detail"] == "Webhook expects application/json"
+
+
+async def test_whatsapp_webhook_received_event_contains_telemetry_fields(client, monkeypatch):
+    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
+    connected = await client.post(
+        "/api/v1/integrations/connect",
+        headers=_auth_headers(1, "ceo@org1.com", "CEO", 1),
+        json={
+            "type": "whatsapp_business",
+            "config_json": {"access_token": "wa-token", "phone_number_id": "pn-telemetry"},
+        },
+    )
+    assert connected.status_code == 201
+
+    payload = {
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "metadata": {"phone_number_id": "pn-telemetry"},
+                            "messages": [
+                                {
+                                    "from": "15551234567",
+                                    "id": "wamid.TELEMETRY1",
+                                    "timestamp": "1739900000",
+                                    "type": "text",
+                                    "text": {"body": "hello"},
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+    raw = json.dumps(payload, separators=(",", ":"))
+    signature = "sha256=" + hmac.new(
+        b"wa-app-secret",
+        raw.encode("utf-8"),
+        sha256,
+    ).hexdigest()
+
+    webhook = await client.post(
+        "/api/v1/integrations/whatsapp/webhook",
+        content=raw,
+        headers={"X-Hub-Signature-256": signature, "Content-Type": "application/json"},
+    )
+    assert webhook.status_code == 200
+    body = webhook.json()
+    assert body["stored"] >= 1
+    assert "status_updated" in body
+    assert "status_inserted" in body
+    assert "inbound_inserted" in body
+    assert "skipped_invalid" in body
+    assert "skipped_unknown_integration" in body
+
+    events = await client.get(
+        "/api/v1/observability/events?event_type=whatsapp_webhook_received&days=30&limit=10",
+        headers=_auth_headers(1, "ceo@org1.com", "CEO", 1),
+    )
+    assert events.status_code == 200
+    rows = events.json()
+    assert isinstance(rows, list)
+    assert len(rows) >= 1
+    payload_json = rows[0]["payload"]
+    for key in (
+        "stored",
+        "status_updated",
+        "status_inserted",
+        "inbound_inserted",
+        "skipped_invalid",
+        "skipped_unknown_integration",
+    ):
+        assert key in payload_json
