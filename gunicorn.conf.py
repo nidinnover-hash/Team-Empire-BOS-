@@ -23,6 +23,10 @@ accesslog = "-"  # stdout
 errorlog = "-"   # stderr
 loglevel = os.environ.get("LOG_LEVEL", "info")
 
+# Worker recycling — prevent memory leaks from long-lived workers
+max_requests = 1000
+max_requests_jitter = 100
+
 # Security
 limit_request_line = 8190
 limit_request_fields = 100

@@ -732,9 +732,9 @@ async def whatsapp_webhook_receive(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="Invalid Content-Length header") from exc
 
-    # Validate Content-Type before parsing
+    # Validate Content-Type before parsing — reject missing or wrong types
     content_type = (request.headers.get("content-type") or "").lower()
-    if content_type and "application/json" not in content_type:
+    if "application/json" not in content_type:
         raise HTTPException(status_code=415, detail="Webhook expects application/json")
 
     raw_body = await request.body()

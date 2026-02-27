@@ -1,5 +1,4 @@
 from datetime import date
-from typing import Any
 from urllib.parse import urlencode
 
 import httpx

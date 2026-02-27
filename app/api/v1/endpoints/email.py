@@ -4,7 +4,7 @@ import uuid
 from collections import deque as _deque
 from importlib import import_module
 from time import time
-from typing import Any, Protocol
+from typing import Protocol
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import RedirectResponse
