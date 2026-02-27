@@ -932,8 +932,7 @@
           var p = Math.max(1, Math.min(4, t.priority || 2));
           return '<div class="item" id="task-item-' + t.id + '">' +
             '<div style="display:flex;align-items:flex-start;gap:.55rem">' +
-              '<input type="checkbox" class="task-check" ' + (t.is_done ? "checked" : "") + ' ' +
-                'onchange="taskToggle(' + t.id + ',this.checked)" />' +
+              '<input type="checkbox" class="task-check" data-task-id="' + t.id + '" ' + (t.is_done ? "checked" : "") + ' />' +
               '<div style="flex:1;min-width:0">' +
                 '<div class="item-text" style="' + (t.is_done ? "text-decoration:line-through;color:var(--text-faint)" : "") + '">' +
                   esc(t.title) +
@@ -950,6 +949,19 @@
       } catch(e) {
         list.innerHTML = '<div class="empty">Error loading tasks.</div>';
       }
+    }
+
+    // Event delegation for task checkboxes (CSP-safe, no inline handlers)
+    var tasksList = document.getElementById("tasks-list");
+    if (tasksList) {
+      tasksList.addEventListener("change", function(e) {
+        var cb = e.target;
+        if (!(cb instanceof HTMLElement)) return;
+        if (!cb.classList.contains("task-check") || !cb.dataset.taskId) return;
+        var taskId = Number(cb.dataset.taskId);
+        if (!Number.isFinite(taskId) || taskId <= 0) return;
+        window.taskToggle(taskId, !!cb.checked);
+      });
     }
 
     window.taskToggle = async function(id, isDone) {

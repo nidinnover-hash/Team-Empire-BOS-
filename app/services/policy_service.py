@@ -63,6 +63,8 @@ async def list_decisions(
     end_date: date | None = None,
     limit: int = 50,
 ) -> list[DecisionLog]:
+    # Defense in depth: keep this service bounded even if callers bypass API validation.
+    limit = max(1, min(int(limit or 50), 2000))
     query = select(DecisionLog).where(
         DecisionLog.organization_id == org_id,
     ).order_by(DecisionLog.created_at.desc()).limit(limit)
@@ -72,7 +74,7 @@ async def list_decisions(
     if end_date:
         query = query.where(DecisionLog.created_at < str(end_date))
 
-    result = await db.execute(query.limit(2000))
+    result = await db.execute(query)
     return list(result.scalars().all())
 
 

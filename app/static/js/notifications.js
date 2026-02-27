@@ -7,6 +7,10 @@
   if (!bellBtn || !dropdown) return;
 
   var baseTitle = document.title;
+  var _sseTimer = null;
+  var _sseRetryMs = 5000;
+  var _sseMaxRetryMs = 120000;
+  var _sseClient = null;
 
   function setTitleBadge(count) {
     document.title = count > 0 ? "(" + count + ") " + baseTitle : baseTitle;
@@ -83,24 +87,60 @@
   });
 
   // SSE real-time badge updates
+  function scheduleReconnect() {
+    if (_sseTimer) return;
+    if (document.visibilityState === "hidden") return;
+    _sseTimer = setTimeout(function () {
+      _sseTimer = null;
+      connectSSE();
+    }, _sseRetryMs);
+    _sseRetryMs = Math.min(_sseRetryMs * 2, _sseMaxRetryMs);
+  }
+
   function connectSSE() {
+    if (document.visibilityState === "hidden") return;
+    if (_sseClient) {
+      _sseClient.close();
+      _sseClient = null;
+    }
     var es = new EventSource("/api/v1/notifications/stream");
+    _sseClient = es;
     es.onmessage = function (event) {
       try {
         var d = JSON.parse(event.data);
         badge.textContent = d.unread_count;
         badge.classList.toggle("active", d.unread_count > 0);
         setTitleBadge(d.unread_count);
+        _sseRetryMs = 5000;
       } catch (e) { /* ignore */ }
     };
     es.onerror = function () {
       es.close();
-      setTimeout(connectSSE, 30000);
+      if (_sseClient === es) _sseClient = null;
+      scheduleReconnect();
     };
   }
 
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") {
+      _sseRetryMs = 5000;
+      connectSSE();
+      return;
+    }
+    if (_sseClient) {
+      _sseClient.close();
+      _sseClient = null;
+    }
+  });
+
+  window.addEventListener("online", function () {
+    _sseRetryMs = 5000;
+    connectSSE();
+  });
+
   // Initial load
   updateBadge();
+  connectSSE();
   // Fallback polling every 30s (SSE is primary)
   setInterval(updateBadge, 30000);
 })();
