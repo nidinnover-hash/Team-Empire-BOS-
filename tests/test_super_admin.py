@@ -1,4 +1,5 @@
 """Tests for super-admin cross-org analytics layer."""
+import json
 import pytest
 
 from app.core.security import create_access_token
@@ -281,3 +282,55 @@ async def test_org_readiness_trend_returns_daily_series(client):
     assert isinstance(body["series"], list)
     assert len(body["series"]) == 5
     assert all("day" in point for point in body["series"])
+
+
+@pytest.mark.asyncio
+async def test_super_admin_can_view_org_whatsapp_webhook_failures(client, monkeypatch):
+    from app.api.v1.endpoints import integrations as integrations_endpoint
+
+    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
+    connected = await client.post(
+        "/api/v1/integrations/connect",
+        headers=_super_token(),
+        json={
+            "type": "whatsapp_business",
+            "config_json": {"access_token": "wa-token", "phone_number_id": "pn-super-admin"},
+        },
+    )
+    assert connected.status_code == 201
+
+    payload = {
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "metadata": {"phone_number_id": "pn-super-admin"},
+                            "messages": [{"id": "wamid.SUPER1"}],
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+    bad_signature_headers = {
+        "X-Hub-Signature-256": "sha256=invalid",
+        "Content-Type": "application/json",
+    }
+    webhook = await client.post(
+        "/api/v1/integrations/whatsapp/webhook",
+        content=json.dumps(payload, separators=(",", ":")),
+        headers=bad_signature_headers,
+    )
+    assert webhook.status_code == 403
+
+    failures_r = await client.get(
+        "/api/v1/admin/orgs/1/whatsapp-webhook-failures?days=30&limit=20",
+        headers=_super_token(),
+    )
+    assert failures_r.status_code == 200
+    body = failures_r.json()
+    assert body["org_id"] == 1
+    assert body["total"] >= 1
+    assert isinstance(body["failures"], list)
+    assert any(item["error_code"] == "signature_verification_failed" for item in body["failures"])

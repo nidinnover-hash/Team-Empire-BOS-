@@ -83,6 +83,25 @@ class ReadinessTrendRead(BaseModel):
     generated_at: datetime
 
 
+class WhatsAppWebhookFailureRead(BaseModel):
+    event_id: int
+    event_type: str
+    error_code: str | None = None
+    detail: str | None = None
+    phone_number_id: str | None = None
+    actor_user_id: int | None = None
+    created_at: datetime
+
+
+class WhatsAppWebhookFailureListRead(BaseModel):
+    org_id: int
+    org_name: str
+    days: int
+    total: int
+    failures: list[WhatsAppWebhookFailureRead]
+    generated_at: datetime
+
+
 class AutonomyPolicyRead(BaseModel):
     current_mode: Literal["suggest_only", "approved_execution", "autonomous"]
     allow_auto_approval: bool

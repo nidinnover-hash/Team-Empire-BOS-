@@ -93,6 +93,73 @@ def _sign_google_calendar_state(org_id: int) -> str:
     return sign_google_calendar_state_fn(org_id)
 
 
+def _first_phone_number_id(payload: dict) -> str | None:
+    entries = payload.get("entry")
+    if not isinstance(entries, list):
+        return None
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        changes = entry.get("changes")
+        if not isinstance(changes, list):
+            continue
+        for change in changes:
+            if not isinstance(change, dict):
+                continue
+            value = change.get("value")
+            if not isinstance(value, dict):
+                continue
+            metadata = value.get("metadata")
+            if not isinstance(metadata, dict):
+                continue
+            raw_phone = metadata.get("phone_number_id")
+            if isinstance(raw_phone, str) and raw_phone.strip():
+                return raw_phone.strip()
+    return None
+
+
+async def _resolve_whatsapp_context(
+    db: AsyncSession,
+    payload: dict,
+) -> tuple[int | None, int | None, str | None]:
+    phone_number_id = _first_phone_number_id(payload)
+    if not phone_number_id:
+        return None, None, None
+    integration = await integration_service.find_whatsapp_integration_by_phone_number_id(
+        db,
+        phone_number_id=phone_number_id,
+    )
+    if integration is None:
+        return None, None, phone_number_id
+    return int(integration.organization_id), int(integration.id), phone_number_id
+
+
+async def _record_whatsapp_webhook_failure(
+    db: AsyncSession,
+    *,
+    organization_id: int | None,
+    integration_id: int | None,
+    phone_number_id: str | None,
+    error_code: str,
+    detail: str,
+) -> None:
+    if organization_id is None:
+        return
+    await record_action(
+        db=db,
+        event_type="whatsapp_webhook_failed",
+        actor_user_id=None,
+        organization_id=organization_id,
+        entity_type="integration",
+        entity_id=integration_id,
+        payload_json={
+            "error_code": error_code,
+            "detail": detail,
+            "phone_number_id": phone_number_id,
+        },
+    )
+
+
 # Collection endpoints (no path params)
 
 @router.get("", response_model=list[IntegrationRead])
@@ -664,10 +731,32 @@ async def whatsapp_send_test_message(
             body=data.body,
         )
     except (httpx.HTTPError, RuntimeError, ValueError, TypeError) as exc:
+        await record_action(
+            db,
+            event_type="whatsapp_test_message_failed",
+            actor_user_id=actor["id"],
+            organization_id=actor["org_id"],
+            entity_type="integration",
+            entity_id=item.id,
+            payload_json={
+                "to": data.to,
+                "error_code": "provider_send_failed",
+                "error_type": type(exc).__name__,
+            },
+        )
         raise HTTPException(
             status_code=502,
             detail=safe_provider_error_fn("WhatsApp message send failed"),
         ) from exc
+
+    message_id: str | None = None
+    messages = resp.get("messages")
+    if isinstance(messages, list) and messages:
+        first = messages[0]
+        if isinstance(first, dict):
+            raw_id = first.get("id")
+            if isinstance(raw_id, str):
+                message_id = raw_id
 
     await integration_service.mark_sync_time(db, item)
     await record_action(
@@ -677,16 +766,8 @@ async def whatsapp_send_test_message(
         organization_id=actor["org_id"],
         entity_type="integration",
         entity_id=item.id,
-        payload_json={"to": data.to},
+        payload_json={"to": data.to, "message_id": message_id},
     )
-    message_id: str | None = None
-    messages = resp.get("messages")
-    if isinstance(messages, list) and messages:
-        first = messages[0]
-        if isinstance(first, dict):
-            raw_id = first.get("id")
-            if isinstance(raw_id, str):
-                message_id = raw_id
 
     return WhatsAppSendResult(status="queued", to=data.to, message_id=message_id)
 
@@ -717,13 +798,12 @@ async def whatsapp_webhook_receive(
     """
     Receive webhook events from WhatsApp Business.
     Verifies X-Hub-Signature-256 when WHATSAPP_APP_SECRET is configured.
-    Acks quickly — processing pipelines can be added behind this endpoint.
+    Acks quickly - processing pipelines can be added behind this endpoint.
     """
     import json as _json
 
     _MAX_WEBHOOK_BODY = 1_048_576  # 1 MB guard against oversized payloads
 
-    # Reject obviously oversized payloads before buffering the body
     content_length = request.headers.get("content-length")
     if content_length:
         try:
@@ -732,24 +812,40 @@ async def whatsapp_webhook_receive(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="Invalid Content-Length header") from exc
 
-    # Validate Content-Type before parsing — reject missing or wrong types
     content_type = (request.headers.get("content-type") or "").lower()
     if "application/json" not in content_type:
         raise HTTPException(status_code=415, detail="Webhook expects application/json")
 
     raw_body = await request.body()
-
-    # Post-read size check (Content-Length can be spoofed or absent)
     if len(raw_body) > _MAX_WEBHOOK_BODY:
         raise HTTPException(status_code=413, detail="Webhook payload too large")
 
-    # Verify HMAC signature — reject entirely when secret is not configured
+    try:
+        payload = _json.loads(raw_body)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Webhook payload must be a JSON object")
+
+    webhook_org_id, webhook_integration_id, webhook_phone_number_id = await _resolve_whatsapp_context(
+        db, payload
+    )
+
     app_secret = (settings.WHATSAPP_APP_SECRET or "").strip()
     if not app_secret:
+        await _record_whatsapp_webhook_failure(
+            db,
+            organization_id=webhook_org_id,
+            integration_id=webhook_integration_id,
+            phone_number_id=webhook_phone_number_id,
+            error_code="webhook_disabled_missing_secret",
+            detail="WhatsApp webhook disabled: WHATSAPP_APP_SECRET not configured",
+        )
         raise HTTPException(
             status_code=503,
             detail="WhatsApp webhook disabled: WHATSAPP_APP_SECRET not configured",
         )
+
     sig_header = request.headers.get("X-Hub-Signature-256", "")
     expected_sig = "sha256=" + hmac.new(
         app_secret.encode("utf-8"),
@@ -757,29 +853,50 @@ async def whatsapp_webhook_receive(
         sha256,
     ).hexdigest()
     if not sig_header or not hmac.compare_digest(sig_header, expected_sig):
+        await _record_whatsapp_webhook_failure(
+            db,
+            organization_id=webhook_org_id,
+            integration_id=webhook_integration_id,
+            phone_number_id=webhook_phone_number_id,
+            error_code="signature_verification_failed",
+            detail="Webhook signature verification failed",
+        )
         raise HTTPException(status_code=403, detail="Webhook signature verification failed")
+
     window = max(30, int(settings.WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS))
     if not consume_oauth_nonce_once(
         namespace="whatsapp_webhook_sig",
         nonce=sig_header,
         max_age_seconds=window,
     ):
+        await _record_whatsapp_webhook_failure(
+            db,
+            organization_id=webhook_org_id,
+            integration_id=webhook_integration_id,
+            phone_number_id=webhook_phone_number_id,
+            error_code="webhook_replay_detected",
+            detail="Webhook replay detected",
+        )
         raise HTTPException(status_code=409, detail="Webhook replay detected")
-
-    try:
-        payload = _json.loads(raw_body)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload") from exc
-
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="Webhook payload must be a JSON object")
 
     entries = payload.get("entry")
     count = len(entries) if isinstance(entries, list) else 0
-    stored = await whatsapp_service.ingest_webhook_payload(db, payload)
-    return {"status": "received", "entries": count, "stored": stored}
-
-
+    telemetry = await whatsapp_service.ingest_webhook_payload(db, payload)
+    if webhook_org_id is not None:
+        await record_action(
+            db=db,
+            event_type="whatsapp_webhook_received",
+            actor_user_id=None,
+            organization_id=webhook_org_id,
+            entity_type="integration",
+            entity_id=webhook_integration_id,
+            payload_json={
+                "entries": count,
+                "phone_number_id": webhook_phone_number_id,
+                **telemetry,
+            },
+        )
+    return {"status": "received", "entries": count, **telemetry}
 # ── ClickUp (literal prefix — must be before /{integration_id}/…) ──────────────
 
 

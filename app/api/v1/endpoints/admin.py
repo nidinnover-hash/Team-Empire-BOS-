@@ -11,6 +11,7 @@ from app.core.rbac import require_super_admin
 from app.logs.audit import record_action
 from app.models.approval import Approval
 from app.models.ceo_control import SchedulerJobRun
+from app.models.event import Event
 from app.models.notification import Notification
 from app.models.organization import Organization
 from app.models.task import Task
@@ -31,6 +32,8 @@ from app.schemas.admin import (
     OrgSummary,
     ReadinessTrendPoint,
     ReadinessTrendRead,
+    WhatsAppWebhookFailureListRead,
+    WhatsAppWebhookFailureRead,
 )
 from app.services import autonomy_policy
 from app.services.org_readiness import build_org_readiness_report
@@ -528,6 +531,51 @@ async def org_readiness_trend(
         org_name=org.name,
         days=days,
         series=series,
+        generated_at=datetime.now(UTC),
+    )
+
+
+@router.get("/orgs/{org_id}/whatsapp-webhook-failures", response_model=WhatsAppWebhookFailureListRead)
+async def org_whatsapp_webhook_failures(
+    org_id: int,
+    days: int = Query(default=7, ge=1, le=90),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+    _actor: dict = Depends(require_super_admin),
+) -> WhatsAppWebhookFailureListRead:
+    org = await _load_org_or_404(db, org_id)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+    rows = (
+        await db.execute(
+            select(Event)
+            .where(
+                Event.organization_id == int(org.id),
+                Event.created_at >= cutoff,
+                Event.event_type.in_(["whatsapp_webhook_failed", "whatsapp_test_message_failed"]),
+            )
+            .order_by(Event.created_at.desc())
+            .limit(limit)
+        )
+    ).scalars().all()
+
+    failures = [
+        WhatsAppWebhookFailureRead(
+            event_id=int(row.id),
+            event_type=row.event_type,
+            error_code=str((row.payload_json or {}).get("error_code") or "") or None,
+            detail=str((row.payload_json or {}).get("detail") or "") or None,
+            phone_number_id=str((row.payload_json or {}).get("phone_number_id") or "") or None,
+            actor_user_id=row.actor_user_id,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
+    return WhatsAppWebhookFailureListRead(
+        org_id=int(org.id),
+        org_name=org.name,
+        days=days,
+        total=len(failures),
+        failures=failures,
         generated_at=datetime.now(UTC),
     )
 
