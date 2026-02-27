@@ -24,6 +24,9 @@ jobs:
       - name: Check migration heads
         run: python scripts/check_migration_heads.py
 
+      - name: Check ops readiness controls
+        run: python scripts/check_ops_readiness.py
+
       - name: Full quality gate
         run: python scripts/check_ready.py
 
@@ -37,6 +40,7 @@ jobs:
           - Startup validation passes in production-like env
           - Rollback command documented and tested
           - Key dashboards reviewed (error budget, latency, privacy redaction)
+          - Ops docs verified (SLO/error budget, incident playbook, backup/restore drill)
           EOF
 
       - name: Upload checklist

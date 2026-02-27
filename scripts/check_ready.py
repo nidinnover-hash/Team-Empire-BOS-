@@ -7,6 +7,7 @@ import sys
 
 
 CHECKS: list[list[str]] = [
+    [sys.executable, "scripts/check_ops_readiness.py"],
     [sys.executable, "-m", "ruff", "check", "app", "tests"],
     [sys.executable, "-m", "mypy"],
     [sys.executable, "scripts/check_migration_heads.py"],

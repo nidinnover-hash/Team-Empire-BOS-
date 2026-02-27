@@ -1,5 +1,10 @@
 # Production Runbook
 
+Related controls:
+- `docs/SLO_ERROR_BUDGET.md`
+- `docs/INCIDENT_RESPONSE_PLAYBOOK.md`
+- `docs/BACKUP_RESTORE_DRILL.md`
+
 ## Deploy
 1. Confirm release gate: `python scripts/check_ready.py`
 2. Run deploy:

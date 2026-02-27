@@ -8,6 +8,7 @@
 - Restrict force-push and direct pushes to `main`.
 
 ## Required Pre-Merge Checks
+- `python scripts/check_ops_readiness.py`
 - `python scripts/check_ready.py`
 - `ruff check app tests`
 - `python -m mypy`
@@ -25,6 +26,7 @@
 
 ## Release Checklist
 - Ensure single Alembic head.
+- Run `python scripts/check_ops_readiness.py`.
 - Run `python scripts/check_ready.py`.
 - Validate startup with production-like env values.
 - Confirm rollback command and previous image tag.
