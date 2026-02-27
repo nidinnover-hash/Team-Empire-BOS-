@@ -622,7 +622,7 @@
       webhookFailureDays = nextDays;
       writeUrlState();
       if (selectedOrgId) {
-        await loadOrgDetail(selectedOrgId);
+        await loadWhatsAppFailures(selectedOrgId);
       }
     });
 
@@ -635,7 +635,7 @@
     return panel;
   }
 
-  function renderWhatsAppFailures(report) {
+  function renderWhatsAppFailures(report, hasError) {
     var panel = ensureWhatsAppFailuresPanel();
     if (!panel) return;
     var totalEl = document.getElementById("wa-failures-total");
@@ -645,6 +645,12 @@
       btn.classList.toggle("active", Number(btn.getAttribute("data-days")) === webhookFailureDays);
     });
     if (!totalEl || !generatedEl || !body) return;
+    if (hasError) {
+      totalEl.textContent = "-";
+      generatedEl.textContent = "-";
+      body.innerHTML = '<tr><td colspan="4" class="empty">Failed to load failures</td></tr>';
+      return;
+    }
     if (!report) {
       totalEl.textContent = "-";
       generatedEl.textContent = "-";
@@ -668,6 +674,20 @@
     }).join("");
   }
 
+  async function loadWhatsAppFailures(orgId) {
+    if (!orgId) {
+      renderWhatsAppFailures(null, false);
+      return null;
+    }
+    var report = await apiGet("/api/v1/admin/orgs/" + orgId + "/whatsapp-webhook-failures?days=" + webhookFailureDays + "&limit=500");
+    if (!report) {
+      renderWhatsAppFailures(null, true);
+      return null;
+    }
+    renderWhatsAppFailures(report, false);
+    return report;
+  }
+
   function renderDetail(readiness, gates, trend, policy, history, webhookFailures) {
     var empty = document.getElementById("readiness-detail-empty");
     var detail = document.getElementById("readiness-detail");
@@ -680,7 +700,7 @@
       setPolicyMessage("", "");
       setRolloutMessage("", "");
       setDryRunMessage("", "");
-      renderWhatsAppFailures(null);
+      renderWhatsAppFailures(null, false);
       var dryRunReasons = document.getElementById("dryrun-reasons");
       if (dryRunReasons) dryRunReasons.innerHTML = "";
       return;
@@ -706,11 +726,11 @@
     populatePolicyForm(policy || null);
     renderPolicyHistory(history || []);
     renderTemplateOptions(policy || null, policyTemplates);
-    renderWhatsAppFailures(webhookFailures || null);
+    renderWhatsAppFailures(webhookFailures || null, false);
     setPolicyMessage("", "");
 
     var trendBody = document.getElementById("trend-body");
-    Array.prototype.forEach.call(document.querySelectorAll(".trend-btn"), function (btn) {
+    Array.prototype.forEach.call(document.querySelectorAll(".trend-btn:not(.wa-failures-btn)"), function (btn) {
       btn.classList.toggle("active", Number(btn.getAttribute("data-days")) === trendDays);
     });
     var series = Array.isArray(trend.series) ? trend.series : [];
@@ -738,7 +758,7 @@
       apiGet("/api/v1/admin/orgs/" + orgId + "/autonomy-policy/history?limit=12"),
       apiGet("/api/v1/admin/orgs/" + orgId + "/autonomy-rollout"),
       apiGet("/api/v1/admin/orgs/" + orgId + "/autonomy-policy/templates"),
-      apiGet("/api/v1/admin/orgs/" + orgId + "/whatsapp-webhook-failures?days=" + webhookFailureDays + "&limit=500"),
+      loadWhatsAppFailures(orgId),
     ]);
     policyTemplates = Array.isArray(data[6]) ? data[6] : [];
     populateRolloutForm(data[5]);
