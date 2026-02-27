@@ -24,28 +24,41 @@ test("admin WhatsApp failures panel toggles independently and handles API errors
     <div id="detail-allowed-modes"></div>
     <div id="detail-denied-modes"></div>
     <ul id="detail-reasons"></ul>
-    <div id="policy-msg"></div><div id="rollout-msg"></div><div id="dryrun-msg"></div>
-    <div id="policy-meta"></div>
-    <select id="policy-current-mode"><option value="approved_execution">approved_execution</option></select>
-    <input id="policy-allow-auto" type="checkbox" />
-    <input id="policy-min-auto" />
-    <input id="policy-min-approved" />
-    <input id="policy-min-autonomous" />
-    <input id="policy-block-alerts" type="checkbox" />
-    <input id="policy-block-stale" type="checkbox" />
-    <input id="policy-block-sla" type="checkbox" />
-    <button id="policy-save-btn" type="button"></button>
-    <tbody id="policy-history-body"></tbody>
-    <select id="policy-template-select"></select>
-    <button id="policy-template-apply-btn" type="button"></button>
-    <div id="policy-template-desc"></div>
-    <input id="rollout-kill-switch" type="checkbox" />
-    <input id="rollout-max-actions" />
-    <input id="rollout-pilot-orgs" />
-    <button id="rollout-save-btn" type="button"></button>
-    <input id="dryrun-approval-type" />
-    <button id="dryrun-run-btn" type="button"></button>
-    <ul id="dryrun-reasons"></ul>
+    <div class="policy-panel">
+      <div class="policy-head"></div>
+      <div id="policy-msg"></div><div id="rollout-msg"></div><div id="dryrun-msg"></div>
+      <div id="policy-meta"></div>
+      <div class="policy-grid">
+        <select id="policy-current-mode"><option value="approved_execution">approved_execution</option></select>
+        <input id="policy-min-auto" />
+        <input id="policy-min-approved" />
+        <input id="policy-min-autonomous" />
+      </div>
+      <div class="policy-checks">
+        <input id="policy-allow-auto" type="checkbox" />
+        <input id="policy-block-alerts" type="checkbox" />
+        <input id="policy-block-stale" type="checkbox" />
+        <input id="policy-block-sla" type="checkbox" />
+      </div>
+      <button id="policy-save-btn" type="button"></button>
+      <div class="policy-history-wrap"><tbody id="policy-history-body"></tbody></div>
+      <div class="policy-template-wrap">
+        <select id="policy-template-select"></select>
+        <button id="policy-template-apply-btn" type="button"></button>
+        <div id="policy-template-desc"></div>
+      </div>
+      <div class="policy-rollout-wrap">
+        <input id="rollout-kill-switch" type="checkbox" />
+        <input id="rollout-max-actions" />
+        <input id="rollout-pilot-orgs" />
+        <button id="rollout-save-btn" type="button"></button>
+      </div>
+      <div class="dry-run-wrap">
+        <input id="dryrun-approval-type" />
+        <button id="dryrun-run-btn" type="button"></button>
+        <ul id="dryrun-reasons"></ul>
+      </div>
+    </div>
     <div class="trend-head">
       <div class="trend-controls">
         <button class="trend-btn active" data-days="7" type="button">7d</button>
@@ -136,9 +149,19 @@ test("admin WhatsApp failures panel toggles independently and handles API errors
 
   await page.goto("/web/admin", { waitUntil: "networkidle" });
 
+  await expect(page.locator(".detail-tab-btn")).toHaveCount(4);
+  if ((page.viewportSize()?.width || 0) < 800) {
+    await page.locator(".detail-tab-btn[data-tab='whatsapp']").click();
+    await expect(page.locator(".detail-tab-btn[data-tab='whatsapp']")).toHaveAttribute("aria-selected", "true");
+  }
+
   await expect(page.locator("#wa-failures-total")).toHaveText("3");
   await expect(page.locator(".trend-btn:not(.wa-failures-btn)[data-days='7']")).toHaveClass(/active/);
   await expect(page.locator(".trend-btn:not(.wa-failures-btn)[data-days='14']")).not.toHaveClass(/active/);
+
+  await page.locator(".detail-tab-btn[data-tab='rollout']").focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".detail-tab-btn[data-tab='rollout']")).toHaveAttribute("aria-selected", "true");
 
   const readinessCallsAfterLoad = readinessDetailCalls;
   await page.locator(".wa-failures-btn[data-days='1']").click();
