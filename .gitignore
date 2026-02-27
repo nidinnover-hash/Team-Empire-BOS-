@@ -26,6 +26,9 @@ build/
 .pytest_cache/
 .coverage
 htmlcov/
+test-results/
+playwright-report/
+.playwright/
 
 # Editors & IDE plugins
 .vscode/
@@ -48,3 +51,6 @@ b_vQRsLDjjOMc-1771887990410.zip
 strategy-pack.zip
 personal-clone-strategy-pack.zip
 strategy-pack/
+
+# Node
+node_modules/
