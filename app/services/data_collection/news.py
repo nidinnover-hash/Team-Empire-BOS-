@@ -45,9 +45,9 @@ _NEWS_TOPICS: dict[str, dict[str, str | int]] = {
         "score": 85,
     },
     "clone_tech": {
-        "title": "Digital Clone Technology Enters Mainstream Business",
-        "summary": "Personal AI clones that handle communications, scheduling, and knowledge management are becoming essential tools for busy executives.",
-        "tag": "AI Clones",
+        "title": "AI Agent Technology Enters Mainstream Business",
+        "summary": "Personal AI agents that handle communications, scheduling, and knowledge management are becoming essential tools for busy executives.",
+        "tag": "AI Agents",
         "score": 93,
     },
     "cybersec_ai": {

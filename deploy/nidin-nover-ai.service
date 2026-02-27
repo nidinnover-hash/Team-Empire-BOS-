@@ -1,25 +1,25 @@
-# systemd service for Personal Clone web server (Gunicorn + Uvicorn workers)
-# Place at: /etc/systemd/system/personal-clone.service
+# systemd service for Nidin Nover AI web server (Gunicorn + Uvicorn workers)
+# Place at: /etc/systemd/system/nidin-nover-ai.service
 #
 # Commands:
-#   sudo systemctl enable personal-clone
-#   sudo systemctl start personal-clone
-#   sudo systemctl status personal-clone
-#   sudo journalctl -u personal-clone -f
+#   sudo systemctl enable nidin-nover-ai
+#   sudo systemctl start nidin-nover-ai
+#   sudo systemctl status nidin-nover-ai
+#   sudo journalctl -u nidin-nover-ai -f
 
 [Unit]
-Description=Personal Clone AI (Gunicorn)
+Description=Nidin Nover AI (Gunicorn)
 After=network.target postgresql.service redis.service
-Wants=personal-clone-scheduler.service
+Wants=nidin-nover-ai-scheduler.service
 
 [Service]
 Type=notify
 User=deploy
 Group=deploy
-WorkingDirectory=/opt/personal-clone
-Environment="PATH=/opt/personal-clone/venv/bin:/usr/local/bin:/usr/bin"
-EnvironmentFile=/opt/personal-clone/.env
-ExecStart=/opt/personal-clone/venv/bin/gunicorn -c gunicorn.conf.py app.main:app
+WorkingDirectory=/opt/nidin-nover-ai
+Environment="PATH=/opt/nidin-nover-ai/venv/bin:/usr/local/bin:/usr/bin"
+EnvironmentFile=/opt/nidin-nover-ai/.env
+ExecStart=/opt/nidin-nover-ai/venv/bin/gunicorn -c gunicorn.conf.py app.main:app
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=5
@@ -30,7 +30,7 @@ StandardError=journal
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/personal-clone
+ReadWritePaths=/opt/nidin-nover-ai
 PrivateTmp=true
 
 [Install]

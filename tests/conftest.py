@@ -2,7 +2,7 @@
 Shared test fixtures.
 
 Every test gets:
-  - A fresh in-memory SQLite database (never touches personal_clone.db)
+  - A fresh in-memory SQLite database (never touches the production DB)
   - An async HTTP client wired to the FastAPI app
   - The get_db dependency overridden to use the test database
 """

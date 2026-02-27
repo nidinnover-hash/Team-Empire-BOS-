@@ -56,9 +56,9 @@ async def agent_chat(
     current_user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> AgentChatResponse:
     """
-    Send a message to your AI clone. Returns a real AI response.
+    Send a message to your AI agent. Returns a real AI response.
 
-    The clone automatically picks the right role (CEO, Ops, Sales, Tech PM)
+    The agent automatically picks the right role (CEO, Ops, Sales, Tech PM)
     based on your message, or you can force a role with force_role.
     """
     # Only CEO/ADMIN may force a specific role; other roles get keyword routing

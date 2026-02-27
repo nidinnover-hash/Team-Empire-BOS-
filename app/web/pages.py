@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any, cast
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -33,7 +33,7 @@ async def _get_web_user_or_none(request: Request, db: AsyncSession) -> dict | No
     if not token:
         return None
     try:
-        return cast(dict, await get_current_web_user(session_token=token, db=db))
+        return await get_current_web_user(session_token=token, db=db)
     except HTTPException:
         return None
 
@@ -105,8 +105,8 @@ async def web_talk_bootstrap(
             "value": getattr(item, "value", ""),
             "category": getattr(item, "category", None),
             "updated_at": (
-                cast(Any, item).updated_at.isoformat()
-                if cast(Any, item).updated_at
+                item.updated_at.isoformat()
+                if getattr(item, "updated_at", None)
                 else None
             ),
         }

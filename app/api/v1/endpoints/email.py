@@ -4,7 +4,7 @@ import uuid
 from collections import deque as _deque
 from importlib import import_module
 from time import time
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import RedirectResponse
@@ -80,14 +80,11 @@ def _get_compose_redis_client() -> _ComposeRedisLike | None:
         return None
     try:
         redis_module = import_module("redis")
-        _compose_redis_client = cast(
-            _ComposeRedisLike,
-            redis_module.Redis.from_url(
-                redis_url,
-                decode_responses=True,
-                socket_timeout=0.25,
-                socket_connect_timeout=0.25,
-            ),
+        _compose_redis_client = redis_module.Redis.from_url(
+            redis_url,
+            decode_responses=True,
+            socket_timeout=0.25,
+            socket_connect_timeout=0.25,
         )
         return _compose_redis_client
     except (ImportError, AttributeError, TypeError, ValueError, OSError):
@@ -310,7 +307,7 @@ async def gmail_health(
 ) -> GmailHealthRead:
     """Return Gmail integration health for the current org."""
     org_id = int(current_user["org_id"])
-    payload = cast(dict[str, Any], await email_service.check_gmail_health(db=db, org_id=org_id))
+    payload = await email_service.check_gmail_health(db=db, org_id=org_id)
     return GmailHealthRead.model_validate(payload)
 
 
@@ -324,11 +321,8 @@ async def list_inbox(
 ) -> list[EmailRead]:
     """List emails from the inbox. Filter by unread if needed."""
     org_id = int(_user["org_id"])
-    return cast(
-        list[EmailRead],
-        await email_service.list_emails(
-            db, org_id=org_id, limit=limit, offset=offset, unread_only=unread_only
-        ),
+    return await email_service.list_emails(
+        db, org_id=org_id, limit=limit, offset=offset, unread_only=unread_only
     )
 
 

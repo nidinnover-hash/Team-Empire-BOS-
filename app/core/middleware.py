@@ -16,7 +16,7 @@ import uuid
 from collections import defaultdict, deque
 from importlib import import_module
 from threading import Lock
-from typing import Protocol, cast
+from typing import Protocol
 from urllib.parse import parse_qsl, urlencode
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -86,7 +86,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         nonce = secrets.token_urlsafe(16)
         request.state.csp_nonce = nonce
 
-        response = cast(Response, await call_next(request))
+        response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -119,7 +119,7 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
         request.state.correlation_id = correlation_id
         token = set_current_request_id(correlation_id)
         try:
-            response = cast(Response, await call_next(request))
+            response = await call_next(request)
             response.headers["X-Correlation-ID"] = correlation_id
             response.headers["X-Request-ID"] = correlation_id
             return response
@@ -135,7 +135,7 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
         response: Response | None = None
         status_code = 500
         try:
-            response = cast(Response, await call_next(request))
+            response = await call_next(request)
             status_code = response.status_code
             return response
         finally:
@@ -194,7 +194,7 @@ class RequestBodyLimitMiddleware(BaseHTTPMiddleware):
                             "detail": f"Request body too large. Max {max_bytes // (1024 * 1024)} MB."
                         },
                     )
-        return cast(Response, await call_next(request))
+        return await call_next(request)
 
 
 # -- Rate Limiter --------------------------------------------------------------
@@ -292,14 +292,11 @@ def _get_redis_client() -> _RedisLike | None:
         return None
     try:
         redis_module = import_module("redis")
-        client = cast(
-            _RedisLike,
-            redis_module.Redis.from_url(
-                redis_url,
-                decode_responses=True,
-                socket_timeout=0.25,
-                socket_connect_timeout=0.25,
-            ),
+        client = redis_module.Redis.from_url(
+            redis_url,
+            decode_responses=True,
+            socket_timeout=0.25,
+            socket_connect_timeout=0.25,
         )
         client.ping()
         _redis_client = client
@@ -435,11 +432,11 @@ def clear_login_failures(ip: str) -> None:
 class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         if not settings.RATE_LIMIT_ENABLED:
-            return cast(Response, await call_next(request))
+            return await call_next(request)
 
         path = request.url.path
         if any(path.startswith(p) for p in _EXEMPT_PREFIXES):
-            return cast(Response, await call_next(request))
+            return await call_next(request)
 
         client_ip = get_client_ip(request)
         window = settings.RATE_LIMIT_WINDOW_SECONDS
@@ -463,7 +460,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                         headers={"Retry-After": str(window)},
                     )
                 _rate_limit_stats["allowed"] += 1
-                return cast(Response, await call_next(request))
+                return await call_next(request)
 
         now = time.monotonic()
         try:
@@ -507,7 +504,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             _rate_limit_stats["allowed"] += 1
         finally:
             _rate_limit_lock.release()
-        response = cast(Response, await call_next(request))
+        response = await call_next(request)
         response.headers["X-RateLimit-Limit"] = str(max_req)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
         response.headers["X-RateLimit-Reset"] = str(window)

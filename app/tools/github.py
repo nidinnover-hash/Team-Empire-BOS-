@@ -9,7 +9,7 @@ Fine-grained PAT permissions needed: Contents (read), Issues (read), Pull reques
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import Any
 
 import httpx
 
@@ -67,7 +67,8 @@ async def get_authenticated_user(token: str) -> dict[str, Any]:
             return {"login": "unknown", "id": None, "name": ""}
 
         resp.raise_for_status()
-        return cast(dict[str, Any], resp.json())
+        payload = resp.json()
+        return payload if isinstance(payload, dict) else {}
 
 
 async def list_repos(

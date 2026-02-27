@@ -11,7 +11,6 @@ Flow:
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import cast
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -725,7 +724,7 @@ async def send_approved_compose(
 
     access_token, refresh_token, expires_at = _get_tokens(integration)
     try:
-        sent = cast(bool, await asyncio.wait_for(
+        sent = await asyncio.wait_for(
             asyncio.to_thread(
                 gmail_tool.send_email,
                 access_token=access_token,
@@ -736,7 +735,7 @@ async def send_approved_compose(
                 expires_at=expires_at,
             ),
             timeout=_GMAIL_SEND_TIMEOUT,
-        ))
+        )
     except TimeoutError:
         # Ambiguous: email may have been sent. Do NOT rollback executed_at
         # to avoid double-send. Log critical and let manual review resolve.

@@ -771,7 +771,7 @@ main, .main-wrap, .talk-header, .stats { backdrop-filter: blur(6px); }
 .filter-btn,
 .item,
 .msg.user,
-.msg.clone {
+.msg.agent {
   border-color: #31343a !important;
 }
 
@@ -805,7 +805,7 @@ h1,
 .msg.user {
   background: linear-gradient(145deg, #2d3138 0%, #1e2127 100%) !important;
 }
-.msg.clone,
+.msg.agent,
 .item,
 .kpi,
 .task-item,
@@ -888,7 +888,7 @@ h1,
 
   .item,
   .msg.user,
-  .msg.clone {
+  .msg.agent {
     font-size: 0.83rem !important;
     line-height: 1.45 !important;
   }

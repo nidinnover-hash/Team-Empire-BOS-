@@ -183,7 +183,7 @@
             var url = URL.createObjectURL(blob);
             var a = document.createElement("a");
             a.href = url;
-            a.download = "personal-clone-export.json";
+            a.download = "nidin-nover-ai-export.json";
             a.click();
             URL.revokeObjectURL(url);
             exportStatus.textContent = "Export downloaded.";

@@ -1,6 +1,6 @@
 import ipaddress
 import re
-from typing import Any, cast
+from typing import Any
 
 from app.core.config import settings
 from app.core.sensitive_keys import is_sensitive_key
@@ -156,7 +156,7 @@ def sanitize_audit_payload(payload: dict | None) -> dict:
     if not settings.PRIVACY_REDACTION_ENABLED:
         return dict(payload)
     safe = _sanitize_value(dict(payload), key_hint=None, depth=0)
-    return cast(dict[str, Any], safe)
+    return safe if isinstance(safe, dict) else {}
 
 
 def sanitize_response_payload(payload: Any) -> Any:

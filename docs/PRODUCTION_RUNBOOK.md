@@ -8,11 +8,11 @@ Related controls:
 ## Deploy
 1. Confirm release gate: `python scripts/check_ready.py`
 2. Run deploy:
-   - `bash deploy/deploy.sh /opt/personal-clone personal-clone /opt/personal-clone/.env`
+   - `bash deploy/deploy.sh /opt/nidin-nover-ai nidin-nover-ai /opt/nidin-nover-ai/.env`
 3. Verify:
    - `curl -fsS http://127.0.0.1:8000/health`
-   - `journalctl -u personal-clone --since "10 minutes ago"`
-   - `journalctl -u personal-clone-scheduler --since "10 minutes ago"`
+   - `journalctl -u nidin-nover-ai --since "10 minutes ago"`
+   - `journalctl -u nidin-nover-ai-scheduler --since "10 minutes ago"`
 
 ## Security-critical env defaults
 Set these explicitly in production:
@@ -36,8 +36,8 @@ Otherwise `X-Forwarded-For` can be spoofed and weaken rate-limits/login lockout.
 2. Reinstall dependencies if needed.
 3. Run backward-compatible migration or restore DB backup.
 4. Restart services:
-   - `systemctl restart personal-clone`
-   - `systemctl restart personal-clone-scheduler`
+   - `systemctl restart nidin-nover-ai`
+   - `systemctl restart nidin-nover-ai-scheduler`
 5. Re-check health and logs.
 
 ## Incident response priorities

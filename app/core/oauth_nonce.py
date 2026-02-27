@@ -4,7 +4,7 @@ import logging
 from importlib import import_module
 from threading import Lock
 from time import time
-from typing import Protocol, cast
+from typing import Protocol
 
 from app.core.config import settings
 
@@ -38,14 +38,11 @@ def _get_redis_client() -> _RedisLike | None:
         return None
     try:
         redis_module = import_module("redis")
-        _redis_client = cast(
-            _RedisLike,
-            redis_module.Redis.from_url(
-                url,
-                decode_responses=True,
-                socket_timeout=0.25,
-                socket_connect_timeout=0.25,
-            ),
+        _redis_client = redis_module.Redis.from_url(
+            url,
+            decode_responses=True,
+            socket_timeout=0.25,
+            socket_connect_timeout=0.25,
         )
     except (ImportError, ModuleNotFoundError, AttributeError, TypeError, ValueError):
         _redis_client = None

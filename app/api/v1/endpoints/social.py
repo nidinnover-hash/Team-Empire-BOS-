@@ -1,5 +1,3 @@
-from typing import cast
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,7 +66,7 @@ async def list_social_posts(
         status=status,
         content_mode=allowed_mode,
     )
-    return cast(list[SocialPostRead], rows)
+    return rows
 
 
 @router.patch("/posts/{post_id}/status", response_model=SocialPostRead)

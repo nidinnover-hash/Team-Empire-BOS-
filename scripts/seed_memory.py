@@ -43,7 +43,7 @@ def login():
 PROFILE_ENTRIES = [
     ("owner_name", "Demo Admin", "fact"),
     ("owner_role", "CEO", "fact"),
-    ("company_name", "Personal Clone Co", "fact"),
+    ("company_name", "Nidin Nover AI", "fact"),
     ("company_focus", "AI-powered personal productivity and delegation", "goal"),
     ("primary_goal", "Automate routine decisions and email responses using AI", "goal"),
     ("communication_style", "Direct, concise, no fluff. Use bullet points for summaries.", "preference"),

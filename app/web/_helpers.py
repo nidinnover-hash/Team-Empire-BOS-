@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any, cast
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
@@ -147,7 +147,7 @@ def create_jwt(user) -> str:
     """Create a JWT token for the authenticated user."""
     purpose_profile = resolve_login_profile_cached(user.email)
     token_version = int(getattr(user, "token_version", 1) or 1)
-    return cast(str, create_access_token(
+    return create_access_token(
         {
             "id": user.id,
             "email": user.email,
@@ -159,11 +159,11 @@ def create_jwt(user) -> str:
             "default_avatar_mode": purpose_profile["default_avatar_mode"],
         },
         expires_minutes=effective_token_expiry_minutes(),
-    ))
+    )
 
 
 def resolve_login_profile_cached(email: str) -> dict[str, str]:
-    return cast(dict[str, str], resolve_login_profile(email))
+    return resolve_login_profile(email)
 
 
 def read_avatar_scope(user: dict[str, Any], requested_mode: str) -> str:

@@ -1,7 +1,7 @@
-﻿# Personal AI Clone Operating Guide
+﻿# Nidin Nover AI — Operating Guide
 
 ## Purpose
-This repository implements Phase 1 (Me First): personal work automation with a controlled dashboard interface.
+AI agent platform for autonomous work operations — task orchestration, multi-integration management, and intelligent decision support with human-in-the-loop safety controls.
 
 ## Architecture Rules
 - Keep integrations in `app/tools`.

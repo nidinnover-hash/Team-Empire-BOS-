@@ -106,7 +106,7 @@
     const roleBtns   = document.querySelectorAll(".role-btn");
     if (!input || !sendBtn || !history) return;
 
-    let selectedRole = "CEO Clone";
+    let selectedRole = "CEO Agent";
 
     roleBtns.forEach(function (btn) {
       btn.addEventListener("click", function () {

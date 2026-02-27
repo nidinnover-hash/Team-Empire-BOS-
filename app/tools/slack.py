@@ -8,7 +8,7 @@ Token scopes needed: channels:read, channels:history, groups:read, groups:histor
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import Any
 
 import httpx
 
@@ -37,7 +37,9 @@ async def auth_test(bot_token: str) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await client.post(f"{_BASE}/auth.test", headers=_headers(bot_token))
         resp.raise_for_status()
-        body = cast(dict[str, Any], resp.json())
+        body = resp.json()
+        if not isinstance(body, dict):
+            raise ValueError("Slack auth.test returned invalid response")
         _raise_if_error(body, "auth.test")
         return body
 
@@ -55,7 +57,9 @@ async def list_channels(
             params={"types": types, "limit": limit, "exclude_archived": "true"},
         )
         resp.raise_for_status()
-        body = cast(dict[str, Any], resp.json())
+        body = resp.json()
+        if not isinstance(body, dict):
+            return []
         _raise_if_error(body, "conversations.list")
         channels = body.get("channels") or []
         # Only return channels the bot is in
@@ -75,7 +79,9 @@ async def get_channel_history(
             params={"channel": channel_id, "limit": limit},
         )
         resp.raise_for_status()
-        body = cast(dict[str, Any], resp.json())
+        body = resp.json()
+        if not isinstance(body, dict):
+            return []
         _raise_if_error(body, "conversations.history")
         messages = body.get("messages") or []
         # Exclude bot messages and system messages
@@ -101,7 +107,9 @@ async def post_message(
             json={"channel": channel_id, "text": text},
         )
         resp.raise_for_status()
-        body = cast(dict[str, Any], resp.json())
+        body = resp.json()
+        if not isinstance(body, dict):
+            raise ValueError("Slack chat.postMessage returned invalid response")
         _raise_if_error(body, "chat.postMessage")
         return body
 
@@ -116,7 +124,9 @@ async def get_user_name(bot_token: str, user_id: str) -> str:
                 params={"user": user_id},
             )
             resp.raise_for_status()
-            body = cast(dict[str, Any], resp.json())
+            body = resp.json()
+            if not isinstance(body, dict):
+                return user_id
             if body.get("ok"):
                 user = body.get("user", {})
                 return user.get("real_name") or user.get("name") or user_id

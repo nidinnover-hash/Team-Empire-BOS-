@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Any, cast
+from typing import Any
 from urllib.parse import urlencode
 
 import httpx
@@ -47,7 +47,8 @@ async def exchange_code_for_tokens(
             },
         )
         response.raise_for_status()
-        return cast(dict[str, Any], response.json())
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}
 
 
 async def refresh_access_token(
@@ -66,7 +67,8 @@ async def refresh_access_token(
             },
         )
         response.raise_for_status()
-        return cast(dict[str, Any], response.json())
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}
 
 
 async def list_events_for_day(
@@ -89,5 +91,8 @@ async def list_events_for_day(
             headers={"Authorization": f"Bearer {access_token}"},
         )
         response.raise_for_status()
-        data = cast(dict[str, Any], response.json())
-        return cast(list[dict[str, Any]], data.get("items", []))
+        data = response.json()
+        if not isinstance(data, dict):
+            return []
+        items = data.get("items", [])
+        return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []

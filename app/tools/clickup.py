@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 
 import httpx
 
@@ -31,7 +31,9 @@ async def get_authorized_user(api_token: str) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await client.get(f"{_BASE}/user", headers=_headers(api_token))
         resp.raise_for_status()
-        body = cast(dict[str, Any], resp.json())
+        body = resp.json()
+        if not isinstance(body, dict):
+            return {}
         user = body.get("user")
         return user if isinstance(user, dict) else {}
 
@@ -41,7 +43,9 @@ async def get_teams(api_token: str) -> list[dict[str, Any]]:
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await client.get(f"{_BASE}/team", headers=_headers(api_token))
         resp.raise_for_status()
-        body = cast(dict[str, Any], resp.json())
+        body = resp.json()
+        if not isinstance(body, dict):
+            return []
         teams = body.get("teams")
         if not isinstance(teams, list):
             return []
@@ -77,7 +81,9 @@ async def get_tasks(
             params=params,
         )
         resp.raise_for_status()
-        body = cast(dict[str, Any], resp.json())
+        body = resp.json()
+        if not isinstance(body, dict):
+            return []
         tasks = body.get("tasks")
         if not isinstance(tasks, list):
             return []
@@ -88,7 +94,9 @@ async def get_spaces(api_token: str, team_id: str) -> list[dict[str, Any]]:
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await client.get(f"{_BASE}/team/{team_id}/space", headers=_headers(api_token))
         resp.raise_for_status()
-        body = cast(dict[str, Any], resp.json())
+        body = resp.json()
+        if not isinstance(body, dict):
+            return []
         spaces = body.get("spaces")
         if not isinstance(spaces, list):
             return []
@@ -99,7 +107,9 @@ async def get_folders(api_token: str, space_id: str) -> list[dict[str, Any]]:
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await client.get(f"{_BASE}/space/{space_id}/folder", headers=_headers(api_token))
         resp.raise_for_status()
-        body = cast(dict[str, Any], resp.json())
+        body = resp.json()
+        if not isinstance(body, dict):
+            return []
         folders = body.get("folders")
         if not isinstance(folders, list):
             return []
@@ -110,7 +120,9 @@ async def get_lists_for_folder(api_token: str, folder_id: str) -> list[dict[str,
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await client.get(f"{_BASE}/folder/{folder_id}/list", headers=_headers(api_token))
         resp.raise_for_status()
-        body = cast(dict[str, Any], resp.json())
+        body = resp.json()
+        if not isinstance(body, dict):
+            return []
         lists = body.get("lists")
         if not isinstance(lists, list):
             return []

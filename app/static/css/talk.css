@@ -67,7 +67,7 @@
       word-break: break-word;
     }
     .msg.user { align-self: flex-end; background: var(--surface-alt); border: 1px solid var(--line); max-width: 78%; }
-    .msg.clone { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); max-width: 92%; }
+    .msg.agent { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); max-width: 92%; }
     .msg .tag {
       display: block;
       margin-bottom: 0.24rem;
@@ -203,7 +203,7 @@
   border: 1px solid rgba(129, 140, 248, 0.12) !important;
 }
 
-.msg.clone {
+.msg.agent {
   background: linear-gradient(180deg, rgba(23, 24, 27, 0.75) 0%, rgba(17, 18, 20, 0.85) 100%) !important;
   border: 1px solid rgba(255, 255, 255, 0.05) !important;
   backdrop-filter: blur(12px);

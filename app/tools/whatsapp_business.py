@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import Any
 
 import httpx
 
@@ -24,7 +24,8 @@ async def get_phone_number_details(access_token: str, phone_number_id: str) -> d
             headers=_auth_headers(access_token),
         )
         response.raise_for_status()
-        return cast(dict[str, Any], response.json())
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}
 
 
 async def send_text_message(
@@ -47,4 +48,5 @@ async def send_text_message(
     async with httpx.AsyncClient(timeout=20.0) as client:
         response = await client.post(url, json=payload, headers=_auth_headers(access_token))
         response.raise_for_status()
-        return cast(dict[str, Any], response.json())
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}

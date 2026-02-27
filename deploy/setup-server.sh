@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════════
-# Server Setup Script for Personal Clone / Empire OE AI
+# Server Setup Script for Nidin Nover AI / Empire OE AI
 # Run on a fresh Ubuntu 22.04/24.04 droplet as root.
 #
 # Usage:
 #   # Personal droplet:
-#   bash setup-server.sh personal clone.nidin.ai
+#   bash setup-server.sh personal ai.nidin.ai
 #
 #   # Empire OE droplet:
 #   bash setup-server.sh empireoe ai.empireoe.com
@@ -17,13 +17,13 @@ DOMAIN="${2:-}"
 
 if [[ -z "$DOMAIN" ]]; then
     echo "Usage: bash setup-server.sh <personal|empireoe> <domain>"
-    echo "  e.g. bash setup-server.sh personal clone.nidin.ai"
+    echo "  e.g. bash setup-server.sh personal ai.nidin.ai"
     exit 1
 fi
 
 if [[ "$MODE" == "personal" ]]; then
-    APP_DIR="/opt/personal-clone"
-    SERVICE_NAME="personal-clone"
+    APP_DIR="/opt/nidin-nover-ai"
+    SERVICE_NAME="nidin-nover-ai"
     REPO_BRANCH="main"
 elif [[ "$MODE" == "empireoe" ]]; then
     APP_DIR="/opt/empireoe-clone"
@@ -105,7 +105,7 @@ if [[ "$MODE" == "personal" ]]; then
     cp "$APP_DIR/deploy/nginx-personal.conf" "/etc/nginx/sites-available/$DOMAIN"
 else
     # Adjust static path for empireoe
-    sed "s|/opt/personal-clone|$APP_DIR|g" \
+    sed "s|/opt/nidin-nover-ai|$APP_DIR|g" \
         "$APP_DIR/deploy/nginx-empireoe.conf" > "/etc/nginx/sites-available/$DOMAIN"
 fi
 ln -sf "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
@@ -123,12 +123,12 @@ nginx -t && systemctl reload nginx
 # 8. Systemd services
 echo "[8/8] Installing systemd services..."
 # Web server service
-sed "s|/opt/personal-clone|$APP_DIR|g; s|personal-clone|$SERVICE_NAME|g" \
-    "$APP_DIR/deploy/personal-clone.service" > "/etc/systemd/system/$SERVICE_NAME.service"
+sed "s|/opt/nidin-nover-ai|$APP_DIR|g; s|nidin-nover-ai|$SERVICE_NAME|g" \
+    "$APP_DIR/deploy/nidin-nover-ai.service" > "/etc/systemd/system/$SERVICE_NAME.service"
 
 # Scheduler service
-sed "s|/opt/personal-clone|$APP_DIR|g; s|personal-clone|$SERVICE_NAME|g" \
-    "$APP_DIR/deploy/personal-clone-scheduler.service" > "/etc/systemd/system/$SERVICE_NAME-scheduler.service"
+sed "s|/opt/nidin-nover-ai|$APP_DIR|g; s|nidin-nover-ai|$SERVICE_NAME|g" \
+    "$APP_DIR/deploy/nidin-nover-ai-scheduler.service" > "/etc/systemd/system/$SERVICE_NAME-scheduler.service"
 
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME" "$SERVICE_NAME-scheduler"

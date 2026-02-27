@@ -3,12 +3,12 @@
 # Run from the server as root (or with sudo).
 #
 # Usage:
-#   bash deploy.sh /opt/personal-clone personal-clone /opt/personal-clone/.env
+#   bash deploy.sh /opt/nidin-nover-ai nidin-nover-ai /opt/nidin-nover-ai/.env
 #   bash deploy.sh /opt/empireoe-clone empireoe-clone /opt/empireoe-clone/.env
 set -euo pipefail
 
-APP_DIR="${1:-/opt/personal-clone}"
-SERVICE_NAME="${2:-personal-clone}"
+APP_DIR="${1:-/opt/nidin-nover-ai}"
+SERVICE_NAME="${2:-nidin-nover-ai}"
 ENV_FILE="${3:-$APP_DIR/.env}"
 
 echo "Deploying $SERVICE_NAME from $APP_DIR..."

@@ -4,7 +4,6 @@ import hashlib
 import hmac
 import os
 from datetime import UTC, datetime, timedelta
-from typing import cast
 
 import jwt
 from fastapi.security import OAuth2PasswordBearer
@@ -39,7 +38,9 @@ def decode_access_token(token: str) -> dict:
         raise ValueError("Token expired") from exc
     except jwt.InvalidTokenError as exc:
         raise ValueError("Invalid token") from exc
-    return cast(dict, payload)
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid token payload")
+    return payload
 
 
 def hash_password(password: str) -> str:

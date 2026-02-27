@@ -19,7 +19,7 @@ async def test_talk_mode_page_loads_for_logged_user(client):
     _set_web_session(client)
     response = await client.get("/web/talk")
     assert response.status_code == 200
-    assert "Talk to Clone" in response.text
+    assert "Talk to Agent" in response.text
     assert "Continuous work conversation mode" in response.text
     assert "/static/js/ui-utils.js" in response.text
     assert "/static/js/talk-page.js" in response.text

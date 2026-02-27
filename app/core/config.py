@@ -196,7 +196,7 @@ class Settings(BaseSettings):
     #   opentelemetry-instrumentation-fastapi opentelemetry-instrumentation-sqlalchemy
     #   opentelemetry-exporter-otlp-proto-http
     OTEL_EXPORTER_OTLP_ENDPOINT: str | None = None
-    OTEL_SERVICE_NAME: str = "personal-clone"
+    OTEL_SERVICE_NAME: str = "nidin-nover-ai"
 
     # Feature flags — disable expensive features without redeploying
     FEATURE_AI_COMMANDS: bool = True     # AI responses in command input

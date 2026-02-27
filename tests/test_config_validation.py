@@ -31,7 +31,7 @@ def _base_settings(**overrides) -> Settings:
         "AUTO_SEED_DEFAULTS": False,
         "MARKETING_EXPORT_PII_ALLOWED": False,
         "PURPOSE_PERSONAL_EMAILS": "nidinnover@gmail.com",
-        "DATABASE_URL": "postgresql+asyncpg://user:pass@localhost:5432/personal_clone_test",
+        "DATABASE_URL": "postgresql+asyncpg://user:pass@localhost:5432/nidin_nover_ai_test",
     }
     data.update(overrides)
     return Settings(**data)
@@ -244,7 +244,7 @@ def test_validate_startup_flags_web_api_token_ttl_bounds():
 def test_validate_startup_flags_unknown_env_keys(tmp_path, monkeypatch):
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/personal_clone_test\n"
+        "DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/nidin_nover_ai_test\n"
         "UNKNOWN_CONFIG_FLAG=true\n",
         encoding="utf-8",
     )
@@ -258,7 +258,7 @@ def test_validate_startup_flags_unknown_env_keys(tmp_path, monkeypatch):
 def test_validate_startup_flags_unknown_env_keys_even_when_debug_true(tmp_path, monkeypatch):
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/personal_clone_test\n"
+        "DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/nidin_nover_ai_test\n"
         "UNKNOWN_CONFIG_FLAG=true\n",
         encoding="utf-8",
     )

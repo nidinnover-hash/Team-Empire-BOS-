@@ -6,7 +6,7 @@ import logging
 import time
 from importlib import import_module
 from threading import Lock
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 from app.core.config import settings
 
@@ -51,7 +51,13 @@ def _redis_key(scope: str, key: str) -> str:
 
 
 def _json_clone(payload: dict[str, Any]) -> dict[str, Any]:
-    return cast(dict[str, Any], json.loads(json.dumps(payload)))
+    cloned = json.loads(json.dumps(payload))
+    return cloned if isinstance(cloned, dict) else {}
+
+
+def _json_loads_dict(raw: str | bytes) -> dict[str, Any] | None:
+    parsed = json.loads(raw)
+    return parsed if isinstance(parsed, dict) else None
 
 
 def build_fingerprint(payload: dict[str, Any]) -> str:
@@ -96,14 +102,11 @@ def _get_redis_client() -> _RedisLike | None:
         logger.warning("Redis idempotency requested but redis package is not installed; using memory backend.")
         return None
     try:
-        client = cast(
-            _RedisLike,
-            redis_module.Redis.from_url(
-                redis_url,
-                decode_responses=True,
-                socket_timeout=0.25,
-                socket_connect_timeout=0.25,
-            ),
+        client = redis_module.Redis.from_url(
+            redis_url,
+            decode_responses=True,
+            socket_timeout=0.25,
+            socket_connect_timeout=0.25,
         )
         client.get("__idempotency_healthcheck__")
         _redis_client = client
@@ -143,7 +146,9 @@ def get_cached_response(scope: str, key: str, fingerprint: str | None = None) ->
             raw = client.get(_redis_key(scope, key))
             if raw:
                 try:
-                    payload = cast(dict[str, Any], json.loads(raw))
+                    payload = _json_loads_dict(raw)
+                    if payload is None:
+                        raise ValueError("Invalid idempotency payload type")
                     _idempotency_stats["hits"] += 1
                     return _unpack_cached(payload, fingerprint)
                 except IdempotencyConflictError:
@@ -183,7 +188,9 @@ def store_response(
                     existing = client.get(_redis_key(scope, key))
                     if existing:
                         try:
-                            old = cast(dict[str, Any], json.loads(existing))
+                            old = _json_loads_dict(existing)
+                            if old is None:
+                                raise ValueError("Invalid idempotency payload type")
                             old_fp = old.get("fingerprint")
                             if isinstance(old_fp, str) and old_fp != fingerprint:
                                 _idempotency_stats["conflicts"] += 1

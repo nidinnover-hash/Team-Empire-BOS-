@@ -84,7 +84,7 @@ ROLE_PROMPTS: dict[str, str] = {
         "Rules:\n"
         "- Always respond with: current task status, next tasks to assign, any blockers.\n"
         "- Tech team has 1 Tech Head and 4 developers. They currently track work in Excel.\n"
-        "- Prioritize tasks that directly move the Personal AI Clone project forward.\n"
+        "- Prioritize tasks that directly move active projects forward.\n"
         "- Be specific — give actual task names, not generic descriptions."
     ),
 }

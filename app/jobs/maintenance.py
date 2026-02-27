@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -91,7 +90,7 @@ async def cleanup_old_job_runs_and_snapshots(db: AsyncSession, org_id: int) -> N
     ]
     try:
         for model, name, ts_col in tables:
-            model_cls = cast(Any, model)
+            model_cls = model
             result = await db.execute(
                 delete(model_cls).where(
                     model_cls.organization_id == org_id,

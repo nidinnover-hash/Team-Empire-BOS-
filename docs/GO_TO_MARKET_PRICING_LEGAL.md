@@ -2,7 +2,7 @@
 
 ## Positioning
 
-Personal AI Clone is a `suggest-only` executive operating system.
+Nidin Nover AI is a `suggest-only` executive operating system.
 It centralizes visibility, compliance monitoring, and decision support while
 keeping irreversible actions behind human approval.
 

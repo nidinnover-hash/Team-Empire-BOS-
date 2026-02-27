@@ -91,8 +91,8 @@ function getCookie(name) {
     }
     function appendMessage(role, text) {
       var div = document.createElement("div");
-      div.className = "msg " + (role === "user" ? "user" : "clone");
-      div.innerHTML = '<span class="tag">' + (role === "user" ? "You" : "Clone") + "</span>" + esc(text);
+      div.className = "msg " + (role === "user" ? "user" : "agent");
+      div.innerHTML = '<span class="tag">' + (role === "user" ? "You" : "Agent") + "</span>" + esc(text);
       chatLog.appendChild(div);
       chatLog.scrollTop = chatLog.scrollHeight;
     }
@@ -195,7 +195,7 @@ function getCookie(name) {
       if (Array.isArray(history) && history.length) {
         history.forEach(function (m) {
           if (m.user_message) appendMessage("user", m.user_message);
-          if (m.ai_response) appendMessage("clone", m.ai_response);
+          if (m.ai_response) appendMessage("agent", m.ai_response);
         });
       }
     }
@@ -215,9 +215,9 @@ function getCookie(name) {
         renderPrompts(bootstrap.suggested_prompts || []);
       }
       if (!chatLog.children.length && bootstrap.welcome) {
-        appendMessage("clone", bootstrap.welcome);
+        appendMessage("agent", bootstrap.welcome);
       }
-      setStatus("Clone is online and synced with your work.", "ok");
+      setStatus("Agent is online and synced with your work.", "ok");
     }
 
     async function sendMessage() {
@@ -231,7 +231,7 @@ function getCookie(name) {
       input.value = "";
       if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(sendBtn, true, "Sending...");
       else sendBtn.disabled = true;
-      setStatus("Clone is thinking...");
+      setStatus("Agent is thinking...");
 
       try {
         var form = new FormData();
@@ -244,10 +244,10 @@ function getCookie(name) {
         });
         var body = await r.json().catch(function () { return {}; });
         if (!r.ok) throw new Error(body.detail || "Chat request failed");
-        appendMessage("clone", body.response || "Done.");
+        appendMessage("agent", body.response || "Done.");
         setStatus(body.requires_approval ? "Reply generated. Some actions require approval." : "Reply ready.", "ok");
       } catch (err) {
-        appendMessage("clone", "I hit an error while processing that. Please try again.");
+        appendMessage("agent", "I hit an error while processing that. Please try again.");
         setStatus(mapUiError(err), "err");
       } finally {
         if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(sendBtn, false);

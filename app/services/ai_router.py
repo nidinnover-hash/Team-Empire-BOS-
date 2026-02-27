@@ -16,7 +16,7 @@ import logging
 import re
 import time
 from collections import deque
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -296,10 +296,24 @@ def _configured_providers() -> list[str]:
 
 def _normalize_provider_result(raw: object) -> tuple[str, bool, int | None, int | None]:
     """Accept legacy/provider-mocked return shapes from _call_provider."""
+    def _to_optional_int(value: object) -> int | None:
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str | bytes | bytearray):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+        return None
+
     if isinstance(raw, tuple):
         if len(raw) == 4:
             result, is_transient, in_tok, out_tok = raw
-            return str(result), bool(is_transient), cast(int | None, in_tok), cast(int | None, out_tok)
+            return str(result), bool(is_transient), _to_optional_int(in_tok), _to_optional_int(out_tok)
         if len(raw) == 2:
             result, is_transient = raw
             return str(result), bool(is_transient), None, None
