@@ -238,8 +238,9 @@ async def ingest_github_signals(db: AsyncSession, org_id: int) -> dict[str, Any]
 
     config = integration.config_json or {}
     token = config.get("access_token")
+    # missing token is effectively a disconnected integration
     if not token:
-        return {"synced": 0, "error": "Missing GitHub token"}
+        return {"synced": 0, "error": "GitHub not connected"}
 
     emp_maps = await _employee_map(db, org_id)
 
@@ -433,8 +434,9 @@ async def ingest_github_cicd_signals(db: AsyncSession, org_id: int) -> dict[str,
 
     config = integration.config_json or {}
     token = config.get("access_token")
+    # treat absent token same as disconnected for consistent client handling
     if not token:
-        return {"workflow_runs": 0, "deployments": 0, "error": "Missing GitHub token"}
+        return {"workflow_runs": 0, "deployments": 0, "error": "GitHub not connected"}
 
     emp_maps = await _employee_map(db, org_id)
 

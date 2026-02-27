@@ -243,13 +243,15 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
     """
     item = await integration_service.get_integration_by_type(db, org_id, _GITHUB_TYPE)
     if item is None or item.status != "connected":
-        return {"prs_synced": 0, "issues_synced": 0, "error": "GitHub integration is not connected"}
+        # integration missing or disconnected -> treat as not connected
+        return {"prs_synced": 0, "issues_synced": 0, "error": "GitHub not connected"}
 
     cfg = item.config_json or {}
     token = cfg.get("access_token")
 
+    # absence of token indicates misconfiguration; respond same as not connected
     if not token:
-        return {"prs_synced": 0, "issues_synced": 0, "error": "Missing access_token in GitHub config"}
+        return {"prs_synced": 0, "issues_synced": 0, "error": "GitHub not connected"}
 
     prs_synced = 0
     issues_synced = 0

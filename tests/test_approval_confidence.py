@@ -36,7 +36,7 @@ async def test_approval_request_creates_pattern_on_approve(client):
     r3 = await client.get("/api/v1/approvals/approval-patterns")
     assert r3.status_code == 200
     patterns = r3.json()
-    assert any(p["approval_type"] == "notify_team" and p["approve_count"] == 1 for p in patterns)
+    assert any(p["approval_type"] == "notify_team" and p["approved_count"] == 1 for p in patterns)
 
 
 @pytest.mark.asyncio
@@ -55,7 +55,7 @@ async def test_confidence_score_increases_with_approvals(client):
     patterns = r.json()
     p = next((x for x in patterns if x["approval_type"] == "tag_contact"), None)
     assert p is not None
-    assert p["approve_count"] == 3
+    assert p["approved_count"] == 3
     assert p["confidence_score"] > 0.0
 
 

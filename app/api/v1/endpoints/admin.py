@@ -218,6 +218,37 @@ async def list_org_autonomy_policy_templates(
     return [AutonomyTemplateRead.model_validate(row) for row in autonomy_policy.list_policy_templates()]
 
 
+@router.patch("/orgs/{org_id}/autonomy-policy", response_model=AutonomyPolicyRead)
+async def patch_org_autonomy_policy(
+    org_id: int,
+    updates: dict[str, object],
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_super_admin),
+) -> AutonomyPolicyRead:
+    org = await _load_org_or_404(db, org_id)
+    updated = await autonomy_policy.update_autonomy_policy(
+        db,
+        organization_id=int(org.id),
+        updates=updates,
+        updated_by_user_id=int(actor.get("id")) if actor.get("id") is not None else None,
+        updated_by_email=str(actor.get("email") or "").strip().lower() or None,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Organisation not found")
+    policy, meta = updated
+    await record_action(
+        db=db,
+        event_type="autonomy_policy_updated",
+        actor_user_id=int(actor.get("id")) if actor.get("id") is not None else None,
+        organization_id=int(org.id),
+        entity_type="organization",
+        entity_id=int(org.id),
+        payload_json={"changed_fields": list(updates.keys())},
+    )
+    await db.commit()
+    return AutonomyPolicyRead.model_validate({**policy, **meta})
+
+
 @router.post("/orgs/{org_id}/autonomy-policy/templates/{template_id}", response_model=AutonomyPolicyRead)
 async def apply_org_autonomy_policy_template(
     org_id: int,
