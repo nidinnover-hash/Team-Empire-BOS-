@@ -32,6 +32,8 @@ class ApprovalRead(BaseModel):
     status: str
     approved_by: int | None
     approved_at: datetime | None
+    auto_approved_at: datetime | None = None
+    confidence_score: float | None = None
     executed_at: datetime | None = None
     expires_at: datetime | None = None
     created_at: datetime

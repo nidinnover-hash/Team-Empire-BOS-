@@ -89,7 +89,8 @@ async def test_auto_approve_triggers_after_threshold(client):
         json={"is_auto_approve_enabled": True, "auto_approve_threshold": threshold},
     )
     assert patch_r.status_code == 200
-    assert patch_r.json()["is_auto_approve_enabled"] is True
+    body = patch_r.json()
+    assert body["is_auto_approve_enabled"] is True
 
     # Next request should be auto-approved
     r2 = await client.post(

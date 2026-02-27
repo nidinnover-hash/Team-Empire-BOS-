@@ -11,6 +11,7 @@ class ApprovalPatternRead(BaseModel):
     sample_payload: dict[str, Any] = Field(default_factory=dict)
     approved_count: int = 0
     rejected_count: int = 0
+    reject_count: int = 0
     is_auto_approve_enabled: bool = False
     auto_approve_threshold: float = 0.9
     confidence_score: float = 0.0

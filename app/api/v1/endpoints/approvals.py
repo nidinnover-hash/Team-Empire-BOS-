@@ -506,6 +506,7 @@ async def list_approval_patterns(
     result = []
     for p in patterns:
         read = ApprovalPatternRead.model_validate(p, from_attributes=True)
+        read.reject_count = read.rejected_count
         read.confidence_score = pattern_service.compute_confidence(p)
         result.append(read)
     return result
@@ -526,6 +527,7 @@ async def update_approval_pattern(
     if pattern is None:
         raise HTTPException(status_code=404, detail="Pattern not found")
     read = ApprovalPatternRead.model_validate(pattern, from_attributes=True)
+    read.reject_count = read.rejected_count
     read.confidence_score = pattern_service.compute_confidence(pattern)
     return read
 

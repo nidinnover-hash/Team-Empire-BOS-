@@ -92,7 +92,7 @@ async def digitalocean_sync(
             entity_id=None,
             payload_json={"request_id": request_id, "status": "error", "error": normalized["error"]},
         )
-        raise HTTPException(status_code=400, detail=str(normalized["error"]))
+        raise HTTPException(status_code=400, detail="DigitalOcean sync failed. Check your configuration and retry.")
     await record_action(
         db,
         event_type="digitalocean_synced",
