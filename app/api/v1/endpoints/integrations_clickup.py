@@ -3,6 +3,7 @@ from typing import cast
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.endpoints._integration_helpers import normalize_sync_result
 from app.core.deps import get_db
 from app.core.idempotency import (
     IdempotencyConflictError,
@@ -96,8 +97,16 @@ async def clickup_sync(
                 return cast(ClickUpSyncResult, ClickUpSyncResult.model_validate(cached))
         except IdempotencyConflictError as exc:
             raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
-    result = await clickup_service.sync_clickup_tasks(db, org_id=int(actor["org_id"]))
-    if result["error"]:
+    try:
+        result = await clickup_service.sync_clickup_tasks(db, org_id=int(actor["org_id"]))
+    except (RuntimeError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
+        raise HTTPException(status_code=502, detail="ClickUp sync failed due to upstream error. Retry shortly.") from exc
+    normalized = normalize_sync_result(
+        result,
+        integration_type="clickup",
+        required_int_fields=("synced",),
+    )
+    if normalized["error"]:
         await record_action(
             db,
             event_type="clickup_synced",
@@ -105,9 +114,9 @@ async def clickup_sync(
             organization_id=actor["org_id"],
             entity_type="integration",
             entity_id=None,
-            payload_json={"request_id": request_id, "status": "error", "error": result["error"]},
+            payload_json={"request_id": request_id, "status": "error", "error": normalized["error"]},
         )
-        raise HTTPException(status_code=400, detail=result["error"])
+        raise HTTPException(status_code=400, detail=normalized["error"])
 
     await record_action(
         db,
@@ -116,11 +125,14 @@ async def clickup_sync(
         organization_id=actor["org_id"],
         entity_type="integration",
         entity_id=None,
-        payload_json={"request_id": request_id, "status": "ok", "synced": result["synced"]},
+        payload_json={"request_id": request_id, "status": "ok", "synced": normalized["synced"]},
     )
 
     status = await clickup_service.get_clickup_status(db, org_id=int(actor["org_id"]))
-    response = ClickUpSyncResult(synced=result["synced"], last_sync_at=status.get("last_sync_at"))
+    response = ClickUpSyncResult(
+        synced=normalized["synced"],
+        last_sync_at=status.get("last_sync_at"),
+    )
     if idempotency_key:
         store_response(scope, idempotency_key, response.model_dump(), fingerprint=fingerprint)
     return response

@@ -35,3 +35,18 @@ async def test_do_sync_returns_result(client, monkeypatch):
     }))
     resp = await client.post("/api/v1/integrations/digitalocean/sync")
     assert resp.status_code == 200
+
+
+async def test_do_sync_malformed_result_returns_502(client, monkeypatch):
+    monkeypatch.setattr(do_service, "sync_digitalocean", AsyncMock(return_value={
+        "droplets": "2",
+        "members": 3,
+    }))
+    resp = await client.post("/api/v1/integrations/digitalocean/sync")
+    assert resp.status_code == 502
+
+
+async def test_do_sync_timeout_returns_502(client, monkeypatch):
+    monkeypatch.setattr(do_service, "sync_digitalocean", AsyncMock(side_effect=TimeoutError("do timeout")))
+    resp = await client.post("/api/v1/integrations/digitalocean/sync")
+    assert resp.status_code == 502

@@ -148,3 +148,21 @@ async def test_github_sync_denied_for_manager(client):
         headers={"Authorization": f"Bearer {mgr}"},
     )
     assert response.status_code == 403
+
+
+async def test_github_sync_malformed_result_returns_502(client, monkeypatch):
+    async def _bad_shape(db, org_id):
+        return {"prs_synced": "7", "issues_synced": 3, "error": None}
+
+    monkeypatch.setattr(github_service, "sync_github", _bad_shape)
+    response = await client.post("/api/v1/integrations/github/sync", headers=_ceo_headers())
+    assert response.status_code == 502
+
+
+async def test_github_sync_timeout_returns_502(client, monkeypatch):
+    async def _timeout(db, org_id):
+        raise TimeoutError("github timeout")
+
+    monkeypatch.setattr(github_service, "sync_github", _timeout)
+    response = await client.post("/api/v1/integrations/github/sync", headers=_ceo_headers())
+    assert response.status_code == 502

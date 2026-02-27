@@ -1,3 +1,4 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,6 +7,7 @@ from app.api.v1.endpoints._integration_helpers import (
     audit_connect_success,
     audit_sync,
     handle_connect_error,
+    normalize_sync_result,
 )
 from app.core.deps import get_db
 from app.core.rbac import require_roles
@@ -58,6 +60,23 @@ async def ga_sync(
     try:
         result = await google_analytics_service.sync_analytics(db, org_id=int(actor["org_id"]))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Sync failed. Check connection and try again.") from exc
-    await audit_sync(db, event_type="ga_synced", actor=actor, payload={"sessions": result["sessions_30d"]})
-    return GoogleAnalyticsSyncResult(**result)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (httpx.HTTPError, RuntimeError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
+        raise HTTPException(status_code=502, detail="Google Analytics sync failed due to upstream error. Retry shortly.") from exc
+    normalized = normalize_sync_result(
+        result,
+        integration_type="google analytics",
+        required_int_fields=("sessions_30d", "active_users_30d", "page_views_30d"),
+    )
+    top_pages = result.get("top_pages")
+    traffic_sources = result.get("traffic_sources")
+    if not isinstance(top_pages, list) or not isinstance(traffic_sources, list):
+        raise HTTPException(status_code=502, detail="Google Analytics sync returned invalid response shape.")
+    await audit_sync(db, event_type="ga_synced", actor=actor, payload={"sessions": normalized["sessions_30d"]})
+    return GoogleAnalyticsSyncResult(
+        sessions_30d=normalized["sessions_30d"],
+        active_users_30d=normalized["active_users_30d"],
+        page_views_30d=normalized["page_views_30d"],
+        top_pages=top_pages,
+        traffic_sources=traffic_sources,
+    )

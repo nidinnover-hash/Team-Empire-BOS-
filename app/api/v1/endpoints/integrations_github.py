@@ -3,6 +3,7 @@ from typing import cast
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.endpoints._integration_helpers import normalize_sync_result
 from app.core.deps import get_db
 from app.core.idempotency import (
     IdempotencyConflictError,
@@ -124,8 +125,16 @@ async def github_sync(
                 return cast(GitHubSyncResult, GitHubSyncResult.model_validate(cached))
         except IdempotencyConflictError as exc:
             raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
-    result = await github_service.sync_github(db, org_id=org_id)
-    if result["error"]:
+    try:
+        result = await github_service.sync_github(db, org_id=org_id)
+    except (RuntimeError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
+        raise HTTPException(status_code=502, detail="GitHub sync failed due to upstream error. Retry shortly.") from exc
+    normalized = normalize_sync_result(
+        result,
+        integration_type="github",
+        required_int_fields=("prs_synced", "issues_synced"),
+    )
+    if normalized["error"]:
         await record_action(
             db,
             event_type="github_synced",
@@ -133,9 +142,9 @@ async def github_sync(
             organization_id=actor["org_id"],
             entity_type="integration",
             entity_id=None,
-            payload_json={"request_id": request_id, "status": "error", "error": result["error"]},
+            payload_json={"request_id": request_id, "status": "error", "error": normalized["error"]},
         )
-        raise HTTPException(status_code=400, detail=result["error"])
+        raise HTTPException(status_code=400, detail=normalized["error"])
 
     await record_action(
         db,
@@ -147,14 +156,14 @@ async def github_sync(
         payload_json={
             "request_id": request_id,
             "status": "ok",
-            "prs_synced": result["prs_synced"],
-            "issues_synced": result["issues_synced"],
+            "prs_synced": normalized["prs_synced"],
+            "issues_synced": normalized["issues_synced"],
         },
     )
     status = await github_service.get_github_status(db, org_id=org_id)
     response = GitHubSyncResult(
-        prs_synced=result["prs_synced"],
-        issues_synced=result["issues_synced"],
+        prs_synced=normalized["prs_synced"],
+        issues_synced=normalized["issues_synced"],
         last_sync_at=status.get("last_sync_at"),
     )
     if idempotency_key:

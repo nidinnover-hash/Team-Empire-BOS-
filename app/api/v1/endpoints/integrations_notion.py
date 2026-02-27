@@ -1,3 +1,4 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,6 +7,7 @@ from app.api.v1.endpoints._integration_helpers import (
     audit_connect_success,
     audit_sync,
     handle_connect_error,
+    normalize_sync_result,
 )
 from app.core.deps import get_db
 from app.core.rbac import require_roles
@@ -52,9 +54,20 @@ async def notion_sync(
     try:
         result = await notion_service.sync_pages_to_notes(db, org_id=int(actor["org_id"]))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Sync failed. Check connection and try again.") from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (httpx.HTTPError, RuntimeError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
+        raise HTTPException(status_code=502, detail="Notion sync failed due to upstream error. Retry shortly.") from exc
+    normalized = normalize_sync_result(
+        result,
+        integration_type="notion",
+        required_int_fields=("pages_synced", "notes_created"),
+    )
     await audit_sync(
         db, event_type="notion_synced", actor=actor,
-        payload={"pages_synced": result["pages_synced"], "notes_created": result["notes_created"]},
+        payload={"pages_synced": normalized["pages_synced"], "notes_created": normalized["notes_created"]},
     )
-    return NotionSyncResult(**result)
+    return NotionSyncResult(
+        pages_synced=normalized["pages_synced"],
+        notes_created=normalized["notes_created"],
+        last_sync_at=result.get("last_sync_at"),
+    )

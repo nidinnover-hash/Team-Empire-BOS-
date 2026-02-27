@@ -161,3 +161,12 @@ async def test_slack_send_denied_for_manager(client):
         headers={"Authorization": f"Bearer {mgr}"},
     )
     assert response.status_code == 403
+
+
+async def test_slack_sync_malformed_result_returns_502(client, monkeypatch):
+    async def _bad_shape(db, org_id):
+        return {"channels_synced": 3, "messages_read": "45", "error": None}
+
+    monkeypatch.setattr(slack_service, "sync_slack_messages", _bad_shape)
+    response = await client.post("/api/v1/integrations/slack/sync", headers=_ceo_headers())
+    assert response.status_code == 502

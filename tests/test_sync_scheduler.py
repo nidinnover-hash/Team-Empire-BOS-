@@ -149,6 +149,40 @@ async def test_run_integrations_all_succeed(monkeypatch):
     assert results == ["ok", "ok", "ok"]
 
 
+async def test_integration_retry_path_recovers_and_continues(monkeypatch):
+    _reset_state()
+    from app.services import clickup_service, github_service, slack_service
+
+    attempts = {"clickup": 0}
+    results: list[str] = []
+
+    async def _flaky_clickup(db, org_id):
+        attempts["clickup"] += 1
+        if attempts["clickup"] == 1:
+            raise TimeoutError("temporary timeout")
+        results.append("clickup")
+        return {"synced": 1, "error": None}
+
+    async def _ok_github(db, org_id):
+        results.append("github")
+        return {"prs_synced": 1, "issues_synced": 1, "error": None}
+
+    async def _ok_slack(db, org_id):
+        results.append("slack")
+        return {"channels_synced": 1, "messages_read": 1, "error": None}
+
+    monkeypatch.setattr(clickup_service, "sync_clickup_tasks", _flaky_clickup)
+    monkeypatch.setattr(github_service, "sync_github", _ok_github)
+    monkeypatch.setattr(slack_service, "sync_slack_messages", _ok_slack)
+
+    await sync_scheduler._run_integrations(object(), org_id=1)
+
+    assert attempts["clickup"] >= 2
+    assert "clickup" in results
+    assert "github" in results
+    assert "slack" in results
+
+
 # ── scheduler start/stop ──────────────────────────────────────────────────────
 
 async def test_start_stop_scheduler():

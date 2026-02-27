@@ -129,3 +129,12 @@ async def test_clickup_sync_denied_for_manager(client):
         headers={"Authorization": f"Bearer {mgr_token}"},
     )
     assert response.status_code == 403
+
+
+async def test_clickup_sync_malformed_result_returns_502(client, monkeypatch):
+    async def _bad_shape(db, org_id):
+        return {"synced": "12", "error": None}
+
+    monkeypatch.setattr(clickup_service, "sync_clickup_tasks", _bad_shape)
+    response = await client.post("/api/v1/integrations/clickup/sync", headers=_ceo_headers())
+    assert response.status_code == 502

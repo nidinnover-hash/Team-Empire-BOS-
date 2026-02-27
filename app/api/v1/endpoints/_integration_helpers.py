@@ -97,3 +97,32 @@ async def audit_sync(
         entity_id=None,
         payload_json=full_payload,
     )
+
+
+def normalize_sync_result(
+    result: object,
+    *,
+    integration_type: str,
+    required_int_fields: tuple[str, ...],
+) -> dict[str, Any]:
+    """Validate sync result contract and return normalized dict."""
+    if not isinstance(result, dict):
+        raise HTTPException(
+            status_code=502,
+            detail=f"{integration_type.capitalize()} sync returned an invalid response shape.",
+        )
+
+    error = result.get("error")
+    if error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    normalized: dict[str, Any] = {"error": None}
+    for field in required_int_fields:
+        value = result.get(field)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise HTTPException(
+                status_code=502,
+                detail=f"{integration_type.capitalize()} sync returned invalid field '{field}'.",
+            )
+        normalized[field] = value
+    return normalized

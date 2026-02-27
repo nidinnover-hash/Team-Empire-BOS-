@@ -1,6 +1,8 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.endpoints._integration_helpers import normalize_sync_result
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.core.request_context import get_current_request_id
@@ -71,8 +73,16 @@ async def digitalocean_sync(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> DigitalOceanSyncResult:
     request_id = get_current_request_id()
-    result = await do_service.sync_digitalocean(db, org_id=int(actor["org_id"]))
-    if result.get("error"):
+    try:
+        result = await do_service.sync_digitalocean(db, org_id=int(actor["org_id"]))
+    except (httpx.HTTPError, RuntimeError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
+        raise HTTPException(status_code=502, detail="DigitalOcean sync failed due to upstream error. Retry shortly.") from exc
+    normalized = normalize_sync_result(
+        result,
+        integration_type="digitalocean",
+        required_int_fields=("droplets", "members"),
+    )
+    if normalized["error"]:
         await record_action(
             db,
             event_type="digitalocean_synced",
@@ -80,9 +90,9 @@ async def digitalocean_sync(
             organization_id=actor["org_id"],
             entity_type="integration",
             entity_id=None,
-            payload_json={"request_id": request_id, "status": "error", "error": result.get("error")},
+            payload_json={"request_id": request_id, "status": "error", "error": normalized["error"]},
         )
-        raise HTTPException(status_code=400, detail="DigitalOcean sync failed. Check your configuration.")
+        raise HTTPException(status_code=400, detail=str(normalized["error"]))
     await record_action(
         db,
         event_type="digitalocean_synced",
@@ -93,8 +103,12 @@ async def digitalocean_sync(
         payload_json={
             "request_id": request_id,
             "status": "ok",
-            "droplets_synced": result.get("droplets_synced", 0),
-            "team_members_synced": result.get("team_members_synced", 0),
+            "droplets_synced": normalized["droplets"],
+            "team_members_synced": normalized["members"],
         },
     )
-    return DigitalOceanSyncResult(**result)
+    return DigitalOceanSyncResult(
+        droplets=normalized["droplets"],
+        members=normalized["members"],
+        error=None,
+    )

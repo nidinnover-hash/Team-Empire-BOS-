@@ -1,3 +1,4 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,6 +7,7 @@ from app.api.v1.endpoints._integration_helpers import (
     audit_connect_success,
     audit_sync,
     handle_connect_error,
+    normalize_sync_result,
 )
 from app.core.deps import get_db
 from app.core.rbac import require_roles
@@ -52,9 +54,20 @@ async def hubspot_sync(
     try:
         result = await hubspot_service.sync_hubspot_data(db, org_id=int(actor["org_id"]))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Sync failed. Check connection and try again.") from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (httpx.HTTPError, RuntimeError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
+        raise HTTPException(status_code=502, detail="HubSpot sync failed due to upstream error. Retry shortly.") from exc
+    normalized = normalize_sync_result(
+        result,
+        integration_type="hubspot",
+        required_int_fields=("contacts_synced", "deals_synced"),
+    )
     await audit_sync(
         db, event_type="hubspot_synced", actor=actor,
-        payload={"contacts": result["contacts_synced"], "deals": result["deals_synced"]},
+        payload={"contacts": normalized["contacts_synced"], "deals": normalized["deals_synced"]},
     )
-    return HubSpotSyncResult(**result)
+    return HubSpotSyncResult(
+        contacts_synced=normalized["contacts_synced"],
+        deals_synced=normalized["deals_synced"],
+        last_sync_at=result.get("last_sync_at"),
+    )

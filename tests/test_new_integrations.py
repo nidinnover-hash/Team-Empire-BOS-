@@ -106,6 +106,26 @@ async def test_notion_sync_not_connected(client):
     assert resp.status_code == 400
 
 
+@pytest.mark.asyncio
+async def test_notion_sync_malformed_result_returns_502(client, monkeypatch):
+    async def fake_sync(db, org_id):
+        return {"pages_synced": "2", "notes_created": 1, "last_sync_at": None}
+
+    monkeypatch.setattr(notion_service, "sync_pages_to_notes", fake_sync)
+    resp = await client.post("/api/v1/integrations/notion/sync")
+    assert resp.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_notion_sync_timeout_returns_502(client, monkeypatch):
+    async def fake_sync(db, org_id):
+        raise TimeoutError("notion timeout")
+
+    monkeypatch.setattr(notion_service, "sync_pages_to_notes", fake_sync)
+    resp = await client.post("/api/v1/integrations/notion/sync")
+    assert resp.status_code == 502
+
+
 # ── Stripe ──────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -129,6 +149,31 @@ async def test_stripe_status_not_connected(client):
 async def test_stripe_sync_not_connected(client):
     resp = await client.post("/api/v1/integrations/stripe/sync")
     assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_stripe_sync_malformed_result_returns_502(client, monkeypatch):
+    async def fake_sync(db, org_id):
+        return {
+            "charges_synced": "2",
+            "refunds_synced": 1,
+            "disputes_synced": 0,
+            "last_sync_at": "2026-02-27T00:00:00Z",
+        }
+
+    monkeypatch.setattr(stripe_service, "sync_stripe_data", fake_sync)
+    resp = await client.post("/api/v1/integrations/stripe/sync")
+    assert resp.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_stripe_sync_timeout_returns_502(client, monkeypatch):
+    async def fake_sync(db, org_id):
+        raise TimeoutError("stripe timeout")
+
+    monkeypatch.setattr(stripe_service, "sync_stripe_data", fake_sync)
+    resp = await client.post("/api/v1/integrations/stripe/sync")
+    assert resp.status_code == 502
 
 
 # ── Google Analytics ────────────────────────────────────────────────────
@@ -160,6 +205,32 @@ async def test_ga_sync_not_connected(client):
     assert resp.status_code == 400
 
 
+@pytest.mark.asyncio
+async def test_ga_sync_malformed_result_returns_502(client, monkeypatch):
+    async def fake_sync(db, org_id):
+        return {
+            "sessions_30d": "100",
+            "active_users_30d": 50,
+            "page_views_30d": 300,
+            "top_pages": [],
+            "traffic_sources": [],
+        }
+
+    monkeypatch.setattr(google_analytics_service, "sync_analytics", fake_sync)
+    resp = await client.post("/api/v1/integrations/google-analytics/sync")
+    assert resp.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_ga_sync_timeout_returns_502(client, monkeypatch):
+    async def fake_sync(db, org_id):
+        raise TimeoutError("ga timeout")
+
+    monkeypatch.setattr(google_analytics_service, "sync_analytics", fake_sync)
+    resp = await client.post("/api/v1/integrations/google-analytics/sync")
+    assert resp.status_code == 502
+
+
 # ── Calendly ────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -183,6 +254,26 @@ async def test_calendly_status_not_connected(client):
 async def test_calendly_sync_not_connected(client):
     resp = await client.post("/api/v1/integrations/calendly/sync")
     assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_calendly_sync_malformed_result_returns_502(client, monkeypatch):
+    async def fake_sync(db, org_id):
+        return {"events_synced": 2, "upcoming_events": "3", "last_sync_at": None}
+
+    monkeypatch.setattr(calendly_service, "sync_events", fake_sync)
+    resp = await client.post("/api/v1/integrations/calendly/sync")
+    assert resp.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_calendly_sync_timeout_returns_502(client, monkeypatch):
+    async def fake_sync(db, org_id):
+        raise TimeoutError("calendly timeout")
+
+    monkeypatch.setattr(calendly_service, "sync_events", fake_sync)
+    resp = await client.post("/api/v1/integrations/calendly/sync")
+    assert resp.status_code == 502
 
 
 # ── ElevenLabs ──────────────────────────────────────────────────────────
@@ -233,6 +324,26 @@ async def test_hubspot_status_not_connected(client):
 async def test_hubspot_sync_not_connected(client):
     resp = await client.post("/api/v1/integrations/hubspot/sync")
     assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_hubspot_sync_malformed_result_returns_502(client, monkeypatch):
+    async def fake_sync(db, org_id):
+        return {"contacts_synced": "10", "deals_synced": 2, "last_sync_at": None}
+
+    monkeypatch.setattr(hubspot_service, "sync_hubspot_data", fake_sync)
+    resp = await client.post("/api/v1/integrations/hubspot/sync")
+    assert resp.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_hubspot_sync_timeout_returns_502(client, monkeypatch):
+    async def fake_sync(db, org_id):
+        raise TimeoutError("hubspot timeout")
+
+    monkeypatch.setattr(hubspot_service, "sync_hubspot_data", fake_sync)
+    resp = await client.post("/api/v1/integrations/hubspot/sync")
+    assert resp.status_code == 502
 
 
 # ── Setup Guide includes new integrations ───────────────────────────────
