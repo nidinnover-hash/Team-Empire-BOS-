@@ -1,6 +1,6 @@
 import json
 from json import JSONDecodeError
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,12 +11,12 @@ from app.models.organization import Organization
 
 async def get_organization_by_slug(db: AsyncSession, slug: str) -> Organization | None:
     result = await db.execute(select(Organization).where(Organization.slug == slug))
-    return cast(Organization | None, result.scalar_one_or_none())
+    return result.scalar_one_or_none()
 
 
 async def get_organization_by_id(db: AsyncSession, organization_id: int) -> Organization | None:
     result = await db.execute(select(Organization).where(Organization.id == organization_id))
-    return cast(Organization | None, result.scalar_one_or_none())
+    return result.scalar_one_or_none()
 
 
 async def list_organizations(db: AsyncSession, limit: int = 200) -> list[Organization]:
@@ -73,6 +73,16 @@ def default_policy_config() -> dict[str, Any]:
         ],
         "allow_personal_owner_exceptions": bool(settings.COMPLIANCE_ALLOW_PERSONAL_OWNER_EXCEPTIONS),
         "critical_github_repos": [x.strip().lower() for x in (settings.CRITICAL_GITHUB_REPOS or "").split(",") if x.strip()],
+        "autonomy_policy": {
+            "current_mode": "approved_execution",
+            "allow_auto_approval": True,
+            "min_readiness_for_auto_approval": 70,
+            "min_readiness_for_approved_execution": 65,
+            "min_readiness_for_autonomous": 90,
+            "block_on_unread_high_alerts": True,
+            "block_on_stale_integrations": True,
+            "block_on_sla_breaches": True,
+        },
     }
 
 

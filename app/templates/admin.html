@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="AI Command Center — Super Admin by Nidin Nover" />
+  <meta name="theme-color" content="#18181b" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Admin — Nidin Nover</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/admin.css" />
+  <script nonce="{{ csp_nonce }}" src="/static/js/lucide-lite.js"></script>
+</head>
+<body>
+<nav class="sidebar">
+  <div class="sb-brand">
+    <div class="sb-pulse"></div>
+    <div>
+      <div class="sb-name">Nidin Nover</div>
+      <div class="sb-sub">AI Command Center</div>
+    </div>
+  </div>
+  <div class="sb-nav">
+    <a href="/" class="sb-item"><i data-lucide="layout-dashboard"></i> Dashboard</a>
+    <a href="/web/talk" class="sb-item"><i data-lucide="message-circle"></i> Talk Mode</a>
+    <a href="/web/integrations" class="sb-item"><i data-lucide="plug"></i> Integrations</a>
+    <a href="/web/data-hub" class="sb-item"><i data-lucide="database"></i> Data Hub</a>
+    <a href="/web/observe" class="sb-item"><i data-lucide="activity"></i> Observe</a>
+    <a href="/web/ops-intel" class="sb-item"><i data-lucide="bar-chart-3"></i> Ops Intel</a>
+    <a href="/web/tasks" class="sb-item"><i data-lucide="check-square"></i> Tasks</a>
+    <a href="/web/team" class="sb-item"><i data-lucide="users"></i> Team</a>
+    <a href="/web/audit" class="sb-item"><i data-lucide="shield-check"></i> Audit Log</a>
+    <a href="/web/webhooks" class="sb-item"><i data-lucide="webhook"></i> Webhooks</a>
+    <a href="/web/personas" class="sb-item"><i data-lucide="brain"></i> Personas</a>
+    <a href="/web/coaching" class="sb-item"><i data-lucide="graduation-cap"></i> Coaching</a>
+    <a href="/web/admin" class="sb-item active"><i data-lucide="shield"></i> Admin</a>
+    <div class="sb-divider"></div>
+    <a href="/docs" class="sb-item" target="_blank" rel="noopener noreferrer"><i data-lucide="book-open"></i> API Docs</a>
+  </div>
+  <div class="sb-footer">
+    <button class="theme-toggle" type="button">
+      <i data-lucide="moon" class="theme-icon"></i> Toggle theme
+    </button>
+    <button class="sb-item" id="logout-btn" type="button"><i data-lucide="log-out"></i> Sign out</button>
+  </div>
+</nav>
+
+<div class="main-wrap">
+  <div class="page-head">
+    <h1>Super Admin <span class="super-badge"><i data-lucide="shield" style="width:10px;height:10px"></i> Super Admin</span></h1>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="label">Organisations</div><div class="val" id="k-orgs">0</div></div>
+    <div class="kpi"><div class="label">Total Users</div><div class="val" id="k-users">0</div></div>
+    <div class="kpi"><div class="label">Total Tasks</div><div class="val" id="k-tasks">0</div></div>
+    <div class="kpi"><div class="label">Active Orgs</div><div class="val" id="k-active">0</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span>All Organisations</span></div>
+    <div class="card-body" style="overflow-x:auto">
+      <div id="loading-orgs" class="loading-state">Loading…</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Slug</th>
+            <th>Users</th>
+            <th>Tasks</th>
+            <th>Approvals</th>
+            <th>Last Activity</th>
+          </tr>
+        </thead>
+        <tbody id="orgs-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <span>Readiness Fleet Ranking</span>
+      <label class="inline-control">
+        <span>Filter</span>
+        <select id="fleet-status-filter">
+          <option value="">All</option>
+          <option value="ready">Ready</option>
+          <option value="watch">Watch</option>
+          <option value="blocked">Blocked</option>
+        </select>
+      </label>
+    </div>
+    <div class="card-body" style="overflow-x:auto">
+      <div id="loading-readiness" class="loading-state">Loading...</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Organisation</th>
+            <th>Score</th>
+            <th>Status</th>
+            <th>Blockers</th>
+            <th>Generated</th>
+          </tr>
+        </thead>
+        <tbody id="readiness-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span>Autonomy Control Panel</span></div>
+    <div class="card-body">
+      <div id="readiness-detail-empty" class="empty">Select an organisation from readiness ranking.</div>
+      <div id="readiness-detail" style="display:none">
+        <div class="detail-grid">
+          <div>
+            <div class="mini-label">Selected Org</div>
+            <div class="detail-title" id="detail-org-name">-</div>
+          </div>
+          <div>
+            <div class="mini-label">Readiness Score</div>
+            <div class="detail-score" id="detail-score">-</div>
+          </div>
+          <div>
+            <div class="mini-label">Readiness Status</div>
+            <div id="detail-status">-</div>
+          </div>
+        </div>
+
+        <div class="chip-row">
+          <div>
+            <div class="mini-label">Allowed Modes</div>
+            <div id="detail-allowed-modes" class="mode-list"></div>
+          </div>
+          <div>
+            <div class="mini-label">Denied Modes</div>
+            <div id="detail-denied-modes" class="mode-list"></div>
+          </div>
+        </div>
+
+        <div class="mini-label">Reasons / Blockers</div>
+        <ul id="detail-reasons" class="reason-list"></ul>
+
+        <div class="policy-panel">
+          <div class="policy-head">
+            <div class="mini-label">Autonomy Policy</div>
+            <button id="policy-save-btn" class="btn primary" type="button" disabled>Save Policy</button>
+          </div>
+          <div id="policy-msg" class="policy-msg" aria-live="polite"></div>
+          <div id="policy-meta" class="policy-meta">Not updated yet.</div>
+          <div class="policy-grid">
+            <label>
+              <span>Current Mode</span>
+              <select id="policy-current-mode">
+                <option value="suggest_only">suggest_only</option>
+                <option value="approved_execution">approved_execution</option>
+                <option value="autonomous">autonomous</option>
+              </select>
+            </label>
+            <label>
+              <span>Min Readiness Auto-Approval</span>
+              <input id="policy-min-auto" type="number" min="0" max="100" step="1" />
+            </label>
+            <label>
+              <span>Min Readiness Approved Execution</span>
+              <input id="policy-min-approved" type="number" min="0" max="100" step="1" />
+            </label>
+            <label>
+              <span>Min Readiness Autonomous</span>
+              <input id="policy-min-autonomous" type="number" min="0" max="100" step="1" />
+            </label>
+          </div>
+          <div class="policy-checks">
+            <label><input id="policy-allow-auto" type="checkbox" /> Allow auto-approval</label>
+            <label><input id="policy-block-alerts" type="checkbox" /> Block on unread high alerts</label>
+            <label><input id="policy-block-stale" type="checkbox" /> Block on stale integrations</label>
+            <label><input id="policy-block-sla" type="checkbox" /> Block on approval SLA breaches</label>
+          </div>
+        </div>
+
+        <div class="trend-head">
+          <div class="mini-label">Risk Trend</div>
+          <div class="trend-controls">
+            <button class="trend-btn active" data-days="7" type="button">7d</button>
+            <button class="trend-btn" data-days="14" type="button">14d</button>
+            <button class="trend-btn" data-days="30" type="button">30d</button>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Day</th>
+              <th>Integration Failures</th>
+              <th>High Alerts</th>
+              <th>Pending Approvals</th>
+            </tr>
+          </thead>
+          <tbody id="trend-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span>All Users</span></div>
+    <div class="card-body" style="overflow-x:auto">
+      <div id="loading-users" class="loading-state">Loading…</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Org</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="users-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/admin-page.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
+</body>
+</html>

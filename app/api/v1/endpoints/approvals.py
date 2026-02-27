@@ -20,8 +20,13 @@ from app.schemas.approval import (
     ApprovalTimelineItem,
     ApprovalTimelineResponse,
 )
+from app.schemas.approval_pattern import ApprovalPatternRead, ApprovalPatternUpdate
+from app.services import alert as alert_service
 from app.services import approval as approval_service
-from app.services import clone_control, execution_engine
+from app.services import approval_pattern as pattern_service
+from app.services import autonomy_policy, clone_control, execution_engine
+from app.services import organization as org_service
+from app.services import webhook as webhook_service
 
 router = APIRouter(prefix="/approvals", tags=["Approvals"])
 logger = logging.getLogger(__name__)
@@ -33,6 +38,7 @@ RISKY_APPROVAL_TYPES = {
     "spend_money",
     "spend",
 }
+NON_FATAL_SIDE_EFFECT_ERRORS = (SQLAlchemyError, RuntimeError, ValueError, TypeError)
 
 
 async def _record_approval_feedback(
@@ -110,6 +116,9 @@ async def request_approval(
 ) -> ApprovalRead:
     if data.organization_id != actor["org_id"]:
         raise HTTPException(status_code=403, detail="Cross-organization access denied")
+    org = await org_service.get_organization_by_id(db, int(actor["org_id"]))
+    if org is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
     approval = await approval_service.request_approval(db, actor["id"], data)
     await record_action(
         db,
@@ -120,6 +129,71 @@ async def request_approval(
         entity_id=approval.id,
         payload_json={"approval_type": approval.approval_type, "request_id": get_current_request_id()},
     )
+    # Check confidence pattern — auto-approve if eligible
+    try:
+        should_auto, confidence = await pattern_service.should_auto_approve(
+            db, int(actor["org_id"]), data.approval_type, data.payload_json
+        )
+        approval.confidence_score = confidence if confidence > 0 else None
+        if should_auto:
+            can_auto_approve, denial_reason = await autonomy_policy.can_auto_approve(db, org=org)
+            if can_auto_approve:
+                from datetime import UTC, datetime
+                approval.status = "approved"
+                approval.approved_by = int(actor["id"])
+                approval.approved_at = datetime.now(UTC)
+                approval.auto_approved_at = datetime.now(UTC)
+                await db.commit()
+                await db.refresh(approval)
+                await record_action(
+                    db,
+                    event_type="approval_auto_approved",
+                    actor_user_id=actor["id"],
+                    organization_id=actor["org_id"],
+                    entity_type="approval",
+                    entity_id=approval.id,
+                    payload_json={"confidence_score": confidence, "approval_type": approval.approval_type},
+                )
+            else:
+                await db.commit()
+                await db.refresh(approval)
+                logger.info("auto-approve denied by autonomy policy: %s", denial_reason)
+        else:
+            await db.commit()
+            await db.refresh(approval)
+    except NON_FATAL_SIDE_EFFECT_ERRORS as exc:
+        logger.warning("approval pattern check failed: %s", type(exc).__name__, exc_info=True)
+    # Fire outgoing webhook
+    try:
+        await webhook_service.trigger_org_webhooks(
+            db,
+            organization_id=int(actor["org_id"]),
+            event="approval.created",
+            payload={
+                "approval_id": approval.id,
+                "approval_type": approval.approval_type,
+                "status": approval.status,
+                "requested_by": approval.requested_by,
+            },
+        )
+    except NON_FATAL_SIDE_EFFECT_ERRORS as exc:
+        logger.warning("webhook: approval.created failed: %s", type(exc).__name__)
+    # Alert for risky types still pending
+    if data.approval_type in RISKY_APPROVAL_TYPES and approval.status == "pending":
+        try:
+            await alert_service.send_pending_alert(
+                db,
+                org_id=int(actor["org_id"]),
+                entity_type="approval",
+                entity_id=approval.id,
+                title=f"Risky approval pending: {approval.approval_type}",
+                detail=(
+                    f"Approval #{approval.id} of type '{approval.approval_type}' "
+                    "requires CEO/ADMIN sign-off with note 'YES EXECUTE'."
+                ),
+            )
+        except NON_FATAL_SIDE_EFFECT_ERRORS as exc:
+            logger.warning("alert: approval pending failed: %s", type(exc).__name__)
     return approval
 
 
@@ -211,6 +285,13 @@ async def approve(
             status_code=400,
             detail="Risky approvals require note 'YES EXECUTE'",
         )
+    org = await org_service.get_organization_by_id(db, int(actor["org_id"]))
+    if org is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    if should_execute:
+        can_execute, denial_reason = await autonomy_policy.can_execute_post_approval(db, org=org)
+        if not can_execute:
+            raise HTTPException(status_code=409, detail=denial_reason)
     approval = await approval_service.approve_approval(
         db,
         approval_id,
@@ -235,6 +316,15 @@ async def approve(
             actor_user_id=actor["id"],
             actor_org_id=actor["org_id"],
         )
+    # Record pattern decision
+    try:
+        p = await pattern_service.get_or_create(
+            db, int(actor["org_id"]), approval.approval_type, approval.payload_json
+        )
+        await pattern_service.record_decision(db, p.id, approved=True, decided_by_id=int(actor["id"]))
+        await db.commit()
+    except NON_FATAL_SIDE_EFFECT_ERRORS as exc:
+        logger.warning("pattern record failed (approve): %s", type(exc).__name__)
     try:
         await _record_approval_feedback(
             db,
@@ -260,6 +350,19 @@ async def approve(
             status="error",
             error_type=type(exc).__name__,
         )
+    try:
+        await webhook_service.trigger_org_webhooks(
+            db,
+            organization_id=int(actor["org_id"]),
+            event="approval.approved",
+            payload={
+                "approval_id": approval.id,
+                "approval_type": approval.approval_type,
+                "approved_by": approval.approved_by,
+            },
+        )
+    except NON_FATAL_SIDE_EFFECT_ERRORS as exc:
+        logger.warning("webhook: approval.approved failed: %s", type(exc).__name__)
     return approval
 
 
@@ -299,6 +402,15 @@ async def reject(
         entity_id=approval.id,
         payload_json={"status": approval.status, "request_id": get_current_request_id()},
     )
+    # Record pattern decision
+    try:
+        p = await pattern_service.get_or_create(
+            db, int(actor["org_id"]), approval.approval_type, approval.payload_json
+        )
+        await pattern_service.record_decision(db, p.id, approved=False, decided_by_id=int(actor["id"]))
+        await db.commit()
+    except NON_FATAL_SIDE_EFFECT_ERRORS as exc:
+        logger.warning("pattern record failed (reject): %s", type(exc).__name__)
     try:
         await _record_approval_feedback(
             db,
@@ -324,4 +436,70 @@ async def reject(
             status="error",
             error_type=type(exc).__name__,
         )
+    try:
+        await webhook_service.trigger_org_webhooks(
+            db,
+            organization_id=int(actor["org_id"]),
+            event="approval.rejected",
+            payload={
+                "approval_id": approval.id,
+                "approval_type": approval.approval_type,
+            },
+        )
+    except NON_FATAL_SIDE_EFFECT_ERRORS as exc:
+        logger.warning("webhook: approval.rejected failed: %s", type(exc).__name__)
     return approval
+
+
+# ---------------------------------------------------------------------------
+# Approval pattern management
+# ---------------------------------------------------------------------------
+
+@router.get("/approval-patterns", response_model=list[ApprovalPatternRead])
+async def list_approval_patterns(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> list[ApprovalPatternRead]:
+    """List all learned approval patterns with confidence scores."""
+    patterns = await pattern_service.list_patterns(db, organization_id=int(actor["org_id"]))
+    result = []
+    for p in patterns:
+        read = ApprovalPatternRead.model_validate(p, from_attributes=True)
+        read.confidence_score = pattern_service.compute_confidence(p)
+        result.append(read)
+    return result
+
+
+@router.patch("/approval-patterns/{pattern_id}", response_model=ApprovalPatternRead)
+async def update_approval_pattern(
+    pattern_id: int,
+    data: ApprovalPatternUpdate,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO")),
+) -> ApprovalPatternRead:
+    """Enable/disable auto-approve or adjust threshold for a pattern."""
+    pattern = await pattern_service.update_pattern(
+        db, pattern_id, int(actor["org_id"]),
+        data.is_auto_approve_enabled, data.auto_approve_threshold,
+    )
+    if pattern is None:
+        raise HTTPException(status_code=404, detail="Pattern not found")
+    read = ApprovalPatternRead.model_validate(pattern, from_attributes=True)
+    read.confidence_score = pattern_service.compute_confidence(pattern)
+    return read
+
+
+@router.delete("/approval-patterns/{pattern_id}", status_code=204)
+async def delete_approval_pattern(
+    pattern_id: int,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO")),
+) -> None:
+    """Reset (delete) an approval pattern to clear its learned history."""
+    deleted = await pattern_service.delete_pattern(db, pattern_id, int(actor["org_id"]))
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Pattern not found")
+    await record_action(
+        db, event_type="approval_pattern_deleted", actor_user_id=actor["id"],
+        organization_id=actor["org_id"], entity_type="approval_pattern", entity_id=pattern_id,
+    )
