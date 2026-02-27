@@ -51,6 +51,16 @@ jobs:
           fi
           pre-commit run --files $files
 
+      - name: Critical regression suite
+        run: |
+          python -m pytest -q \
+            tests/test_api_smoke_fast.py \
+            tests/test_super_admin.py \
+            tests/test_integrations.py \
+            tests/test_talk_mode.py \
+            tests/test_config_validation.py \
+            -p no:cacheprovider
+
   full-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 25
