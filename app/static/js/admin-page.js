@@ -9,6 +9,9 @@
   var fleetStatusFilter = "";
   var trendDays = 7;
   var webhookFailureDays = 7;
+  var detailTab = "policy";
+  var waFailureFilterText = "";
+  var waFailureLastReport = null;
   var autonomyPolicy = null;
   var policyBaselineKey = "";
   var rolloutBaselineKey = "";
@@ -73,6 +76,8 @@
     trendDays = (days === 7 || days === 14 || days === 30) ? days : 7;
     var waDays = Number(q.get("wa_days") || "7");
     webhookFailureDays = (waDays === 1 || waDays === 7) ? waDays : 7;
+    var tab = String(q.get("tab") || "policy").trim().toLowerCase();
+    detailTab = (tab === "policy" || tab === "rollout" || tab === "dryrun" || tab === "whatsapp") ? tab : "policy";
     var org = Number(q.get("org") || "");
     selectedOrgId = Number.isFinite(org) && org > 0 ? org : null;
   }
@@ -83,6 +88,7 @@
     if (fleetStatusFilter) q.set("status", fleetStatusFilter);
     if (trendDays !== 7) q.set("days", String(trendDays));
     if (webhookFailureDays !== 7) q.set("wa_days", String(webhookFailureDays));
+    if (detailTab !== "policy") q.set("tab", detailTab);
     if (selectedOrgId) q.set("org", String(selectedOrgId));
     var qs = q.toString();
     var url = window.location.pathname + (qs ? "?" + qs : "");
@@ -574,6 +580,52 @@
     });
   }
 
+  function ensureDetailTabs() {
+    var panel = document.querySelector("#readiness-detail .policy-panel");
+    if (!panel) return;
+    if (panel.querySelector(".detail-tabs")) return;
+    var tabs = document.createElement("div");
+    tabs.className = "detail-tabs";
+    tabs.setAttribute("role", "tablist");
+    tabs.innerHTML =
+      '<button class="detail-tab-btn" data-tab="policy" type="button" role="tab">Policy</button>' +
+      '<button class="detail-tab-btn" data-tab="rollout" type="button" role="tab">Rollout</button>' +
+      '<button class="detail-tab-btn" data-tab="dryrun" type="button" role="tab">Dry Run</button>' +
+      '<button class="detail-tab-btn" data-tab="whatsapp" type="button" role="tab">WhatsApp Failures</button>';
+    panel.insertBefore(tabs, panel.firstChild);
+
+    Array.prototype.forEach.call(tabs.querySelectorAll(".detail-tab-btn"), function (btn) {
+      btn.addEventListener("click", function () {
+        detailTab = String(btn.getAttribute("data-tab") || "policy");
+        writeUrlState();
+        applyDetailTabState();
+      });
+    });
+  }
+
+  function applyDetailTabState() {
+    ensureDetailTabs();
+    var panel = document.querySelector("#readiness-detail .policy-panel");
+    if (!panel) return;
+    var selectors = [
+      { tab: "policy", sel: ".policy-head, #policy-msg, #policy-meta, .policy-grid, .policy-checks, .policy-history-wrap, .policy-template-wrap:not(#wa-failures-panel)" },
+      { tab: "rollout", sel: ".policy-rollout-wrap" },
+      { tab: "dryrun", sel: ".dry-run-wrap" },
+      { tab: "whatsapp", sel: "#wa-failures-panel" },
+    ];
+    selectors.forEach(function (entry) {
+      var show = detailTab === entry.tab;
+      Array.prototype.forEach.call(panel.querySelectorAll(entry.sel), function (el) {
+        el.style.display = show ? "" : "none";
+      });
+    });
+    Array.prototype.forEach.call(panel.querySelectorAll(".detail-tab-btn"), function (btn) {
+      var active = btn.getAttribute("data-tab") === detailTab;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+    });
+  }
+
   function ensureWhatsAppFailuresPanel() {
     var detail = document.getElementById("readiness-detail");
     if (!detail) return null;
@@ -581,13 +633,14 @@
     if (panel) return panel;
     panel = document.createElement("div");
     panel.id = "wa-failures-panel";
-    panel.className = "policy-template-wrap";
+    panel.className = "policy-template-wrap wa-failures-wrap";
     panel.innerHTML =
       '<div class="trend-head">' +
       '<div class="mini-label">WhatsApp Webhook Failures</div>' +
-      '<div class="trend-controls">' +
+      '<div class="trend-controls wa-failures-controls">' +
       '<button class="trend-btn wa-failures-btn" data-days="1" type="button">24h</button>' +
       '<button class="trend-btn wa-failures-btn" data-days="7" type="button">7d</button>' +
+      '<button class="policy-history-action wa-failures-retry" type="button">Retry</button>' +
       "</div>" +
       "</div>" +
       '<div class="chip-row">' +
@@ -600,6 +653,7 @@
       '<div class="detail-title" id="wa-failures-generated">-</div>' +
       "</div>" +
       "</div>" +
+      '<label class="wa-filter-wrap"><span class="mini-label">Filter Errors</span><input id="wa-failures-filter" type="text" placeholder="error code or detail" /></label>' +
       "<table>" +
       "<thead>" +
       "<tr>" +
@@ -607,6 +661,7 @@
       "<th>Type</th>" +
       "<th>Error</th>" +
       "<th>Detail</th>" +
+      "<th>Action</th>" +
       "</tr>" +
       "</thead>" +
       '<tbody id="wa-failures-body"></tbody>' +
@@ -616,15 +671,28 @@
       var target = ev.target;
       if (!target || !target.closest) return;
       var btn = target.closest(".wa-failures-btn");
-      if (!btn) return;
-      var nextDays = Number(btn.getAttribute("data-days") || "7");
-      if ((nextDays !== 1 && nextDays !== 7) || nextDays === webhookFailureDays) return;
-      webhookFailureDays = nextDays;
-      writeUrlState();
-      if (selectedOrgId) {
-        await loadWhatsAppFailures(selectedOrgId);
+      if (btn) {
+        var nextDays = Number(btn.getAttribute("data-days") || "7");
+        if ((nextDays !== 1 && nextDays !== 7) || nextDays === webhookFailureDays) return;
+        webhookFailureDays = nextDays;
+        writeUrlState();
+        if (selectedOrgId) {
+          await loadWhatsAppFailures(selectedOrgId);
+        }
+        return;
+      }
+      if (target.closest(".wa-failures-retry")) {
+        if (selectedOrgId) await loadWhatsAppFailures(selectedOrgId);
+        return;
       }
     });
+    var filterEl = panel.querySelector("#wa-failures-filter");
+    if (filterEl) {
+      filterEl.addEventListener("input", function () {
+        waFailureFilterText = String(filterEl.value || "").trim().toLowerCase();
+        renderWhatsAppFailures(waFailureLastReport, false);
+      });
+    }
 
     var trendHead = detail.querySelector(".trend-head");
     if (trendHead && trendHead.parentNode) {
@@ -632,6 +700,7 @@
     } else {
       detail.appendChild(panel);
     }
+    applyDetailTabState();
     return panel;
   }
 
@@ -641,35 +710,49 @@
     var totalEl = document.getElementById("wa-failures-total");
     var generatedEl = document.getElementById("wa-failures-generated");
     var body = document.getElementById("wa-failures-body");
+    var filterEl = document.getElementById("wa-failures-filter");
+    if (filterEl) filterEl.value = waFailureFilterText;
     Array.prototype.forEach.call(panel.querySelectorAll(".wa-failures-btn"), function (btn) {
       btn.classList.toggle("active", Number(btn.getAttribute("data-days")) === webhookFailureDays);
     });
+    waFailureLastReport = report;
     if (!totalEl || !generatedEl || !body) return;
     if (hasError) {
       totalEl.textContent = "-";
       generatedEl.textContent = "-";
-      body.innerHTML = '<tr><td colspan="4" class="empty">Failed to load failures</td></tr>';
+      body.innerHTML = '<tr><td colspan="5" class="empty">Failed to load failures</td></tr>';
       return;
     }
     if (!report) {
       totalEl.textContent = "-";
       generatedEl.textContent = "-";
-      body.innerHTML = '<tr><td colspan="4" class="empty">No data</td></tr>';
+      body.innerHTML = '<tr><td colspan="5" class="empty">Loading failures...</td></tr>';
       return;
     }
     totalEl.textContent = String(Number(report.total || 0));
     generatedEl.textContent = toIsoLocal(report.generated_at);
-    var rows = Array.isArray(report.failures) ? report.failures.slice(0, 5) : [];
+    var rows = Array.isArray(report.failures) ? report.failures.slice(0, 20) : [];
+    var filter = waFailureFilterText;
+    if (filter) {
+      rows = rows.filter(function (row) {
+        var hay = (String(row.error_code || "") + " " + String(row.detail || "")).toLowerCase();
+        return hay.indexOf(filter) >= 0;
+      });
+    }
+    rows = rows.slice(0, 5);
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="4" class="empty">No failures in selected window</td></tr>';
+      body.innerHTML = '<tr><td colspan="5" class="empty">No failures in selected window</td></tr>';
       return;
     }
     body.innerHTML = rows.map(function (row) {
+      var errorCode = String(row.error_code || "").trim();
+      var observeHref = "/web/observe" + (errorCode ? ("?event_type=whatsapp_webhook_failed&q=" + encodeURIComponent(errorCode)) : "");
       return "<tr>" +
         "<td>" + esc(toIsoLocal(row.created_at)) + "</td>" +
         "<td>" + esc(row.event_type || "-") + "</td>" +
         "<td>" + esc(row.error_code || "-") + "</td>" +
         "<td>" + esc(row.detail || "-") + "</td>" +
+        '<td><a class="policy-history-action" href="' + esc(observeHref) + '">Open in Observe</a></td>' +
         "</tr>";
     }).join("");
   }
@@ -679,6 +762,7 @@
       renderWhatsAppFailures(null, false);
       return null;
     }
+    renderWhatsAppFailures(null, false);
     var report = await apiGet("/api/v1/admin/orgs/" + orgId + "/whatsapp-webhook-failures?days=" + webhookFailureDays + "&limit=500");
     if (!report) {
       renderWhatsAppFailures(null, true);
@@ -701,6 +785,7 @@
       setRolloutMessage("", "");
       setDryRunMessage("", "");
       renderWhatsAppFailures(null, false);
+      applyDetailTabState();
       var dryRunReasons = document.getElementById("dryrun-reasons");
       if (dryRunReasons) dryRunReasons.innerHTML = "";
       return;
@@ -727,6 +812,7 @@
     renderPolicyHistory(history || []);
     renderTemplateOptions(policy || null, policyTemplates);
     renderWhatsAppFailures(webhookFailures || null, false);
+    applyDetailTabState();
     setPolicyMessage("", "");
 
     var trendBody = document.getElementById("trend-body");
@@ -774,7 +860,7 @@
     });
   }
 
-  Array.prototype.forEach.call(document.querySelectorAll(".trend-btn"), function (btn) {
+  Array.prototype.forEach.call(document.querySelectorAll(".trend-btn:not(.wa-failures-btn)"), function (btn) {
     btn.addEventListener("click", async function () {
       var nextDays = Number(btn.getAttribute("data-days") || "7");
       if (!nextDays || nextDays === trendDays) return;
