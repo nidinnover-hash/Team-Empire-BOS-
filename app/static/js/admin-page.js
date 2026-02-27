@@ -8,6 +8,7 @@
   var selectedOrgId = null;
   var fleetStatusFilter = "";
   var trendDays = 7;
+  var webhookFailureDays = 7;
   var autonomyPolicy = null;
   var policyBaselineKey = "";
   var rolloutBaselineKey = "";
@@ -70,6 +71,8 @@
     }
     var days = Number(q.get("days") || "7");
     trendDays = (days === 7 || days === 14 || days === 30) ? days : 7;
+    var waDays = Number(q.get("wa_days") || "7");
+    webhookFailureDays = (waDays === 1 || waDays === 7) ? waDays : 7;
     var org = Number(q.get("org") || "");
     selectedOrgId = Number.isFinite(org) && org > 0 ? org : null;
   }
@@ -79,6 +82,7 @@
     var q = new URLSearchParams();
     if (fleetStatusFilter) q.set("status", fleetStatusFilter);
     if (trendDays !== 7) q.set("days", String(trendDays));
+    if (webhookFailureDays !== 7) q.set("wa_days", String(webhookFailureDays));
     if (selectedOrgId) q.set("org", String(selectedOrgId));
     var qs = q.toString();
     var url = window.location.pathname + (qs ? "?" + qs : "");
@@ -570,7 +574,101 @@
     });
   }
 
-  function renderDetail(readiness, gates, trend, policy, history) {
+  function ensureWhatsAppFailuresPanel() {
+    var detail = document.getElementById("readiness-detail");
+    if (!detail) return null;
+    var panel = document.getElementById("wa-failures-panel");
+    if (panel) return panel;
+    panel = document.createElement("div");
+    panel.id = "wa-failures-panel";
+    panel.className = "policy-template-wrap";
+    panel.innerHTML =
+      '<div class="trend-head">' +
+      '<div class="mini-label">WhatsApp Webhook Failures</div>' +
+      '<div class="trend-controls">' +
+      '<button class="trend-btn wa-failures-btn" data-days="1" type="button">24h</button>' +
+      '<button class="trend-btn wa-failures-btn" data-days="7" type="button">7d</button>' +
+      "</div>" +
+      "</div>" +
+      '<div class="chip-row">' +
+      "<div>" +
+      '<div class="mini-label">Total Failures</div>' +
+      '<div class="detail-score" id="wa-failures-total">-</div>' +
+      "</div>" +
+      "<div>" +
+      '<div class="mini-label">Generated</div>' +
+      '<div class="detail-title" id="wa-failures-generated">-</div>' +
+      "</div>" +
+      "</div>" +
+      "<table>" +
+      "<thead>" +
+      "<tr>" +
+      "<th>When</th>" +
+      "<th>Type</th>" +
+      "<th>Error</th>" +
+      "<th>Detail</th>" +
+      "</tr>" +
+      "</thead>" +
+      '<tbody id="wa-failures-body"></tbody>' +
+      "</table>";
+
+    panel.addEventListener("click", async function (ev) {
+      var target = ev.target;
+      if (!target || !target.closest) return;
+      var btn = target.closest(".wa-failures-btn");
+      if (!btn) return;
+      var nextDays = Number(btn.getAttribute("data-days") || "7");
+      if ((nextDays !== 1 && nextDays !== 7) || nextDays === webhookFailureDays) return;
+      webhookFailureDays = nextDays;
+      writeUrlState();
+      if (selectedOrgId) {
+        await loadOrgDetail(selectedOrgId);
+      }
+    });
+
+    var trendHead = detail.querySelector(".trend-head");
+    if (trendHead && trendHead.parentNode) {
+      trendHead.parentNode.insertBefore(panel, trendHead);
+    } else {
+      detail.appendChild(panel);
+    }
+    return panel;
+  }
+
+  function renderWhatsAppFailures(report) {
+    var panel = ensureWhatsAppFailuresPanel();
+    if (!panel) return;
+    var totalEl = document.getElementById("wa-failures-total");
+    var generatedEl = document.getElementById("wa-failures-generated");
+    var body = document.getElementById("wa-failures-body");
+    Array.prototype.forEach.call(panel.querySelectorAll(".wa-failures-btn"), function (btn) {
+      btn.classList.toggle("active", Number(btn.getAttribute("data-days")) === webhookFailureDays);
+    });
+    if (!totalEl || !generatedEl || !body) return;
+    if (!report) {
+      totalEl.textContent = "-";
+      generatedEl.textContent = "-";
+      body.innerHTML = '<tr><td colspan="4" class="empty">No data</td></tr>';
+      return;
+    }
+    totalEl.textContent = String(Number(report.total || 0));
+    generatedEl.textContent = toIsoLocal(report.generated_at);
+    var rows = Array.isArray(report.failures) ? report.failures.slice(0, 5) : [];
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="4" class="empty">No failures in selected window</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(function (row) {
+      return "<tr>" +
+        "<td>" + esc(toIsoLocal(row.created_at)) + "</td>" +
+        "<td>" + esc(row.event_type || "-") + "</td>" +
+        "<td>" + esc(row.error_code || "-") + "</td>" +
+        "<td>" + esc(row.detail || "-") + "</td>" +
+        "</tr>";
+    }).join("");
+  }
+
+  function renderDetail(readiness, gates, trend, policy, history, webhookFailures) {
     var empty = document.getElementById("readiness-detail-empty");
     var detail = document.getElementById("readiness-detail");
     if (!readiness || !gates || !trend) {
@@ -582,6 +680,7 @@
       setPolicyMessage("", "");
       setRolloutMessage("", "");
       setDryRunMessage("", "");
+      renderWhatsAppFailures(null);
       var dryRunReasons = document.getElementById("dryrun-reasons");
       if (dryRunReasons) dryRunReasons.innerHTML = "";
       return;
@@ -607,6 +706,7 @@
     populatePolicyForm(policy || null);
     renderPolicyHistory(history || []);
     renderTemplateOptions(policy || null, policyTemplates);
+    renderWhatsAppFailures(webhookFailures || null);
     setPolicyMessage("", "");
 
     var trendBody = document.getElementById("trend-body");
@@ -638,10 +738,11 @@
       apiGet("/api/v1/admin/orgs/" + orgId + "/autonomy-policy/history?limit=12"),
       apiGet("/api/v1/admin/orgs/" + orgId + "/autonomy-rollout"),
       apiGet("/api/v1/admin/orgs/" + orgId + "/autonomy-policy/templates"),
+      apiGet("/api/v1/admin/orgs/" + orgId + "/whatsapp-webhook-failures?days=" + webhookFailureDays + "&limit=500"),
     ]);
     policyTemplates = Array.isArray(data[6]) ? data[6] : [];
     populateRolloutForm(data[5]);
-    renderDetail(data[0], data[1], data[2], data[3], data[4]);
+    renderDetail(data[0], data[1], data[2], data[3], data[4], data[7]);
     refreshRolloutDirtyState();
   }
 
@@ -662,7 +763,7 @@
       if (selectedOrgId) {
         await loadOrgDetail(selectedOrgId);
       } else {
-        renderDetail(null, null, null, null, []);
+        renderDetail(null, null, null, null, [], null);
       }
     });
   });
