@@ -228,6 +228,50 @@ async def test_org_autonomy_policy_history_and_rollback(client):
 
 
 @pytest.mark.asyncio
+async def test_autonomy_templates_rollout_and_dry_run_endpoints(client):
+    templates_r = await client.get(
+        "/api/v1/admin/orgs/1/autonomy-policy/templates",
+        headers=_super_token(),
+    )
+    assert templates_r.status_code == 200
+    templates = templates_r.json()
+    assert any(t["id"] == "conservative" for t in templates)
+
+    apply_r = await client.post(
+        "/api/v1/admin/orgs/1/autonomy-policy/templates/conservative",
+        headers=_super_token(),
+    )
+    assert apply_r.status_code == 200
+    assert apply_r.json()["current_mode"] == "suggest_only"
+
+    rollout_get = await client.get("/api/v1/admin/orgs/1/autonomy-rollout", headers=_super_token())
+    assert rollout_get.status_code == 200
+    assert "kill_switch" in rollout_get.json()
+
+    rollout_patch = await client.patch(
+        "/api/v1/admin/orgs/1/autonomy-rollout",
+        headers=_super_token(),
+        json={"kill_switch": True, "pilot_org_ids": [1], "max_actions_per_day": 5},
+    )
+    assert rollout_patch.status_code == 200
+    rollout = rollout_patch.json()
+    assert rollout["kill_switch"] is True
+    assert rollout["pilot_org_ids"] == [1]
+    assert rollout["max_actions_per_day"] == 5
+
+    dry_run = await client.post(
+        "/api/v1/admin/orgs/1/autonomy-dry-run",
+        headers=_super_token(),
+        json={"approval_type": "send_message", "payload_json": {"to": "ops@org1.com"}},
+    )
+    assert dry_run.status_code == 200
+    body = dry_run.json()
+    assert body["approval_type"] == "send_message"
+    assert body["rollout_allowed"] is False
+    assert isinstance(body["reasons"], list)
+
+
+@pytest.mark.asyncio
 async def test_org_readiness_trend_returns_daily_series(client):
     r = await client.get("/api/v1/admin/orgs/1/readiness/trend?days=5", headers=_super_token())
     assert r.status_code == 200

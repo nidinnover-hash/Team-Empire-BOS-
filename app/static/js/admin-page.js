@@ -10,6 +10,8 @@
   var trendDays = 7;
   var autonomyPolicy = null;
   var policyBaselineKey = "";
+  var rolloutBaselineKey = "";
+  var policyTemplates = [];
   var _suppressUrlWrite = false;
 
   function esc(s) {
@@ -127,6 +129,20 @@
     msg.textContent = text || "";
   }
 
+  function setRolloutMessage(text, cls) {
+    var msg = document.getElementById("rollout-msg");
+    if (!msg) return;
+    msg.className = "policy-msg" + (cls ? " " + cls : "");
+    msg.textContent = text || "";
+  }
+
+  function setDryRunMessage(text, cls) {
+    var msg = document.getElementById("dryrun-msg");
+    if (!msg) return;
+    msg.className = "policy-msg" + (cls ? " " + cls : "");
+    msg.textContent = text || "";
+  }
+
   function toIsoLocal(value) {
     if (!value) return "-";
     var d = new Date(value);
@@ -174,6 +190,96 @@
     setSaveButtonEnabled(dirty);
   }
 
+  function canonicalRollout(rollout) {
+    if (!rollout) return "";
+    var pilot = Array.isArray(rollout.pilot_org_ids) ? rollout.pilot_org_ids.slice(0) : [];
+    pilot = pilot.map(function (v) { return Number(v) || 0; }).filter(function (v) { return v > 0; }).sort(function (a, b) { return a - b; });
+    return JSON.stringify({
+      kill_switch: !!rollout.kill_switch,
+      pilot_org_ids: pilot,
+      max_actions_per_day: Number(rollout.max_actions_per_day || 1),
+    });
+  }
+
+  function parsePilotOrgIds(value) {
+    var seen = {};
+    return String(value || "").split(",").map(function (chunk) {
+      return Number(String(chunk || "").trim());
+    }).filter(function (n) {
+      if (!Number.isFinite(n) || n <= 0) return false;
+      if (seen[n]) return false;
+      seen[n] = true;
+      return true;
+    });
+  }
+
+  function populateRolloutForm(rollout) {
+    var kill = document.getElementById("rollout-kill-switch");
+    var max = document.getElementById("rollout-max-actions");
+    var pilots = document.getElementById("rollout-pilot-orgs");
+    if (!rollout) {
+      if (kill) kill.checked = false;
+      if (max) max.value = "250";
+      if (pilots) pilots.value = "";
+      rolloutBaselineKey = "";
+      return;
+    }
+    if (kill) kill.checked = !!rollout.kill_switch;
+    if (max) max.value = String(Number(rollout.max_actions_per_day || 250));
+    if (pilots) pilots.value = (rollout.pilot_org_ids || []).join(",");
+    rolloutBaselineKey = canonicalRollout(rollout);
+  }
+
+  function readRolloutForm() {
+    var kill = document.getElementById("rollout-kill-switch");
+    var max = document.getElementById("rollout-max-actions");
+    var pilots = document.getElementById("rollout-pilot-orgs");
+    var maxParsed = Number(max ? max.value : "250");
+    if (!Number.isFinite(maxParsed)) maxParsed = 250;
+    maxParsed = Math.max(1, Math.min(10000, Math.round(maxParsed)));
+    return {
+      kill_switch: !!(kill && kill.checked),
+      pilot_org_ids: parsePilotOrgIds(pilots ? pilots.value : ""),
+      max_actions_per_day: maxParsed,
+    };
+  }
+
+  function refreshRolloutDirtyState() {
+    var save = document.getElementById("rollout-save-btn");
+    if (!save) return;
+    if (!selectedOrgId || !rolloutBaselineKey) {
+      save.disabled = true;
+      return;
+    }
+    save.disabled = canonicalRollout(readRolloutForm()) === rolloutBaselineKey;
+  }
+
+  function renderTemplateOptions(policy, templates) {
+    var sel = document.getElementById("policy-template-select");
+    var desc = document.getElementById("policy-template-desc");
+    var apply = document.getElementById("policy-template-apply-btn");
+    if (!sel || !desc || !apply) return;
+    var rows = Array.isArray(templates) ? templates : [];
+    if (!rows.length) {
+      sel.innerHTML = '<option value="">No templates</option>';
+      apply.disabled = true;
+      desc.textContent = "";
+      return;
+    }
+    apply.disabled = false;
+    sel.innerHTML = rows.map(function (t) {
+      return '<option value="' + esc(t.id) + '">' + esc(t.label) + "</option>";
+    }).join("");
+    if (policy) {
+      var matched = rows.find(function (t) {
+        return canonicalPolicy(t.policy || {}) === canonicalPolicy(policy);
+      });
+      if (matched) sel.value = matched.id;
+    }
+    var selected = rows.find(function (t) { return t.id === sel.value; }) || rows[0];
+    desc.textContent = selected && selected.description ? selected.description : "";
+  }
+
   function populatePolicyForm(policy) {
     autonomyPolicy = policy || null;
     var mode = document.getElementById("policy-current-mode");
@@ -196,6 +302,7 @@
       policyBaselineKey = "";
       renderPolicyMeta(null);
       refreshPolicyDirtyState();
+      renderTemplateOptions(null, policyTemplates);
       return;
     }
     if (mode) mode.value = policy.current_mode || "approved_execution";
@@ -209,6 +316,7 @@
     policyBaselineKey = canonicalPolicy(policy);
     renderPolicyMeta(policy);
     refreshPolicyDirtyState();
+    renderTemplateOptions(policy, policyTemplates);
   }
 
   function readPolicyForm() {
@@ -254,6 +362,72 @@
       setPolicyMessage("Policy saved.", "ok");
     } finally {
       refreshPolicyDirtyState();
+    }
+  }
+
+  async function saveRollout() {
+    if (!selectedOrgId) return;
+    var btn = document.getElementById("rollout-save-btn");
+    if (btn) btn.disabled = true;
+    setRolloutMessage("Saving rollout...", "");
+    try {
+      var payload = readRolloutForm();
+      var updated = await apiPatch("/api/v1/admin/orgs/" + selectedOrgId + "/autonomy-rollout", payload);
+      if (!updated) {
+        setRolloutMessage("Failed to save rollout.", "err");
+        return;
+      }
+      populateRolloutForm(updated);
+      setRolloutMessage("Rollout saved.", "ok");
+      await loadOrgDetail(selectedOrgId);
+    } finally {
+      refreshRolloutDirtyState();
+    }
+  }
+
+  async function applyTemplate() {
+    if (!selectedOrgId) return;
+    var sel = document.getElementById("policy-template-select");
+    if (!sel || !sel.value) return;
+    setPolicyMessage("Applying template...", "");
+    var updated = await apiPost("/api/v1/admin/orgs/" + selectedOrgId + "/autonomy-policy/templates/" + encodeURIComponent(sel.value));
+    if (!updated) {
+      setPolicyMessage("Template apply failed.", "err");
+      return;
+    }
+    await loadOrgDetail(selectedOrgId);
+    setPolicyMessage("Template applied.", "ok");
+  }
+
+  async function runDryRun() {
+    if (!selectedOrgId) return;
+    var approvalTypeEl = document.getElementById("dryrun-approval-type");
+    var reasonsEl = document.getElementById("dryrun-reasons");
+    var approvalType = String(approvalTypeEl ? approvalTypeEl.value : "").trim();
+    if (!approvalType) {
+      setDryRunMessage("Enter an approval type first.", "err");
+      return;
+    }
+    setDryRunMessage("Running dry-run...", "");
+    var out = await apiPost("/api/v1/admin/orgs/" + selectedOrgId + "/autonomy-dry-run", {
+      approval_type: approvalType,
+      payload_json: {},
+    });
+    if (!out) {
+      setDryRunMessage("Dry-run failed.", "err");
+      if (reasonsEl) reasonsEl.innerHTML = "";
+      return;
+    }
+    var summary = (out.can_execute_after_approval ? "EXECUTE OK" : "EXECUTE BLOCKED") +
+      " | " + (out.can_auto_approve ? "AUTO-APPROVE OK" : "AUTO-APPROVE BLOCKED") +
+      " | " + (out.rollout_allowed ? "ROLLOUT OK" : "ROLLOUT BLOCKED");
+    setDryRunMessage(summary, out.can_execute_after_approval ? "ok" : "err");
+    var reasons = Array.isArray(out.reasons) ? out.reasons : [];
+    if (!reasons.length) reasons = ["No blockers detected."];
+    if (reasonsEl) {
+      reasonsEl.innerHTML = reasons.slice(0, 8).map(function (r) {
+        return "<li>" + esc(r) + "</li>";
+      }).join("");
     }
   }
 
@@ -403,7 +577,13 @@
       empty.style.display = "";
       detail.style.display = "none";
       populatePolicyForm(null);
+      populateRolloutForm(null);
+      renderPolicyHistory([]);
       setPolicyMessage("", "");
+      setRolloutMessage("", "");
+      setDryRunMessage("", "");
+      var dryRunReasons = document.getElementById("dryrun-reasons");
+      if (dryRunReasons) dryRunReasons.innerHTML = "";
       return;
     }
     empty.style.display = "none";
@@ -426,6 +606,7 @@
     reasonList.innerHTML = reasons.map(function (r) { return "<li>" + esc(r) + "</li>"; }).join("");
     populatePolicyForm(policy || null);
     renderPolicyHistory(history || []);
+    renderTemplateOptions(policy || null, policyTemplates);
     setPolicyMessage("", "");
 
     var trendBody = document.getElementById("trend-body");
@@ -455,8 +636,13 @@
       apiGet("/api/v1/admin/orgs/" + orgId + "/readiness/trend?days=" + trendDays),
       apiGet("/api/v1/admin/orgs/" + orgId + "/autonomy-policy"),
       apiGet("/api/v1/admin/orgs/" + orgId + "/autonomy-policy/history?limit=12"),
+      apiGet("/api/v1/admin/orgs/" + orgId + "/autonomy-rollout"),
+      apiGet("/api/v1/admin/orgs/" + orgId + "/autonomy-policy/templates"),
     ]);
+    policyTemplates = Array.isArray(data[6]) ? data[6] : [];
+    populateRolloutForm(data[5]);
     renderDetail(data[0], data[1], data[2], data[3], data[4]);
+    refreshRolloutDirtyState();
   }
 
   var fleetFilter = document.getElementById("fleet-status-filter");
@@ -476,7 +662,7 @@
       if (selectedOrgId) {
         await loadOrgDetail(selectedOrgId);
       } else {
-        renderDetail(null, null, null);
+        renderDetail(null, null, null, null, []);
       }
     });
   });
@@ -493,6 +679,26 @@
   if (savePolicyBtn) {
     savePolicyBtn.addEventListener("click", savePolicy);
   }
+  var saveRolloutBtn = document.getElementById("rollout-save-btn");
+  if (saveRolloutBtn) {
+    saveRolloutBtn.addEventListener("click", saveRollout);
+  }
+  var applyTemplateBtn = document.getElementById("policy-template-apply-btn");
+  if (applyTemplateBtn) {
+    applyTemplateBtn.addEventListener("click", applyTemplate);
+  }
+  var templateSelect = document.getElementById("policy-template-select");
+  if (templateSelect) {
+    templateSelect.addEventListener("change", function () {
+      var desc = document.getElementById("policy-template-desc");
+      var row = policyTemplates.find(function (t) { return t.id === templateSelect.value; });
+      if (desc) desc.textContent = row && row.description ? row.description : "";
+    });
+  }
+  var dryRunBtn = document.getElementById("dryrun-run-btn");
+  if (dryRunBtn) {
+    dryRunBtn.addEventListener("click", runDryRun);
+  }
   [
     "policy-current-mode",
     "policy-allow-auto",
@@ -507,6 +713,12 @@
     if (!el) return;
     el.addEventListener("change", refreshPolicyDirtyState);
     el.addEventListener("input", refreshPolicyDirtyState);
+  });
+  ["rollout-kill-switch", "rollout-max-actions", "rollout-pilot-orgs"].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("change", refreshRolloutDirtyState);
+    el.addEventListener("input", refreshRolloutDirtyState);
   });
 
   _suppressUrlWrite = true;

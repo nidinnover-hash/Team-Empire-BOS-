@@ -8,6 +8,7 @@ from app.main import app as fastapi_app
 from app.models.approval import Approval
 from app.models.clone_control import CloneLearningFeedback
 from app.models.employee import Employee
+from app.models.execution import Execution
 
 
 async def _get_session():
@@ -133,3 +134,66 @@ async def test_approval_records_learning_feedback_when_employee_mapped(client):
         assert rows[0].outcome_score > 0.8
     finally:
         await agen.aclose()
+
+
+async def test_yes_execute_blocked_by_rollout_kill_switch(client):
+    rollout_patch = await client.patch(
+        "/api/v1/admin/orgs/1/autonomy-rollout",
+        json={"kill_switch": True},
+    )
+    assert rollout_patch.status_code == 200
+
+    req = await client.post(
+        "/api/v1/approvals/request",
+        json={
+            "organization_id": 1,
+            "approval_type": "send_message",
+            "payload_json": {"to": "ops@org1.com", "subject": "hello"},
+        },
+    )
+    assert req.status_code == 201
+    aid = req.json()["id"]
+
+    approve = await client.post(f"/api/v1/approvals/{aid}/approve", json={"note": "YES EXECUTE"})
+    assert approve.status_code == 409
+
+
+async def test_yes_execute_blocked_by_rollout_daily_cap(client):
+    rollout_patch = await client.patch(
+        "/api/v1/admin/orgs/1/autonomy-rollout",
+        json={"kill_switch": False, "pilot_org_ids": [1], "max_actions_per_day": 1},
+    )
+    assert rollout_patch.status_code == 200
+
+    executed_approval_id = await _seed_approval(client, status="approved", approval_type="assign_task")
+    session, agen = await _get_session()
+    try:
+        session.add(
+            Execution(
+                organization_id=1,
+                approval_id=executed_approval_id,
+                triggered_by=1,
+                status="succeeded",
+                output_json={},
+                error_text=None,
+                started_at=datetime.now(UTC),
+                finished_at=datetime.now(UTC),
+            )
+        )
+        await session.commit()
+    finally:
+        await agen.aclose()
+
+    req = await client.post(
+        "/api/v1/approvals/request",
+        json={
+            "organization_id": 1,
+            "approval_type": "send_message",
+            "payload_json": {"to": "ops@org1.com", "subject": "hello"},
+        },
+    )
+    assert req.status_code == 201
+    aid = req.json()["id"]
+
+    approve = await client.post(f"/api/v1/approvals/{aid}/approve", json={"note": "YES EXECUTE"})
+    assert approve.status_code == 409

@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.logs.audit import record_action
 from app.models.approval import Approval
+from app.services import autonomy_policy
 from app.services import execution as execution_service
+from app.services import organization as org_service
 from app.services.email_service import send_approved_compose, send_approved_reply
 from app.services.notification import create_notification
 from app.tools.calendar import build_calendar_digest
@@ -154,7 +156,6 @@ async def execute_approval(
         raise ValueError(
             f"Cannot execute approval {approval.id} with status '{approval.status}'"
         )
-
     # Double-execution guard
     if approval.executed_at is not None:
         logger.warning(
@@ -162,6 +163,20 @@ async def execute_approval(
             approval.id, approval.executed_at,
         )
         return
+    # Defense in depth: enforce autonomy controls even for direct service calls.
+    # If policy lookup fails unexpectedly, proceed with normal execution path
+    # (API layer already enforces policy before calling this service).
+    if isinstance(db, AsyncSession):
+        try:
+            org = await org_service.get_organization_by_id(db, int(actor_org_id))
+            if org is not None:
+                can_execute, denial_reason = await autonomy_policy.can_execute_post_approval(db, org=org)
+                if not can_execute:
+                    raise ValueError(denial_reason or "Execution denied by autonomy policy")
+        except ValueError:
+            raise
+        except (SQLAlchemyError, RuntimeError, TypeError, AttributeError):
+            logger.warning("autonomy execution guard lookup failed; continuing execution path", exc_info=True)
 
     execution = await execution_service.create_execution(
         db,

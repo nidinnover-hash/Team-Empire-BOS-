@@ -83,6 +83,11 @@ def default_policy_config() -> dict[str, Any]:
             "block_on_stale_integrations": True,
             "block_on_sla_breaches": True,
         },
+        "autonomy_rollout": {
+            "kill_switch": False,
+            "pilot_org_ids": [],
+            "max_actions_per_day": 250,
+        },
     }
 
 

@@ -17,10 +17,15 @@ from app.models.task import Task
 from app.models.user import User
 from app.schemas.admin import (
     AdminUserRead,
+    AutonomyDryRunRead,
+    AutonomyDryRunRequest,
     AutonomyGatesRead,
     AutonomyPolicyHistoryItemRead,
     AutonomyPolicyRead,
     AutonomyPolicyUpdate,
+    AutonomyRolloutRead,
+    AutonomyRolloutUpdate,
+    AutonomyTemplateRead,
     OrgReadinessFleetItem,
     OrgReadinessReport,
     OrgSummary,
@@ -203,6 +208,50 @@ async def get_org_autonomy_policy(
     return AutonomyPolicyRead.model_validate({**policy, **meta})
 
 
+@router.get("/orgs/{org_id}/autonomy-policy/templates", response_model=list[AutonomyTemplateRead])
+async def list_org_autonomy_policy_templates(
+    org_id: int,
+    db: AsyncSession = Depends(get_db),
+    _actor: dict = Depends(require_super_admin),
+) -> list[AutonomyTemplateRead]:
+    await _load_org_or_404(db, org_id)
+    return [AutonomyTemplateRead.model_validate(row) for row in autonomy_policy.list_policy_templates()]
+
+
+@router.post("/orgs/{org_id}/autonomy-policy/templates/{template_id}", response_model=AutonomyPolicyRead)
+async def apply_org_autonomy_policy_template(
+    org_id: int,
+    template_id: str,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_super_admin),
+) -> AutonomyPolicyRead:
+    org = await _load_org_or_404(db, org_id)
+    template = autonomy_policy.get_policy_template(template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Autonomy policy template not found")
+    policy_updates = dict(template["policy"]) if isinstance(template.get("policy"), dict) else {}
+    updated = await autonomy_policy.update_autonomy_policy(
+        db,
+        organization_id=int(org.id),
+        updates=policy_updates,
+        updated_by_user_id=int(actor.get("id")) if actor.get("id") is not None else None,
+        updated_by_email=str(actor.get("email") or "").strip().lower() or None,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Organisation not found")
+    policy, meta = updated
+    await record_action(
+        db=db,
+        event_type="autonomy_policy_template_applied",
+        actor_user_id=int(actor["id"]),
+        organization_id=int(org.id),
+        entity_type="organization",
+        entity_id=int(org.id),
+        payload_json={"template_id": template.get("id")},
+    )
+    return AutonomyPolicyRead.model_validate({**policy, **meta})
+
+
 @router.get("/orgs/{org_id}/autonomy-policy/history", response_model=list[AutonomyPolicyHistoryItemRead])
 async def list_org_autonomy_policy_history(
     org_id: int,
@@ -250,6 +299,85 @@ async def update_org_autonomy_policy(
         },
     )
     return AutonomyPolicyRead.model_validate({**policy, **meta})
+
+
+@router.get("/orgs/{org_id}/autonomy-rollout", response_model=AutonomyRolloutRead)
+async def get_org_autonomy_rollout(
+    org_id: int,
+    db: AsyncSession = Depends(get_db),
+    _actor: dict = Depends(require_super_admin),
+) -> AutonomyRolloutRead:
+    org = await _load_org_or_404(db, org_id)
+    rollout = await autonomy_policy.get_rollout_config(db, int(org.id))
+    return AutonomyRolloutRead.model_validate(rollout)
+
+
+@router.patch("/orgs/{org_id}/autonomy-rollout", response_model=AutonomyRolloutRead)
+async def update_org_autonomy_rollout(
+    org_id: int,
+    data: AutonomyRolloutUpdate,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_super_admin),
+) -> AutonomyRolloutRead:
+    org = await _load_org_or_404(db, org_id)
+    updates = data.model_dump(exclude_unset=True)
+    updated = await autonomy_policy.update_rollout_config(
+        db,
+        organization_id=int(org.id),
+        updates=updates,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Organisation not found")
+    await record_action(
+        db=db,
+        event_type="autonomy_rollout_updated",
+        actor_user_id=int(actor["id"]),
+        organization_id=int(org.id),
+        entity_type="organization",
+        entity_id=int(org.id),
+        payload_json={"updated_fields": sorted(list(updates.keys()))},
+    )
+    return AutonomyRolloutRead.model_validate(updated)
+
+
+@router.post("/orgs/{org_id}/autonomy-dry-run", response_model=AutonomyDryRunRead)
+async def org_autonomy_dry_run(
+    org_id: int,
+    data: AutonomyDryRunRequest,
+    db: AsyncSession = Depends(get_db),
+    _actor: dict = Depends(require_super_admin),
+) -> AutonomyDryRunRead:
+    org = await _load_org_or_404(db, org_id)
+    readiness = await _build_org_readiness_report(db, org)
+    gates = await autonomy_policy.evaluate_autonomy_modes(db, org=org)
+    rollout = await autonomy_policy.evaluate_rollout_for_execution(db, org=org)
+    can_auto, auto_reason = await autonomy_policy.can_auto_approve(db, org=org)
+    can_execute, execute_reason = await autonomy_policy.can_execute_post_approval(db, org=org)
+    reasons = [reason for reason in [auto_reason, execute_reason] if reason]
+    reasons.extend(gates["reasons"])
+    # Deduplicate while preserving order.
+    seen: set[str] = set()
+    unique_reasons: list[str] = []
+    for reason in reasons:
+        if reason not in seen:
+            seen.add(reason)
+            unique_reasons.append(reason)
+    return AutonomyDryRunRead(
+        org_id=int(org.id),
+        org_name=org.name,
+        approval_type=(data.approval_type or "").strip(),
+        readiness_score=readiness.score,
+        readiness_status=readiness.status,
+        allowed_modes=gates["allowed_modes"],
+        rollout_allowed=rollout["allowed"],
+        rollout_reason=rollout["reason"] or None,
+        actions_today=rollout["actions_today"],
+        max_actions_per_day=rollout["max_actions_per_day"],
+        can_auto_approve=can_auto,
+        can_execute_after_approval=can_execute,
+        reasons=unique_reasons,
+        generated_at=datetime.now(UTC),
+    )
 
 
 @router.post("/orgs/{org_id}/autonomy-policy/rollback/{version_id}", response_model=AutonomyPolicyRead)

@@ -32,10 +32,14 @@ from app.models import ai_call_log as _model_ai_call_log  # noqa: F401
 
 # Register all models so Base.metadata knows about the tables
 from app.models import approval as _model_approval  # noqa: F401
+from app.models import approval_pattern as _model_approval_pattern  # noqa: F401
+from app.models import autonomy_policy as _model_autonomy_policy  # noqa: F401
 from app.models import ceo_control as _model_ceo_control  # noqa: F401
 from app.models import chat_message as _model_chat_message  # noqa: F401
 from app.models import clone_control as _model_clone_control  # noqa: F401
 from app.models import clone_performance as _model_clone_performance  # noqa: F401
+from app.models import clone_persona as _model_clone_persona  # noqa: F401
+from app.models import coaching_report as _model_coaching_report  # noqa: F401
 from app.models import command as _model_command  # noqa: F401
 from app.models import contact as _model_contact  # noqa: F401
 from app.models import conversation as _model_conversation  # noqa: F401
@@ -52,6 +56,7 @@ from app.models import github as _model_github  # noqa: F401
 from app.models import goal as _model_goal  # noqa: F401
 from app.models import integration as _model_integration  # noqa: F401
 from app.models import integration_signal as _model_integration_signal  # noqa: F401
+from app.models import invite_token as _model_invite_token  # noqa: F401
 from app.models import media_project as _model_media_project  # noqa: F401
 from app.models import memory as _model_memory  # noqa: F401
 from app.models import note as _model_note  # noqa: F401
@@ -146,20 +151,83 @@ def _reset_redis_module_state():
     email_mod._compose_redis_client = saved_modules["email_client"]
 
 
+def _seed_test_data(session_factory):
+    """Seed standard test users so JWT auth resolves against the DB."""
+    import asyncio
+
+    async def _seed():
+        async with session_factory() as seed_session:
+            seed_session.add(Organization(id=1, name="Test Org", slug="test-org"))
+            seed_session.add(Organization(id=2, name="Test Org 2", slug="test-org-2"))
+            seed_session.add(User(id=1, organization_id=1, name="Test CEO",
+                                  email="ceo@org1.com", password_hash="unused",
+                                  role="CEO", is_active=True, token_version=1,
+                                  is_super_admin=True))
+            seed_session.add(User(id=2, organization_id=2, name="Test CEO 2",
+                                  email="ceo@org2.com", password_hash="unused",
+                                  role="CEO", is_active=True, token_version=1))
+            seed_session.add(User(id=3, organization_id=1, name="Test Manager",
+                                  email="manager@org1.com", password_hash="unused",
+                                  role="MANAGER", is_active=True, token_version=1))
+            seed_session.add(User(id=4, organization_id=1, name="Test Staff",
+                                  email="staff@org1.com", password_hash="unused",
+                                  role="STAFF", is_active=True, token_version=1))
+            seed_session.add(User(id=5, organization_id=1, name="Personal CEO",
+                                  email="nidinnover@gmail.com", password_hash="unused",
+                                  role="CEO", is_active=True, token_version=1))
+            await seed_session.commit()
+
+    asyncio.get_event_loop().run_until_complete(_seed())
+
+
 @pytest_asyncio.fixture
-async def client():
+async def _test_engine():
+    """Shared in-memory SQLite engine for a single test (used by both client and db)."""
     engine = create_async_engine(
         TEST_DATABASE_URL,
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-
-    # Create all tables fresh for this test
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    yield engine
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await engine.dispose()
 
+
+@pytest_asyncio.fixture
+async def db(_test_engine):
+    """Async DB session backed by the test in-memory database.
+
+    Use for tests that call service / job functions directly (not via HTTP).
+    Shares the same engine as the ``client`` fixture when both are requested.
+    """
     TestSession = async_sessionmaker(
-        bind=engine,
+        bind=_test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    async with TestSession() as seed_session:
+        seed_session.add(Organization(id=1, name="Test Org", slug="test-org"))
+        seed_session.add(Organization(id=2, name="Test Org 2", slug="test-org-2"))
+        seed_session.add(User(id=1, organization_id=1, name="Test CEO",
+                              email="ceo@org1.com", password_hash="unused",
+                              role="CEO", is_active=True, token_version=1,
+                              is_super_admin=True))
+        seed_session.add(User(id=2, organization_id=2, name="Test CEO 2",
+                              email="ceo@org2.com", password_hash="unused",
+                              role="CEO", is_active=True, token_version=1))
+        await seed_session.commit()
+
+    async with TestSession() as session:
+        yield session
+
+
+@pytest_asyncio.fixture
+async def client(_test_engine):
+    TestSession = async_sessionmaker(
+        bind=_test_engine,
         class_=AsyncSession,
         expire_on_commit=False,
     )
@@ -171,7 +239,8 @@ async def client():
         seed_session.add(Organization(id=2, name="Test Org 2", slug="test-org-2"))
         seed_session.add(User(id=1, organization_id=1, name="Test CEO",
                               email="ceo@org1.com", password_hash="unused",
-                              role="CEO", is_active=True, token_version=1))
+                              role="CEO", is_active=True, token_version=1,
+                              is_super_admin=True))
         seed_session.add(User(id=2, organization_id=2, name="Test CEO 2",
                               email="ceo@org2.com", password_hash="unused",
                               role="CEO", is_active=True, token_version=1))
@@ -213,6 +282,3 @@ async def client():
 
     # Teardown: remove overrides and wipe the test database
     fastapi_app.dependency_overrides.clear()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    await engine.dispose()

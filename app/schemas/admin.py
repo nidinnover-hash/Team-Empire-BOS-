@@ -117,6 +117,47 @@ class AutonomyPolicyHistoryItemRead(BaseModel):
     policy: AutonomyPolicySnapshot
 
 
+class AutonomyTemplateRead(BaseModel):
+    id: str
+    label: str
+    description: str
+    policy: AutonomyPolicySnapshot
+
+
+class AutonomyRolloutRead(BaseModel):
+    kill_switch: bool
+    pilot_org_ids: list[int]
+    max_actions_per_day: int
+
+
+class AutonomyRolloutUpdate(BaseModel):
+    kill_switch: bool | None = None
+    pilot_org_ids: list[int] | None = None
+    max_actions_per_day: int | None = None
+
+
+class AutonomyDryRunRequest(BaseModel):
+    approval_type: str
+    payload_json: dict = {}
+
+
+class AutonomyDryRunRead(BaseModel):
+    org_id: int
+    org_name: str
+    approval_type: str
+    readiness_score: int
+    readiness_status: Literal["ready", "watch", "blocked"]
+    allowed_modes: list[Literal["suggest_only", "approved_execution", "autonomous"]]
+    rollout_allowed: bool
+    rollout_reason: str | None
+    actions_today: int
+    max_actions_per_day: int
+    can_auto_approve: bool
+    can_execute_after_approval: bool
+    reasons: list[str]
+    generated_at: datetime
+
+
 class AutonomyPolicyUpdate(BaseModel):
     current_mode: Literal["suggest_only", "approved_execution", "autonomous"] | None = None
     allow_auto_approval: bool | None = None

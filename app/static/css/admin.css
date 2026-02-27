@@ -68,6 +68,9 @@ tr:last-child td { border-bottom: none; }
 .policy-history-wrap { margin-top: .65rem; }
 .policy-history-action { border: 1px solid var(--line); background: var(--surface); color: var(--text-secondary); border-radius: 6px; padding: .15rem .45rem; font-size: .68rem; cursor: pointer; }
 .policy-history-action:hover { background: var(--surface-alt); }
+.policy-template-wrap, .policy-rollout-wrap, .dry-run-wrap { margin-top: .75rem; border-top: 1px dashed var(--line-soft); padding-top: .65rem; }
+.policy-template-controls { display: flex; gap: .45rem; align-items: center; margin-bottom: .35rem; }
+.policy-template-controls select, .policy-template-controls input { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); padding: .26rem .38rem; font-size: .74rem; min-width: 14rem; }
 .trend-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .35rem; }
 .trend-controls { display: inline-flex; gap: .35rem; }
 .trend-btn { border: 1px solid var(--line); background: var(--surface); color: var(--text-secondary); border-radius: 6px; padding: .15rem .45rem; font-size: .68rem; cursor: pointer; }
@@ -78,6 +81,8 @@ tr:last-child td { border-bottom: none; }
   .kpi-row { grid-template-columns: 1fr 1fr; }
   .detail-grid, .chip-row { grid-template-columns: 1fr; }
   .policy-grid, .policy-checks { grid-template-columns: 1fr; }
+  .policy-template-controls { flex-direction: column; align-items: stretch; }
+  .policy-template-controls select, .policy-template-controls input { min-width: 0; width: 100%; }
   table { font-size: .72rem; }
   th, td { padding: .4rem .35rem; }
 }
