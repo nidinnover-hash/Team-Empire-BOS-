@@ -183,10 +183,18 @@ async def test_mfa_confirm_with_valid_code(client):
 @pytest.mark.asyncio
 async def test_mfa_confirm_with_wrong_code(client):
     pytest.importorskip("pyotp")
-    await client.post("/api/v1/mfa/setup", headers={"Authorization": f"Bearer {_ceo_token()}"})
+    import pyotp as _pyotp
+    r2 = await client.post("/api/v1/mfa/setup", headers={"Authorization": f"Bearer {_ceo_token()}"})
+    _secret = r2.json()["secret"]
+    _totp = _pyotp.TOTP(_secret)
+    wrong_code = "000000"
+    for _c in ("000000", "111111", "222222", "333333"):
+        if not _totp.verify(_c, valid_window=1):
+            wrong_code = _c
+            break
     r = await client.post(
         "/api/v1/mfa/confirm",
-        json={"totp_code": "000000"},
+        json={"totp_code": wrong_code},
         headers={"Authorization": f"Bearer {_ceo_token()}"},
     )
     assert r.status_code == 401
@@ -207,15 +215,22 @@ async def test_mfa_disable_requires_valid_code(client):
         headers={"Authorization": f"Bearer {_ceo_token()}"},
     )
 
-    # Wrong code → fail
+    # Wrong code -> fail (pick a code guaranteed invalid within the +/-1 window)
+    import pyotp as _pyotp
+    _totp = _pyotp.TOTP(secret)
+    wrong_code = "000000"
+    for _candidate in ("000000", "111111", "222222", "333333"):
+        if not _totp.verify(_candidate, valid_window=1):
+            wrong_code = _candidate
+            break
     r = await client.post(
         "/api/v1/mfa/disable",
-        json={"totp_code": "999999"},
+        json={"totp_code": wrong_code},
         headers={"Authorization": f"Bearer {_ceo_token()}"},
     )
     assert r.status_code == 401
 
-    # Correct code → succeed
+    # Correct code -> succeed
     code = pyotp.TOTP(secret).now()
     r = await client.post(
         "/api/v1/mfa/disable",
@@ -240,7 +255,7 @@ async def test_mfa_setup_conflict_when_already_enabled(client):
         headers={"Authorization": f"Bearer {_ceo_token()}"},
     )
 
-    # Setup again while already enabled → 409
+    # Setup again while already enabled -> 409
     r = await client.post("/api/v1/mfa/setup", headers={"Authorization": f"Bearer {_ceo_token()}"})
     assert r.status_code == 409
 
@@ -294,7 +309,7 @@ async def mfa_enabled_client():
 
 @pytest.mark.asyncio
 async def test_login_mfa_required_when_no_code(mfa_enabled_client):
-    """Login with correct password but no TOTP code → 401 + X-MFA-Required header."""
+    """Login with correct password but no TOTP code -> 401 + X-MFA-Required header."""
     client, _ = mfa_enabled_client
     r = await client.post(
         "/web/login",
@@ -309,18 +324,25 @@ async def test_login_mfa_required_when_no_code(mfa_enabled_client):
 
 @pytest.mark.asyncio
 async def test_login_mfa_wrong_code_rejected(mfa_enabled_client):
-    """Login with correct password + wrong TOTP code → 401."""
-    client, _ = mfa_enabled_client
+    """Login with correct password + wrong TOTP code -> 401."""
+    import pyotp as _pyotp
+    client, secret = mfa_enabled_client
+    _totp = _pyotp.TOTP(secret)
+    wrong_code = "000000"
+    for _c in ("000000", "111111", "222222", "333333"):
+        if not _totp.verify(_c, valid_window=1):
+            wrong_code = _c
+            break
     r = await client.post(
         "/web/login",
-        data={"username": "ceo@org1.com", "password": "TestPass2026!", "totp_code": "000000"},
+        data={"username": "ceo@org1.com", "password": "TestPass2026!", "totp_code": wrong_code},
     )
     assert r.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_login_mfa_correct_code_succeeds(mfa_enabled_client):
-    """Login with correct password + correct TOTP code → success (200 + cookies)."""
+    """Login with correct password + correct TOTP code -> success (200 + cookies)."""
     import pyotp
     client, secret = mfa_enabled_client
     code = pyotp.TOTP(secret).now()
