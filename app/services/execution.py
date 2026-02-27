@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
-from typing import cast
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.execution import Execution
@@ -13,17 +13,56 @@ async def create_execution(
     approval_id: int,
     triggered_by: int,
     status: str = "running",
-) -> Execution:
+    execute_idempotency_key: str | None = None,
+) -> tuple[Execution, bool]:
     execution = Execution(
         organization_id=organization_id,
         approval_id=approval_id,
         triggered_by=triggered_by,
         status=status,
+        execute_idempotency_key=execute_idempotency_key,
     )
-    db.add(execution)
-    await db.commit()
-    await db.refresh(execution)
-    return execution
+    try:
+        db.add(execution)
+        await db.commit()
+        await db.refresh(execution)
+        return execution, True
+    except IntegrityError:
+        await db.rollback()
+        if execute_idempotency_key:
+            existing_by_key = (
+                await db.execute(
+                    select(Execution).where(
+                        Execution.organization_id == organization_id,
+                        Execution.execute_idempotency_key == execute_idempotency_key,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing_by_key is not None:
+                return existing_by_key, False
+        existing = (
+            await db.execute(
+                select(Execution).where(Execution.approval_id == approval_id)
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            raise
+        return existing, False
+
+
+async def get_execution_by_idempotency_key(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    execute_idempotency_key: str,
+) -> Execution | None:
+    result = await db.execute(
+        select(Execution).where(
+            Execution.organization_id == organization_id,
+            Execution.execute_idempotency_key == execute_idempotency_key,
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 async def complete_execution(
@@ -38,7 +77,7 @@ async def complete_execution(
     if organization_id is not None:
         query = query.where(Execution.organization_id == organization_id)
     result = await db.execute(query)
-    execution = cast(Execution | None, result.scalar_one_or_none())
+    execution = result.scalar_one_or_none()
     if execution is None:
         return None
     execution.status = status

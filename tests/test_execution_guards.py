@@ -80,7 +80,7 @@ async def test_unknown_handler_type_skipped():
         patch("app.services.execution_engine.record_action", new_callable=AsyncMock),
         patch("app.services.execution_engine._finalize_execution", new_callable=AsyncMock) as mock_finalize,
     ):
-        mock_exec.create_execution = AsyncMock(return_value=fake_execution)
+        mock_exec.create_execution = AsyncMock(return_value=(fake_execution, True))
         await execute_approval(db, approval, actor_user_id=1, actor_org_id=1)
 
     mock_finalize.assert_awaited_once()
@@ -106,7 +106,7 @@ async def test_send_message_reply_path():
         patch("app.services.execution_engine.send_approved_compose", new_callable=AsyncMock) as mock_compose,
         patch("app.services.execution_engine._finalize_execution", new_callable=AsyncMock) as mock_finalize,
     ):
-        mock_exec.create_execution = AsyncMock(return_value=fake_execution)
+        mock_exec.create_execution = AsyncMock(return_value=(fake_execution, True))
         await execute_approval(db, approval, actor_user_id=1, actor_org_id=1)
 
     mock_reply.assert_awaited_once()
@@ -132,7 +132,7 @@ async def test_send_message_compose_path():
         patch("app.services.execution_engine.send_approved_compose", new_callable=AsyncMock, return_value=True) as mock_compose,
         patch("app.services.execution_engine._finalize_execution", new_callable=AsyncMock) as mock_finalize,
     ):
-        mock_exec.create_execution = AsyncMock(return_value=fake_execution)
+        mock_exec.create_execution = AsyncMock(return_value=(fake_execution, True))
         await execute_approval(db, approval, actor_user_id=1, actor_org_id=1)
 
     mock_compose.assert_awaited_once()

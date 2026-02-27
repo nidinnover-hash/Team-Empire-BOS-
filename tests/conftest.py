@@ -7,6 +7,7 @@ Every test gets:
   - The get_db dependency overridden to use the test database
 """
 import os
+from datetime import UTC, datetime
 
 import pytest_asyncio
 
@@ -73,6 +74,7 @@ from app.models import threat_signal as _model_threat_signal  # noqa: F401
 from app.models import user as _model_user  # noqa: F401
 from app.models import weekly_report as _model_weekly_report  # noqa: F401
 from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
+from app.models.integration import Integration
 from app.models.organization import Organization
 from app.models.user import User
 
@@ -175,6 +177,16 @@ def _seed_test_data(session_factory):
             seed_session.add(User(id=5, organization_id=1, name="Personal CEO",
                                   email="nidinnover@gmail.com", password_hash="unused",
                                   role="CEO", is_active=True, token_version=1))
+            seed_session.add(
+                Integration(
+                    organization_id=1,
+                    type="github",
+                    config_json={},
+                    status="connected",
+                    last_sync_at=datetime.now(UTC),
+                    last_sync_status="ok",
+                )
+            )
             await seed_session.commit()
 
     asyncio.get_event_loop().run_until_complete(_seed())
@@ -218,6 +230,16 @@ async def db(_test_engine):
         seed_session.add(User(id=2, organization_id=2, name="Test CEO 2",
                               email="ceo@org2.com", password_hash="unused",
                               role="CEO", is_active=True, token_version=1))
+        seed_session.add(
+            Integration(
+                organization_id=1,
+                type="github",
+                config_json={},
+                status="connected",
+                last_sync_at=datetime.now(UTC),
+                last_sync_status="ok",
+            )
+        )
         await seed_session.commit()
 
     async with TestSession() as session:
@@ -253,6 +275,16 @@ async def client(_test_engine):
         seed_session.add(User(id=5, organization_id=1, name="Personal CEO",
                               email="nidinnover@gmail.com", password_hash="unused",
                               role="CEO", is_active=True, token_version=1))
+        seed_session.add(
+            Integration(
+                organization_id=1,
+                type="github",
+                config_json={},
+                status="connected",
+                last_sync_at=datetime.now(UTC),
+                last_sync_status="ok",
+            )
+        )
         await seed_session.commit()
 
     async def override_get_db():

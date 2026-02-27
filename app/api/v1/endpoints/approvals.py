@@ -1,7 +1,7 @@
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +25,7 @@ from app.services import alert as alert_service
 from app.services import approval as approval_service
 from app.services import approval_pattern as pattern_service
 from app.services import autonomy_policy, clone_control, execution_engine
+from app.services import execution as execution_service
 from app.services import organization as org_service
 from app.services import webhook as webhook_service
 
@@ -111,6 +112,7 @@ async def _record_feedback_telemetry_event(
 @router.post("/request", response_model=ApprovalRead, status_code=201)
 async def request_approval(
     data: ApprovalRequestCreate,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=128),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> ApprovalRead:
@@ -119,7 +121,28 @@ async def request_approval(
     org = await org_service.get_organization_by_id(db, int(actor["org_id"]))
     if org is None:
         raise HTTPException(status_code=404, detail="Organization not found")
+    if idempotency_key:
+        existing = (
+            await db.execute(
+                select(Approval).where(
+                    Approval.organization_id == int(actor["org_id"]),
+                    Approval.request_idempotency_key == idempotency_key,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            same_shape = (
+                existing.approval_type == data.approval_type
+                and (existing.payload_json or {}) == (data.payload_json or {})
+            )
+            if not same_shape:
+                raise HTTPException(status_code=409, detail="Idempotency key reused with different approval payload")
+            return existing
     approval = await approval_service.request_approval(db, actor["id"], data)
+    if idempotency_key:
+        approval.request_idempotency_key = idempotency_key
+        await db.commit()
+        await db.refresh(approval)
     await record_action(
         db,
         event_type="approval_requested",
@@ -262,10 +285,27 @@ async def approval_timeline(
 async def approve(
     approval_id: int,
     data: ApprovalDecision,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=128),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> ApprovalRead:
     should_execute = (data.note or "").strip().upper() == "YES EXECUTE"
+    if should_execute and not idempotency_key:
+        raise HTTPException(status_code=400, detail="Idempotency-Key header is required for YES EXECUTE")
+    if should_execute and idempotency_key:
+        existing_exec = await execution_service.get_execution_by_idempotency_key(
+            db,
+            organization_id=int(actor["org_id"]),
+            execute_idempotency_key=idempotency_key,
+        )
+        if existing_exec is not None:
+            replay = await approval_service.get_approval(
+                db,
+                existing_exec.approval_id,
+                organization_id=int(actor["org_id"]),
+            )
+            if replay is not None:
+                return replay
     existing = await approval_service.get_approval(
         db,
         approval_id,
@@ -315,6 +355,7 @@ async def approve(
             approval=approval,
             actor_user_id=actor["id"],
             actor_org_id=actor["org_id"],
+            execute_idempotency_key=idempotency_key,
         )
     # Record pattern decision
     try:

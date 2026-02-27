@@ -217,5 +217,9 @@ async def test_suggest_only_mode_blocks_yes_execute(client):
     assert req.status_code == 201
     approval_id = req.json()["id"]
 
-    approve = await client.post(f"/api/v1/approvals/{approval_id}/approve", json={"note": "YES EXECUTE"})
+    approve = await client.post(
+        f"/api/v1/approvals/{approval_id}/approve",
+        json={"note": "YES EXECUTE"},
+        headers={"Idempotency-Key": "conf-suggest-only-1"},
+    )
     assert approve.status_code == 409

@@ -36,6 +36,9 @@ class Approval(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    confidence_score: Mapped[float | None] = mapped_column(nullable=True)
+    auto_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    request_idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

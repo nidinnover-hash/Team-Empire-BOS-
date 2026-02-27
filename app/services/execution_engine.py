@@ -143,6 +143,7 @@ async def execute_approval(
     approval: Approval,
     actor_user_id: int,
     actor_org_id: int,
+    execute_idempotency_key: str | None = None,
 ) -> None:
     # Org isolation check
     if approval.organization_id != actor_org_id:
@@ -178,13 +179,17 @@ async def execute_approval(
         except (SQLAlchemyError, RuntimeError, TypeError, AttributeError):
             logger.warning("autonomy execution guard lookup failed; continuing execution path", exc_info=True)
 
-    execution = await execution_service.create_execution(
+    execution, created = await execution_service.create_execution(
         db,
         organization_id=approval.organization_id,
         approval_id=approval.id,
         triggered_by=actor_user_id,
         status="running",
+        execute_idempotency_key=execute_idempotency_key,
     )
+    if not created:
+        logger.info("idempotent replay for approval %d (key=%s)", approval.id, execute_idempotency_key)
+        return
     await record_action(
         db,
         event_type="execution_started",

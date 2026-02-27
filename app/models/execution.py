@@ -10,6 +10,7 @@ class Execution(Base):
     __tablename__ = "executions"
     __table_args__ = (
         UniqueConstraint("approval_id", name="uq_execution_approval"),
+        UniqueConstraint("organization_id", "execute_idempotency_key", name="uq_execution_org_idempotency_key"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -32,6 +33,7 @@ class Execution(Base):
         index=True,
     )
     status: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    execute_idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     output_json: Mapped[dict] = mapped_column(JSON, default=dict)
     error_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime] = mapped_column(

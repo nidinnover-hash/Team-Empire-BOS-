@@ -22,7 +22,7 @@ async def test_execution_runs_and_succeeds(client):
     approve = await client.post(
         f"/api/v1/approvals/{approval_id}/approve",
         json={"note": "YES EXECUTE"},
-        headers=approver,
+        headers={**approver, "Idempotency-Key": "exec-test-1"},
     )
     assert approve.status_code == 200
 
@@ -48,7 +48,7 @@ async def test_execution_failure_is_recorded(client):
     approve = await client.post(
         f"/api/v1/approvals/{approval_id}/approve",
         json={"note": "YES EXECUTE"},
-        headers=approver,
+        headers={**approver, "Idempotency-Key": "exec-test-2"},
     )
     assert approve.status_code == 200
 
@@ -113,7 +113,7 @@ async def test_calendar_digest_execution_output(client):
     approve = await client.post(
         f"/api/v1/approvals/{approval_id}/approve",
         json={"note": "YES EXECUTE"},
-        headers=approver,
+        headers={**approver, "Idempotency-Key": "exec-test-3"},
     )
     assert approve.status_code == 200
 

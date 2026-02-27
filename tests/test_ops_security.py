@@ -51,7 +51,7 @@ async def test_approval_request_and_approve_flow(client):
     approved = await client.post(
         f"/api/v1/approvals/{approval_id}/approve",
         json={"note": "YES EXECUTE"},
-        headers=ceo_headers,
+        headers={**ceo_headers, "Idempotency-Key": "ops-sec-1"},
     )
     assert approved.status_code == 200
     assert approved.json()["status"] == "approved"

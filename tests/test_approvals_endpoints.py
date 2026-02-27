@@ -49,6 +49,38 @@ async def test_request_approval_returns_201(client):
     assert body["status"] == "pending"
 
 
+async def test_request_approval_idempotent_replay_returns_same_approval(client):
+    payload = {"organization_id": 1, "approval_type": "task_execution", "payload_json": {"task": "x"}}
+    first = await client.post(
+        "/api/v1/approvals/request",
+        json=payload,
+        headers={"Idempotency-Key": "req-replay-1"},
+    )
+    assert first.status_code == 201
+    second = await client.post(
+        "/api/v1/approvals/request",
+        json=payload,
+        headers={"Idempotency-Key": "req-replay-1"},
+    )
+    assert second.status_code == 201
+    assert second.json()["id"] == first.json()["id"]
+
+
+async def test_request_approval_idempotency_conflict_on_different_payload(client):
+    first = await client.post(
+        "/api/v1/approvals/request",
+        json={"organization_id": 1, "approval_type": "task_execution", "payload_json": {"task": "a"}},
+        headers={"Idempotency-Key": "req-conflict-1"},
+    )
+    assert first.status_code == 201
+    second = await client.post(
+        "/api/v1/approvals/request",
+        json={"organization_id": 1, "approval_type": "task_execution", "payload_json": {"task": "b"}},
+        headers={"Idempotency-Key": "req-conflict-1"},
+    )
+    assert second.status_code == 409
+
+
 async def test_list_approvals_empty(client):
     resp = await client.get("/api/v1/approvals")
     assert resp.status_code == 200
@@ -154,7 +186,11 @@ async def test_yes_execute_blocked_by_rollout_kill_switch(client):
     assert req.status_code == 201
     aid = req.json()["id"]
 
-    approve = await client.post(f"/api/v1/approvals/{aid}/approve", json={"note": "YES EXECUTE"})
+    approve = await client.post(
+        f"/api/v1/approvals/{aid}/approve",
+        json={"note": "YES EXECUTE"},
+        headers={"Idempotency-Key": "kill-switch-1"},
+    )
     assert approve.status_code == 409
 
 
@@ -195,5 +231,55 @@ async def test_yes_execute_blocked_by_rollout_daily_cap(client):
     assert req.status_code == 201
     aid = req.json()["id"]
 
-    approve = await client.post(f"/api/v1/approvals/{aid}/approve", json={"note": "YES EXECUTE"})
+    approve = await client.post(
+        f"/api/v1/approvals/{aid}/approve",
+        json={"note": "YES EXECUTE"},
+        headers={"Idempotency-Key": "daily-cap-1"},
+    )
     assert approve.status_code == 409
+
+
+async def test_yes_execute_requires_idempotency_key(client):
+    req = await client.post(
+        "/api/v1/approvals/request",
+        json={
+            "organization_id": 1,
+            "approval_type": "send_message",
+            "payload_json": {"to": "ops@org1.com", "subject": "hello"},
+        },
+    )
+    assert req.status_code == 201
+    aid = req.json()["id"]
+    approve = await client.post(f"/api/v1/approvals/{aid}/approve", json={"note": "YES EXECUTE"})
+    assert approve.status_code == 400
+
+
+async def test_yes_execute_idempotency_replay_returns_existing_approval(client):
+    req = await client.post(
+        "/api/v1/approvals/request",
+        json={
+            "organization_id": 1,
+            "approval_type": "assign_task",
+            "payload_json": {"task_id": 123},
+        },
+    )
+    assert req.status_code == 201
+    aid = req.json()["id"]
+    key = "replay-key-1"
+
+    first = await client.post(
+        f"/api/v1/approvals/{aid}/approve",
+        json={"note": "YES EXECUTE"},
+        headers={"Idempotency-Key": key},
+    )
+    assert first.status_code == 200
+    first_body = first.json()
+
+    second = await client.post(
+        f"/api/v1/approvals/{aid}/approve",
+        json={"note": "YES EXECUTE"},
+        headers={"Idempotency-Key": key},
+    )
+    assert second.status_code == 200
+    second_body = second.json()
+    assert second_body["id"] == first_body["id"]
