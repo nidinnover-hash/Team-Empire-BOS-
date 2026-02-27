@@ -24,6 +24,23 @@ jobs:
       - name: Check migration heads
         run: python scripts/check_migration_heads.py
 
+      - name: Production config smoke
+        env:
+          DEBUG: "false"
+          ENFORCE_STARTUP_VALIDATION: "true"
+          AUTO_CREATE_SCHEMA: "false"
+          AUTO_SEED_DEFAULTS: "false"
+          COOKIE_SECURE: "true"
+          SECRET_KEY: "0123456789abcdef0123456789abcdef"
+          ADMIN_EMAIL: "owner@example.com"
+          ADMIN_PASSWORD: "StrongPassword123!"
+          TOKEN_ENCRYPTION_KEY: "abcdef0123456789abcdef0123456789"
+          OPENAI_API_KEY: "sk-live-valid-key-value"
+          DEFAULT_AI_PROVIDER: "openai"
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/nidin_nover_ai
+          PURPOSE_PERSONAL_EMAILS: "nidinnover@gmail.com"
+        run: python scripts/smoke_prod_config.py --import-app
+
       - name: Check ops readiness controls
         run: python scripts/check_ops_readiness.py
 
