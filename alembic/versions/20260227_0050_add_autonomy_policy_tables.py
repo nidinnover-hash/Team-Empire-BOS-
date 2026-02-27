@@ -1,14 +1,14 @@
 """add autonomy policy config + version tables
 
 Revision ID: 20260227_0050
-Revises: 20260227_0049
+Revises: 20260226_0042
 Create Date: 2026-02-27
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "20260227_0050"
-down_revision = "20260227_0049"
+down_revision = "20260226_0042"
 branch_labels = None
 depends_on = None
 

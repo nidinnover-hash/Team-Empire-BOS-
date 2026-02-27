@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, date, datetime, timedelta
-from typing import cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,7 +51,7 @@ async def upsert_identity_map(
     db.add(row)
     await db.commit()
     await db.refresh(row)
-    return cast(EmployeeIdentityMap, row)
+    return row
 
 
 async def list_identity_maps(db: AsyncSession, *, organization_id: int) -> list[EmployeeIdentityMap]:
@@ -95,7 +94,7 @@ async def upsert_clone_profile(
     db.add(row)
     await db.commit()
     await db.refresh(row)
-    return cast(EmployeeCloneProfile, row)
+    return row
 
 
 def profile_to_payload(row: EmployeeCloneProfile) -> dict[str, object]:
@@ -124,7 +123,7 @@ async def get_clone_profile(
             )
         )
     ).scalar_one_or_none()
-    return cast(EmployeeCloneProfile | None, row)
+    return row
 
 
 async def record_feedback(
@@ -150,7 +149,7 @@ async def record_feedback(
     db.add(row)
     await db.commit()
     await db.refresh(row)
-    return cast(CloneLearningFeedback, row)
+    return row
 
 
 async def feedback_adjustment_for_employee(
@@ -286,7 +285,7 @@ async def update_role_training_plan_status(
     db.add(row)
     await db.commit()
     await db.refresh(row)
-    return cast(RoleTrainingPlan, row)
+    return row
 
 
 async def data_quality_snapshot(db: AsyncSession, *, organization_id: int) -> dict[str, object]:

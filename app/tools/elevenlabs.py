@@ -4,7 +4,7 @@ Pure async httpx client, no DB.
 """
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 import httpx
 
@@ -51,7 +51,7 @@ async def text_to_speech(
             headers={**_headers(api_key), "Content-Type": "application/json"},
         )
         resp.raise_for_status()
-        return cast(bytes, resp.content)
+        return resp.content
 
 
 async def get_voice(api_key: str, voice_id: str) -> dict[str, Any]:

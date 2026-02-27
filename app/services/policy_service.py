@@ -11,7 +11,6 @@ import json
 import logging
 import re
 from datetime import date
-from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -101,7 +100,7 @@ async def get_policy(db: AsyncSession, org_id: int, policy_id: int) -> PolicyRul
             PolicyRule.id == policy_id,
         )
     )
-    return cast(PolicyRule | None, result.scalar_one_or_none())
+    return result.scalar_one_or_none()
 
 
 async def activate_policy(db: AsyncSession, org_id: int, policy_id: int) -> PolicyRule | None:

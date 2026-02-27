@@ -38,6 +38,22 @@ from app.services.org_readiness import build_org_readiness_report
 router = APIRouter(prefix="/admin", tags=["Super Admin"])
 
 
+def _actor_user_id(actor: dict) -> int | None:
+    raw = actor.get("id")
+    if isinstance(raw, bool):
+        return int(raw)
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, float):
+        return int(raw)
+    if isinstance(raw, str | bytes | bytearray):
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 async def _load_org_or_404(db: AsyncSession, org_id: int) -> Organization:
     org_result = await db.execute(select(Organization).where(Organization.id == org_id))
     org = org_result.scalar_one_or_none()
@@ -226,11 +242,12 @@ async def patch_org_autonomy_policy(
     actor: dict = Depends(require_super_admin),
 ) -> AutonomyPolicyRead:
     org = await _load_org_or_404(db, org_id)
+    actor_user_id = _actor_user_id(actor)
     updated = await autonomy_policy.update_autonomy_policy(
         db,
         organization_id=int(org.id),
         updates=updates,
-        updated_by_user_id=int(actor.get("id")) if actor.get("id") is not None else None,
+        updated_by_user_id=actor_user_id,
         updated_by_email=str(actor.get("email") or "").strip().lower() or None,
     )
     if updated is None:
@@ -239,7 +256,7 @@ async def patch_org_autonomy_policy(
     await record_action(
         db=db,
         event_type="autonomy_policy_updated",
-        actor_user_id=int(actor.get("id")) if actor.get("id") is not None else None,
+        actor_user_id=actor_user_id,
         organization_id=int(org.id),
         entity_type="organization",
         entity_id=int(org.id),
@@ -257,15 +274,17 @@ async def apply_org_autonomy_policy_template(
     actor: dict = Depends(require_super_admin),
 ) -> AutonomyPolicyRead:
     org = await _load_org_or_404(db, org_id)
+    actor_user_id = _actor_user_id(actor)
     template = autonomy_policy.get_policy_template(template_id)
     if template is None:
         raise HTTPException(status_code=404, detail="Autonomy policy template not found")
-    policy_updates = dict(template["policy"]) if isinstance(template.get("policy"), dict) else {}
+    template_policy = template.get("policy")
+    policy_updates = dict(template_policy) if isinstance(template_policy, dict) else {}
     updated = await autonomy_policy.update_autonomy_policy(
         db,
         organization_id=int(org.id),
         updates=policy_updates,
-        updated_by_user_id=int(actor.get("id")) if actor.get("id") is not None else None,
+        updated_by_user_id=actor_user_id,
         updated_by_email=str(actor.get("email") or "").strip().lower() or None,
     )
     if updated is None:
@@ -303,13 +322,14 @@ async def update_org_autonomy_policy(
     actor: dict = Depends(require_super_admin),
 ) -> AutonomyPolicyRead:
     org = await _load_org_or_404(db, org_id)
+    actor_user_id = _actor_user_id(actor)
     before = await autonomy_policy.get_autonomy_policy(db, int(org.id))
     incoming = data.model_dump(exclude_unset=True)
     updated = await autonomy_policy.update_autonomy_policy(
         db,
         organization_id=int(org.id),
         updates=incoming,
-        updated_by_user_id=int(actor.get("id")) if actor.get("id") is not None else None,
+        updated_by_user_id=actor_user_id,
         updated_by_email=str(actor.get("email") or "").strip().lower() or None,
     )
     if updated is None:
@@ -419,11 +439,12 @@ async def rollback_org_autonomy_policy(
     actor: dict = Depends(require_super_admin),
 ) -> AutonomyPolicyRead:
     org = await _load_org_or_404(db, org_id)
+    actor_user_id = _actor_user_id(actor)
     rolled_back = await autonomy_policy.rollback_autonomy_policy(
         db,
         organization_id=int(org.id),
         version_id=version_id,
-        updated_by_user_id=int(actor.get("id")) if actor.get("id") is not None else None,
+        updated_by_user_id=actor_user_id,
         updated_by_email=str(actor.get("email") or "").strip().lower() or None,
     )
     if rolled_back is None:

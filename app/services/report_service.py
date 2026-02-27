@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 from datetime import date, timedelta
-from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,7 +47,7 @@ async def generate_weekly_report(
             WeeklyReport.report_type == report_type,
         )
     )
-    existing = cast(WeeklyReport | None, result.scalar_one_or_none())
+    existing = result.scalar_one_or_none()
     if existing:
         existing.content_markdown = content
         report = existing
@@ -76,7 +75,7 @@ async def get_report(
             WeeklyReport.report_type == report_type,
         )
     )
-    return cast(WeeklyReport | None, result.scalar_one_or_none())
+    return result.scalar_one_or_none()
 
 
 # ---------------------------------------------------------------------------

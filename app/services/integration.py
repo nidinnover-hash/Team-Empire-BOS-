@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -185,7 +184,7 @@ async def find_whatsapp_integration_by_phone_number_id(
         if item is not None:
             cfg = decrypt_config(item.config_json or {})
             set_committed_value(item, "config_json", cfg)
-            return cast(Integration, item)
+            return item
         # Cached entry stale (disconnected/deleted) — fall through to full scan
         _whatsapp_phone_cache.pop(phone_number_id, None)
 
@@ -206,5 +205,5 @@ async def find_whatsapp_integration_by_phone_number_id(
                 _whatsapp_phone_cache.pop(oldest_key, None)
             _whatsapp_phone_cache[phone_number_id] = item.id
             set_committed_value(item, "config_json", cfg)
-            return cast(Integration, item)
+            return item
     return None

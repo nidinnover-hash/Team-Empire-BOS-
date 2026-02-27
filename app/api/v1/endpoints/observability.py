@@ -1,5 +1,4 @@
 from datetime import UTC, datetime, timedelta
-from typing import cast
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
@@ -26,7 +25,7 @@ async def observability_summary(
     db: AsyncSession = Depends(get_db),
 ) -> ObservabilitySummaryRead:
     payload = await obs_service.get_observability_summary(db, org_id=int(actor["org_id"]), days=days)
-    return cast(ObservabilitySummaryRead, ObservabilitySummaryRead.model_validate(payload))
+    return ObservabilitySummaryRead.model_validate(payload)
 
 
 @router.get("/ai-calls", response_model=list[AICallLogRead])
@@ -55,7 +54,7 @@ async def storage_summary(
     db: AsyncSession = Depends(get_db),
 ) -> StorageSummaryRead:
     payload = await obs_service.get_storage_summary(db, org_id=int(actor["org_id"]))
-    return cast(StorageSummaryRead, StorageSummaryRead.model_validate(payload))
+    return StorageSummaryRead.model_validate(payload)
 
 
 @router.get("/events")

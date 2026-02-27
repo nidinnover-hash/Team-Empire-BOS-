@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any
 
 import httpx
 from sqlalchemy import delete, select
@@ -291,7 +291,7 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
             # Sync open PRs
             try:
                 async def _load_prs(o: str = owner, n: str = name) -> list[dict[str, Any]]:
-                    return cast(list[dict[str, Any]], await get_pull_requests(token, o, n))
+                    return await get_pull_requests(token, o, n)
 
                 prs = await run_with_retry(_load_prs)
             except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
@@ -313,7 +313,7 @@ async def sync_github(db: AsyncSession, org_id: int) -> dict[str, Any]:
             # Sync open bug/critical issues
             try:
                 async def _load_issues(o: str = owner, n: str = name) -> list[dict[str, Any]]:
-                    return cast(list[dict[str, Any]], await get_issues(token, o, n, labels="bug"))
+                    return await get_issues(token, o, n, labels="bug")
 
                 issues = await run_with_retry(_load_issues)
             except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:

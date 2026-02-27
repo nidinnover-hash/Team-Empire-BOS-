@@ -1,4 +1,3 @@
-from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,7 +41,7 @@ async def update_project_status(
             Project.organization_id == organization_id,
         )
     )
-    project = cast(Project | None, result.scalar_one_or_none())
+    project = result.scalar_one_or_none()
     if project is None:
         return None
     project.status = data.status

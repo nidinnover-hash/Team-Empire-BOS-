@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Literal, cast
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,7 +47,7 @@ async def daily_briefing(
         org_id=org_id,
         actor_user_id=int(current_user["id"]),
     )
-    return cast(DailyBriefingResponse, DailyBriefingResponse.model_validate(payload))
+    return DailyBriefingResponse.model_validate(payload)
 
 
 # ── Team Dashboard ────────────────────────────────────────────────────────────
@@ -63,7 +63,7 @@ async def team_dashboard(
     """
     org_id = int(_user["org_id"])
     payload = await get_team_dashboard(db=db, org_id=org_id)
-    return cast(TeamDashboardResponse, TeamDashboardResponse.model_validate(payload))
+    return TeamDashboardResponse.model_validate(payload)
 
 
 @router.get("/executive", response_model=ExecutiveBriefingResponse)
@@ -77,7 +77,7 @@ async def executive_briefing(
     """
     org_id = int(_user["org_id"])
     payload = await get_executive_briefing(db=db, org_id=org_id)
-    return cast(ExecutiveBriefingResponse, ExecutiveBriefingResponse.model_validate(payload))
+    return ExecutiveBriefingResponse.model_validate(payload)
 
 
 # ── Daily Task Plans ──────────────────────────────────────────────────────────

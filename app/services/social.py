@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,7 +57,7 @@ async def get_social_post(
             SocialPost.id == post_id,
         )
     )
-    return cast(SocialPost | None, result.scalar_one_or_none())
+    return result.scalar_one_or_none()
 
 
 async def list_social_posts(
@@ -90,7 +89,7 @@ async def update_social_post_status(
             SocialPost.organization_id == organization_id,
         )
     )
-    post = cast(SocialPost | None, result.scalar_one_or_none())
+    post = result.scalar_one_or_none()
     if post is None:
         return None
 
@@ -152,7 +151,7 @@ async def publish_social_post(
             SocialPost.organization_id == organization_id,
         )
     )
-    post = cast(SocialPost | None, result.scalar_one_or_none())
+    post = result.scalar_one_or_none()
     if post is None:
         return None
     if post.status not in ("approved", "queued"):

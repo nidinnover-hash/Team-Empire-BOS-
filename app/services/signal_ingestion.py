@@ -12,7 +12,7 @@ import hashlib
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 
 import httpx
 from sqlalchemy import select
@@ -135,7 +135,7 @@ async def _upsert_signal(
             IntegrationSignal.external_id == external_id,
         )
     )
-    existing = cast(IntegrationSignal | None, result.scalar_one_or_none())
+    existing = result.scalar_one_or_none()
 
     if existing:
         if existing.hash != payload_hash:

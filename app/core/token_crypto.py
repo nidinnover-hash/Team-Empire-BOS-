@@ -18,7 +18,6 @@ WARNING: Rotating the active key invalidates all stored tokens.
 import base64
 import hashlib
 import logging
-from typing import cast
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -59,7 +58,7 @@ def _fernet() -> Fernet:
 
 def encrypt_token(plaintext: str) -> str:
     """Encrypt a token string. Returns a Fernet ciphertext string."""
-    return cast(str, _fernet().encrypt(plaintext.encode("utf-8")).decode("utf-8"))
+    return _fernet().encrypt(plaintext.encode("utf-8")).decode("utf-8")
 
 
 def decrypt_token(ciphertext: str) -> str:
@@ -67,7 +66,7 @@ def decrypt_token(ciphertext: str) -> str:
     Decrypt a Fernet ciphertext string.
     Raises InvalidToken if the value is corrupted or encrypted with a different key.
     """
-    return cast(str, _fernet().decrypt(ciphertext.encode("utf-8")).decode("utf-8"))
+    return _fernet().decrypt(ciphertext.encode("utf-8")).decode("utf-8")
 
 
 def encrypt_config(config_json: dict) -> dict:

@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +23,7 @@ async def get_by_key(
             Conversation.participant_key == participant_key,
         )
     )
-    return cast(Conversation | None, row.scalar_one_or_none())
+    return row.scalar_one_or_none()
 
 
 async def create_if_missing(

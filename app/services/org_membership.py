@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +30,7 @@ async def get_membership(
             OrganizationMembership.user_id == user_id,
         )
     )
-    return cast(OrganizationMembership | None, result.scalar_one_or_none())
+    return result.scalar_one_or_none()
 
 
 async def upsert_membership(

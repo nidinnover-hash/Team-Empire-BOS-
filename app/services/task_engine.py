@@ -10,7 +10,7 @@ Flow:
 
 import copy
 from datetime import UTC, date, datetime
-from typing import Any, TypedDict, cast
+from typing import Any, TypedDict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -234,7 +234,7 @@ async def approve_plan(
             DailyTaskPlan.organization_id == org_id,
         )
     )
-    plan = cast(DailyTaskPlan | None, result.scalar_one_or_none())
+    plan = result.scalar_one_or_none()
     if not plan or plan.status != "draft":
         return None
 
@@ -269,7 +269,7 @@ async def mark_task_done(
             DailyTaskPlan.organization_id == org_id,
         )
     )
-    plan = cast(DailyTaskPlan | None, result.scalar_one_or_none())
+    plan = result.scalar_one_or_none()
     if not plan:
         return None
 

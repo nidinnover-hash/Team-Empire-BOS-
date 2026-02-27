@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +19,7 @@ async def create_or_update_employee(
             Employee.email == data.email,
         )
     )
-    existing = cast(Employee | None, result.scalar_one_or_none())
+    existing = result.scalar_one_or_none()
 
     if existing:
         existing.name = data.name
@@ -72,7 +71,7 @@ async def get_employee(
             Employee.id == employee_id,
         )
     )
-    return cast(Employee | None, result.scalar_one_or_none())
+    return result.scalar_one_or_none()
 
 
 async def update_employee(

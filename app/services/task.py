@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,7 +52,7 @@ async def update_task(
     if organization_id is not None:
         query = query.where(Task.organization_id == organization_id)
     result = await db.execute(query)
-    task = cast(Task | None, result.scalar_one_or_none())
+    task = result.scalar_one_or_none()
     if task is None:
         return None
 

@@ -1,5 +1,4 @@
 from datetime import UTC, datetime, timedelta
-from typing import cast
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,7 +49,7 @@ async def get_approval(
     if organization_id is not None:
         query = query.where(Approval.organization_id == organization_id)
     result = await db.execute(query)
-    return cast(Approval | None, result.scalar_one_or_none())
+    return result.scalar_one_or_none()
 
 
 async def list_approvals(

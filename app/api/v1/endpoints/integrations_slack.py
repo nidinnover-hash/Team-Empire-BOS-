@@ -1,4 +1,3 @@
-from typing import cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -92,7 +91,7 @@ async def slack_sync(
         try:
             cached = get_cached_response(scope, idempotency_key, fingerprint=fingerprint)
             if cached:
-                return cast(SlackSyncResult, SlackSyncResult.model_validate(cached))
+                return SlackSyncResult.model_validate(cached)
         except IdempotencyConflictError as exc:
             raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
     try:

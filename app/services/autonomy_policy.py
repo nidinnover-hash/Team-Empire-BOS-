@@ -165,9 +165,19 @@ def _normalize_mode(value: object) -> AutonomyMode:
 
 
 def _to_int(value: object, fallback: int, *, min_value: int = 0, max_value: int = 100) -> int:
-    try:
+    parsed: int | None = None
+    if isinstance(value, bool):
         parsed = int(value)
-    except (TypeError, ValueError):
+    elif isinstance(value, int):
+        parsed = value
+    elif isinstance(value, float):
+        parsed = int(value)
+    elif isinstance(value, str | bytes | bytearray):
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = None
+    if parsed is None:
         parsed = fallback
     return max(min_value, min(max_value, parsed))
 
@@ -205,9 +215,18 @@ def _normalize_meta(raw: dict[str, object]) -> AutonomyPolicyMeta:
     if not updated_at:
         updated_at = None
     user_id_raw = raw.get("updated_by_user_id")
-    try:
-        user_id = int(user_id_raw) if user_id_raw is not None else None
-    except (TypeError, ValueError):
+    if isinstance(user_id_raw, bool):
+        user_id = int(user_id_raw)
+    elif isinstance(user_id_raw, int):
+        user_id = user_id_raw
+    elif isinstance(user_id_raw, float):
+        user_id = int(user_id_raw)
+    elif isinstance(user_id_raw, str | bytes | bytearray):
+        try:
+            user_id = int(user_id_raw)
+        except (TypeError, ValueError):
+            user_id = None
+    else:
         user_id = None
     email_raw = raw.get("updated_by_email")
     email = str(email_raw).strip().lower() if email_raw is not None else None

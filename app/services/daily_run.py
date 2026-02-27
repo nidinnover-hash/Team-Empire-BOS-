@@ -1,5 +1,4 @@
 from datetime import UTC, date, datetime
-from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +19,7 @@ async def get_daily_run_by_scope(
             DailyRun.team_filter == team_filter,
         )
     )
-    return cast(DailyRun | None, result.scalar_one_or_none())
+    return result.scalar_one_or_none()
 
 
 async def create_daily_run(
@@ -60,7 +59,7 @@ async def complete_daily_run(
             DailyRun.organization_id == organization_id,
         )
     )
-    run = cast(DailyRun | None, result.scalar_one_or_none())
+    run = result.scalar_one_or_none()
     if run is None:
         return None
     run.status = status

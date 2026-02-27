@@ -3,7 +3,6 @@ import json
 import logging
 from datetime import UTC, date, datetime
 from hashlib import sha256
-from typing import cast
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -338,7 +337,7 @@ async def sync_google_calendar(
         try:
             cached = get_cached_response(scope, idempotency_key, fingerprint=fingerprint)
             if cached:
-                return cast(CalendarSyncResult, CalendarSyncResult.model_validate(cached))
+                return CalendarSyncResult.model_validate(cached)
         except IdempotencyConflictError as exc:
             raise HTTPException(status_code=409, detail="Idempotency conflict: this key was already used with a different request body") from exc
     result = await sync_calendar_events(

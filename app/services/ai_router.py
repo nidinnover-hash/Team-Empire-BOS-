@@ -443,13 +443,13 @@ def _get_key(provider: str, org_id: int = 1) -> str | None:
     if cached and cached not in PLACEHOLDER_AI_KEYS:
         return cached
     if provider == "openai":
-        return cast(str | None, settings.OPENAI_API_KEY)
+        return settings.OPENAI_API_KEY
     if provider == "anthropic":
-        return cast(str | None, settings.ANTHROPIC_API_KEY)
+        return settings.ANTHROPIC_API_KEY
     if provider == "groq":
-        return cast(str | None, settings.GROQ_API_KEY)
+        return settings.GROQ_API_KEY
     if provider == "gemini":
-        return cast(str | None, settings.GEMINI_API_KEY)
+        return settings.GEMINI_API_KEY
     return None
 
 

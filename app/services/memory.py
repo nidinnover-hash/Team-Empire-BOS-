@@ -8,7 +8,6 @@ everything into a single string that gets injected into every AI call.
 import logging
 from collections.abc import Mapping
 from datetime import UTC, date, datetime
-from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -84,7 +83,7 @@ async def upsert_profile_memory(
             ProfileMemory.key == key,
         )
     )
-    existing = cast(ProfileMemory | None, result.scalar_one_or_none())
+    existing = result.scalar_one_or_none()
 
     if existing:
         existing.value = value
@@ -119,7 +118,7 @@ async def upsert_profile_memory(
                 ProfileMemory.key == key,
             )
         )
-        existing = cast(ProfileMemory | None, retry.scalar_one_or_none())
+        existing = retry.scalar_one_or_none()
         if existing is None:
             raise  # re-raise IntegrityError if the winning row vanished
         existing.value = value
@@ -183,7 +182,7 @@ async def get_team_member(
             TeamMember.organization_id == organization_id,
         )
     )
-    return cast(TeamMember | None, result.scalar_one_or_none())
+    return result.scalar_one_or_none()
 
 
 async def create_team_member(
@@ -545,4 +544,4 @@ async def build_memory_context(
         _memory_context_cache[organization_id] = (now_ts, base_context)
         _memory_context_cache_stats["size"] = len(_memory_context_cache)
 
-    return cast(str, base_context)
+    return base_context

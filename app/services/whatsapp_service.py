@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +27,7 @@ async def _find_existing_message(
             WhatsAppMessage.wa_message_id == wa_message_id,
         )
     )
-    return cast(WhatsAppMessage | None, row.scalar_one_or_none())
+    return row.scalar_one_or_none()
 
 
 async def ingest_webhook_payload(db: AsyncSession, payload: dict) -> int:

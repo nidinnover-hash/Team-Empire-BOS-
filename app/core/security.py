@@ -24,7 +24,7 @@ def create_access_token(data: dict, expires_minutes: int = 30) -> str:
         algorithm=settings.ALGORITHM,
         headers={"typ": "JWT"},
     )
-    return cast(str, token)
+    return token
 
 
 def decode_access_token(token: str) -> dict:
