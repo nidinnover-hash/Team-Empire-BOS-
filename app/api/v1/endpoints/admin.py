@@ -18,6 +18,7 @@ from app.models.user import User
 from app.schemas.admin import (
     AdminUserRead,
     AutonomyGatesRead,
+    AutonomyPolicyHistoryItemRead,
     AutonomyPolicyRead,
     AutonomyPolicyUpdate,
     OrgReadinessFleetItem,
@@ -202,6 +203,18 @@ async def get_org_autonomy_policy(
     return AutonomyPolicyRead.model_validate({**policy, **meta})
 
 
+@router.get("/orgs/{org_id}/autonomy-policy/history", response_model=list[AutonomyPolicyHistoryItemRead])
+async def list_org_autonomy_policy_history(
+    org_id: int,
+    limit: int = Query(default=20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    _actor: dict = Depends(require_super_admin),
+) -> list[AutonomyPolicyHistoryItemRead]:
+    org = await _load_org_or_404(db, org_id)
+    history = await autonomy_policy.get_autonomy_policy_history(db, int(org.id), limit=limit)
+    return [AutonomyPolicyHistoryItemRead.model_validate(item) for item in history]
+
+
 @router.patch("/orgs/{org_id}/autonomy-policy", response_model=AutonomyPolicyRead)
 async def update_org_autonomy_policy(
     org_id: int,
@@ -235,6 +248,36 @@ async def update_org_autonomy_policy(
             "before": {k: before.get(k) for k in changed_fields},
             "after": {k: policy.get(k) for k in changed_fields},
         },
+    )
+    return AutonomyPolicyRead.model_validate({**policy, **meta})
+
+
+@router.post("/orgs/{org_id}/autonomy-policy/rollback/{version_id}", response_model=AutonomyPolicyRead)
+async def rollback_org_autonomy_policy(
+    org_id: int,
+    version_id: str,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_super_admin),
+) -> AutonomyPolicyRead:
+    org = await _load_org_or_404(db, org_id)
+    rolled_back = await autonomy_policy.rollback_autonomy_policy(
+        db,
+        organization_id=int(org.id),
+        version_id=version_id,
+        updated_by_user_id=int(actor.get("id")) if actor.get("id") is not None else None,
+        updated_by_email=str(actor.get("email") or "").strip().lower() or None,
+    )
+    if rolled_back is None:
+        raise HTTPException(status_code=404, detail="Autonomy policy version not found")
+    policy, meta = rolled_back
+    await record_action(
+        db=db,
+        event_type="autonomy_policy_rolled_back",
+        actor_user_id=int(actor["id"]),
+        organization_id=int(org.id),
+        entity_type="organization",
+        entity_id=int(org.id),
+        payload_json={"version_id": version_id},
     )
     return AutonomyPolicyRead.model_validate({**policy, **meta})
 

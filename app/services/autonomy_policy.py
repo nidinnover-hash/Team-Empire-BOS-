@@ -40,6 +40,15 @@ class AutonomyPolicyMeta(TypedDict, total=False):
     updated_by_email: str | None
 
 
+class AutonomyPolicyHistoryItem(TypedDict, total=False):
+    version_id: str
+    updated_at: str | None
+    updated_by_user_id: int | None
+    updated_by_email: str | None
+    rollback_of_version_id: str | None
+    policy: AutonomyPolicy
+
+
 def default_autonomy_policy() -> AutonomyPolicy:
     # Backward-compatible defaults: no behavior break for current deployments.
     return {
@@ -117,6 +126,29 @@ def _normalize_meta(raw: dict[str, object]) -> AutonomyPolicyMeta:
     }
 
 
+def _normalize_history_item(raw: dict[str, object]) -> AutonomyPolicyHistoryItem | None:
+    version_id_raw = raw.get("version_id")
+    version_id = str(version_id_raw).strip() if version_id_raw is not None else ""
+    if not version_id:
+        return None
+    policy_raw = raw.get("policy")
+    if not isinstance(policy_raw, dict):
+        return None
+    item: AutonomyPolicyHistoryItem = {
+        "version_id": version_id,
+        "updated_at": _normalize_meta({"updated_at": raw.get("updated_at")}).get("updated_at"),
+        "updated_by_user_id": _normalize_meta({"updated_by_user_id": raw.get("updated_by_user_id")}).get("updated_by_user_id"),
+        "updated_by_email": _normalize_meta({"updated_by_email": raw.get("updated_by_email")}).get("updated_by_email"),
+        "rollback_of_version_id": str(raw.get("rollback_of_version_id")).strip()
+        if raw.get("rollback_of_version_id") is not None
+        else None,
+        "policy": _normalize_policy(policy_raw),
+    }
+    if not item["rollback_of_version_id"]:
+        item["rollback_of_version_id"] = None
+    return item
+
+
 async def get_autonomy_policy(db: AsyncSession, organization_id: int) -> AutonomyPolicy:
     policy_config = await org_service.get_policy_config(db, organization_id)
     raw = policy_config.get("autonomy_policy", {})
@@ -131,6 +163,28 @@ async def get_autonomy_policy_meta(db: AsyncSession, organization_id: int) -> Au
     if not isinstance(raw, dict):
         raw = {}
     return _normalize_meta(raw)
+
+
+async def get_autonomy_policy_history(
+    db: AsyncSession,
+    organization_id: int,
+    *,
+    limit: int = 20,
+) -> list[AutonomyPolicyHistoryItem]:
+    policy_config = await org_service.get_policy_config(db, organization_id)
+    raw = policy_config.get("autonomy_policy_history", [])
+    if not isinstance(raw, list):
+        raw = []
+    items: list[AutonomyPolicyHistoryItem] = []
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        normalized = _normalize_history_item(row)
+        if normalized is not None:
+            items.append(normalized)
+        if len(items) >= max(1, int(limit)):
+            break
+    return items
 
 
 async def update_autonomy_policy(
@@ -160,10 +214,71 @@ async def update_autonomy_policy(
     else:
         cleaned_email = actor_email.strip().lower()
         meta["updated_by_email"] = cleaned_email or None
+    existing_history = await get_autonomy_policy_history(db, organization_id, limit=50)
+    version_id = meta["updated_at"] or datetime.now(UTC).isoformat()
+    new_item: AutonomyPolicyHistoryItem = {
+        "version_id": version_id,
+        "updated_at": meta["updated_at"],
+        "updated_by_user_id": meta["updated_by_user_id"],
+        "updated_by_email": meta["updated_by_email"],
+        "rollback_of_version_id": None,
+        "policy": normalized,
+    }
+    merged_history = [new_item, *existing_history]
     out = await org_service.update_policy_config(
         db,
         organization_id,
-        {"autonomy_policy": normalized, "autonomy_policy_meta": meta},
+        {
+            "autonomy_policy": normalized,
+            "autonomy_policy_meta": meta,
+            "autonomy_policy_history": merged_history[:50],
+        },
+    )
+    if out is None:
+        return None
+    return normalized, meta
+
+
+async def rollback_autonomy_policy(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    version_id: str,
+    updated_by_user_id: int | None = None,
+    updated_by_email: str | None = None,
+) -> tuple[AutonomyPolicy, AutonomyPolicyMeta] | None:
+    history = await get_autonomy_policy_history(db, organization_id, limit=50)
+    target = next((item for item in history if item.get("version_id") == version_id), None)
+    if target is None:
+        return None
+    target_policy = target.get("policy")
+    if not isinstance(target_policy, dict):
+        return None
+    normalized = _normalize_policy(target_policy)
+    meta: AutonomyPolicyMeta = {
+        "updated_at": datetime.now(UTC).isoformat(),
+        "updated_by_user_id": updated_by_user_id,
+        "updated_by_email": (updated_by_email or "").strip().lower() or None,
+    }
+    if not isinstance(meta["updated_by_user_id"], int):
+        meta["updated_by_user_id"] = None
+    version_id_new = meta["updated_at"] or datetime.now(UTC).isoformat()
+    new_item: AutonomyPolicyHistoryItem = {
+        "version_id": version_id_new,
+        "updated_at": meta["updated_at"],
+        "updated_by_user_id": meta["updated_by_user_id"],
+        "updated_by_email": meta["updated_by_email"],
+        "rollback_of_version_id": version_id,
+        "policy": normalized,
+    }
+    out = await org_service.update_policy_config(
+        db,
+        organization_id,
+        {
+            "autonomy_policy": normalized,
+            "autonomy_policy_meta": meta,
+            "autonomy_policy_history": [new_item] + history[:49],
+        },
     )
     if out is None:
         return None

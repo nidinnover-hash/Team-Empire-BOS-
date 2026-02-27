@@ -191,6 +191,43 @@ async def test_patch_org_autonomy_policy_writes_audit_event(client):
 
 
 @pytest.mark.asyncio
+async def test_org_autonomy_policy_history_and_rollback(client):
+    first = await client.patch(
+        "/api/v1/admin/orgs/1/autonomy-policy",
+        headers=_super_token(),
+        json={"current_mode": "approved_execution", "allow_auto_approval": True},
+    )
+    assert first.status_code == 200
+
+    second = await client.patch(
+        "/api/v1/admin/orgs/1/autonomy-policy",
+        headers=_super_token(),
+        json={"current_mode": "suggest_only", "allow_auto_approval": False},
+    )
+    assert second.status_code == 200
+    assert second.json()["current_mode"] == "suggest_only"
+
+    history_r = await client.get(
+        "/api/v1/admin/orgs/1/autonomy-policy/history?limit=10",
+        headers=_super_token(),
+    )
+    assert history_r.status_code == 200
+    history = history_r.json()
+    assert len(history) >= 2
+    target = next((row for row in history if row["policy"]["current_mode"] == "approved_execution"), None)
+    assert target is not None
+
+    rollback_r = await client.post(
+        f"/api/v1/admin/orgs/1/autonomy-policy/rollback/{target['version_id']}",
+        headers=_super_token(),
+    )
+    assert rollback_r.status_code == 200
+    body = rollback_r.json()
+    assert body["current_mode"] == "approved_execution"
+    assert body["updated_at"] is not None
+
+
+@pytest.mark.asyncio
 async def test_org_readiness_trend_returns_daily_series(client):
     r = await client.get("/api/v1/admin/orgs/1/readiness/trend?days=5", headers=_super_token())
     assert r.status_code == 200

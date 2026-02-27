@@ -106,6 +106,20 @@
     return r.json();
   }
 
+  async function apiPost(path, payload) {
+    var tok = await getToken();
+    if (!tok) return null;
+    var headers = { Authorization: "Bearer " + tok };
+    var options = { method: "POST", headers: headers };
+    if (payload && typeof payload === "object") {
+      headers["Content-Type"] = "application/json";
+      options.body = JSON.stringify(payload);
+    }
+    var r = await fetch(path, options);
+    if (!r.ok) return null;
+    return r.json();
+  }
+
   function setPolicyMessage(text, cls) {
     var msg = document.getElementById("policy-msg");
     if (!msg) return;
@@ -343,7 +357,46 @@
     }
   }
 
-  function renderDetail(readiness, gates, trend, policy) {
+  function renderPolicyHistory(history) {
+    var body = document.getElementById("policy-history-body");
+    if (!body) return;
+    var rows = Array.isArray(history) ? history : [];
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="5" class="empty">No policy history</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(function (row) {
+      var updatedAt = toIsoLocal(row.updated_at);
+      var by = esc(row.updated_by_email || (row.updated_by_user_id ? ("user #" + row.updated_by_user_id) : "-"));
+      var mode = esc((row.policy && row.policy.current_mode) || "-");
+      var source = row.rollback_of_version_id ? ("rollback " + esc(row.rollback_of_version_id)) : "direct update";
+      return "<tr>" +
+        "<td>" + esc(updatedAt) + "</td>" +
+        "<td>" + by + "</td>" +
+        "<td>" + mode + "</td>" +
+        "<td>" + source + "</td>" +
+        '<td><button class="policy-history-action" data-version-id="' + esc(row.version_id) + '" type="button">Rollback</button></td>' +
+        "</tr>";
+    }).join("");
+    Array.prototype.forEach.call(body.querySelectorAll(".policy-history-action"), function (btn) {
+      btn.addEventListener("click", async function () {
+        var versionId = btn.getAttribute("data-version-id");
+        if (!versionId || !selectedOrgId) return;
+        btn.disabled = true;
+        setPolicyMessage("Rolling back...", "");
+        var out = await apiPost("/api/v1/admin/orgs/" + selectedOrgId + "/autonomy-policy/rollback/" + encodeURIComponent(versionId));
+        if (!out) {
+          setPolicyMessage("Rollback failed.", "err");
+          btn.disabled = false;
+          return;
+        }
+        await loadOrgDetail(selectedOrgId);
+        setPolicyMessage("Rollback applied.", "ok");
+      });
+    });
+  }
+
+  function renderDetail(readiness, gates, trend, policy, history) {
     var empty = document.getElementById("readiness-detail-empty");
     var detail = document.getElementById("readiness-detail");
     if (!readiness || !gates || !trend) {
@@ -372,6 +425,7 @@
     if (!reasons.length) reasons = ["No blocking reasons."];
     reasonList.innerHTML = reasons.map(function (r) { return "<li>" + esc(r) + "</li>"; }).join("");
     populatePolicyForm(policy || null);
+    renderPolicyHistory(history || []);
     setPolicyMessage("", "");
 
     var trendBody = document.getElementById("trend-body");
@@ -400,8 +454,9 @@
       apiGet("/api/v1/admin/orgs/" + orgId + "/autonomy-gates"),
       apiGet("/api/v1/admin/orgs/" + orgId + "/readiness/trend?days=" + trendDays),
       apiGet("/api/v1/admin/orgs/" + orgId + "/autonomy-policy"),
+      apiGet("/api/v1/admin/orgs/" + orgId + "/autonomy-policy/history?limit=12"),
     ]);
-    renderDetail(data[0], data[1], data[2], data[3]);
+    renderDetail(data[0], data[1], data[2], data[3], data[4]);
   }
 
   var fleetFilter = document.getElementById("fleet-status-filter");

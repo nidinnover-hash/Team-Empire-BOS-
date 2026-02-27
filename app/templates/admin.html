@@ -177,6 +177,21 @@
             <label><input id="policy-block-stale" type="checkbox" /> Block on stale integrations</label>
             <label><input id="policy-block-sla" type="checkbox" /> Block on approval SLA breaches</label>
           </div>
+          <div class="policy-history-wrap">
+            <div class="mini-label">Policy History</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>By</th>
+                  <th>Mode</th>
+                  <th>Source</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="policy-history-body"></tbody>
+            </table>
+          </div>
         </div>
 
         <div class="trend-head">

@@ -97,6 +97,26 @@ class AutonomyPolicyRead(BaseModel):
     updated_by_email: str | None = None
 
 
+class AutonomyPolicySnapshot(BaseModel):
+    current_mode: Literal["suggest_only", "approved_execution", "autonomous"]
+    allow_auto_approval: bool
+    min_readiness_for_auto_approval: int
+    min_readiness_for_approved_execution: int
+    min_readiness_for_autonomous: int
+    block_on_unread_high_alerts: bool
+    block_on_stale_integrations: bool
+    block_on_sla_breaches: bool
+
+
+class AutonomyPolicyHistoryItemRead(BaseModel):
+    version_id: str
+    updated_at: datetime | None = None
+    updated_by_user_id: int | None = None
+    updated_by_email: str | None = None
+    rollback_of_version_id: str | None = None
+    policy: AutonomyPolicySnapshot
+
+
 class AutonomyPolicyUpdate(BaseModel):
     current_mode: Literal["suggest_only", "approved_execution", "autonomous"] | None = None
     allow_auto_approval: bool | None = None
