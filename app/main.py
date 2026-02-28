@@ -128,27 +128,26 @@ if settings.ENFORCE_STARTUP_VALIDATION or not settings.DEBUG:
         )
 
 
-def _verify_static_asset_integrity(asset_path: str, checksum_path: str) -> None:
-    asset = Path(asset_path)
-    checksum = Path(checksum_path)
+def _verify_static_asset_integrity(asset: Path, checksum: Path) -> None:
     if not asset.exists():
-        raise RuntimeError(f"Missing required static asset: {asset_path}")
+        raise RuntimeError(f"Missing required static asset: {asset}")
     if not checksum.exists():
-        raise RuntimeError(f"Missing checksum file for static asset: {checksum_path}")
+        raise RuntimeError(f"Missing checksum file for static asset: {checksum}")
     expected = checksum.read_text(encoding="utf-8").strip().split()[0].lower()
     actual = hashlib.sha256(asset.read_bytes()).hexdigest()
     if not expected:
-        raise RuntimeError(f"Invalid checksum file (empty): {checksum_path}")
+        raise RuntimeError(f"Invalid checksum file (empty): {checksum}")
     if expected != actual:
         raise RuntimeError(
-            f"Static asset integrity check failed for {asset_path}. "
+            f"Static asset integrity check failed for {asset}. "
             f"Expected SHA256 {expected}, got {actual}."
         )
 
 
+_APP_DIR = Path(__file__).resolve().parent
 _verify_static_asset_integrity(
-    asset_path="app/static/js/lucide.min.js",
-    checksum_path="app/static/js/lucide.min.js.sha256",
+    asset=_APP_DIR / "static" / "js" / "lucide.min.js",
+    checksum=_APP_DIR / "static" / "js" / "lucide.min.js.sha256",
 )
 
 

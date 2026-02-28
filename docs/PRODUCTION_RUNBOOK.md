@@ -18,6 +18,8 @@ Related controls:
    - `tests/test_config_validation.py`
 4. Run deploy:
    - `bash deploy/deploy.sh /opt/nidin-nover-ai nidin-nover-ai /opt/nidin-nover-ai/.env`
+   - Optional preflight only (no changes): `bash deploy/deploy.sh --dry-run /opt/nidin-nover-ai nidin-nover-ai /opt/nidin-nover-ai/.env`
+   - Require backup tooling before deploy: `bash deploy/deploy.sh --require-backup /opt/nidin-nover-ai nidin-nover-ai /opt/nidin-nover-ai/.env`
 5. Verify:
    - `curl -fsS http://127.0.0.1:8000/health`
    - `journalctl -u nidin-nover-ai --since "10 minutes ago"`
@@ -27,6 +29,7 @@ Related controls:
 Set these explicitly in production:
 - `COOKIE_SECURE=true`
 - `TOKEN_ENCRYPTION_KEY` set, 32+ chars, and different from `SECRET_KEY`
+- `OAUTH_STATE_KEY` set, 32+ chars, and different from both `SECRET_KEY` and `TOKEN_ENCRYPTION_KEY`
 - `WEB_API_TOKEN_EXPIRE_MINUTES=10` (short browser API token TTL; keep `<=15`)
 - `CORS_ALLOWED_ORIGINS` only trusted HTTPS origins (no `*`, no paths)
 
@@ -44,6 +47,7 @@ Otherwise `X-Forwarded-For` can be spoofed and weaken rate-limits/login lockout.
 1. Checkout previous release tag/commit in app directory.
 2. Reinstall dependencies if needed.
 3. Run backward-compatible migration or restore DB backup.
+   - Restore DB backup: `bash deploy/restore-db.sh --yes /opt/nidin-nover-ai/Data/backups/<backup-file> /opt/nidin-nover-ai/.env`
 4. Restart services:
    - `systemctl restart nidin-nover-ai`
    - `systemctl restart nidin-nover-ai-scheduler`
