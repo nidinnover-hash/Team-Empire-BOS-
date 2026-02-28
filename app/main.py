@@ -9,9 +9,11 @@ Route modules:
 # ruff: noqa: E402
 
 import asyncio
+import hashlib
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
@@ -90,6 +92,7 @@ from app.models import task as _model_task  # noqa: F401
 from app.models import threat_signal as _model_threat_signal  # noqa: F401
 from app.models import user as _model_user  # noqa: F401
 from app.models import weekly_report as _model_weekly_report  # noqa: F401
+from app.models import webhook as _model_webhook  # noqa: F401
 from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
 
 # ---------------------------------------------------------------------------
@@ -123,6 +126,30 @@ if settings.ENFORCE_STARTUP_VALIDATION or not settings.DEBUG:
         raise RuntimeError(
             "Startup configuration validation failed:\n" + format_startup_issues(startup_issues)
         )
+
+
+def _verify_static_asset_integrity(asset_path: str, checksum_path: str) -> None:
+    asset = Path(asset_path)
+    checksum = Path(checksum_path)
+    if not asset.exists():
+        raise RuntimeError(f"Missing required static asset: {asset_path}")
+    if not checksum.exists():
+        raise RuntimeError(f"Missing checksum file for static asset: {checksum_path}")
+    expected = checksum.read_text(encoding="utf-8").strip().split()[0].lower()
+    actual = hashlib.sha256(asset.read_bytes()).hexdigest()
+    if not expected:
+        raise RuntimeError(f"Invalid checksum file (empty): {checksum_path}")
+    if expected != actual:
+        raise RuntimeError(
+            f"Static asset integrity check failed for {asset_path}. "
+            f"Expected SHA256 {expected}, got {actual}."
+        )
+
+
+_verify_static_asset_integrity(
+    asset_path="app/static/js/lucide.min.js",
+    checksum_path="app/static/js/lucide.min.js.sha256",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +205,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
     if settings.SYNC_ENABLED and run_scheduler:
         await stop_scheduler()
+
+    # Close all module-level httpx clients to avoid resource leaks
+    from app.tools import (
+        calendly, clickup, digitalocean, elevenlabs, github, github_admin,
+        google_analytics, google_calendar, hubspot, linkedin, notion,
+        perplexity, slack, stripe_api, whatsapp_business,
+    )
+    for mod in (
+        calendly, clickup, digitalocean, elevenlabs, github, github_admin,
+        google_analytics, google_calendar, hubspot, linkedin, notion,
+        perplexity, slack, stripe_api, whatsapp_business,
+    ):
+        client = getattr(mod, "_client", None)
+        if client is not None and not client.is_closed:
+            await client.aclose()
+
     await engine.dispose()
 
 
@@ -230,6 +273,18 @@ _STATUS_CODE_MAP = {
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc) -> JSONResponse:
+    # Serve HTML error page for browser requests on 404/500
+    accept = request.headers.get("accept", "")
+    if exc.status_code in (404, 500) and "text/html" in accept:
+        from fastapi.templating import Jinja2Templates
+        _err_templates = Jinja2Templates(directory="app/templates")
+        nonce = getattr(request.state, "csp_nonce", "")
+        msg = "Page not found" if exc.status_code == 404 else "Internal server error"
+        return _err_templates.TemplateResponse(
+            "error.html",
+            {"request": request, "code": exc.status_code, "message": msg, "csp_nonce": nonce},
+            status_code=exc.status_code,
+        )
     return JSONResponse(
         status_code=exc.status_code,
         content=error_envelope(
@@ -267,7 +322,8 @@ async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSON
 
 
 @app.exception_handler(Exception)
-async def unhandled_exception_handler(request: Request, _exc: Exception) -> JSONResponse:
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path, exc_info=exc)
     return JSONResponse(
         status_code=500,
         content=error_envelope(

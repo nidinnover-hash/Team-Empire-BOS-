@@ -28,22 +28,23 @@ CHECKS: list[list[str]] = [
 ]
 
 
-def _ensure_tool(module_name: str, package_name: str) -> None:
+def _require_module(module_name: str, package_name: str) -> int:
     try:
         importlib.import_module(module_name)
-    except Exception as err:
-        print(f"Installing missing tool: {package_name}")
-        proc = subprocess.run(
-            [sys.executable, "-m", "pip", "install", package_name],
-            check=False,
+        return 0
+    except Exception:
+        print(
+            f"Missing required tool '{package_name}'. "
+            f"Install it first: {sys.executable} -m pip install {package_name}"
         )
-        if proc.returncode != 0:
-            raise RuntimeError(f"Failed to install required tool: {package_name}") from err
+        return 1
 
 
 def main() -> int:
-    _ensure_tool("pip_audit", "pip-audit")
-    _ensure_tool("bandit", "bandit")
+    for module_name, package_name in (("pip_audit", "pip-audit"), ("bandit", "bandit")):
+        rc = _require_module(module_name, package_name)
+        if rc != 0:
+            return rc
     base_env = os.environ.copy()
     base_env.setdefault("PYTHONUTF8", "1")
     base_env.setdefault("PYTHONIOENCODING", "utf-8")

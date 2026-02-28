@@ -29,7 +29,6 @@ from app.core.request_context import reset_current_request_id, set_current_reque
 from app.core.security import decode_access_token
 
 logger = logging.getLogger("request")
-_LUCIDE_CDN_SOURCE = "https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"
 _rate_limit_stats: dict[str, int] = {
     "allowed": 0,
     "blocked": 0,
@@ -92,11 +91,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-        response.headers["Cache-Control"] = "no-store, must-revalidate, max-age=0"
+        # Static assets get browser caching; everything else is no-store
+        if request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "public, max-age=86400"
+        else:
+            response.headers["Cache-Control"] = "no-store, must-revalidate, max-age=0"
         response.headers["X-API-Contract-Version"] = API_CONTRACT_VERSION
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            f"script-src 'self' 'nonce-{nonce}' {_LUCIDE_CDN_SOURCE}; "
+            f"script-src 'self' 'nonce-{nonce}'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data:; "
@@ -172,7 +175,12 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
 
 
 class RequestBodyLimitMiddleware(BaseHTTPMiddleware):
-    """Reject requests whose Content-Length exceeds MAX_REQUEST_BODY_BYTES."""
+    """Reject requests whose body exceeds MAX_REQUEST_BODY_BYTES.
+
+    Checks Content-Length header first (fast path), then enforces the
+    limit by reading the body for chunked/streaming uploads that omit
+    Content-Length.
+    """
 
     async def dispatch(self, request: Request, call_next) -> Response:
         max_bytes = settings.MAX_REQUEST_BODY_BYTES
@@ -193,6 +201,23 @@ class RequestBodyLimitMiddleware(BaseHTTPMiddleware):
                             "detail": f"Request body too large. Max {max_bytes // (1024 * 1024)} MB."
                         },
                     )
+            else:
+                # No Content-Length (chunked transfer encoding) — read and
+                # measure the body to enforce the limit.
+                chunks: list[bytes] = []
+                body_size = 0
+                async for chunk in request.stream():
+                    body_size += len(chunk)
+                    if body_size > max_bytes:
+                        return JSONResponse(
+                            status_code=413,
+                            content={
+                                "detail": f"Request body too large. Max {max_bytes // (1024 * 1024)} MB."
+                            },
+                        )
+                    chunks.append(chunk)
+                # Stash the already-read body so downstream can access it.
+                request._body = b"".join(chunks)  # noqa: SLF001
         return cast(Response, await call_next(request))
 
 
@@ -202,6 +227,11 @@ class RequestBodyLimitMiddleware(BaseHTTPMiddleware):
 
 _rate_buckets: dict[str, deque] = defaultdict(deque)
 _rate_limit_lock = asyncio.Lock()
+
+# Per-route rate-limit buckets — separate from the global _rate_buckets to
+# avoid lock contention between the async middleware and sync callers.
+_per_route_buckets: dict[str, deque] = defaultdict(deque)
+_per_route_lock = Lock()
 
 # Paths exempt from rate limiting (health checks, docs)
 _EXEMPT_PREFIXES = ("/health", "/docs", "/redoc", "/openapi.json", "/static/")
@@ -219,21 +249,31 @@ _redis_client: _RedisLike | None = None
 _redis_initialized = False
 
 
+_proxy_cache_key: str | None = None
+_proxy_cache_value: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+
+
 def _trusted_proxy_networks() -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    """Parse TRUSTED_PROXY_CIDRS, cached until the setting value changes."""
+    global _proxy_cache_key, _proxy_cache_value
     raw = (settings.TRUSTED_PROXY_CIDRS or "").strip()
+    if raw == _proxy_cache_key:
+        return _proxy_cache_value
+    _proxy_cache_key = raw
     if not raw:
-        return []
+        _proxy_cache_value = []
+        return _proxy_cache_value
     networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
     for value in raw.split(","):
         cidr = value.strip()
         if not cidr:
             continue
         try:
-            network = ipaddress.ip_network(cidr, strict=False)
-            networks.append(network)
+            networks.append(ipaddress.ip_network(cidr, strict=False))
         except ValueError:
             logger.warning("Invalid TRUSTED_PROXY_CIDRS entry ignored: %r", cidr)
-    return networks
+    _proxy_cache_value = networks
+    return _proxy_cache_value
 
 
 def get_client_ip(request: Request) -> str:
@@ -405,8 +445,8 @@ def check_per_route_rate_limit(ip: str, route_key: str, max_requests: int, windo
             return count <= max_requests
     now = time.monotonic()
     bucket_key = f"{route_key}:{ip}"
-    with _login_lock:
-        bucket = _rate_buckets[bucket_key]
+    with _per_route_lock:
+        bucket = _per_route_buckets[bucket_key]
         while bucket and now - bucket[0] > window_seconds:
             bucket.popleft()
         if len(bucket) >= max_requests:
