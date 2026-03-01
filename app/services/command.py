@@ -85,7 +85,7 @@ async def _call_ai(
         )
         response = await call_ai(
             system_prompt=(
-                "You are Nidin Nover - Nidin's sharp, efficient AI assistant. "
+                "You are Nidin BOS - Nidin's sharp, efficient AI assistant. "
                 "Be concise, practical, and direct. "
                 f"{behavior_clause} "
                 "Study recurring patterns, suggest policy drafts, "

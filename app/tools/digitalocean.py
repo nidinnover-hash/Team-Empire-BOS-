@@ -8,6 +8,15 @@ from app.core.config import settings
 
 _TIMEOUT = 20.0
 
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=_TIMEOUT)
+    return _client
+
 
 def _headers(token: str) -> dict[str, str]:
     return {
@@ -18,11 +27,11 @@ def _headers(token: str) -> dict[str, str]:
 
 async def _get(path: str, token: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
     base = settings.DIGITALOCEAN_BASE_URL.rstrip("/")
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(f"{base}{path}", headers=_headers(token), params=params)
-        resp.raise_for_status()
-        body = resp.json()
-        return body if isinstance(body, dict) else {}
+    c = _get_client()
+    resp = await c.get(f"{base}{path}", headers=_headers(token), params=params)
+    resp.raise_for_status()
+    body = resp.json()
+    return body if isinstance(body, dict) else {}
 
 
 async def list_droplets(token: str) -> list[dict[str, Any]]:

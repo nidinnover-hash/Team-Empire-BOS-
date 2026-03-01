@@ -41,6 +41,7 @@ from app.core.idempotency import (
     store_response,
 )
 from app.core.oauth_nonce import consume_oauth_nonce_once
+from app.core.oauth_nonce import oauth_nonce_seen
 from app.core.oauth_state import verify_oauth_state
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
@@ -132,32 +133,6 @@ async def _resolve_whatsapp_context(
     if integration is None:
         return None, None, phone_number_id
     return int(integration.organization_id), int(integration.id), phone_number_id
-
-
-async def _record_whatsapp_webhook_failure(
-    db: AsyncSession,
-    *,
-    organization_id: int | None,
-    integration_id: int | None,
-    phone_number_id: str | None,
-    error_code: str,
-    detail: str,
-) -> None:
-    if organization_id is None:
-        return
-    await record_action(
-        db=db,
-        event_type="whatsapp_webhook_failed",
-        actor_user_id=None,
-        organization_id=organization_id,
-        entity_type="integration",
-        entity_id=integration_id,
-        payload_json={
-            "error_code": error_code,
-            "detail": detail,
-            "phone_number_id": phone_number_id,
-        },
-    )
 
 
 # Collection endpoints (no path params)
@@ -827,20 +802,8 @@ async def whatsapp_webhook_receive(
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Webhook payload must be a JSON object")
 
-    webhook_org_id, webhook_integration_id, webhook_phone_number_id = await _resolve_whatsapp_context(
-        db, payload
-    )
-
     app_secret = (settings.WHATSAPP_APP_SECRET or "").strip()
     if not app_secret:
-        await _record_whatsapp_webhook_failure(
-            db,
-            organization_id=webhook_org_id,
-            integration_id=webhook_integration_id,
-            phone_number_id=webhook_phone_number_id,
-            error_code="webhook_disabled_missing_secret",
-            detail="WhatsApp webhook disabled: WHATSAPP_APP_SECRET not configured",
-        )
         raise HTTPException(
             status_code=503,
             detail="WhatsApp webhook disabled: WHATSAPP_APP_SECRET not configured",
@@ -853,35 +816,69 @@ async def whatsapp_webhook_receive(
         sha256,
     ).hexdigest()
     if not sig_header or not hmac.compare_digest(sig_header, expected_sig):
-        await _record_whatsapp_webhook_failure(
-            db,
-            organization_id=webhook_org_id,
-            integration_id=webhook_integration_id,
-            phone_number_id=webhook_phone_number_id,
-            error_code="signature_verification_failed",
-            detail="Webhook signature verification failed",
-        )
+        # Record failure event so admin dashboard can surface it
+        _wa_org_id, _wa_integ_id, _wa_phone = await _resolve_whatsapp_context(db, payload)
+        if _wa_org_id is not None:
+            await record_action(
+                db=db,
+                event_type="whatsapp_webhook_failed",
+                actor_user_id=None,
+                organization_id=_wa_org_id,
+                entity_type="integration",
+                entity_id=_wa_integ_id,
+                payload_json={
+                    "error_code": "signature_verification_failed",
+                    "detail": "X-Hub-Signature-256 mismatch",
+                    "phone_number_id": _wa_phone,
+                },
+            )
         raise HTTPException(status_code=403, detail="Webhook signature verification failed")
 
     window = max(30, int(settings.WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS))
+    if oauth_nonce_seen(
+        namespace="whatsapp_webhook_sig",
+        nonce=sig_header,
+        max_age_seconds=window,
+    ):
+        raise HTTPException(status_code=409, detail="Webhook replay detected")
+
+    entries = payload.get("entry")
+    count = len(entries) if isinstance(entries, list) else 0
+
+    try:
+        telemetry = await whatsapp_service.ingest_webhook_payload(db, payload)
+    except Exception as exc:
+        # Don't consume nonce — allow provider to retry the same payload
+        logger.warning("WhatsApp webhook ingest failed: %s", exc, exc_info=True)
+        _fail_org_id, _fail_integ_id, _fail_phone = await _resolve_whatsapp_context(db, payload)
+        if _fail_org_id is not None:
+            await record_action(
+                db=db,
+                event_type="whatsapp_webhook_failed",
+                actor_user_id=None,
+                organization_id=_fail_org_id,
+                entity_type="integration",
+                entity_id=_fail_integ_id,
+                payload_json={
+                    "error_code": "ingest_error",
+                    "detail": str(exc)[:500],
+                    "phone_number_id": _fail_phone,
+                },
+            )
+        raise HTTPException(status_code=500, detail="Webhook processing failed") from exc
+
+    # Mark nonce after successful ingestion so provider retries after transient
+    # failures are still accepted within the replay window.
     if not consume_oauth_nonce_once(
         namespace="whatsapp_webhook_sig",
         nonce=sig_header,
         max_age_seconds=window,
     ):
-        await _record_whatsapp_webhook_failure(
-            db,
-            organization_id=webhook_org_id,
-            integration_id=webhook_integration_id,
-            phone_number_id=webhook_phone_number_id,
-            error_code="webhook_replay_detected",
-            detail="Webhook replay detected",
-        )
         raise HTTPException(status_code=409, detail="Webhook replay detected")
 
-    entries = payload.get("entry")
-    count = len(entries) if isinstance(entries, list) else 0
-    telemetry = await whatsapp_service.ingest_webhook_payload(db, payload)
+    webhook_org_id, webhook_integration_id, webhook_phone_number_id = await _resolve_whatsapp_context(
+        db, payload
+    )
     if webhook_org_id is not None:
         await record_action(
             db=db,

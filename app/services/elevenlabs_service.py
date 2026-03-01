@@ -7,6 +7,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.resilience import run_with_retry
 from app.services.integration import (
     connect_integration,
     get_integration_by_type,
@@ -21,7 +22,7 @@ _TYPE = "elevenlabs"
 async def connect_elevenlabs(
     db: AsyncSession, org_id: int, api_key: str
 ) -> dict:
-    await elevenlabs_tool.get_user_info(api_key)
+    await run_with_retry(lambda: elevenlabs_tool.get_user_info(api_key))
     integration = await connect_integration(
         db, organization_id=org_id, integration_type=_TYPE,
         config_json={"api_key": api_key},
@@ -38,9 +39,9 @@ async def get_elevenlabs_status(db: AsyncSession, org_id: int) -> dict:
     chars_used = 0
     chars_limit = 0
     try:
-        voices = await elevenlabs_tool.list_voices(api_key)
+        voices = await run_with_retry(lambda: elevenlabs_tool.list_voices(api_key))
         voices_count = len(voices)
-        usage = await elevenlabs_tool.get_usage(api_key)
+        usage = await run_with_retry(lambda: elevenlabs_tool.get_usage(api_key))
         chars_used = usage.get("character_count", 0)
         chars_limit = usage.get("character_limit", 0)
     except (httpx.HTTPError, RuntimeError, ValueError, TypeError, TimeoutError) as exc:
@@ -62,9 +63,9 @@ async def text_to_speech(
         raise ValueError("ElevenLabs not connected")
     api_key = (integration.config_json or {}).get("api_key", "")
     vid = voice_id or settings.ELEVENLABS_DEFAULT_VOICE_ID
-    audio_bytes = await elevenlabs_tool.text_to_speech(
+    audio_bytes = await run_with_retry(lambda: elevenlabs_tool.text_to_speech(
         api_key, voice_id=vid, text=text,
-    )
+    ))
     await mark_sync_time(db, integration)
     return {
         "audio_size_bytes": len(audio_bytes),

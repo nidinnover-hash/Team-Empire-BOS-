@@ -18,12 +18,13 @@ async def create_goal(
 
 
 async def list_goals(
-    db: AsyncSession, organization_id: int, limit: int = 50
+    db: AsyncSession, organization_id: int, limit: int = 50, offset: int = 0
 ) -> list[Goal]:
     result = await db.execute(
         select(Goal)
         .where(Goal.organization_id == organization_id)
         .order_by(Goal.created_at.desc())
+        .offset(offset)
         .limit(limit)
     )
     return list(result.scalars().all())

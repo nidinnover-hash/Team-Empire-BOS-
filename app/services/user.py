@@ -34,12 +34,13 @@ async def create_user(db: AsyncSession, data: UserCreate) -> User:
 
 
 async def list_users(
-    db: AsyncSession, organization_id: int, limit: int = 100
+    db: AsyncSession, organization_id: int, limit: int = 100, offset: int = 0
 ) -> list[User]:
     result = await db.execute(
         select(User)
         .where(User.organization_id == organization_id)
         .order_by(User.created_at.desc())
+        .offset(offset)
         .limit(limit)
     )
     return list(result.scalars().all())

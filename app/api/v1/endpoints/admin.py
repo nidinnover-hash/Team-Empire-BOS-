@@ -31,6 +31,7 @@ from app.schemas.admin import (
     OrgReadinessReport,
     OrgSummary,
     ReadinessTrendPoint,
+    SuperAdminActionResponse,
     ReadinessTrendRead,
     WhatsAppWebhookFailureListRead,
     WhatsAppWebhookFailureRead,
@@ -237,37 +238,6 @@ async def list_org_autonomy_policy_templates(
     return [AutonomyTemplateRead.model_validate(row) for row in autonomy_policy.list_policy_templates()]
 
 
-@router.patch("/orgs/{org_id}/autonomy-policy", response_model=AutonomyPolicyRead)
-async def patch_org_autonomy_policy(
-    org_id: int,
-    updates: dict[str, object],
-    db: AsyncSession = Depends(get_db),
-    actor: dict = Depends(require_super_admin),
-) -> AutonomyPolicyRead:
-    org = await _load_org_or_404(db, org_id)
-    actor_user_id = _actor_user_id(actor)
-    updated = await autonomy_policy.update_autonomy_policy(
-        db,
-        organization_id=int(org.id),
-        updates=updates,
-        updated_by_user_id=actor_user_id,
-        updated_by_email=str(actor.get("email") or "").strip().lower() or None,
-    )
-    if updated is None:
-        raise HTTPException(status_code=404, detail="Organisation not found")
-    policy, meta = updated
-    await record_action(
-        db=db,
-        event_type="autonomy_policy_updated",
-        actor_user_id=actor_user_id,
-        organization_id=int(org.id),
-        entity_type="organization",
-        entity_id=int(org.id),
-        payload_json={"changed_fields": list(updates.keys())},
-    )
-    await db.commit()
-    return AutonomyPolicyRead.model_validate({**policy, **meta})
-
 
 @router.post("/orgs/{org_id}/autonomy-policy/templates/{template_id}", response_model=AutonomyPolicyRead)
 async def apply_org_autonomy_policy_template(
@@ -296,7 +266,7 @@ async def apply_org_autonomy_policy_template(
     await record_action(
         db=db,
         event_type="autonomy_policy_template_applied",
-        actor_user_id=int(actor["id"]),
+        actor_user_id=_actor_user_id(actor),
         organization_id=int(org.id),
         entity_type="organization",
         entity_id=int(org.id),
@@ -342,7 +312,7 @@ async def update_org_autonomy_policy(
     await record_action(
         db=db,
         event_type="autonomy_policy_updated",
-        actor_user_id=int(actor["id"]),
+        actor_user_id=_actor_user_id(actor),
         organization_id=int(org.id),
         entity_type="organization",
         entity_id=int(org.id),
@@ -385,7 +355,7 @@ async def update_org_autonomy_rollout(
     await record_action(
         db=db,
         event_type="autonomy_rollout_updated",
-        actor_user_id=int(actor["id"]),
+        actor_user_id=_actor_user_id(actor),
         organization_id=int(org.id),
         entity_type="organization",
         entity_id=int(org.id),
@@ -456,7 +426,7 @@ async def rollback_org_autonomy_policy(
     await record_action(
         db=db,
         event_type="autonomy_policy_rolled_back",
-        actor_user_id=int(actor["id"]),
+        actor_user_id=_actor_user_id(actor),
         organization_id=int(org.id),
         entity_type="organization",
         entity_id=int(org.id),
@@ -582,8 +552,8 @@ async def org_whatsapp_webhook_failures(
 
 @router.get("/users", response_model=list[AdminUserRead])
 async def list_all_users(
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     _actor: dict = Depends(require_super_admin),
 ) -> list[AdminUserRead]:
@@ -595,7 +565,7 @@ async def list_all_users(
     return [AdminUserRead.model_validate(user) for user in users]
 
 
-@router.post("/users/{user_id}/grant-super", status_code=200)
+@router.post("/users/{user_id}/grant-super", status_code=200, response_model=SuperAdminActionResponse)
 async def grant_super_admin(
     user_id: int,
     db: AsyncSession = Depends(get_db),
@@ -608,17 +578,26 @@ async def grant_super_admin(
         raise HTTPException(status_code=404, detail="User not found")
     user.is_super_admin = True
     await db.commit()
+    await record_action(
+        db=db,
+        event_type="super_admin_granted",
+        actor_user_id=_actor_user_id(actor),
+        organization_id=int(user.organization_id),
+        entity_type="user",
+        entity_id=user_id,
+        payload_json={"target_user_id": user_id},
+    )
     return {"ok": True, "user_id": user_id, "is_super_admin": True}
 
 
-@router.post("/users/{user_id}/revoke-super", status_code=200)
+@router.post("/users/{user_id}/revoke-super", status_code=200, response_model=SuperAdminActionResponse)
 async def revoke_super_admin(
     user_id: int,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_super_admin),
 ) -> dict:
     """Revoke super-admin from a user. Cannot revoke from self."""
-    if actor.get("id") == user_id:
+    if _actor_user_id(actor) == user_id:
         raise HTTPException(status_code=400, detail="Cannot revoke your own super-admin access")
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
@@ -626,4 +605,13 @@ async def revoke_super_admin(
         raise HTTPException(status_code=404, detail="User not found")
     user.is_super_admin = False
     await db.commit()
+    await record_action(
+        db=db,
+        event_type="super_admin_revoked",
+        actor_user_id=_actor_user_id(actor),
+        organization_id=int(user.organization_id),
+        entity_type="user",
+        entity_id=user_id,
+        payload_json={"target_user_id": user_id},
+    )
     return {"ok": True, "user_id": user_id, "is_super_admin": False}

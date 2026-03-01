@@ -1,6 +1,10 @@
 {
+  "scripts": {
+    "lint:frontend": "eslint app/static/js/dashboard-page.js app/static/js/integrations-page.js"
+  },
   "devDependencies": {
-    "@playwright/test": "^1.58.2"
+    "@playwright/test": "^1.58.2",
+    "eslint": "^8.57.1"
   },
   "dependencies": {
     "lucide": "^0.468.0"

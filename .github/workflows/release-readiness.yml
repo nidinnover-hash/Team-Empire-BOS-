@@ -37,7 +37,7 @@ jobs:
           TOKEN_ENCRYPTION_KEY: "abcdef0123456789abcdef0123456789"
           OPENAI_API_KEY: "sk-live-valid-key-value"
           DEFAULT_AI_PROVIDER: "openai"
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/nidin_nover_ai
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/nidin_bos
           PURPOSE_PERSONAL_EMAILS: "nidinnover@gmail.com"
         run: python scripts/smoke_prod_config.py --import-app
 
@@ -54,7 +54,7 @@ jobs:
           TOKEN_ENCRYPTION_KEY: "abcdef0123456789abcdef0123456789"
           OPENAI_API_KEY: "sk-live-valid-key-value"
           DEFAULT_AI_PROVIDER: "openai"
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/nidin_nover_ai
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/nidin_bos
           PURPOSE_PERSONAL_EMAILS: "nidinnover@gmail.com"
         run: python scripts/preflight_deploy.py --skip-db
 

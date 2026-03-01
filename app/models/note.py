@@ -21,6 +21,7 @@ class Note(Base):
     title: Mapped[str | None] = mapped_column(String(500), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     tags: Mapped[str | None] = mapped_column(String(500), nullable=True)  # e.g. "work,idea,urgent"
+    source: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

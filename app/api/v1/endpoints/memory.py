@@ -34,7 +34,7 @@ async def list_profile_memory(
     )
 
 
-@router.post("/profile", response_model=ProfileMemoryRead)
+@router.post("/profile", response_model=ProfileMemoryRead, status_code=201)
 async def set_profile_memory(
     data: ProfileMemoryCreate,
     db: AsyncSession = Depends(get_db),

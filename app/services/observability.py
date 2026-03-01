@@ -77,7 +77,7 @@ class StorageTableStat(TypedDict):
 
 class StorageSummary(TypedDict):
     org_id: int
-    generated_at: str
+    generated_at: datetime
     total_rows: int
     retention_days_chat: int
     tables: list[StorageTableStat]
@@ -212,7 +212,7 @@ async def get_storage_summary(db: AsyncSession, org_id: int) -> StorageSummary:
 
     return {
         "org_id": org_id,
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": datetime.now(UTC),
         "total_rows": total_rows,
         "retention_days_chat": int(settings.CHAT_HISTORY_RETENTION_DAYS),
         "tables": stats,

@@ -16,6 +16,7 @@ from app.schemas.notification import (
     NotificationCountRead,
     NotificationListRead,
     NotificationMarkReadRequest,
+    NotificationMarkReadResponse,
     NotificationRead,
 )
 from app.services import notification as notification_service
@@ -80,7 +81,7 @@ async def unread_count(
     return NotificationCountRead(unread_count=count)
 
 
-@router.post("/mark-read")
+@router.post("/mark-read", response_model=NotificationMarkReadResponse)
 async def mark_notifications_read(
     payload: NotificationMarkReadRequest,
     db: AsyncSession = Depends(get_db),

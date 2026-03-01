@@ -11,6 +11,7 @@
   var _sseRetryMs = 5000;
   var _sseMaxRetryMs = 120000;
   var _sseClient = null;
+  var _sseFailNotified = false;
 
   function setTitleBadge(count) {
     document.title = count > 0 ? "(" + count + ") " + baseTitle : baseTitle;
@@ -90,6 +91,10 @@
   function scheduleReconnect() {
     if (_sseTimer) return;
     if (document.visibilityState === "hidden") return;
+    if (_sseRetryMs >= _sseMaxRetryMs && !_sseFailNotified) {
+      _sseFailNotified = true;
+      if (window.showToast) window.showToast("Live updates unavailable. Using polling fallback.", "warning");
+    }
     _sseTimer = setTimeout(function () {
       _sseTimer = null;
       connectSSE();
@@ -124,6 +129,7 @@
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") {
       _sseRetryMs = 5000;
+      _sseFailNotified = false;
       connectSSE();
       return;
     }

@@ -1,4 +1,4 @@
-﻿# Nidin Nover AI — Operating Guide
+﻿# Nidin BOS — Operating Guide
 
 ## Purpose
 AI agent platform for autonomous work operations — task orchestration, multi-integration management, and intelligent decision support with human-in-the-loop safety controls.

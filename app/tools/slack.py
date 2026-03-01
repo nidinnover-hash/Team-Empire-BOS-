@@ -17,6 +17,15 @@ logger = logging.getLogger(__name__)
 _BASE = "https://slack.com/api"
 _TIMEOUT = 20.0
 
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=_TIMEOUT)
+    return _client
+
 
 def _headers(bot_token: str) -> dict[str, str]:
     return {
@@ -34,14 +43,14 @@ def _raise_if_error(body: dict[str, Any], method: str) -> None:
 
 async def auth_test(bot_token: str) -> dict[str, Any]:
     """Verify the bot token. Returns {ok, team, user, user_id, bot_id, team_id}."""
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.post(f"{_BASE}/auth.test", headers=_headers(bot_token))
-        resp.raise_for_status()
-        body = resp.json()
-        if not isinstance(body, dict):
-            raise ValueError("Slack auth.test returned invalid response")
-        _raise_if_error(body, "auth.test")
-        return body
+    client = _get_client()
+    resp = await client.post(f"{_BASE}/auth.test", headers=_headers(bot_token))
+    resp.raise_for_status()
+    body = resp.json()
+    if not isinstance(body, dict):
+        raise ValueError("Slack auth.test returned invalid response")
+    _raise_if_error(body, "auth.test")
+    return body
 
 
 async def list_channels(
@@ -49,21 +58,33 @@ async def list_channels(
     types: str = "public_channel,private_channel",
     limit: int = 100,
 ) -> list[dict[str, Any]]:
-    """List channels the bot is a member of."""
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    """List channels the bot is a member of with auto-pagination."""
+    page_size = min(limit, 200)
+    params: dict[str, Any] = {
+        "types": types,
+        "limit": page_size,
+        "exclude_archived": "true",
+    }
+    client = _get_client()
+    all_channels: list[dict[str, Any]] = []
+    while len(all_channels) < limit:
         resp = await client.get(
             f"{_BASE}/conversations.list",
             headers=_headers(bot_token),
-            params={"types": types, "limit": limit, "exclude_archived": "true"},
+            params=params,
         )
         resp.raise_for_status()
         body = resp.json()
         if not isinstance(body, dict):
-            return []
+            break
         _raise_if_error(body, "conversations.list")
         channels = body.get("channels") or []
-        # Only return channels the bot is in
-        return [c for c in channels if isinstance(c, dict) and c.get("is_member")]
+        all_channels.extend(c for c in channels if isinstance(c, dict) and c.get("is_member"))
+        cursor = (body.get("response_metadata") or {}).get("next_cursor", "")
+        if not cursor:
+            break
+        params["cursor"] = cursor
+    return all_channels[:limit]
 
 
 async def get_channel_history(
@@ -71,27 +92,36 @@ async def get_channel_history(
     channel_id: str,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
-    """Return recent messages from a channel (newest first)."""
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    """Return recent messages from a channel (newest first) with auto-pagination."""
+    page_size = min(limit, 200)
+    params: dict[str, Any] = {"channel": channel_id, "limit": page_size}
+    client = _get_client()
+    all_messages: list[dict[str, Any]] = []
+    while len(all_messages) < limit:
         resp = await client.get(
             f"{_BASE}/conversations.history",
             headers=_headers(bot_token),
-            params={"channel": channel_id, "limit": limit},
+            params=params,
         )
         resp.raise_for_status()
         body = resp.json()
         if not isinstance(body, dict):
-            return []
+            break
         _raise_if_error(body, "conversations.history")
         messages = body.get("messages") or []
         # Exclude bot messages and system messages
-        return [
+        all_messages.extend(
             m for m in messages
             if isinstance(m, dict)
             and m.get("type") == "message"
             and not m.get("bot_id")
             and m.get("text", "").strip()
-        ]
+        )
+        cursor = (body.get("response_metadata") or {}).get("next_cursor", "")
+        if not cursor:
+            break
+        params["cursor"] = cursor
+    return all_messages[:limit]
 
 
 async def post_message(
@@ -100,36 +130,36 @@ async def post_message(
     text: str,
 ) -> dict[str, Any]:
     """Post a message to a Slack channel. Returns the posted message object."""
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.post(
-            f"{_BASE}/chat.postMessage",
-            headers=_headers(bot_token),
-            json={"channel": channel_id, "text": text},
-        )
-        resp.raise_for_status()
-        body = resp.json()
-        if not isinstance(body, dict):
-            raise ValueError("Slack chat.postMessage returned invalid response")
-        _raise_if_error(body, "chat.postMessage")
-        return body
+    client = _get_client()
+    resp = await client.post(
+        f"{_BASE}/chat.postMessage",
+        headers=_headers(bot_token),
+        json={"channel": channel_id, "text": text},
+    )
+    resp.raise_for_status()
+    body = resp.json()
+    if not isinstance(body, dict):
+        raise ValueError("Slack chat.postMessage returned invalid response")
+    _raise_if_error(body, "chat.postMessage")
+    return body
 
 
 async def get_user_name(bot_token: str, user_id: str) -> str:
     """Resolve a Slack user ID to a display name. Returns user_id on failure."""
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            resp = await client.get(
-                f"{_BASE}/users.info",
-                headers=_headers(bot_token),
-                params={"user": user_id},
-            )
-            resp.raise_for_status()
-            body = resp.json()
-            if not isinstance(body, dict):
-                return user_id
-            if body.get("ok"):
-                user = body.get("user", {})
-                return user.get("real_name") or user.get("name") or user_id
+        client = _get_client()
+        resp = await client.get(
+            f"{_BASE}/users.info",
+            headers=_headers(bot_token),
+            params={"user": user_id},
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        if not isinstance(body, dict):
+            return user_id
+        if body.get("ok"):
+            user = body.get("user", {})
+            return user.get("real_name") or user.get("name") or user_id
     except (httpx.HTTPError, ValueError, TypeError) as exc:
         logger.debug("Slack users.info failed for %s: %s", user_id, type(exc).__name__)
     return user_id

@@ -122,9 +122,11 @@
 
     function appendNode(html) {
       if (placeholder && placeholder.parentNode) placeholder.remove();
-      const wrap = document.createElement("div");
-      wrap.innerHTML = html;
-      history.appendChild(wrap.firstChild);
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(String(html || ""), "text/html");
+      var node = doc.body.firstElementChild;
+      if (!node) return;
+      history.appendChild(node);
       history.scrollTop = history.scrollHeight;
     }
 
@@ -215,6 +217,7 @@
             '</div>'
           );
           roleDisplay.textContent = data.role;
+          try { localStorage.removeItem(_chatCacheKey); } catch(e) {}
         }
       } catch (err) {
         appendNode('<div class="chat-msg-agent"><div class="chat-role-tag">Error</div>Could not reach server.</div>');
@@ -302,22 +305,43 @@
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send();
     });
 
-    // Load persistent chat history on boot
+    // Load persistent chat history on boot (with localStorage cache, 5-min TTL)
+    var _chatCacheKey = "nn_chat_history";
+    var _chatCacheTTL = 5 * 60 * 1000;
+
+    function renderChatMessages(msgs) {
+      if (!msgs || !msgs.length) return;
+      msgs.forEach(function(m) {
+        appendNode('<div class="chat-msg-user">' + esc(m.user_message) + '</div>');
+        appendNode(
+          '<div class="chat-msg-agent">' +
+            '<div class="chat-role-tag">' + esc(m.role) + '</div>' +
+            esc(m.ai_response).replace(/\n/g, "<br>") +
+          '</div>'
+        );
+      });
+    }
+
     (async function bootHistory() {
+      try {
+        var cached = localStorage.getItem(_chatCacheKey);
+        if (cached) {
+          var parsed = JSON.parse(cached);
+          if (parsed.ts && Date.now() - parsed.ts < _chatCacheTTL) {
+            renderChatMessages(parsed.data);
+            return;
+          }
+        }
+      } catch(e) { /* ignore corrupt cache */ }
+
       try {
         var r = await fetch("/web/chat/history");
         if (!r.ok) return;
         var msgs = await r.json();
-        if (!msgs || !msgs.length) return;
-        msgs.forEach(function(m) {
-          appendNode('<div class="chat-msg-user">' + esc(m.user_message) + '</div>');
-          appendNode(
-            '<div class="chat-msg-agent">' +
-              '<div class="chat-role-tag">' + esc(m.role) + '</div>' +
-              esc(m.ai_response).replace(/\n/g, "<br>") +
-            '</div>'
-          );
-        });
+        renderChatMessages(msgs);
+        try {
+          localStorage.setItem(_chatCacheKey, JSON.stringify({ ts: Date.now(), data: msgs }));
+        } catch(e) { /* quota exceeded */ }
       } catch(e) {
         if (window.showToast) window.showToast("Failed to load chat history.", "warn");
       }
@@ -356,16 +380,25 @@
     function render() {
       var state = getState();
       var done = 0;
-      list.innerHTML = steps.map(function (s) {
+      list.innerHTML = "";
+      steps.forEach(function (s) {
         var checked = !!state[s.id];
         if (checked) done += 1;
-        return (
-          '<label class="onboarding-row' + (checked ? ' done' : '') + '">' +
-          '<input type="checkbox" data-onboarding-id="' + s.id + '"' + (checked ? ' checked' : '') + ' />' +
-          '<span>' + s.label + '</span>' +
-          '</label>'
-        );
-      }).join("");
+        var row = document.createElement("label");
+        row.className = "onboarding-row" + (checked ? " done" : "");
+
+        var input = document.createElement("input");
+        input.type = "checkbox";
+        input.setAttribute("data-onboarding-id", s.id);
+        input.checked = checked;
+        row.appendChild(input);
+
+        var text = document.createElement("span");
+        text.textContent = s.label;
+        row.appendChild(text);
+
+        list.appendChild(row);
+      });
       progress.textContent = done + "/" + steps.length;
       if (done === steps.length) {
         var card = document.getElementById("first-login-card");
@@ -406,40 +439,80 @@
 
     function fmt(iso) {
       if (!iso) return "";
-      const d = new Date(iso);
-      return d.toLocaleDateString("en-US", { month:"short", day:"numeric" }) + " " +
-             d.toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" });
+      var d = new Date(iso);
+      return d.toLocaleDateString("en-US",{month:"short",day:"numeric"}) + " " +
+             d.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});
     }
 
     function esc(s) {
       return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     }
 
+    function mk(tag, className, text) {
+      var node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined && text !== null) node.textContent = String(text);
+      return node;
+    }
+
+    function setInboxEmpty(text) {
+      list.innerHTML = "";
+      list.appendChild(mk("div", "empty", text));
+    }
+
+    function renderInboxItem(e) {
+      var item = mk("div", "inbox-item" + (e.is_read ? "" : " unread"));
+      item.id = "email-" + e.id;
+      item.appendChild(mk("div", "inbox-from", e.from_address || "Unknown"));
+      item.appendChild(mk("div", "inbox-subject", e.subject || "(no subject)"));
+      var meta = mk("div", "inbox-meta", fmt(e.received_at));
+      if (e.reply_sent) {
+        meta.appendChild(document.createTextNode(" · "));
+        var replied = mk("span", "", "replied");
+        replied.style.color = "var(--ok)";
+        meta.appendChild(replied);
+      }
+      item.appendChild(meta);
+      if (e.ai_summary) item.appendChild(mk("div", "inbox-summary", e.ai_summary));
+      var actions = mk("div", "inbox-actions");
+      if (!e.ai_summary) {
+        var summarizeBtn = mk("button", "ia-btn ia-summarize", "Summarize");
+        summarizeBtn.setAttribute("data-inbox-id", String(e.id));
+        summarizeBtn.setAttribute("data-inbox-action", "summarize");
+        actions.appendChild(summarizeBtn);
+      }
+      var strategyBtn = mk("button", "ia-btn ia-strategy", "Strategy");
+      strategyBtn.setAttribute("data-inbox-id", String(e.id));
+      strategyBtn.setAttribute("data-inbox-action", "strategize");
+      actions.appendChild(strategyBtn);
+      var draftBtn = mk("button", "ia-btn ia-draft", e.draft_reply ? "Re-draft" : "Draft Reply");
+      draftBtn.setAttribute("data-inbox-id", String(e.id));
+      draftBtn.setAttribute("data-inbox-action", "draft");
+      actions.appendChild(draftBtn);
+      item.appendChild(actions);
+      if (e.draft_reply) {
+        var draft = mk("div", "inbox-draft", e.draft_reply);
+        draft.id = "draft-" + e.id;
+        item.appendChild(draft);
+      }
+      return item;
+    }
+
     async function loadInbox() {
-      list.innerHTML = '<div class="empty">Loading…</div>';
+      setInboxEmpty("Loading...");
       try {
         const r = await fetch("/api/v1/email/inbox?limit=15&unread_only=false", {
           headers: { "Authorization": "Bearer " + window.__apiToken }
         });
-        if (!r.ok) { list.innerHTML = '<div class="empty">Could not load inbox.</div>'; return; }
+        if (!r.ok) { setInboxEmpty("Could not load inbox."); return; }
         const emails = await r.json();
-        if (!emails.length) { list.innerHTML = '<div class="empty">No emails synced yet. Click Sync Gmail.</div>'; return; }
-        list.innerHTML = emails.map(function(e) {
-          return '<div class="inbox-item' + (e.is_read ? "" : " unread") + '" id="email-' + e.id + '">' +
-            '<div class="inbox-from">' + esc(e.from_address || "Unknown") + '</div>' +
-            '<div class="inbox-subject">' + esc(e.subject || "(no subject)") + '</div>' +
-            '<div class="inbox-meta">' + esc(fmt(e.received_at)) + (e.reply_sent ? ' · <span style="color:var(--ok)">replied</span>' : '') + '</div>' +
-            (e.ai_summary ? '<div class="inbox-summary">' + esc(e.ai_summary) + '</div>' : '') +
-            '<div class="inbox-actions">' +
-              (!e.ai_summary ? '<button class="ia-btn ia-summarize" data-inbox-id="' + e.id + '" data-inbox-action="summarize">Summarize</button>' : '') +
-              '<button class="ia-btn ia-strategy" data-inbox-id="' + e.id + '" data-inbox-action="strategize">Strategy</button>' +
-              (!e.draft_reply ? '<button class="ia-btn ia-draft" data-inbox-id="' + e.id + '" data-inbox-action="draft">Draft Reply</button>' : '<button class="ia-btn ia-draft" data-inbox-id="' + e.id + '" data-inbox-action="draft">Re-draft</button>') +
-            '</div>' +
-            (e.draft_reply ? '<div class="inbox-draft" id="draft-' + e.id + '">' + esc(e.draft_reply) + '</div>' : '') +
-          '</div>';
-        }).join("");
+        if (!emails.length) { setInboxEmpty("No emails synced yet. Click Sync Gmail."); return; }
+        list.innerHTML = "";
+        emails.forEach(function(e) {
+          list.appendChild(renderInboxItem(e));
+        });
       } catch(err) {
-        list.innerHTML = '<div class="empty">Error loading inbox.</div>';
+        setInboxEmpty("Error loading inbox.");
       }
     }
 
@@ -564,57 +637,109 @@
 
     var esc = window.PCUI.escapeHtml;
 
-    function fmtPayload(p) {
-      var parts = [];
-      if (p.to)      parts.push("<strong>To:</strong> " + esc(p.to));
-      if (p.subject) parts.push("<strong>Subject:</strong> " + esc(p.subject));
-      if (p.body && typeof p.body === "string")
-        parts.push("<strong>Preview:</strong> " + esc(p.body.slice(0,140)) + (p.body.length > 140 ? "…" : ""));
-      if (!parts.length) {
-        Object.keys(p).slice(0,4).forEach(function(k) {
-          if (k !== "approval_type")
-            parts.push("<strong>" + esc(k) + ":</strong> " + esc(String(p[k]).slice(0,80)));
+    function mk(tag, className, text) {
+      var node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined && text !== null) node.textContent = String(text);
+      return node;
+    }
+
+    function payloadRow(label, value) {
+      var row = document.createElement("div");
+      var strong = document.createElement("strong");
+      strong.textContent = label + ":";
+      row.appendChild(strong);
+      row.appendChild(document.createTextNode(" " + value));
+      return row;
+    }
+
+    function renderPayload(payloadDiv, p) {
+      if (p.to) payloadDiv.appendChild(payloadRow("To", String(p.to)));
+      if (p.subject) payloadDiv.appendChild(payloadRow("Subject", String(p.subject)));
+      if (p.body && typeof p.body === "string") {
+        var preview = p.body.slice(0, 140) + (p.body.length > 140 ? "..." : "");
+        payloadDiv.appendChild(payloadRow("Preview", preview));
+      }
+      if (!payloadDiv.childNodes.length) {
+        Object.keys(p).slice(0, 4).forEach(function(k) {
+          if (k !== "approval_type") {
+            payloadDiv.appendChild(payloadRow(k, String(p[k]).slice(0, 80)));
+          }
         });
       }
-      return parts.join("<br>");
+    }
+
+    function setApprovalsEmpty(text, color) {
+      list.innerHTML = "";
+      var node = mk("div", "empty", text);
+      if (color) node.style.color = color;
+      list.appendChild(node);
+    }
+
+    function renderApprovalItem(a) {
+      var risky = RISKY.has(a.approval_type);
+      var payload = a.payload_json || {};
+      var ts = new Date(a.created_at).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+
+      var item = mk("div", "ap-item");
+      item.id = "ap-" + a.id;
+
+      var head = mk("div", "");
+      head.style.display = "flex";
+      head.style.justifyContent = "space-between";
+      head.style.alignItems = "flex-start";
+      head.style.gap = ".5rem";
+
+      var type = mk("span", "ap-type " + (risky ? "risky" : "safe"), (a.approval_type || "") + (risky ? " [RISK]" : ""));
+      var meta = mk("span", "ap-meta", "#" + a.id + " - " + ts);
+      head.appendChild(type);
+      head.appendChild(meta);
+      item.appendChild(head);
+
+      if (Object.keys(payload).length) {
+        var payloadDiv = mk("div", "ap-payload");
+        renderPayload(payloadDiv, payload);
+        item.appendChild(payloadDiv);
+      }
+
+      var actions = mk("div", "ap-actions");
+      var approveBtn = mk("button", risky ? "btn-execute" : "btn-approve", risky ? "Approve & Send" : "Approve");
+      approveBtn.setAttribute("data-approval-id", String(a.id));
+      approveBtn.setAttribute("data-approval-execute", risky ? "true" : "false");
+      actions.appendChild(approveBtn);
+
+      var rejectBtn = mk("button", "btn-reject", "Reject");
+      rejectBtn.setAttribute("data-approval-reject", String(a.id));
+      actions.appendChild(rejectBtn);
+
+      item.appendChild(actions);
+      return item;
     }
 
     async function loadApprovals() {
       var token = window.__apiToken;
-      if (!token) { list.innerHTML = '<div class="empty">Sign in to see approvals.</div>'; return; }
-      list.innerHTML = '<div class="empty">Loading…</div>';
+      if (!token) { setApprovalsEmpty("Sign in to see approvals."); return; }
+      setApprovalsEmpty("Loading...");
       try {
         var r = await fetch("/api/v1/approvals?status=pending", { headers:{"Authorization":"Bearer "+token} });
-        if (!r.ok) { list.innerHTML = '<div class="empty">Could not load approvals.</div>'; return; }
+        if (!r.ok) { setApprovalsEmpty("Could not load approvals."); return; }
         var items = await r.json();
         if (countBadge) countBadge.textContent = items.length + " pending";
         if (!items.length) {
-          list.innerHTML = '<div class="empty" style="color:var(--ok)">No pending approvals — all clear.</div>';
+          setApprovalsEmpty("No pending approvals - all clear.", "var(--ok)");
           return;
         }
-        list.innerHTML = items.map(function(a) {
-          var risky   = RISKY.has(a.approval_type);
-          var payload = a.payload_json || {};
-          var ts = new Date(a.created_at).toLocaleString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
-          return '<div class="ap-item" id="ap-' + a.id + '">' +
-            '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">' +
-              '<span class="ap-type ' + (risky ? "risky" : "safe") + '">' +
-                esc(a.approval_type) + (risky ? " ⚠" : "") +
-              '</span>' +
-              '<span class="ap-meta">#' + a.id + ' · ' + ts + '</span>' +
-            '</div>' +
-            (Object.keys(payload).length ? '<div class="ap-payload">' + fmtPayload(payload) + '</div>' : '') +
-            '<div class="ap-actions">' +
-              (risky
-                ? '<button class="btn-execute" data-approval-id="' + a.id + '" data-approval-execute="true">Approve &amp; Send ⚡</button>'
-                : '<button class="btn-approve" data-approval-id="' + a.id + '" data-approval-execute="false">Approve</button>'
-              ) +
-              '<button class="btn-reject" data-approval-reject="' + a.id + '">Reject</button>' +
-            '</div>' +
-          '</div>';
-        }).join("");
+        list.innerHTML = "";
+        items.forEach(function(a) {
+          list.appendChild(renderApprovalItem(a));
+        });
       } catch(e) {
-        list.innerHTML = '<div class="empty">Error loading approvals.</div>';
+        setApprovalsEmpty("Error loading approvals.");
       }
     }
 
@@ -695,7 +820,7 @@
     // Bootstrap: wait for shared auth token then load approvals
     (async function init() {
       var token = await window.__bootPromise;
-      if (!token) { list.innerHTML = '<div class="empty">Sign in to see approvals.</div>'; return; }
+      if (!token) { setApprovalsEmpty("Sign in to see approvals."); return; }
       if (!window.__apiToken) window.__apiToken = token;
       await loadApprovals();
     })();
@@ -751,38 +876,77 @@
              d.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});
     }
 
-    async function loadAudit() {
-      var token = window.__apiToken;
-      if (!token) { list.innerHTML = '<div class="empty">Sign in to view activity.</div>'; return; }
-      try {
-        var r = await fetch("/api/v1/ops/events?limit=40", { headers:{"Authorization":"Bearer "+token} });
-        if (!r.ok) { list.innerHTML = '<div class="empty">Could not load activity log.</div>'; return; }
-        var events = await r.json();
-        if (countBadge) countBadge.textContent = events.length + " events";
-        if (!events.length) { list.innerHTML = '<div class="empty">No activity logged yet.</div>'; return; }
-        list.innerHTML = events.map(function(e) {
-          var detail = fmtDetail(e);
-          return '<div class="audit-row">' +
-            '<div class="audit-dot ' + dotClass(e.event_type) + '"></div>' +
-            '<div style="flex:1;min-width:0">' +
-              '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem">' +
-                '<span class="audit-type">' + esc(e.event_type) + '</span>' +
-                '<span class="audit-time">' + esc(fmt(e.created_at)) + '</span>' +
-              '</div>' +
-              (detail ? '<div class="audit-detail">' + esc(detail) + '</div>' : '') +
-            '</div>' +
-          '</div>';
-        }).join("");
-      } catch(err) {
-        list.innerHTML = '<div class="empty">Error loading activity log.</div>';
-      }
+    function setAuditEmpty(text) {
+      list.innerHTML = "";
+      var el = document.createElement("div");
+      el.className = "empty";
+      el.textContent = text;
+      list.appendChild(el);
     }
 
+    function renderAuditRow(e) {
+      var row = document.createElement("div");
+      row.className = "audit-row";
+
+      var dot = document.createElement("div");
+      dot.className = "audit-dot " + dotClass(e.event_type);
+      row.appendChild(dot);
+
+      var body = document.createElement("div");
+      body.style.flex = "1";
+      body.style.minWidth = "0";
+
+      var head = document.createElement("div");
+      head.style.display = "flex";
+      head.style.justifyContent = "space-between";
+      head.style.alignItems = "baseline";
+      head.style.gap = ".5rem";
+
+      var type = document.createElement("span");
+      type.className = "audit-type";
+      type.textContent = e.event_type || "";
+      head.appendChild(type);
+
+      var time = document.createElement("span");
+      time.className = "audit-time";
+      time.textContent = fmt(e.created_at);
+      head.appendChild(time);
+      body.appendChild(head);
+
+      var detailText = fmtDetail(e);
+      if (detailText) {
+        var detail = document.createElement("div");
+        detail.className = "audit-detail";
+        detail.textContent = detailText;
+        body.appendChild(detail);
+      }
+
+      row.appendChild(body);
+      return row;
+    }
+
+    async function loadAudit() {
+      var token = window.__apiToken;
+      if (!token) { setAuditEmpty("Sign in to view activity."); return; }
+      try {
+        var r = await fetch("/api/v1/ops/events?limit=40", { headers:{"Authorization":"Bearer "+token} });
+        if (!r.ok) { setAuditEmpty("Could not load activity log."); return; }
+        var events = await r.json();
+        if (countBadge) countBadge.textContent = events.length + " events";
+        if (!events.length) { setAuditEmpty("No activity logged yet."); return; }
+        list.innerHTML = "";
+        events.forEach(function(e) {
+          list.appendChild(renderAuditRow(e));
+        });
+      } catch(err) {
+        setAuditEmpty("Error loading activity log.");
+      }
+    }
     refreshBtn && refreshBtn.addEventListener("click", loadAudit);
 
     // Bootstrap: wait for shared auth, then load
     var token = await window.__bootPromise;
-    if (!token) { list.innerHTML = '<div class="empty">Sign in to view activity.</div>'; return; }
+    if (!token) { setAuditEmpty("Sign in to view activity."); return; }
     if (!window.__apiToken) window.__apiToken = token;
     await loadAudit();
 
@@ -804,29 +968,73 @@
 
     var esc = window.PCUI.escapeHtml;
 
+    function setMemoryEmpty(text) {
+      list.innerHTML = "";
+      var el = document.createElement("div");
+      el.className = "empty";
+      el.textContent = text;
+      list.appendChild(el);
+    }
+
+    function renderMemoryItem(m) {
+      var row = document.createElement("div");
+      row.className = "mem-row";
+      row.id = "mem-entry-" + m.id;
+
+      var body = document.createElement("div");
+      body.style.flex = "1";
+      body.style.minWidth = "0";
+
+      var head = document.createElement("div");
+      head.style.display = "flex";
+      head.style.alignItems = "baseline";
+      head.style.gap = ".4rem";
+
+      var key = document.createElement("span");
+      key.className = "mem-key";
+      key.textContent = m.key || "";
+      head.appendChild(key);
+
+      if (m.category) {
+        var cat = document.createElement("span");
+        cat.className = "mem-cat";
+        cat.textContent = "[" + m.category + "]";
+        head.appendChild(cat);
+      }
+      body.appendChild(head);
+
+      var val = document.createElement("div");
+      val.className = "mem-val";
+      val.textContent = m.value || "";
+      body.appendChild(val);
+
+      row.appendChild(body);
+
+      var del = document.createElement("button");
+      del.className = "btn-mem-del";
+      del.title = "Delete entry";
+      del.setAttribute("data-memory-delete", String(m.id));
+      del.textContent = "x";
+      row.appendChild(del);
+
+      return row;
+    }
+
     async function loadMemory() {
       var token = window.__apiToken;
-      if (!token) { list.innerHTML = '<div class="empty">Sign in to view memory.</div>'; return; }
+      if (!token) { setMemoryEmpty("Sign in to view memory."); return; }
       try {
         var r = await fetch("/api/v1/memory/profile", { headers:{"Authorization":"Bearer "+token} });
-        if (!r.ok) { list.innerHTML = '<div class="empty">Could not load memory (CEO role required).</div>'; return; }
+        if (!r.ok) { setMemoryEmpty("Could not load memory (CEO role required)."); return; }
         var entries = await r.json();
         if (countBadge) countBadge.textContent = entries.length + " entries";
-        if (!entries.length) { list.innerHTML = '<div class="empty">No memory entries yet. Click + Add to create one.</div>'; return; }
-        list.innerHTML = entries.map(function(m) {
-          return '<div class="mem-row" id="mem-entry-' + m.id + '">' +
-            '<div style="flex:1;min-width:0">' +
-              '<div style="display:flex;align-items:baseline;gap:.4rem">' +
-                '<span class="mem-key">' + esc(m.key) + '</span>' +
-                (m.category ? '<span class="mem-cat">[' + esc(m.category) + ']</span>' : '') +
-              '</div>' +
-              '<div class="mem-val">' + esc(m.value) + '</div>' +
-            '</div>' +
-            '<button class="btn-mem-del" title="Delete entry" data-memory-delete="' + m.id + '">✕</button>' +
-          '</div>';
-        }).join("");
+        if (!entries.length) { setMemoryEmpty("No memory entries yet. Click + Add to create one."); return; }
+        list.innerHTML = "";
+        entries.forEach(function(m) {
+          list.appendChild(renderMemoryItem(m));
+        });
       } catch(err) {
-        list.innerHTML = '<div class="empty">Error loading memory.</div>';
+        setMemoryEmpty("Error loading memory.");
       }
     }
 
@@ -892,7 +1100,7 @@
     refreshBtn && refreshBtn.addEventListener("click", loadMemory);
 
     var token = await window.__bootPromise;
-    if (!token) { list.innerHTML = '<div class="empty">Sign in to view memory.</div>'; return; }
+    if (!token) { setMemoryEmpty("Sign in to view memory."); return; }
     if (!window.__apiToken) window.__apiToken = token;
     await loadMemory();
   })();
@@ -913,41 +1121,81 @@
 
     var esc = window.PCUI.escapeHtml;
 
+    function setTasksEmpty(text) {
+      list.innerHTML = "";
+      var el = document.createElement("div");
+      el.className = "empty";
+      el.textContent = text;
+      list.appendChild(el);
+    }
+
+    function renderTaskItem(t) {
+      var p = Math.max(1, Math.min(4, t.priority || 2));
+      var item = document.createElement("div");
+      item.className = "item";
+      item.id = "task-item-" + t.id;
+
+      var row = document.createElement("div");
+      row.style.display = "flex";
+      row.style.alignItems = "flex-start";
+      row.style.gap = ".55rem";
+
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.className = "task-check";
+      cb.setAttribute("data-task-id", String(t.id));
+      cb.checked = !!t.is_done;
+      row.appendChild(cb);
+
+      var content = document.createElement("div");
+      content.style.flex = "1";
+      content.style.minWidth = "0";
+
+      var title = document.createElement("div");
+      title.className = "item-text";
+      title.textContent = t.title || "";
+      if (t.is_done) {
+        title.style.textDecoration = "line-through";
+        title.style.color = "var(--text-faint)";
+      }
+      content.appendChild(title);
+
+      var meta = document.createElement("div");
+      meta.className = "item-meta";
+      meta.appendChild(document.createTextNode((t.category || "personal") + (t.due_date ? " · due " + t.due_date : "") + " · "));
+      var pri = document.createElement("span");
+      pri.style.fontSize = ".65rem";
+      pri.style.color = p===4 ? "var(--danger)" : p===3 ? "var(--warn)" : p===2 ? "var(--brand)" : "var(--text-faint)";
+      pri.textContent = P_LABELS[p];
+      meta.appendChild(pri);
+      content.appendChild(meta);
+
+      row.appendChild(content);
+      item.appendChild(row);
+      return item;
+    }
+
     async function loadTasks() {
       var token = window.__apiToken;
-      if (!token) { list.innerHTML = '<div class="empty">Sign in to view tasks.</div>'; return; }
-      list.innerHTML = '<div class="empty">Loading…</div>';
+      if (!token) { setTasksEmpty("Sign in to view tasks."); return; }
+      setTasksEmpty("Loading...");
       try {
         var r = await fetch("/api/v1/tasks?limit=30&is_done=" + showDone, {
           headers: { "Authorization": "Bearer " + token }
         });
-        if (!r.ok) { list.innerHTML = '<div class="empty">Could not load tasks.</div>'; return; }
+        if (!r.ok) { setTasksEmpty("Could not load tasks."); return; }
         var tasks = await r.json();
         if (countBadge) countBadge.textContent = tasks.length + " " + (showDone ? "done" : "open");
         if (!tasks.length) {
-          list.innerHTML = '<div class="empty">No ' + (showDone ? "completed" : "open") + ' tasks.</div>';
+          setTasksEmpty("No " + (showDone ? "completed" : "open") + " tasks.");
           return;
         }
-        list.innerHTML = tasks.map(function(t) {
-          var p = Math.max(1, Math.min(4, t.priority || 2));
-          return '<div class="item" id="task-item-' + t.id + '">' +
-            '<div style="display:flex;align-items:flex-start;gap:.55rem">' +
-              '<input type="checkbox" class="task-check" data-task-id="' + t.id + '" ' + (t.is_done ? "checked" : "") + ' />' +
-              '<div style="flex:1;min-width:0">' +
-                '<div class="item-text" style="' + (t.is_done ? "text-decoration:line-through;color:var(--text-faint)" : "") + '">' +
-                  esc(t.title) +
-                '</div>' +
-                '<div class="item-meta">' +
-                  esc(t.category || "personal") +
-                  (t.due_date ? " · due " + esc(t.due_date) : "") +
-                  ' · <span style="color:' + (p===4?"var(--danger)":p===3?"var(--warn)":p===2?"var(--brand)":"var(--text-faint)") + ';font-size:.65rem">' + P_LABELS[p] + '</span>' +
-                '</div>' +
-              '</div>' +
-            '</div>' +
-          '</div>';
-        }).join("");
+        list.innerHTML = "";
+        tasks.forEach(function(task) {
+          list.appendChild(renderTaskItem(task));
+        });
       } catch(e) {
-        list.innerHTML = '<div class="empty">Error loading tasks.</div>';
+        setTasksEmpty("Error loading tasks.");
       }
     }
 
@@ -1029,7 +1277,7 @@
 
     // Bootstrap
     var token = await window.__bootPromise;
-    if (!token) { list.innerHTML = '<div class="empty">Sign in to view tasks.</div>'; return; }
+    if (!token) { setTasksEmpty("Sign in to view tasks."); return; }
     if (!window.__apiToken) window.__apiToken = token;
     await loadTasks();
   })();

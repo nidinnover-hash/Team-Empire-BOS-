@@ -9,6 +9,12 @@
   var AUTO_REFRESH_STORAGE_KEY = "pc.integrations.autoRefresh";
   var inflight = {};
   function byId(id) { return document.getElementById(id); }
+  function mk(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = String(text);
+    return node;
+  }
   function bindClick(id, handler) {
     var el = byId(id);
     if (!el) return false;
@@ -327,44 +333,88 @@
         if (ah.rank !== bh.rank) return bh.rank - ah.rank;
         return String(a.type || "").localeCompare(String(b.type || ""));
       });
-      list.innerHTML = (
-        '<table class="table"><thead><tr>' +
-          '<th>Type</th><th>Status</th><th>Last Sync</th><th>Actions</th>' +
-        '</tr></thead><tbody>' +
-        sorted.map(function(i) {
-          var isConnected = i.status === "connected";
-          var hasSyncBtn = ["clickup","github","slack","digitalocean","google_calendar"].includes(i.type);
-          var isOAuth = ["gmail","google_calendar"].includes(i.type);
-          var bs = 'style="padding:0.28rem 0.5rem" type="button"';
-          var health = getHealth(i);
-          var actions = '';
-          if (isConnected) {
-            if (hasSyncBtn) {
-              var syncCall = i.type === 'google_calendar' ? 'window.syncCalendar()' : 'window.syncIntegration(\'' + esc(i.type) + '\')';
-              actions += '<button class="btn sync" ' + bs + ' onclick="' + syncCall + '">Sync</button>';
-            }
-            actions += '<button class="btn subtle" ' + bs + ' onclick="window.integrationTest(' + i.id + ')">Test</button>';
-            actions += '<button class="btn danger" ' + bs + ' onclick="window.integrationDisconnect(' + i.id + ')">Disconnect</button>';
-          } else {
-            if (isOAuth) {
-              var oauthClick = i.type === 'gmail' ? 'document.getElementById(\'gmail-auth-btn\').click()' : 'document.getElementById(\'gcal-auth-btn\').click()';
-              actions += '<button class="btn sync" ' + bs + ' onclick="' + oauthClick + '">Reconnect</button>';
-            } else {
-              actions += '<button class="btn sync" ' + bs + ' onclick="window.reconnectToken(\'' + esc(i.type) + '\')">Connect</button>';
-            }
-            actions += '<button class="btn danger" ' + bs + ' onclick="window.integrationDisconnect(' + i.id + ')">Remove</button>';
+      list.innerHTML = "";
+      var table = mk("table", "table");
+      var thead = document.createElement("thead");
+      var headTr = document.createElement("tr");
+      ["Type", "Status", "Last Sync", "Actions"].forEach(function(label) {
+        headTr.appendChild(mk("th", "", label));
+      });
+      thead.appendChild(headTr);
+      table.appendChild(thead);
+      var tbody = document.createElement("tbody");
+
+      sorted.forEach(function(i) {
+        var isConnected = i.status === "connected";
+        var hasSyncBtn = ["clickup", "github", "slack", "digitalocean", "google_calendar"].includes(i.type);
+        var isOAuth = ["gmail", "google_calendar"].includes(i.type);
+        var health = getHealth(i);
+        var tr = document.createElement("tr");
+
+        var typeTd = document.createElement("td");
+        typeTd.appendChild(mk("strong", "", i.type || ""));
+        tr.appendChild(typeTd);
+
+        var statusTd = document.createElement("td");
+        var pill = mk("span", "pill " + (isConnected ? "connected" : "disconnected"), i.status || "");
+        var healthBadge = mk("span", "health-badge " + health.cls, health.label);
+        statusTd.appendChild(pill);
+        statusTd.appendChild(document.createTextNode(" "));
+        statusTd.appendChild(healthBadge);
+        tr.appendChild(statusTd);
+
+        var syncTd = mk("td", "muted");
+        syncTd.appendChild(document.createTextNode(fmtDate(i.last_sync_at)));
+        var age = mk("span", "", "(" + fmtSyncAge(i.last_sync_at) + ")");
+        age.style.fontSize = ".68rem";
+        age.style.opacity = ".85";
+        syncTd.appendChild(document.createTextNode(" "));
+        syncTd.appendChild(age);
+        if (i.last_sync_status === "error") {
+          var failed = mk("span", "", "FAILED");
+          failed.style.color = "var(--danger)";
+          failed.style.fontSize = ".7rem";
+          syncTd.appendChild(document.createTextNode(" "));
+          syncTd.appendChild(failed);
+        }
+        tr.appendChild(syncTd);
+
+        var actionTd = document.createElement("td");
+        actionTd.style.display = "flex";
+        actionTd.style.gap = "0.35rem";
+        actionTd.style.flexWrap = "wrap";
+        actionTd.style.padding = "0.35rem 0.4rem";
+
+        function addAction(label, className, attrs) {
+          var btn = mk("button", "btn " + className, label);
+          btn.type = "button";
+          Object.keys(attrs).forEach(function(key) {
+            btn.setAttribute(key, attrs[key]);
+          });
+          actionTd.appendChild(btn);
+        }
+
+        if (isConnected) {
+          if (hasSyncBtn) {
+            var syncTarget = i.type === "google_calendar" ? "calendar" : String(i.type || "");
+            addAction("Sync", "sync", { "data-sync": syncTarget });
           }
-          return (
-            '<tr>' +
-              '<td><strong>' + esc(i.type) + '</strong></td>' +
-              '<td><span class="pill ' + (isConnected?"connected":"disconnected") + '">' + esc(i.status) + '</span> <span class="health-badge ' + health.cls + '">' + health.label + '</span></td>' +
-              '<td class="muted">' + esc(fmtDate(i.last_sync_at)) + ' <span style="font-size:.68rem;opacity:.85">(' + esc(fmtSyncAge(i.last_sync_at)) + ')</span>' + (i.last_sync_status === "error" ? ' <span style="color:var(--danger);font-size:.7rem">FAILED</span>' : '') + '</td>' +
-              '<td style="display:flex;gap:0.35rem;flex-wrap:wrap;padding:0.35rem 0.4rem">' + actions + '</td>' +
-            '</tr>'
-          );
-        }).join("") +
-        '</tbody></table>'
-      );
+          addAction("Test", "subtle", { "data-int-action": "test", "data-int-id": String(Number(i.id)) });
+          addAction("Disconnect", "danger", { "data-int-action": "disconnect", "data-int-id": String(Number(i.id)) });
+        } else {
+          if (isOAuth) {
+            addAction("Reconnect", "sync", { "data-int-action": "oauth-reconnect", "data-oauth-type": String(i.type || "") });
+          } else {
+            addAction("Connect", "sync", { "data-int-action": "token-connect", "data-int-type": String(i.type || "") });
+          }
+          addAction("Remove", "danger", { "data-int-action": "disconnect", "data-int-id": String(Number(i.id)) });
+        }
+
+        tr.appendChild(actionTd);
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      list.appendChild(table);
       setStatus("integrations-status", "Integration status is up to date.", "ok");
       updateQcBadges(integrations);
       renderHealthAlert();
@@ -378,10 +428,11 @@
   }
 
   function updateQcBadges(list) {
-    ["clickup","github","slack","digitalocean"].forEach(function(name) {
+    var syncBtnOverrides = { google_analytics: "ga-sync-btn" };
+    ["clickup","github","slack","digitalocean","linkedin","perplexity","google_analytics"].forEach(function(name) {
       var found = list.find(function(i){ return i.type === name && i.status === "connected"; });
       var badge = document.getElementById(name + "-badge");
-      var syncBtn = document.getElementById(name + "-sync-btn");
+      var syncBtn = document.getElementById(syncBtnOverrides[name] || (name + "-sync-btn"));
       if (badge) {
         badge.textContent = found ? "connected" : "not connected";
         badge.className = found ? "qc-badge" : "qc-badge none";
@@ -659,41 +710,67 @@
   async function fetchAiStatus() {
     var controller = startAbortableRequest("fetchAiStatus");
     var list = document.getElementById("ai-list");
+    if (!list) return;
     setStatus("ai-status","Refreshing AI provider status...");
     try {
       var data = await apiJson("/api/v1/integrations/ai/status", { signal: controller.signal });
-      list.innerHTML = data.map(function(p) {
+      list.innerHTML = "";
+      data.forEach(function(p) {
         var roles = [];
         if (p.active) roles.push("default");
         if (p.email_active) roles.push("email");
-        var roleTag = roles.length ? ' <span style="color:var(--brand);font-size:.65rem;font-weight:600">' + roles.join(" + ").toUpperCase() + '</span>' : '';
-        var connectRow = p.configured
-          ? ''
-          : (
-            '<div class="qc-token-row" style="margin-top:0.4rem">' +
-              '<input class="input" type="password" id="ai-key-' + esc(p.provider) + '" placeholder="API key" autocomplete="off" style="font-size:.78rem" />' +
-            '</div>'
-          );
-        var connectBtn = p.configured
-          ? '<button class="btn subtle" type="button" onclick="window.disconnectAI(\'' + esc(p.provider) + '\')">Clear Key</button>'
-          : '<button class="btn success" type="button" onclick="window.connectAI(\'' + esc(p.provider) + '\')">Connect</button>';
-        return (
-          '<div class="ai-card">' +
-            '<div class="ai-head">' +
-              '<div class="ai-name">' + esc(providerLabel(p.provider)) + roleTag + '</div>' +
-              '<span class="pill ' + (p.active||p.email_active?"connected":"disconnected") + '">' + (p.active?"active":"idle") + '</span>' +
-            '</div>' +
-            '<div class="small">Configured: ' + (p.configured?"Yes":"No") + '</div>' +
-            '<div class="small">Model: ' + esc(p.model||"-") + '</div>' +
-            connectRow +
-            '<div class="qc-status" id="ai-status-' + esc(p.provider) + '"></div>' +
-            '<div class="row" style="margin-top:0.5rem;margin-bottom:0;gap:0.35rem">' +
-              connectBtn +
-              '<button class="btn subtle" type="button" onclick="window.testAI(\'' + esc(p.provider) + '\')">Test</button>' +
-            '</div>' +
-          '</div>'
-        );
-      }).join("");
+        var card = mk("div", "ai-card");
+        var head = mk("div", "ai-head");
+        var name = mk("div", "ai-name", providerLabel(p.provider));
+        if (roles.length) {
+          name.appendChild(document.createTextNode(" "));
+          var roleTag = mk("span", "", roles.join(" + ").toUpperCase());
+          roleTag.style.color = "var(--brand)";
+          roleTag.style.fontSize = ".65rem";
+          roleTag.style.fontWeight = "600";
+          name.appendChild(roleTag);
+        }
+        var pill = mk("span", "pill " + (p.active || p.email_active ? "connected" : "disconnected"), p.active ? "active" : "idle");
+        head.appendChild(name);
+        head.appendChild(pill);
+        card.appendChild(head);
+        card.appendChild(mk("div", "small", "Configured: " + (p.configured ? "Yes" : "No")));
+        card.appendChild(mk("div", "small", "Model: " + (p.model || "-")));
+
+        if (!p.configured) {
+          var connectRow = mk("div", "qc-token-row");
+          connectRow.style.marginTop = "0.4rem";
+          var input = mk("input", "input");
+          input.type = "password";
+          input.id = "ai-key-" + String(p.provider || "");
+          input.placeholder = "API key";
+          input.autocomplete = "off";
+          input.style.fontSize = ".78rem";
+          connectRow.appendChild(input);
+          card.appendChild(connectRow);
+        }
+
+        var statusEl = mk("div", "qc-status");
+        statusEl.id = "ai-status-" + String(p.provider || "");
+        card.appendChild(statusEl);
+
+        var row = mk("div", "row");
+        row.style.marginTop = "0.5rem";
+        row.style.marginBottom = "0";
+        row.style.gap = "0.35rem";
+        var connectBtn = mk("button", "btn " + (p.configured ? "subtle" : "success"), p.configured ? "Clear Key" : "Connect");
+        connectBtn.type = "button";
+        connectBtn.setAttribute("data-ai-action", p.configured ? "disconnect" : "connect");
+        connectBtn.setAttribute("data-ai-provider", String(p.provider || ""));
+        row.appendChild(connectBtn);
+        var testBtn = mk("button", "btn subtle", "Test");
+        testBtn.type = "button";
+        testBtn.setAttribute("data-ai-action", "test");
+        testBtn.setAttribute("data-ai-provider", String(p.provider || ""));
+        row.appendChild(testBtn);
+        card.appendChild(row);
+        list.appendChild(card);
+      });
       setStatus("ai-status","AI provider status loaded.","ok");
     } catch (err) {
       if (err && err.name === "AbortError") return;
@@ -781,6 +858,90 @@
     window.syncIntegration("digitalocean","sync-status");
   });
 
+  // ── Quick Connect: LinkedIn ─────────────────────────────────────────────────
+  bindClick("linkedin-connect-btn", async function() {
+    var btn = byId("linkedin-connect-btn");
+    var accessToken = document.getElementById("linkedin-token").value.trim();
+    if (!accessToken) { setQcStatus("linkedin-status","Enter your LinkedIn access token first.","err"); return; }
+    if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(btn, true, "Connecting...");
+    setQcStatus("linkedin-status","Connecting to LinkedIn...","info");
+    try {
+      await apiJson("/api/v1/integrations/linkedin/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ access_token: accessToken })
+      });
+      setQcStatus("linkedin-status","Connected!","ok");
+      document.getElementById("linkedin-token").value = "";
+      await fetchIntegrations();
+    } catch (err) {
+      setQcStatus("linkedin-status", mapUiError(err), "err");
+    } finally {
+      if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(btn, false);
+    }
+  });
+
+  // ── Quick Connect: Perplexity ───────────────────────────────────────────────
+  bindClick("perplexity-connect-btn", async function() {
+    var btn = byId("perplexity-connect-btn");
+    var apiKey = document.getElementById("perplexity-token").value.trim();
+    if (!apiKey) { setQcStatus("perplexity-status","Enter your Perplexity API key first.","err"); return; }
+    if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(btn, true, "Connecting...");
+    setQcStatus("perplexity-status","Connecting to Perplexity...","info");
+    try {
+      await apiJson("/api/v1/integrations/perplexity/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey })
+      });
+      setQcStatus("perplexity-status","Connected!","ok");
+      document.getElementById("perplexity-token").value = "";
+      await fetchIntegrations();
+    } catch (err) {
+      setQcStatus("perplexity-status", mapUiError(err), "err");
+    } finally {
+      if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(btn, false);
+    }
+  });
+
+  // ── Quick Connect: Google Analytics ─────────────────────────────────────────
+  bindClick("ga-connect-btn", async function() {
+    var btn = byId("ga-connect-btn");
+    var accessToken = document.getElementById("ga-token").value.trim();
+    var propertyId = document.getElementById("ga-property-id").value.trim();
+    if (!accessToken) { setQcStatus("ga-status","Enter your Google Analytics access token first.","err"); return; }
+    if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(btn, true, "Connecting...");
+    setQcStatus("ga-status","Connecting to Google Analytics...","info");
+    try {
+      var payload = { access_token: accessToken };
+      if (propertyId) payload.property_id = propertyId;
+      await apiJson("/api/v1/integrations/google-analytics/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      setQcStatus("ga-status","Connected!","ok");
+      document.getElementById("ga-token").value = "";
+      document.getElementById("ga-property-id").value = "";
+      await fetchIntegrations();
+      byId("ga-sync-btn").style.display = "";
+    } catch (err) {
+      setQcStatus("ga-status", mapUiError(err), "err");
+    } finally {
+      if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(btn, false);
+    }
+  });
+  bindClick("ga-sync-btn", async function() {
+    setQcStatus("ga-status","Syncing analytics...","info");
+    try {
+      var body = await apiJson("/api/v1/integrations/google-analytics/sync", { method: "POST" });
+      setQcStatus("ga-status","Synced: " + (body.sessions_30d||0) + " sessions, " + (body.active_users_30d||0) + " users.","ok");
+      await fetchIntegrations();
+    } catch (err) {
+      setQcStatus("ga-status", mapUiError(err), "err");
+    }
+  });
+
   bindClick("refresh-integrations-btn", async function() {
     await refreshIntegrationPanels();
   });
@@ -842,11 +1003,58 @@
 
   // ── Delegate sync button clicks via data-sync attributes ─────────────────
   document.addEventListener("click", function(e) {
-    var btn = e.target.closest("[data-sync]");
-    if (!btn) return;
-    var name = btn.getAttribute("data-sync");
-    if (name === "calendar") { window.syncCalendar(); }
-    else { window.syncIntegration(name); }
+    var syncBtn = e.target.closest("[data-sync]");
+    if (syncBtn) {
+      var name = syncBtn.getAttribute("data-sync");
+      if (name === "calendar") { window.syncCalendar(); }
+      else { window.syncIntegration(name); }
+      return;
+    }
+
+    var integrationBtn = e.target.closest("[data-int-action]");
+    if (integrationBtn) {
+      var intAction = integrationBtn.getAttribute("data-int-action");
+      if (intAction === "test") {
+        var testId = Number(integrationBtn.getAttribute("data-int-id"));
+        if (Number.isFinite(testId) && testId > 0) window.integrationTest(testId);
+        return;
+      }
+      if (intAction === "disconnect") {
+        var disconnectId = Number(integrationBtn.getAttribute("data-int-id"));
+        if (Number.isFinite(disconnectId) && disconnectId > 0) window.integrationDisconnect(disconnectId);
+        return;
+      }
+      if (intAction === "token-connect") {
+        var reconnectType = integrationBtn.getAttribute("data-int-type");
+        if (reconnectType) window.reconnectToken(reconnectType);
+        return;
+      }
+      if (intAction === "oauth-reconnect") {
+        var oauthType = integrationBtn.getAttribute("data-oauth-type");
+        var oauthBtn = oauthType === "gmail" ? byId("gmail-auth-btn") : byId("gcal-auth-btn");
+        if (oauthBtn) oauthBtn.click();
+        return;
+      }
+    }
+
+    var aiBtn = e.target.closest("[data-ai-action]");
+    if (aiBtn) {
+      var aiAction = aiBtn.getAttribute("data-ai-action");
+      var provider = aiBtn.getAttribute("data-ai-provider");
+      if (!provider) return;
+      if (aiAction === "test") { window.testAI(provider); return; }
+      if (aiAction === "connect") { window.connectAI(provider); return; }
+      if (aiAction === "disconnect") { window.disconnectAI(provider); return; }
+      return;
+    }
+
+    var dismissBtn = e.target.closest("[data-toast-dismiss]");
+    if (dismissBtn) {
+      var toast = dismissBtn.closest(".toast");
+      if (!toast) return;
+      toast.classList.add("removing");
+      setTimeout(function() { toast.remove(); }, 250);
+    }
   });
 
   // ── Boot ───────────────────────────────────────────────────────────────────
@@ -876,8 +1084,15 @@ window.showToast = function(msg, type) {
     el.className = "toast " + t;
     el.setAttribute("role", "status");
     el.setAttribute("aria-live", "polite");
-    el.innerHTML = "<span>" + String(msg).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</span>" +
-      '<button aria-label="Dismiss" onclick="this.parentNode.classList.add(\'removing\');setTimeout(function(){this.parentNode.remove()}.bind(this),250)">\u00d7</button>';
+    var text = document.createElement("span");
+    text.textContent = String(msg);
+    var dismiss = document.createElement("button");
+    dismiss.setAttribute("type", "button");
+    dismiss.setAttribute("aria-label", "Dismiss");
+    dismiss.setAttribute("data-toast-dismiss", "1");
+    dismiss.textContent = "\u00d7";
+    el.appendChild(text);
+    el.appendChild(dismiss);
     var c = document.getElementById("toast-container");
     if (c) c.appendChild(el);
     setTimeout(function() {

@@ -1,4 +1,19 @@
+from __future__ import annotations
+
+from datetime import datetime
+
 from pydantic import BaseModel
+
+
+class EventRead(BaseModel):
+    id: int
+    organization_id: int
+    event_type: str
+    actor_user_id: int | None = None
+    entity_type: str | None = None
+    entity_id: int | None = None
+    payload: dict = {}
+    created_at: datetime | None = None
 
 
 class AIProviderStatsRead(BaseModel):
@@ -32,7 +47,7 @@ class AICallLogRead(BaseModel):
     fallback_from: str | None = None
     error_type: str | None = None
     request_id: str | None = None
-    created_at: str | None = None
+    created_at: datetime | None = None
 
 
 class DecisionTraceSummaryRead(BaseModel):
@@ -42,7 +57,7 @@ class DecisionTraceSummaryRead(BaseModel):
     summary: str
     confidence_score: float = 0.0
     request_id: str | None = None
-    created_at: str | None = None
+    created_at: datetime | None = None
 
 
 class StorageTableStatRead(BaseModel):
@@ -52,7 +67,7 @@ class StorageTableStatRead(BaseModel):
 
 class StorageSummaryRead(BaseModel):
     org_id: int
-    generated_at: str
+    generated_at: datetime
     total_rows: int
     retention_days_chat: int
     tables: list[StorageTableStatRead]

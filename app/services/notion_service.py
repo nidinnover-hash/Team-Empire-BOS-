@@ -3,16 +3,19 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from typing import Any, Hashable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.resilience import run_with_retry
+from app.db.base import Base as ORMBase
 from app.models.note import Note
 from app.services.integration import (
     connect_integration,
     get_integration_by_type,
-    mark_sync_time,
 )
+from app.services.sync_base import IntegrationSync, SyncResult
 from app.tools import notion as notion_tool
 
 logger = logging.getLogger(__name__)
@@ -42,10 +45,79 @@ def _blocks_to_text(blocks: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Sync subclass
+# ---------------------------------------------------------------------------
+
+class NotionSync(IntegrationSync):
+    """Sync Notion pages → Note model."""
+
+    provider = "notion"
+
+    def __init__(self) -> None:
+        self._token: str = ""
+
+    def _token_field(self) -> str:
+        return "api_token"
+
+    async def fetch_items(self, token: str, config: dict[str, Any], **kwargs: Any) -> list[dict[str, Any]]:
+        self._token = token
+        query = kwargs.get("query", "")
+        max_pages = kwargs.get("max_pages", 20)
+        pages = await notion_tool.search_pages(token, query, page_size=max_pages, filter_type="page")
+        # Enrich each page with content blocks
+        enriched: list[dict[str, Any]] = []
+        for page in pages[:max_pages]:
+            page_id = page.get("id", "")
+            if not page_id:
+                continue
+            title = _extract_title(page)
+            try:
+                blocks = await run_with_retry(
+                    lambda pid=page_id: notion_tool.get_page_content(token, pid, page_size=50),
+                )
+                content = _blocks_to_text(blocks)
+            except (RuntimeError, ValueError, TypeError, TimeoutError):
+                logger.warning("Failed to fetch Notion page %s", page_id, exc_info=True)
+                content = ""
+            if not content.strip():
+                continue
+            enriched.append({"title": title, "content": content, "page_id": page_id})
+        return enriched
+
+    async def load_existing_keys(self, db: AsyncSession, org_id: int) -> set[Hashable]:
+        result = await db.execute(
+            select(Note.title).where(
+                Note.organization_id == org_id,
+                Note.source == "notion",
+            ).limit(1000)
+        )
+        return {row.title for row in result}
+
+    def dedup_key(self, item: dict[str, Any]) -> Hashable:
+        return f"[Notion] {item['title']}"[:200]
+
+    def to_model(self, item: dict[str, Any], org_id: int) -> ORMBase:
+        return Note(
+            organization_id=org_id,
+            title=f"[Notion] {item['title']}"[:200],
+            content=item["content"][:6000],
+            source="notion",
+            created_at=datetime.now(UTC),
+        )
+
+
+_notion_sync = NotionSync()
+
+
+# ---------------------------------------------------------------------------
+# Public API (unchanged signatures for backward compat)
+# ---------------------------------------------------------------------------
+
 async def connect_notion(
     db: AsyncSession, org_id: int, api_token: str
 ) -> dict:
-    me = await notion_tool.get_me(api_token)
+    me = await run_with_retry(lambda: notion_tool.get_me(api_token))
     bot_name = me.get("name", "Notion Bot")
     integration = await connect_integration(
         db, organization_id=org_id, integration_type=_TYPE,
@@ -69,53 +141,11 @@ async def get_notion_status(db: AsyncSession, org_id: int) -> dict:
 async def sync_pages_to_notes(
     db: AsyncSession, org_id: int, *, query: str = "", max_pages: int = 20
 ) -> dict:
-    integration = await get_integration_by_type(db, org_id, _TYPE)
-    if not integration or integration.status != "connected":
-        raise ValueError("Notion not connected")
-    token = (integration.config_json or {}).get("api_token", "")
-    pages = await notion_tool.search_pages(token, query, page_size=max_pages, filter_type="page")
-    # Pre-load existing Notion note titles for dedup
-    existing_result = await db.execute(
-        select(Note.title).where(
-            Note.organization_id == org_id,
-            Note.source == "notion",  # type: ignore[attr-defined]  # dynamic attr
-        ).limit(1000)
-    )
-    existing_titles = {row.title for row in existing_result}
-    notes_created = 0
-    for page in pages[:max_pages]:
-        title = _extract_title(page)
-        page_id = page.get("id", "")
-        if not page_id:
-            continue
-        note_title = f"[Notion] {title}"[:200]
-        # Skip if this page was already synced
-        if note_title in existing_titles:
-            continue
-        try:
-            blocks = await notion_tool.get_page_content(token, page_id, page_size=50)
-            content = _blocks_to_text(blocks)
-        except (RuntimeError, ValueError, TypeError, TimeoutError):
-            logger.warning("Failed to fetch Notion page %s", page_id, exc_info=True)
-            content = ""
-        if not content.strip():
-            continue
-        note = Note(
-            organization_id=org_id,
-            title=note_title,
-            content=content[:6000],
-            source="notion",
-            created_at=datetime.now(UTC),
-        )
-        db.add(note)
-        notes_created += 1
-    if notes_created:
-        await db.commit()
-    await mark_sync_time(db, integration)
+    result = await _notion_sync.sync(db, org_id, query=query, max_pages=max_pages)
     return {
-        "pages_synced": len(pages),
-        "notes_created": notes_created,
-        "last_sync_at": datetime.now(UTC).isoformat(),
+        "pages_synced": result.synced + result.skipped,
+        "notes_created": result.synced,
+        "last_sync_at": result.last_sync_at.isoformat(),
     }
 
 
@@ -126,7 +156,7 @@ async def search_pages(
     if not integration or integration.status != "connected":
         raise ValueError("Notion not connected")
     token = (integration.config_json or {}).get("api_token", "")
-    pages = await notion_tool.search_pages(token, query, page_size=page_size)
+    pages = await run_with_retry(lambda: notion_tool.search_pages(token, query, page_size=page_size))
     return [
         {"id": p.get("id", ""), "title": _extract_title(p), "url": p.get("url", "")}
         for p in pages

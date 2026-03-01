@@ -11,6 +11,15 @@ import httpx
 _BASE = "https://api.perplexity.ai"
 _TIMEOUT = 25.0
 
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=_TIMEOUT)
+    return _client
+
 
 async def search(
     api_key: str,
@@ -29,11 +38,11 @@ async def search(
         "messages": [{"role": "user", "content": query}],
         "max_tokens": max_tokens,
     }
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.post(f"{_BASE}/chat/completions", json=payload, headers=headers)
-        resp.raise_for_status()
-        body = resp.json()
-        return body if isinstance(body, dict) else {}
+    c = _get_client()
+    resp = await c.post(f"{_BASE}/chat/completions", json=payload, headers=headers)
+    resp.raise_for_status()
+    body = resp.json()
+    return body if isinstance(body, dict) else {}
 
 
 async def search_news(

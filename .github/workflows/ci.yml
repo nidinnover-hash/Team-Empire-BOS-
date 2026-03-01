@@ -22,10 +22,16 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
+          npm install
 
       - name: Dependency integrity
         run: python -m pip check
@@ -41,6 +47,12 @@ jobs:
 
       - name: Security lint (bandit)
         run: bandit -r app -ll -q
+
+      - name: Frontend lint
+        run: npm run lint:frontend
+
+      - name: Frontend safety guards
+        run: python scripts/check_frontend_guards.py
 
       - name: Pre-commit policy checks (main tree only)
         run: |
@@ -91,6 +103,9 @@ jobs:
           python -m alembic downgrade -1
           python -m alembic upgrade head
 
+      # CI-only dummy secrets — NOT used in production. Safe to hardcode here
+      # because they only satisfy the startup validation checks; no real
+      # services are contacted.
       - name: Startup smoke (production-mode config)
         env:
           DEBUG: "false"
@@ -98,14 +113,14 @@ jobs:
           AUTO_CREATE_SCHEMA: "false"
           AUTO_SEED_DEFAULTS: "false"
           COOKIE_SECURE: "true"
-          SECRET_KEY: "0123456789abcdef0123456789abcdef"
-          ADMIN_EMAIL: "owner@example.com"
-          ADMIN_PASSWORD: "StrongPassword123!"
-          TOKEN_ENCRYPTION_KEY: "abcdef0123456789abcdef0123456789"
-          OPENAI_API_KEY: "sk-live-valid-key-value"
+          SECRET_KEY: "ci-only-0123456789abcdef0123456789abcdef"
+          ADMIN_EMAIL: "ci-only@example.com"
+          ADMIN_PASSWORD: "CiOnlyPassword123!"
+          TOKEN_ENCRYPTION_KEY: "ci-only-abcdef0123456789abcdef0123456789"
+          OPENAI_API_KEY: "sk-ci-only-not-a-real-key"
           DEFAULT_AI_PROVIDER: "openai"
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/nidin_nover_ai
-          PURPOSE_PERSONAL_EMAILS: "nidinnover@gmail.com"
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/nidin_bos
+          PURPOSE_PERSONAL_EMAILS: "ci@example.com"
         run: python scripts/smoke_prod_config.py --import-app
 
       - name: Deploy preflight smoke (CI mode)
@@ -115,14 +130,14 @@ jobs:
           AUTO_CREATE_SCHEMA: "false"
           AUTO_SEED_DEFAULTS: "false"
           COOKIE_SECURE: "true"
-          SECRET_KEY: "0123456789abcdef0123456789abcdef"
-          ADMIN_EMAIL: "owner@example.com"
-          ADMIN_PASSWORD: "StrongPassword123!"
-          TOKEN_ENCRYPTION_KEY: "abcdef0123456789abcdef0123456789"
-          OPENAI_API_KEY: "sk-live-valid-key-value"
+          SECRET_KEY: "ci-only-0123456789abcdef0123456789abcdef"
+          ADMIN_EMAIL: "ci-only@example.com"
+          ADMIN_PASSWORD: "CiOnlyPassword123!"
+          TOKEN_ENCRYPTION_KEY: "ci-only-abcdef0123456789abcdef0123456789"
+          OPENAI_API_KEY: "sk-ci-only-not-a-real-key"
           DEFAULT_AI_PROVIDER: "openai"
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/nidin_nover_ai
-          PURPOSE_PERSONAL_EMAILS: "nidinnover@gmail.com"
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/nidin_bos
+          PURPOSE_PERSONAL_EMAILS: "ci@example.com"
         run: python scripts/preflight_deploy.py --skip-db
 
       - name: Fast API smoke suite
@@ -164,7 +179,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build -t nidin-nover-ai:ci-${{ github.sha }} .
+        run: docker build -t nidin-bos:ci-${{ github.sha }} .
 
   secret-scan:
     runs-on: ubuntu-latest
@@ -202,19 +217,19 @@ jobs:
 
       - name: Install Playwright
         run: |
-          npm init -y
-          npm install --save-dev @playwright/test
+          npm install
           npx playwright install --with-deps chromium
 
+      # CI-only dummy secrets — NOT used in production
       - name: Start app
         env:
           DEBUG: "true"
           ENFORCE_STARTUP_VALIDATION: "false"
           COOKIE_SECURE: "false"
-          SECRET_KEY: "0123456789abcdef0123456789abcdef"
-          ADMIN_PASSWORD: "StrongPassword123!"
-          TOKEN_ENCRYPTION_KEY: "abcdef0123456789abcdef0123456789"
-          OPENAI_API_KEY: "sk-live-valid-key-value"
+          SECRET_KEY: "ci-only-0123456789abcdef0123456789abcdef"
+          ADMIN_PASSWORD: "CiOnlyPassword123!"
+          TOKEN_ENCRYPTION_KEY: "ci-only-abcdef0123456789abcdef0123456789"
+          OPENAI_API_KEY: "sk-ci-only-not-a-real-key"
           DEFAULT_AI_PROVIDER: "openai"
           DATABASE_URL: sqlite:///./ci.db
         run: |
@@ -266,19 +281,19 @@ jobs:
 
       - name: Install Playwright
         run: |
-          npm init -y
-          npm install --save-dev @playwright/test
+          npm install
           npx playwright install --with-deps chromium
 
+      # CI-only dummy secrets — NOT used in production
       - name: Start app
         env:
           DEBUG: "true"
           ENFORCE_STARTUP_VALIDATION: "false"
           COOKIE_SECURE: "false"
-          SECRET_KEY: "0123456789abcdef0123456789abcdef"
-          ADMIN_PASSWORD: "StrongPassword123!"
-          TOKEN_ENCRYPTION_KEY: "abcdef0123456789abcdef0123456789"
-          OPENAI_API_KEY: "sk-live-valid-key-value"
+          SECRET_KEY: "ci-only-0123456789abcdef0123456789abcdef"
+          ADMIN_PASSWORD: "CiOnlyPassword123!"
+          TOKEN_ENCRYPTION_KEY: "ci-only-abcdef0123456789abcdef0123456789"
+          OPENAI_API_KEY: "sk-ci-only-not-a-real-key"
           DEFAULT_AI_PROVIDER: "openai"
           DATABASE_URL: sqlite:///./ci.db
         run: |

@@ -102,6 +102,6 @@ async def export_all_data(
     return JSONResponse(
         content=payload,
         headers={
-            "Content-Disposition": f'attachment; filename="nidin-nover-ai-export-{datetime.now(UTC).strftime("%Y%m%d")}.json"',
+            "Content-Disposition": f'attachment; filename="nidin-bos-export-{datetime.now(UTC).strftime("%Y%m%d")}.json"',
         },
     )

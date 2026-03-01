@@ -12,6 +12,15 @@ import httpx
 _BASE = "https://api.hubapi.com"
 _TIMEOUT = 20.0
 
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=_TIMEOUT)
+    return _client
+
 
 def _headers(token: str) -> dict[str, str]:
     return {
@@ -26,11 +35,17 @@ async def list_contacts(
     limit: int = 50,
     properties: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """List CRM contacts."""
-    params: dict[str, Any] = {"limit": min(limit, 100)}
+    """List CRM contacts with auto-pagination up to *limit* items."""
+    page_size = min(limit, 100)
+    params: dict[str, Any] = {"limit": page_size}
     if properties:
         params["properties"] = ",".join(properties)
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    client = _get_client()
+    all_results: list[dict[str, Any]] = []
+    after: str | None = None
+    while len(all_results) < limit:
+        if after:
+            params["after"] = after
         resp = await client.get(
             f"{_BASE}/crm/v3/objects/contacts",
             params=params,
@@ -39,7 +54,12 @@ async def list_contacts(
         resp.raise_for_status()
         body = resp.json()
         results = body.get("results", [])
-        return results if isinstance(results, list) else []
+        if isinstance(results, list):
+            all_results.extend(results)
+        after = (body.get("paging") or {}).get("next", {}).get("after")
+        if not after:
+            break
+    return all_results[:limit]
 
 
 async def list_deals(
@@ -48,11 +68,17 @@ async def list_deals(
     limit: int = 50,
     properties: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """List CRM deals."""
-    params: dict[str, Any] = {"limit": min(limit, 100)}
+    """List CRM deals with auto-pagination up to *limit* items."""
+    page_size = min(limit, 100)
+    params: dict[str, Any] = {"limit": page_size}
     if properties:
         params["properties"] = ",".join(properties)
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    client = _get_client()
+    all_results: list[dict[str, Any]] = []
+    after: str | None = None
+    while len(all_results) < limit:
+        if after:
+            params["after"] = after
         resp = await client.get(
             f"{_BASE}/crm/v3/objects/deals",
             params=params,
@@ -61,7 +87,12 @@ async def list_deals(
         resp.raise_for_status()
         body = resp.json()
         results = body.get("results", [])
-        return results if isinstance(results, list) else []
+        if isinstance(results, list):
+            all_results.extend(results)
+        after = (body.get("paging") or {}).get("next", {}).get("after")
+        if not after:
+            break
+    return all_results[:limit]
 
 
 async def get_deal_pipeline(
@@ -69,14 +100,14 @@ async def get_deal_pipeline(
     pipeline_id: str = "default",
 ) -> dict[str, Any]:
     """Get deal pipeline with stages."""
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(
-            f"{_BASE}/crm/v3/pipelines/deals/{pipeline_id}",
-            headers=_headers(token),
-        )
-        resp.raise_for_status()
-        body = resp.json()
-        return body if isinstance(body, dict) else {}
+    client = _get_client()
+    resp = await client.get(
+        f"{_BASE}/crm/v3/pipelines/deals/{pipeline_id}",
+        headers=_headers(token),
+    )
+    resp.raise_for_status()
+    body = resp.json()
+    return body if isinstance(body, dict) else {}
 
 
 async def search_contacts(
@@ -90,26 +121,26 @@ async def search_contacts(
         "query": query,
         "limit": min(limit, 100),
     }
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.post(
-            f"{_BASE}/crm/v3/objects/contacts/search",
-            json=payload,
-            headers=_headers(token),
-        )
-        resp.raise_for_status()
-        body = resp.json()
-        results = body.get("results", [])
-        return results if isinstance(results, list) else []
+    client = _get_client()
+    resp = await client.post(
+        f"{_BASE}/crm/v3/objects/contacts/search",
+        json=payload,
+        headers=_headers(token),
+    )
+    resp.raise_for_status()
+    body = resp.json()
+    results = body.get("results", [])
+    return results if isinstance(results, list) else []
 
 
 async def get_owner(token: str) -> dict[str, Any]:
     """Get account info (verifies token)."""
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(
-            f"{_BASE}/crm/v3/owners",
-            params={"limit": 1},
-            headers=_headers(token),
-        )
-        resp.raise_for_status()
-        body = resp.json()
-        return body if isinstance(body, dict) else {}
+    client = _get_client()
+    resp = await client.get(
+        f"{_BASE}/crm/v3/owners",
+        params={"limit": 1},
+        headers=_headers(token),
+    )
+    resp.raise_for_status()
+    body = resp.json()
+    return body if isinstance(body, dict) else {}

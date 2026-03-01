@@ -288,10 +288,10 @@ def _fallback_order(primary: str) -> list[str]:
     return ordered
 
 
-def _configured_providers() -> list[str]:
+def _configured_providers(org_id: int = 1) -> list[str]:
     """Return configured providers in preferred order."""
     ordered = ["groq", "openai", "anthropic", "gemini"]
-    return [p for p in ordered if _key_ok(_get_key(p))]
+    return [p for p in ordered if _key_ok(_get_key(p, org_id=org_id))]
 
 
 def _normalize_provider_result(raw: object) -> tuple[str, bool, int | None, int | None]:
@@ -345,7 +345,8 @@ async def call_ai(
     if requested not in {"openai", "anthropic", "groq", "gemini"}:
         requested = "groq"
 
-    configured = _configured_providers()
+    org_id = organization_id or 1
+    configured = _configured_providers(org_id=org_id)
     if not configured:
         return (
             "Error: No AI providers are configured. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, "
@@ -475,7 +476,7 @@ async def _call_provider(
     conversation_history: list[dict] | None = None,
     org_id: int = 1,
 ) -> tuple[str, bool, int | None, int | None]:
-    """Call a specific provider with one retry for transient errors."""
+    """Call a specific provider with configurable retries for transient errors."""
     import asyncio as _aio
 
     async def _single_call() -> tuple[str, bool, int | None, int | None]:
@@ -487,13 +488,20 @@ async def _call_provider(
             return await _call_gemini(system_prompt, user_message, max_tokens, conversation_history, org_id=org_id)
         return await _call_openai(system_prompt, user_message, max_tokens, conversation_history, org_id=org_id)
 
-    result, is_transient, in_tok, out_tok = await _single_call()
-    if not result.startswith("Error:") or not is_transient:
-        return result, is_transient, in_tok, out_tok
-    # One retry with 2s delay for transient errors before giving up
-    logger.info("Retrying %s after transient error", provider)
-    await _aio.sleep(2.0)
-    return await _single_call()
+    attempts = max(1, int(settings.AI_RETRY_ATTEMPTS))
+    backoff = max(0.0, float(settings.AI_RETRY_BACKOFF_SECONDS))
+    max_backoff = max(0.0, float(settings.AI_RETRY_MAX_BACKOFF_SECONDS))
+
+    for idx in range(attempts):
+        result, is_transient, in_tok, out_tok = await _single_call()
+        if not result.startswith("Error:") or not is_transient or idx == attempts - 1:
+            return result, is_transient, in_tok, out_tok
+        delay = min(backoff * (2**idx), max_backoff) if backoff > 0 else 0.0
+        logger.info("Retrying %s after transient error (%s/%s)", provider, idx + 2, attempts)
+        if delay > 0:
+            await _aio.sleep(delay)
+
+    return "Error: provider call failed", True, None, None
 
 
 async def _call_openai(

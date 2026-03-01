@@ -12,6 +12,15 @@ import httpx
 _BASE = "https://api.calendly.com"
 _TIMEOUT = 20.0
 
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=_TIMEOUT)
+    return _client
+
 
 def _headers(token: str) -> dict[str, str]:
     return {
@@ -22,12 +31,12 @@ def _headers(token: str) -> dict[str, str]:
 
 async def get_current_user(token: str) -> dict[str, Any]:
     """Get the authenticated user's profile and org URI."""
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(f"{_BASE}/users/me", headers=_headers(token))
-        resp.raise_for_status()
-        body = resp.json()
-        resource = body.get("resource", {})
-        return resource if isinstance(resource, dict) else {}
+    client = _get_client()
+    resp = await client.get(f"{_BASE}/users/me", headers=_headers(token))
+    resp.raise_for_status()
+    body = resp.json()
+    resource = body.get("resource", {})
+    return resource if isinstance(resource, dict) else {}
 
 
 async def list_scheduled_events(
@@ -39,17 +48,20 @@ async def list_scheduled_events(
     count: int = 25,
     status: str = "active",
 ) -> list[dict[str, Any]]:
-    """List scheduled events for the user."""
+    """List scheduled events for the user with auto-pagination."""
+    page_size = min(count, 100)
     params: dict[str, Any] = {
         "user": user_uri,
-        "count": min(count, 100),
+        "count": page_size,
         "status": status,
     }
     if min_start_time:
         params["min_start_time"] = min_start_time
     if max_start_time:
         params["max_start_time"] = max_start_time
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    client = _get_client()
+    all_events: list[dict[str, Any]] = []
+    while len(all_events) < count:
         resp = await client.get(
             f"{_BASE}/scheduled_events",
             params=params,
@@ -58,20 +70,26 @@ async def list_scheduled_events(
         resp.raise_for_status()
         body = resp.json()
         collection = body.get("collection", [])
-        return collection if isinstance(collection, list) else []
+        if isinstance(collection, list):
+            all_events.extend(collection)
+        next_token = (body.get("pagination") or {}).get("next_page_token")
+        if not next_token:
+            break
+        params["page_token"] = next_token
+    return all_events[:count]
 
 
 async def get_event(token: str, event_uuid: str) -> dict[str, Any]:
     """Get a single scheduled event by UUID."""
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(
-            f"{_BASE}/scheduled_events/{event_uuid}",
-            headers=_headers(token),
-        )
-        resp.raise_for_status()
-        body = resp.json()
-        resource = body.get("resource", {})
-        return resource if isinstance(resource, dict) else {}
+    client = _get_client()
+    resp = await client.get(
+        f"{_BASE}/scheduled_events/{event_uuid}",
+        headers=_headers(token),
+    )
+    resp.raise_for_status()
+    body = resp.json()
+    resource = body.get("resource", {})
+    return resource if isinstance(resource, dict) else {}
 
 
 async def list_event_invitees(
@@ -80,9 +98,12 @@ async def list_event_invitees(
     *,
     count: int = 25,
 ) -> list[dict[str, Any]]:
-    """List invitees for a scheduled event."""
-    params = {"count": min(count, 100)}
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    """List invitees for a scheduled event with auto-pagination."""
+    page_size = min(count, 100)
+    params: dict[str, Any] = {"count": page_size}
+    client = _get_client()
+    all_invitees: list[dict[str, Any]] = []
+    while len(all_invitees) < count:
         resp = await client.get(
             f"{_BASE}/scheduled_events/{event_uuid}/invitees",
             params=params,
@@ -91,7 +112,13 @@ async def list_event_invitees(
         resp.raise_for_status()
         body = resp.json()
         collection = body.get("collection", [])
-        return collection if isinstance(collection, list) else []
+        if isinstance(collection, list):
+            all_invitees.extend(collection)
+        next_token = (body.get("pagination") or {}).get("next_page_token")
+        if not next_token:
+            break
+        params["page_token"] = next_token
+    return all_invitees[:count]
 
 
 async def list_event_types(
@@ -101,14 +128,17 @@ async def list_event_types(
     count: int = 25,
     active: bool = True,
 ) -> list[dict[str, Any]]:
-    """List event types (booking page types) for the user."""
+    """List event types (booking page types) for the user with auto-pagination."""
+    page_size = min(count, 100)
     params: dict[str, Any] = {
         "user": user_uri,
-        "count": min(count, 100),
+        "count": page_size,
     }
     if active:
         params["active"] = "true"
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    client = _get_client()
+    all_types: list[dict[str, Any]] = []
+    while len(all_types) < count:
         resp = await client.get(
             f"{_BASE}/event_types",
             params=params,
@@ -117,4 +147,10 @@ async def list_event_types(
         resp.raise_for_status()
         body = resp.json()
         collection = body.get("collection", [])
-        return collection if isinstance(collection, list) else []
+        if isinstance(collection, list):
+            all_types.extend(collection)
+        next_token = (body.get("pagination") or {}).get("next_page_token")
+        if not next_token:
+            break
+        params["page_token"] = next_token
+    return all_types[:count]

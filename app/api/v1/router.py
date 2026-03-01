@@ -33,6 +33,7 @@ from app.api.v1.endpoints import (
     social,
     tasks,
     users,
+    webhooks,
 )
 
 api_router = APIRouter()
@@ -69,3 +70,4 @@ api_router.include_router(github.router)
 api_router.include_router(social.router)
 api_router.include_router(notifications.router)
 api_router.include_router(mfa.router)
+api_router.include_router(webhooks.router)

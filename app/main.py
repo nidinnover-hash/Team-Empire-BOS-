@@ -94,6 +94,12 @@ from app.models import user as _model_user  # noqa: F401
 from app.models import weekly_report as _model_weekly_report  # noqa: F401
 from app.models import webhook as _model_webhook  # noqa: F401
 from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
+from app.models import approval_pattern as _model_approval_pattern  # noqa: F401
+from app.models import autonomy_policy as _model_autonomy_policy  # noqa: F401
+from app.models import clone_persona as _model_clone_persona  # noqa: F401
+from app.models import coaching_report as _model_coaching_report  # noqa: F401
+from app.models import invite_token as _model_invite_token  # noqa: F401
+from app.models import self_learning_run as _model_self_learning_run  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Startup safety guards
@@ -234,7 +240,7 @@ app = FastAPI(
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
 )
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", StaticFiles(directory=str(_APP_DIR / "static")), name="static")
 
 _cors_origins = settings.cors_allowed_origins_list
 if _cors_origins:

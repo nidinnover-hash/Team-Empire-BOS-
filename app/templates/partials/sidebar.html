@@ -1,0 +1,48 @@
+<nav class="sidebar">
+  <div class="sb-brand">
+    <div class="sb-pulse"></div>
+    <div>
+      <div class="sb-name">Nidin BOS</div>
+      <div class="sb-sub">AI Agent Factory</div>
+      {% if last_synced_at is defined and last_synced_at %}
+      <div class="sb-sub" style="font-size:.65rem;opacity:.6" title="{{ last_synced_at.isoformat() }}">
+        Synced {{ last_synced_at.strftime('%H:%M') }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="sb-nav">
+    <a href="/" class="sb-item{{ ' active' if active_page == 'dashboard' }}"><i data-lucide="layout-dashboard"></i> Dashboard</a>
+    <a href="/web/talk" class="sb-item{{ ' active' if active_page == 'talk' }}"><i data-lucide="message-circle"></i> Agent Chat</a>
+    <a href="/web/integrations" class="sb-item{{ ' active' if active_page == 'integrations' }}"><i data-lucide="plug"></i> Integrations</a>
+    <a href="/web/data-hub" class="sb-item{{ ' active' if active_page == 'data-hub' }}"><i data-lucide="database"></i> Data Hub</a>
+    <a href="/web/observe" class="sb-item{{ ' active' if active_page == 'observe' }}"><i data-lucide="activity"></i> Observe</a>
+    <a href="/web/ops-intel" class="sb-item{{ ' active' if active_page == 'ops-intel' }}"><i data-lucide="bar-chart-3"></i> Ops Intel</a>
+    <a href="/web/tasks" class="sb-item{{ ' active' if active_page == 'tasks' }}"><i data-lucide="check-square"></i> Tasks</a>
+    <a href="/web/team" class="sb-item{{ ' active' if active_page == 'team' }}"><i data-lucide="users"></i> Team</a>
+    <a href="/web/audit" class="sb-item{{ ' active' if active_page == 'audit' }}"><i data-lucide="shield-check"></i> Audit Log</a>
+    <a href="/web/webhooks" class="sb-item{{ ' active' if active_page == 'webhooks' }}"><i data-lucide="webhook"></i> Webhooks</a>
+    <a href="/web/personas" class="sb-item{{ ' active' if active_page == 'personas' }}"><i data-lucide="brain"></i> Personas</a>
+    <a href="/web/coaching" class="sb-item{{ ' active' if active_page == 'coaching' }}"><i data-lucide="graduation-cap"></i> Coaching</a>
+    {% if active_page == 'admin' %}
+    <a href="/web/admin" class="sb-item active"><i data-lucide="shield"></i> Admin</a>
+    {% endif %}
+    <div class="sb-divider"></div>
+    <a href="/docs" class="sb-item" target="_blank" rel="noopener noreferrer"><i data-lucide="book-open"></i> API Docs</a>
+  </div>
+  <div class="sb-footer">
+    <button class="theme-toggle" type="button">
+      <i data-lucide="moon" class="theme-icon"></i> Toggle theme
+    </button>
+    {% if session_user is defined and session_user %}
+    <div class="sb-user">{{ session_user.email }}</div>
+    <button class="sb-item" id="logout-btn" type="button">
+      <i data-lucide="log-out"></i> Sign out
+    </button>
+    {% else %}
+    <a href="/web/login" class="sb-item">
+      <i data-lucide="log-in"></i> Sign in
+    </a>
+    {% endif %}
+  </div>
+</nav>

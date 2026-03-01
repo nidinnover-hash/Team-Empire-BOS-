@@ -12,9 +12,47 @@ import httpx
 _BASE = "https://api.stripe.com/v1"
 _TIMEOUT = 20.0
 
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=_TIMEOUT)
+    return _client
+
 
 def _headers(secret_key: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {secret_key}"}
+
+
+async def _paginated_list(
+    secret_key: str,
+    endpoint: str,
+    *,
+    limit: int,
+    extra_params: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Generic Stripe list pagination using starting_after cursor."""
+    page_size = min(limit, 100)
+    params: dict[str, Any] = {"limit": page_size}
+    if extra_params:
+        params.update(extra_params)
+    client = _get_client()
+    all_data: list[dict[str, Any]] = []
+    while len(all_data) < limit:
+        resp = await client.get(
+            f"{_BASE}/{endpoint}", params=params, headers=_headers(secret_key),
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        data = body.get("data", [])
+        if isinstance(data, list):
+            all_data.extend(data)
+        if not body.get("has_more") or not data:
+            break
+        params["starting_after"] = data[-1].get("id", "")
+    return all_data[:limit]
 
 
 async def list_charges(
@@ -23,16 +61,11 @@ async def list_charges(
     limit: int = 25,
     created_gte: int | None = None,
 ) -> list[dict[str, Any]]:
-    """List recent charges (payments)."""
-    params: dict[str, Any] = {"limit": min(limit, 100)}
+    """List recent charges (payments) with auto-pagination."""
+    extra: dict[str, Any] = {}
     if created_gte:
-        params["created[gte]"] = created_gte
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(f"{_BASE}/charges", params=params, headers=_headers(secret_key))
-        resp.raise_for_status()
-        body = resp.json()
-        data = body.get("data", [])
-        return data if isinstance(data, list) else []
+        extra["created[gte]"] = created_gte
+    return await _paginated_list(secret_key, "charges", limit=limit, extra_params=extra)
 
 
 async def list_refunds(
@@ -41,16 +74,11 @@ async def list_refunds(
     limit: int = 25,
     created_gte: int | None = None,
 ) -> list[dict[str, Any]]:
-    """List recent refunds."""
-    params: dict[str, Any] = {"limit": min(limit, 100)}
+    """List recent refunds with auto-pagination."""
+    extra: dict[str, Any] = {}
     if created_gte:
-        params["created[gte]"] = created_gte
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(f"{_BASE}/refunds", params=params, headers=_headers(secret_key))
-        resp.raise_for_status()
-        body = resp.json()
-        data = body.get("data", [])
-        return data if isinstance(data, list) else []
+        extra["created[gte]"] = created_gte
+    return await _paginated_list(secret_key, "refunds", limit=limit, extra_params=extra)
 
 
 async def list_disputes(
@@ -58,23 +86,17 @@ async def list_disputes(
     *,
     limit: int = 25,
 ) -> list[dict[str, Any]]:
-    """List payment disputes (chargebacks)."""
-    params = {"limit": min(limit, 100)}
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(f"{_BASE}/disputes", params=params, headers=_headers(secret_key))
-        resp.raise_for_status()
-        body = resp.json()
-        data = body.get("data", [])
-        return data if isinstance(data, list) else []
+    """List payment disputes (chargebacks) with auto-pagination."""
+    return await _paginated_list(secret_key, "disputes", limit=limit)
 
 
 async def get_balance(secret_key: str) -> dict[str, Any]:
     """Get current Stripe balance."""
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(f"{_BASE}/balance", headers=_headers(secret_key))
-        resp.raise_for_status()
-        body = resp.json()
-        return body if isinstance(body, dict) else {}
+    client = _get_client()
+    resp = await client.get(f"{_BASE}/balance", headers=_headers(secret_key))
+    resp.raise_for_status()
+    body = resp.json()
+    return body if isinstance(body, dict) else {}
 
 
 async def list_customers(
@@ -83,16 +105,11 @@ async def list_customers(
     limit: int = 25,
     email: str | None = None,
 ) -> list[dict[str, Any]]:
-    """List customers, optionally filtered by email."""
-    params: dict[str, Any] = {"limit": min(limit, 100)}
+    """List customers with auto-pagination, optionally filtered by email."""
+    extra: dict[str, Any] = {}
     if email:
-        params["email"] = email
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(f"{_BASE}/customers", params=params, headers=_headers(secret_key))
-        resp.raise_for_status()
-        body = resp.json()
-        data = body.get("data", [])
-        return data if isinstance(data, list) else []
+        extra["email"] = email
+    return await _paginated_list(secret_key, "customers", limit=limit, extra_params=extra)
 
 
 async def verify_key(secret_key: str) -> dict[str, Any]:

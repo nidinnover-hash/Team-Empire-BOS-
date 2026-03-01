@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class OrgSummary(BaseModel):
@@ -151,13 +151,13 @@ class AutonomyRolloutRead(BaseModel):
 
 class AutonomyRolloutUpdate(BaseModel):
     kill_switch: bool | None = None
-    pilot_org_ids: list[int] | None = None
-    max_actions_per_day: int | None = None
+    pilot_org_ids: list[int] | None = Field(default=None, max_length=1000)
+    max_actions_per_day: int | None = Field(default=None, ge=0)
 
 
 class AutonomyDryRunRequest(BaseModel):
-    approval_type: str
-    payload_json: dict = {}
+    approval_type: str = Field(min_length=1, max_length=100)
+    payload_json: dict = Field(default_factory=dict)
 
 
 class AutonomyDryRunRead(BaseModel):
@@ -180,9 +180,15 @@ class AutonomyDryRunRead(BaseModel):
 class AutonomyPolicyUpdate(BaseModel):
     current_mode: Literal["suggest_only", "approved_execution", "autonomous"] | None = None
     allow_auto_approval: bool | None = None
-    min_readiness_for_auto_approval: int | None = None
-    min_readiness_for_approved_execution: int | None = None
-    min_readiness_for_autonomous: int | None = None
+    min_readiness_for_auto_approval: int | None = Field(default=None, ge=0, le=100)
+    min_readiness_for_approved_execution: int | None = Field(default=None, ge=0, le=100)
+    min_readiness_for_autonomous: int | None = Field(default=None, ge=0, le=100)
     block_on_unread_high_alerts: bool | None = None
     block_on_stale_integrations: bool | None = None
     block_on_sla_breaches: bool | None = None
+
+
+class SuperAdminActionResponse(BaseModel):
+    ok: bool
+    user_id: int
+    is_super_admin: bool

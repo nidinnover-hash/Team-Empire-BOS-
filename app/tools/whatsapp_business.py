@@ -3,6 +3,16 @@ from typing import Any
 import httpx
 
 GRAPH_API_BASE = "https://graph.facebook.com/v21.0"
+_TIMEOUT = 20.0
+
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=_TIMEOUT)
+    return _client
 
 
 def _auth_headers(access_token: str) -> dict[str, str]:
@@ -17,15 +27,15 @@ async def get_phone_number_details(access_token: str, phone_number_id: str) -> d
     Validate WhatsApp Business credentials by reading phone number metadata.
     """
     url = f"{GRAPH_API_BASE}/{phone_number_id}"
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.get(
-            url,
-            params={"fields": "id,display_phone_number,verified_name"},
-            headers=_auth_headers(access_token),
-        )
-        response.raise_for_status()
-        payload = response.json()
-        return payload if isinstance(payload, dict) else {}
+    client = _get_client()
+    response = await client.get(
+        url,
+        params={"fields": "id,display_phone_number,verified_name"},
+        headers=_auth_headers(access_token),
+    )
+    response.raise_for_status()
+    payload = response.json()
+    return payload if isinstance(payload, dict) else {}
 
 
 async def send_text_message(
@@ -45,8 +55,8 @@ async def send_text_message(
         "type": "text",
         "text": {"preview_url": False, "body": body},
     }
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.post(url, json=payload, headers=_auth_headers(access_token))
-        response.raise_for_status()
-        payload = response.json()
-        return payload if isinstance(payload, dict) else {}
+    client = _get_client()
+    response = await client.post(url, json=payload, headers=_auth_headers(access_token))
+    response.raise_for_status()
+    payload = response.json()
+    return payload if isinstance(payload, dict) else {}

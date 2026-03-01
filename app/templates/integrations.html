@@ -3,42 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="AI Agent Factory — Nidin Nover AI" />
+  <meta name="description" content="AI Agent Factory — Nidin BOS" />
   <meta name="theme-color" content="#f5f5f7" />
+  <link rel="manifest" href="/static/manifest.json" />
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <title>Integrations — Nidin Nover</title>
+  <title>Integrations — Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
   <link rel="stylesheet" href="/static/css/integrations.css" />
   
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
 </head>
 <body>
-<nav class="sidebar">
-  <div class="sb-brand">
-    <div class="sb-pulse"></div>
-    <div>
-      <div class="sb-name">Nidin Nover</div>
-      <div class="sb-sub">AI Agent Factory</div>
-    </div>
-  </div>
-  <div class="sb-nav">
-    <a href="/" class="sb-item"><i data-lucide="layout-dashboard"></i> Dashboard</a>
-    <a href="/web/talk" class="sb-item"><i data-lucide="message-circle"></i> Agent Chat</a>
-    <a href="/web/integrations" class="sb-item active"><i data-lucide="plug"></i> Integrations</a>
-    <a href="/web/data-hub" class="sb-item"><i data-lucide="database"></i> Data Hub</a>
-    <a href="/web/observe" class="sb-item"><i data-lucide="activity"></i> Observe</a>
-    <a href="/web/ops-intel" class="sb-item"><i data-lucide="bar-chart-3"></i> Ops Intel</a>
-    <a href="/web/tasks" class="sb-item"><i data-lucide="check-square"></i> Tasks</a>
-    <div class="sb-divider"></div>
-    <a href="/docs" class="sb-item" target="_blank" rel="noopener noreferrer"><i data-lucide="book-open"></i> API Docs</a>
-  </div>
-  <div class="sb-footer">
-    <button class="theme-toggle" type="button">
-      <i data-lucide="moon" class="theme-icon"></i> Toggle theme
-    </button>
-    <button class="sb-item" id="logout-btn" type="button"><i data-lucide="log-out"></i> Sign out</button>
-  </div>
-</nav>
+{% set active_page = "integrations" %}
+{% include "partials/sidebar.html" %}
 
 <div class="main-wrap">
   <section class="hero">
@@ -111,7 +88,7 @@
       <div class="qc-body">
         <div class="qc-desc">Sync open tasks into your AI context. Get your Personal API Token from ClickUp -> Settings -> Apps.</div>
         <div class="qc-token-row">
-          <input class="input" type="password" id="clickup-token" placeholder="pk_XXXX_YYYY" autocomplete="off" />
+          <input class="input" type="password" id="clickup-token" placeholder="pk_XXXX_YYYY" autocomplete="off" aria-label="ClickUp API token" />
         </div>
         <div class="qc-actions">
           <button class="btn success" type="button" id="clickup-connect-btn">Connect</button>
@@ -131,7 +108,7 @@
       <div class="qc-body">
         <div class="qc-desc">Sync open PRs and bug issues as tasks. Generate a Personal Access Token at GitHub -> Settings -> Developer settings.</div>
         <div class="qc-token-row">
-          <input class="input" type="password" id="github-token" placeholder="ghp_XXXXXXXXXXXX" autocomplete="off" />
+          <input class="input" type="password" id="github-token" placeholder="ghp_XXXXXXXXXXXX" autocomplete="off" aria-label="GitHub personal access token" />
         </div>
         <div class="qc-actions">
           <button class="btn success" type="button" id="github-connect-btn">Connect</button>
@@ -151,7 +128,7 @@
       <div class="qc-body">
         <div class="qc-desc">Read channel messages into AI context and send messages. Create a Slack App and copy the Bot Token (xoxb-).</div>
         <div class="qc-token-row">
-          <input class="input" type="password" id="slack-token" placeholder="xoxb-XXXX-YYYY" autocomplete="off" />
+          <input class="input" type="password" id="slack-token" placeholder="xoxb-XXXX-YYYY" autocomplete="off" aria-label="Slack bot token" />
         </div>
         <div class="qc-actions">
           <button class="btn success" type="button" id="slack-connect-btn">Connect</button>
@@ -171,13 +148,72 @@
       <div class="qc-body">
         <div class="qc-desc">Monitor droplets, team roles, and cost snapshots in read-only mode using a Personal Access Token.</div>
         <div class="qc-token-row">
-          <input class="input" type="password" id="digitalocean-token" placeholder="dop_v1_xxxxxxxx" autocomplete="off" />
+          <input class="input" type="password" id="digitalocean-token" placeholder="dop_v1_xxxxxxxx" autocomplete="off" aria-label="DigitalOcean API token" />
         </div>
         <div class="qc-actions">
           <button class="btn success" type="button" id="digitalocean-connect-btn">Connect</button>
           <button class="btn sync" type="button" id="digitalocean-sync-btn" style="display:none">Sync Now</button>
         </div>
         <div class="qc-status" id="digitalocean-status"></div>
+      </div>
+    </div>
+
+    <!-- LinkedIn -->
+    <div class="qc-card">
+      <div class="qc-head">
+        <span class="qc-icon">LI</span>
+        <span class="qc-name">LinkedIn</span>
+        <span class="qc-badge none" id="linkedin-badge">not connected</span>
+      </div>
+      <div class="qc-body">
+        <div class="qc-desc">Publish posts to your LinkedIn profile with AI-generated content. Provide an OAuth access token.</div>
+        <div class="qc-token-row">
+          <input class="input" type="password" id="linkedin-token" placeholder="OAuth access_token" autocomplete="off" aria-label="LinkedIn access token" />
+        </div>
+        <div class="qc-actions">
+          <button class="btn success" type="button" id="linkedin-connect-btn">Connect</button>
+        </div>
+        <div class="qc-status" id="linkedin-status"></div>
+      </div>
+    </div>
+
+    <!-- Perplexity -->
+    <div class="qc-card">
+      <div class="qc-head">
+        <span class="qc-icon">PP</span>
+        <span class="qc-name">Perplexity</span>
+        <span class="qc-badge none" id="perplexity-badge">not connected</span>
+      </div>
+      <div class="qc-body">
+        <div class="qc-desc">Search the web in real-time with citations for AI context. Get your API key from Perplexity settings.</div>
+        <div class="qc-token-row">
+          <input class="input" type="password" id="perplexity-token" placeholder="pplx-XXXXXXXXXXXX" autocomplete="off" aria-label="Perplexity API key" />
+        </div>
+        <div class="qc-actions">
+          <button class="btn success" type="button" id="perplexity-connect-btn">Connect</button>
+        </div>
+        <div class="qc-status" id="perplexity-status"></div>
+      </div>
+    </div>
+
+    <!-- Google Analytics -->
+    <div class="qc-card">
+      <div class="qc-head">
+        <span class="qc-icon">GA</span>
+        <span class="qc-name">Google Analytics</span>
+        <span class="qc-badge none" id="google_analytics-badge">not connected</span>
+      </div>
+      <div class="qc-body">
+        <div class="qc-desc">Monitor website traffic (sessions, users, page views) over the last 30 days. Provide an OAuth token and GA4 property ID.</div>
+        <div class="qc-token-row">
+          <input class="input" type="password" id="ga-token" placeholder="OAuth access_token" autocomplete="off" aria-label="Google Analytics access token" />
+          <input class="input" type="text" id="ga-property-id" placeholder="GA4 property ID (e.g. 123456789)" autocomplete="off" aria-label="GA4 property ID" style="margin-top:0.3rem" />
+        </div>
+        <div class="qc-actions">
+          <button class="btn success" type="button" id="ga-connect-btn">Connect</button>
+          <button class="btn sync" type="button" id="ga-sync-btn" style="display:none">Sync Now</button>
+        </div>
+        <div class="qc-status" id="ga-status"></div>
       </div>
     </div>
   </section>
@@ -206,9 +242,9 @@
       </div>
       <div class="card-body">
         <div class="row" style="gap:0.4rem">
-          <input class="input" id="coding-project-name" type="text" placeholder="Project name" />
-          <input class="input" id="coding-language" type="text" placeholder="Language/stack (e.g. Python/FastAPI)" />
-          <input class="input" id="coding-stage" type="text" placeholder="Stage (planning/building/release)" />
+          <input class="input" id="coding-project-name" type="text" placeholder="Project name" aria-label="Project name" />
+          <input class="input" id="coding-language" type="text" placeholder="Language/stack (e.g. Python/FastAPI)" aria-label="Language or stack" />
+          <input class="input" id="coding-stage" type="text" placeholder="Stage (planning/building/release)" aria-label="Project stage" />
         </div>
         <div id="coding-discovery-output" class="small">Generate to get project questions and a ready prompt.</div>
       </div>
@@ -229,6 +265,9 @@
       <option value="clickup">ClickUp (manual)</option>
       <option value="slack">Slack (manual)</option>
       <option value="digitalocean">DigitalOcean (manual)</option>
+      <option value="linkedin">LinkedIn</option>
+      <option value="perplexity">Perplexity AI</option>
+      <option value="google_analytics">Google Analytics</option>
     </select>
     <label for="modal-config">config_json</label>
     <textarea class="textarea" id="modal-config">{
@@ -255,6 +294,7 @@
 <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/integrations-page.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
 </body>
 </html>
 

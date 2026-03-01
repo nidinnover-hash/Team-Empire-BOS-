@@ -12,6 +12,15 @@ import httpx
 _BASE = "https://analyticsdata.googleapis.com/v1beta"
 _TIMEOUT = 20.0
 
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=_TIMEOUT)
+    return _client
+
 
 def _headers(token: str) -> dict[str, str]:
     return {
@@ -40,15 +49,15 @@ async def run_report(
     }
     if dimensions:
         payload["dimensions"] = [{"name": d} for d in dimensions]
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.post(
-            f"{_BASE}/properties/{property_id}:runReport",
-            json=payload,
-            headers=_headers(token),
-        )
-        resp.raise_for_status()
-        body = resp.json()
-        return body if isinstance(body, dict) else {}
+    c = _get_client()
+    resp = await c.post(
+        f"{_BASE}/properties/{property_id}:runReport",
+        json=payload,
+        headers=_headers(token),
+    )
+    resp.raise_for_status()
+    body = resp.json()
+    return body if isinstance(body, dict) else {}
 
 
 async def get_realtime(
@@ -59,15 +68,15 @@ async def get_realtime(
     payload = {
         "metrics": [{"name": "activeUsers"}],
     }
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.post(
-            f"{_BASE}/properties/{property_id}:runRealtimeReport",
-            json=payload,
-            headers=_headers(token),
-        )
-        resp.raise_for_status()
-        body = resp.json()
-        return body if isinstance(body, dict) else {}
+    c = _get_client()
+    resp = await c.post(
+        f"{_BASE}/properties/{property_id}:runRealtimeReport",
+        json=payload,
+        headers=_headers(token),
+    )
+    resp.raise_for_status()
+    body = resp.json()
+    return body if isinstance(body, dict) else {}
 
 
 async def get_traffic_sources(

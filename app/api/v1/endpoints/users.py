@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
@@ -12,10 +12,12 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.get("", response_model=list[UserRead])
 async def list_users(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     _user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> list[UserRead]:
-    return await user_service.list_users(db, organization_id=_user["org_id"])
+    return await user_service.list_users(db, organization_id=_user["org_id"], limit=limit, offset=offset)
 
 
 @router.post("", response_model=UserRead, status_code=201)

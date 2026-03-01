@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 class _RedisLike(Protocol):
     def set(self, name: str, value: str, ex: int, nx: bool) -> object: ...
+    def exists(self, name: str) -> int: ...
 
 
 def _redis_url() -> str:
@@ -71,10 +72,7 @@ def consume_oauth_nonce_once(namespace: str, nonce: str, *, max_age_seconds: int
 
     expiry = now + ttl
     with _nonce_lock:
-        # Evict expired nonces
-        for seen_key, seen_expiry in list(_used_nonces.items()):
-            if seen_expiry <= now:
-                _used_nonces.pop(seen_key, None)
+        _prune_expired_locked(now)
         # Cap total size to prevent unbounded growth
         if len(_used_nonces) >= _MAX_NONCE_ITEMS:
             oldest = sorted(_used_nonces.items(), key=lambda item: item[1])[:len(_used_nonces) - _MAX_NONCE_ITEMS + 1]
@@ -84,3 +82,29 @@ def consume_oauth_nonce_once(namespace: str, nonce: str, *, max_age_seconds: int
             return False
         _used_nonces[key] = expiry
         return True
+
+
+def oauth_nonce_seen(namespace: str, nonce: str, *, max_age_seconds: int) -> bool:
+    """Return True when nonce is already marked within the replay window."""
+    ttl = max(max_age_seconds, 1)
+    now = time()
+    key = f"{namespace}:{nonce}"
+    redis_client = _get_redis_client()
+    if redis_client is not None:
+        try:
+            return bool(redis_client.exists(key))
+        except (RuntimeError, OSError, TypeError, ValueError) as exc:
+            logger.warning("OAuth nonce seen-check Redis fallback engaged: %s", type(exc).__name__)
+    elif not settings.DEBUG:
+        logger.error("OAuth nonce protection requires Redis when DEBUG=false")
+        return True
+
+    with _nonce_lock:
+        _prune_expired_locked(now)
+        return key in _used_nonces
+
+
+def _prune_expired_locked(now: float) -> None:
+    for seen_key, seen_expiry in list(_used_nonces.items()):
+        if seen_expiry <= now:
+            _used_nonces.pop(seen_key, None)

@@ -18,6 +18,15 @@ logger = logging.getLogger(__name__)
 _BASE = "https://api.clickup.com/api/v2"
 _TIMEOUT = 20.0
 
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=_TIMEOUT)
+    return _client
+
 
 def _headers(api_token: str) -> dict[str, str]:
     return {"Authorization": api_token, "Content-Type": "application/json"}
@@ -28,28 +37,28 @@ async def get_authorized_user(api_token: str) -> dict[str, Any]:
     Verify the token and return the authorized ClickUp user info.
     Raises httpx.HTTPStatusError on auth failure.
     """
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(f"{_BASE}/user", headers=_headers(api_token))
-        resp.raise_for_status()
-        body = resp.json()
-        if not isinstance(body, dict):
-            return {}
-        user = body.get("user")
-        return user if isinstance(user, dict) else {}
+    client = _get_client()
+    resp = await client.get(f"{_BASE}/user", headers=_headers(api_token))
+    resp.raise_for_status()
+    body = resp.json()
+    if not isinstance(body, dict):
+        return {}
+    user = body.get("user")
+    return user if isinstance(user, dict) else {}
 
 
 async def get_teams(api_token: str) -> list[dict[str, Any]]:
     """Return all workspaces (teams) the token has access to."""
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(f"{_BASE}/team", headers=_headers(api_token))
-        resp.raise_for_status()
-        body = resp.json()
-        if not isinstance(body, dict):
-            return []
-        teams = body.get("teams")
-        if not isinstance(teams, list):
-            return []
-        return [t for t in teams if isinstance(t, dict)]
+    client = _get_client()
+    resp = await client.get(f"{_BASE}/team", headers=_headers(api_token))
+    resp.raise_for_status()
+    body = resp.json()
+    if not isinstance(body, dict):
+        return []
+    teams = body.get("teams")
+    if not isinstance(teams, list):
+        return []
+    return [t for t in teams if isinstance(t, dict)]
 
 
 async def get_tasks(
@@ -74,59 +83,59 @@ async def get_tasks(
     if assignee_ids:
         params["assignees[]"] = assignee_ids
 
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(
-            f"{_BASE}/team/{team_id}/task",
-            headers=_headers(api_token),
-            params=params,
-        )
-        resp.raise_for_status()
-        body = resp.json()
-        if not isinstance(body, dict):
-            return []
-        tasks = body.get("tasks")
-        if not isinstance(tasks, list):
-            return []
-        return [t for t in tasks if isinstance(t, dict)]
+    client = _get_client()
+    resp = await client.get(
+        f"{_BASE}/team/{team_id}/task",
+        headers=_headers(api_token),
+        params=params,
+    )
+    resp.raise_for_status()
+    body = resp.json()
+    if not isinstance(body, dict):
+        return []
+    tasks = body.get("tasks")
+    if not isinstance(tasks, list):
+        return []
+    return [t for t in tasks if isinstance(t, dict)]
 
 
 async def get_spaces(api_token: str, team_id: str) -> list[dict[str, Any]]:
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(f"{_BASE}/team/{team_id}/space", headers=_headers(api_token))
-        resp.raise_for_status()
-        body = resp.json()
-        if not isinstance(body, dict):
-            return []
-        spaces = body.get("spaces")
-        if not isinstance(spaces, list):
-            return []
-        return [s for s in spaces if isinstance(s, dict)]
+    client = _get_client()
+    resp = await client.get(f"{_BASE}/team/{team_id}/space", headers=_headers(api_token))
+    resp.raise_for_status()
+    body = resp.json()
+    if not isinstance(body, dict):
+        return []
+    spaces = body.get("spaces")
+    if not isinstance(spaces, list):
+        return []
+    return [s for s in spaces if isinstance(s, dict)]
 
 
 async def get_folders(api_token: str, space_id: str) -> list[dict[str, Any]]:
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(f"{_BASE}/space/{space_id}/folder", headers=_headers(api_token))
-        resp.raise_for_status()
-        body = resp.json()
-        if not isinstance(body, dict):
-            return []
-        folders = body.get("folders")
-        if not isinstance(folders, list):
-            return []
-        return [f for f in folders if isinstance(f, dict)]
+    client = _get_client()
+    resp = await client.get(f"{_BASE}/space/{space_id}/folder", headers=_headers(api_token))
+    resp.raise_for_status()
+    body = resp.json()
+    if not isinstance(body, dict):
+        return []
+    folders = body.get("folders")
+    if not isinstance(folders, list):
+        return []
+    return [f for f in folders if isinstance(f, dict)]
 
 
 async def get_lists_for_folder(api_token: str, folder_id: str) -> list[dict[str, Any]]:
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        resp = await client.get(f"{_BASE}/folder/{folder_id}/list", headers=_headers(api_token))
-        resp.raise_for_status()
-        body = resp.json()
-        if not isinstance(body, dict):
-            return []
-        lists = body.get("lists")
-        if not isinstance(lists, list):
-            return []
-        return [x for x in lists if isinstance(x, dict)]
+    client = _get_client()
+    resp = await client.get(f"{_BASE}/folder/{folder_id}/list", headers=_headers(api_token))
+    resp.raise_for_status()
+    body = resp.json()
+    if not isinstance(body, dict):
+        return []
+    lists = body.get("lists")
+    if not isinstance(lists, list):
+        return []
+    return [x for x in lists if isinstance(x, dict)]
 
 
 def parse_due_date(task: dict[str, Any]) -> str | None:

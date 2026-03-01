@@ -1,6 +1,7 @@
 """Shared helpers for web routes — authentication, JWT, purpose resolution."""
 
 import asyncio
+import hashlib
 import logging
 from typing import Any
 
@@ -23,6 +24,11 @@ logger = logging.getLogger(__name__)
 # Dummy hash — always run verify_password even when user doesn't exist
 # so response time doesn't reveal valid usernames (timing-safe).
 _DUMMY_HASH = "pbkdf2_sha256$600000$w7gXiGr39+vmLFhN19GF2g==$2Fr/fvindUecCaX736N+jixutyVFXfjWvTN8w18qRAY="
+
+
+def _username_fingerprint(username: str) -> str:
+    normalized = (username or "").strip().lower()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
 
 
 def effective_token_expiry_minutes() -> int:
@@ -88,6 +94,7 @@ async def authenticate_user(
 
     if not valid:
         record_login_failure(client_ip)
+        username_fp = _username_fingerprint(username)
         logger.warning("Failed login from %s on %s", client_ip, endpoint)
         await record_action(
             db,
@@ -96,7 +103,7 @@ async def authenticate_user(
             organization_id=user.organization_id if user else 0,
             entity_type="user",
             entity_id=user.id if user else None,
-            payload_json={"username": username[:200], "ip": client_ip, "endpoint": endpoint},
+            payload_json={"username_fingerprint": username_fp, "ip": client_ip, "endpoint": endpoint},
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

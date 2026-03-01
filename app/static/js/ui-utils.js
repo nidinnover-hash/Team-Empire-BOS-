@@ -172,6 +172,23 @@
     return pair ? decodeURIComponent(pair.split("=").slice(1).join("=") || "") : "";
   }
 
+  // Global error handlers — capture unhandled JS errors for debugging
+  var _errThrottle = 0;
+  window.onerror = function(msg, src, line, col, err) {
+    console.error("[GlobalError]", msg, src + ":" + line + ":" + col, err);
+    if (Date.now() - _errThrottle > 10000 && window.showToast) {
+      _errThrottle = Date.now();
+      window.showToast("A client error occurred. Check console for details.", "error");
+    }
+  };
+  window.addEventListener("unhandledrejection", function(event) {
+    console.error("[UnhandledPromise]", event.reason);
+    if (Date.now() - _errThrottle > 10000 && window.showToast) {
+      _errThrottle = Date.now();
+      window.showToast("An unhandled error occurred. Check console for details.", "error");
+    }
+  });
+
   window.PCUI = {
     mapApiError: mapApiError,
     setButtonLoading: setButtonLoading,

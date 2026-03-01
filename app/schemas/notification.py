@@ -32,3 +32,8 @@ class NotificationCountRead(BaseModel):
 
 class NotificationMarkReadRequest(BaseModel):
     notification_ids: list[int] = Field(default_factory=list, max_length=100)
+
+
+class NotificationMarkReadResponse(BaseModel):
+    ok: bool
+    marked_read: int

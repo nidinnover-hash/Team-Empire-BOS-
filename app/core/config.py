@@ -101,7 +101,7 @@ class Settings(BaseSettings):
     IDEMPOTENCY_MAX_ITEMS: int = 5_000
 
     # App
-    APP_NAME: str = "Nidin Nover"
+    APP_NAME: str = "Nidin BOS"
     APP_MODE: AppMode = "NIDIN_AI"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
@@ -186,6 +186,9 @@ class Settings(BaseSettings):
 
     # Tunable timeouts and limits
     AI_TIMEOUT_SECONDS: float = 20.0       # per-request timeout for AI provider calls
+    AI_RETRY_ATTEMPTS: int = 2             # total attempts per provider call (includes first try)
+    AI_RETRY_BACKOFF_SECONDS: float = 1.5  # exponential backoff base between retries
+    AI_RETRY_MAX_BACKOFF_SECONDS: float = 8.0
     EXPORT_MAX_ROWS: int = 2000            # max rows per table in full data export
     BACKUP_TIMEOUT_SECONDS: int = 300      # pg_dump timeout for DB backup
     LOGIN_FAIL_WINDOW_SECONDS: int = 900   # sliding window for login failure tracking
@@ -196,7 +199,7 @@ class Settings(BaseSettings):
     #   opentelemetry-instrumentation-fastapi opentelemetry-instrumentation-sqlalchemy
     #   opentelemetry-exporter-otlp-proto-http
     OTEL_EXPORTER_OTLP_ENDPOINT: str | None = None
-    OTEL_SERVICE_NAME: str = "nidin-nover-ai"
+    OTEL_SERVICE_NAME: str = "nidin-bos"
 
     # Feature flags — disable expensive features without redeploying
     FEATURE_AI_COMMANDS: bool = True     # AI responses in command input
@@ -429,6 +432,14 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS must be >= 30")
     if s.WEB_API_TOKEN_EXPIRE_MINUTES < 1 or s.WEB_API_TOKEN_EXPIRE_MINUTES > 120:
         issues.append("WEB_API_TOKEN_EXPIRE_MINUTES must be between 1 and 120")
+    if s.AI_RETRY_ATTEMPTS < 1 or s.AI_RETRY_ATTEMPTS > 5:
+        issues.append("AI_RETRY_ATTEMPTS must be between 1 and 5")
+    if s.AI_RETRY_BACKOFF_SECONDS < 0 or s.AI_RETRY_BACKOFF_SECONDS > 30:
+        issues.append("AI_RETRY_BACKOFF_SECONDS must be between 0 and 30")
+    if s.AI_RETRY_MAX_BACKOFF_SECONDS < 0 or s.AI_RETRY_MAX_BACKOFF_SECONDS > 60:
+        issues.append("AI_RETRY_MAX_BACKOFF_SECONDS must be between 0 and 60")
+    if s.AI_RETRY_MAX_BACKOFF_SECONDS < s.AI_RETRY_BACKOFF_SECONDS:
+        issues.append("AI_RETRY_MAX_BACKOFF_SECONDS must be >= AI_RETRY_BACKOFF_SECONDS")
     if not s.DEBUG and not s.COOKIE_SECURE:
         issues.append("COOKIE_SECURE must be true when DEBUG=false (production mode)")
     token_key = (s.TOKEN_ENCRYPTION_KEY or "").strip()

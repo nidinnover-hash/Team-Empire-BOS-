@@ -3,10 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="AI Agent Factory — Nidin Nover AI" />
+  <meta name="description" content="AI Agent Factory — Nidin BOS" />
   <meta name="theme-color" content="#f5f5f7" />
+  <link rel="manifest" href="/static/manifest.json" />
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <title>AI Agent Factory — Nidin Nover</title>
+  <title>AI Agent Factory — Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
   <link rel="stylesheet" href="/static/css/dashboard.css" />
   
@@ -14,62 +15,8 @@
 </head>
 <body>
 
-<nav class="sidebar">
-  <div class="sb-brand">
-    <div class="sb-pulse"></div>
-    <div>
-      <div class="sb-name">Nidin Nover</div>
-      <div class="sb-sub">AI Agent Factory</div>
-      {% if last_synced_at %}
-      <div class="sb-sub" style="font-size:.65rem;opacity:.6" title="{{ last_synced_at.isoformat() }}">
-        Synced {{ last_synced_at.strftime('%H:%M') }}
-      </div>
-      {% endif %}
-    </div>
-  </div>
-  <div class="sb-nav">
-    <a href="/" class="sb-item active">
-      <i data-lucide="layout-dashboard"></i> Dashboard
-    </a>
-    <a href="/web/talk" class="sb-item">
-      <i data-lucide="message-circle"></i> Agent Chat
-    </a>
-    <a href="/web/integrations" class="sb-item">
-      <i data-lucide="plug"></i> Integrations
-    </a>
-    <a href="/web/data-hub" class="sb-item">
-      <i data-lucide="database"></i> Data Hub
-    </a>
-    <a href="/web/observe" class="sb-item">
-      <i data-lucide="activity"></i> Observe
-    </a>
-    <a href="/web/ops-intel" class="sb-item">
-      <i data-lucide="bar-chart-3"></i> Ops Intel
-    </a>
-    <a href="/web/tasks" class="sb-item">
-      <i data-lucide="check-square"></i> Tasks
-    </a>
-    <div class="sb-divider"></div>
-    <a href="/docs" class="sb-item" target="_blank" rel="noopener noreferrer">
-      <i data-lucide="book-open"></i> API Docs
-    </a>
-  </div>
-  <div class="sb-footer">
-    <button class="theme-toggle" type="button">
-      <i data-lucide="moon" class="theme-icon"></i> Toggle theme
-    </button>
-    {% if session_user %}
-    <div class="sb-user">{{ session_user.email }}</div>
-    <button class="sb-item" id="logout-btn" type="button">
-      <i data-lucide="log-out"></i> Sign out
-    </button>
-    {% else %}
-    <a href="/web/login" class="sb-item">
-      <i data-lucide="log-in"></i> Sign in
-    </a>
-    {% endif %}
-  </div>
-</nav>
+{% set active_page = "dashboard" %}
+{% include "partials/sidebar.html" %}
 
 <div class="stats">
   <div class="stat"><span>Commands</span><strong>{{ commands|length }}</strong></div>
@@ -146,7 +93,7 @@
             <button class="role-btn" data-role="Tech PM Agent">Tech PM</button>
             <button class="role-btn" data-role="">Auto</button>
           </div>
-          <textarea id="chat-input" class="chat-textarea" placeholder='Ask your agent anything… e.g. "What should I focus on today?" or "Create task: review contracts"'></textarea>
+          <textarea id="chat-input" class="chat-textarea" placeholder='Ask your agent anything… e.g. "What should I focus on today?" or "Create task: review contracts"' aria-label="Chat message"></textarea>
           <div style="display:flex;justify-content:space-between;align-items:center">
             <span class="chat-hint">Ctrl+Enter to send</span>
             <button id="chat-send" class="chat-send" type="button">Send</button>
@@ -169,7 +116,7 @@
         <button id="inbox-compose-btn" class="btn-run" type="button">+ Compose</button>
       </div>
     </div>
-    <div id="inbox-compose-form" class="compose-area">
+    <div id="inbox-compose-form" class="compose-area" style="display:none">
       <div class="compose-grid">
         <input id="compose-to" type="email" placeholder="To: email@example.com" aria-label="Recipient email" />
         <input id="compose-subject" type="text" placeholder="Subject" aria-label="Email subject" />
@@ -353,7 +300,7 @@
           {% for t in tasks %}
           <div class="item" id="task-item-{{ t.id }}">
             <div style="display:flex;align-items:flex-start;gap:.55rem">
-              <input type="checkbox" class="task-check" {% if t.is_done %}checked{% endif %} onchange="taskToggle({{ t.id }},this.checked)" />
+              <input type="checkbox" class="task-check" data-task-id="{{ t.id }}" {% if t.is_done %}checked{% endif %} aria-label="Toggle task {{ t.title }}" />
               <div style="flex:1;min-width:0">
                 <div class="item-text" style="{% if t.is_done %}text-decoration:line-through;color:var(--text-faint){% endif %}">
                   {{ t.title }}
@@ -373,7 +320,7 @@
         {% endif %}
       </div>
       <div style="padding:.55rem 1.08rem;border-top:1px solid var(--line-soft);display:flex;gap:.5rem">
-        <input id="tasks-new-title" class="mem-input" style="flex:1" placeholder="Quick add task…" />
+        <input id="tasks-new-title" class="mem-input" style="flex:1" placeholder="Quick add task…" aria-label="New task title" />
         <button id="tasks-add-btn" class="btn-run" type="button">+ Add</button>
       </div>
     </div>
@@ -635,9 +582,9 @@
     </div>
     <div id="mem-add-form" class="mem-add-form" style="display:none">
       <div style="display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:.5rem;align-items:end">
-        <input id="mem-input-key" class="mem-input" placeholder="Key (e.g. name)" />
-        <input id="mem-input-cat" class="mem-input" placeholder="Category (optional)" />
-        <input id="mem-input-val" class="mem-input" placeholder="Value" />
+        <input id="mem-input-key" class="mem-input" placeholder="Key (e.g. name)" aria-label="Memory key" />
+        <input id="mem-input-cat" class="mem-input" placeholder="Category (optional)" aria-label="Memory category" />
+        <input id="mem-input-val" class="mem-input" placeholder="Value" aria-label="Memory value" />
         <button id="mem-save-btn" class="btn-run" type="button" style="white-space:nowrap">Save</button>
       </div>
       <div id="mem-form-status" class="run-status" style="margin-top:.4rem"></div>
@@ -660,6 +607,7 @@
 <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/notifications.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/dashboard-page.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
 </body>
 </html>
 

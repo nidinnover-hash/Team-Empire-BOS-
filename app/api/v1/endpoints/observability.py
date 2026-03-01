@@ -10,6 +10,7 @@ from app.models.event import Event
 from app.schemas.observability import (
     AICallLogRead,
     DecisionTraceSummaryRead,
+    EventRead,
     ObservabilitySummaryRead,
     StorageSummaryRead,
 )
@@ -57,7 +58,7 @@ async def storage_summary(
     return StorageSummaryRead.model_validate(payload)
 
 
-@router.get("/events")
+@router.get("/events", response_model=list[EventRead])
 async def list_observability_events(
     event_type: str | None = Query(default=None, max_length=100),
     days: int = Query(default=7, ge=1, le=90),
