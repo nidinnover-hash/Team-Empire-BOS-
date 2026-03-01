@@ -265,6 +265,29 @@ async def list_deliveries(
     return list(result.scalars().all())
 
 
+async def list_all_deliveries(
+    db: AsyncSession,
+    organization_id: int,
+    *,
+    event: str | None = None,
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[WebhookDelivery]:
+    """List deliveries across all endpoints for the org (global history view)."""
+    q = (
+        select(WebhookDelivery)
+        .where(WebhookDelivery.organization_id == organization_id)
+    )
+    if event:
+        q = q.where(WebhookDelivery.event == event)
+    if status:
+        q = q.where(WebhookDelivery.status == status)
+    q = q.order_by(WebhookDelivery.created_at.desc()).offset(offset).limit(limit)
+    result = await db.execute(q)
+    return list(result.scalars().all())
+
+
 async def _prune_old_deliveries(db: AsyncSession, endpoint_id: int) -> None:
     count_result = await db.execute(
         select(func.count(WebhookDelivery.id)).where(
@@ -399,6 +422,30 @@ async def _dispatch_to_endpoint(
     return delivery
 
 
+async def _queue_pending_delivery(
+    db: AsyncSession,
+    endpoint: WebhookEndpoint,
+    event: str,
+    payload: dict[str, Any],
+) -> None:
+    delivery = WebhookDelivery(
+        webhook_endpoint_id=endpoint.id,
+        organization_id=endpoint.organization_id,
+        event=event,
+        payload_json=payload,
+        status="pending",
+        attempt_count=0,
+        max_retries=max(1, int(endpoint.max_retry_attempts)),
+    )
+    db.add(delivery)
+    await db.commit()
+    try:
+        await _prune_old_deliveries(db, endpoint.id)
+        await db.commit()
+    except Exception:
+        logger.debug("Delivery pruning failed", exc_info=True)
+
+
 async def trigger_org_webhooks(
     db: AsyncSession,
     *,
@@ -435,7 +482,10 @@ async def trigger_org_webhooks(
                 if endpoint is None or not endpoint.is_active:
                     return
                 try:
-                    await _dispatch_to_endpoint(task_db, endpoint, event, payload)
+                    if settings.WEBHOOK_ASYNC_DISPATCH_ONLY:
+                        await _queue_pending_delivery(task_db, endpoint, event, payload)
+                    else:
+                        await _dispatch_to_endpoint(task_db, endpoint, event, payload)
                 except Exception:
                     logger.warning(
                         "Webhook dispatch error endpoint_id=%d",
@@ -475,16 +525,19 @@ async def send_test_webhook(
 
 
 async def retry_failed_deliveries(db: AsyncSession) -> int:
-    """Re-dispatch failed deliveries whose next_retry_at has passed.
+    """Re-dispatch queued/failed deliveries that are due.
 
     Returns the number of deliveries retried.
     """
     now = datetime.now(UTC)
     result = await db.execute(
         select(WebhookDelivery).where(
-            WebhookDelivery.status == "failed",
-            WebhookDelivery.next_retry_at.isnot(None),
-            WebhookDelivery.next_retry_at <= now,
+            (WebhookDelivery.status == "pending")
+            | (
+                (WebhookDelivery.status == "failed")
+                & WebhookDelivery.next_retry_at.isnot(None)
+                & (WebhookDelivery.next_retry_at <= now)
+            )
         ).limit(50)
     )
     deliveries = list(result.scalars().all())
@@ -509,6 +562,7 @@ async def retry_failed_deliveries(db: AsyncSession) -> int:
         delivery.attempt_count += 1
         start = time.monotonic()
         try:
+            _validate_url(endpoint.url)
             async with httpx.AsyncClient(timeout=_DISPATCH_TIMEOUT_SECONDS) as client:
                 response = await client.post(
                     endpoint.url,

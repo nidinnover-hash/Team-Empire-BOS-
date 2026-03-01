@@ -6,6 +6,7 @@ from app.api.v1.endpoints import (
     api_keys,
     approvals,
     auth,
+    automation,
     briefing,
     commands,
     contacts,
@@ -32,6 +33,7 @@ from app.api.v1.endpoints import (
     orgs,
     projects,
     search,
+    slack_commands,
     social,
     tasks,
     users,
@@ -75,3 +77,5 @@ api_router.include_router(mfa.router)
 api_router.include_router(webhooks.router)
 api_router.include_router(api_keys.router)
 api_router.include_router(dashboard_kpi.router)
+api_router.include_router(automation.router)
+api_router.include_router(slack_commands.router)

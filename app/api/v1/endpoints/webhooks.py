@@ -163,6 +163,25 @@ async def test_webhook(
     return WebhookTestResponse(**result)
 
 
+@router.get("/deliveries/all", response_model=WebhookDeliveryListResponse)
+async def get_all_deliveries(
+    event: str | None = Query(None, max_length=100),
+    status: str | None = Query(None, max_length=20),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0, le=10_000),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> WebhookDeliveryListResponse:
+    """Global webhook delivery history across all endpoints."""
+    deliveries = await webhook_service.list_all_deliveries(
+        db, int(actor["org_id"]), event=event, status=status, limit=limit, offset=offset
+    )
+    return WebhookDeliveryListResponse(
+        count=len(deliveries),
+        items=[WebhookDeliveryRead.model_validate(d) for d in deliveries],
+    )
+
+
 @router.get(
     "/{endpoint_id}/deliveries", response_model=WebhookDeliveryListResponse
 )
