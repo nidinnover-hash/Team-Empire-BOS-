@@ -1,39 +1,61 @@
-# Frontend Quality Checks
+# Nidin BOS
 
-## Project Customization Guide
-- See [`CUSTOMIZATION_GUIDE.md`](CUSTOMIZATION_GUIDE.md) for a full map of what to edit for config, APIs, layers, compliance, clone training, UI, and DB migrations.
+**Business Operating System** — AI agent platform for autonomous work operations.
 
-## Shared UI utilities
-- `app/static/js/ui-utils.js` centralizes:
-  - API error mapping (`PCUI.mapApiError`)
-  - consistent button loading states (`PCUI.setButtonLoading`)
-  - destructive confirmation wrapper (`PCUI.confirmDanger`)
+Task orchestration, multi-integration management, and intelligent decision support with human-in-the-loop safety controls.
 
-## Visual regression tests
-- Playwright config: `playwright.config.ts`
-- Specs: `tests/ui/*.visual.spec.ts`
-- Run locally:
-  1. Start backend on `http://127.0.0.1:8000`
-  2. Install Playwright test runner in your JS toolchain
-  3. Run `npx playwright test tests/ui --update-snapshots` for first baseline
-  4. Run `npx playwright test tests/ui` in CI for diff detection
+## Stack
 
-## Release gate
-- Linux/macOS/CI: `python scripts/check_ready.py`
-- Windows PowerShell: `.\scripts\check_ready.ps1`
+- **Backend**: Python 3.12+, FastAPI, SQLAlchemy (async), Alembic
+- **Frontend**: Server-rendered Jinja2 templates, vanilla JS, Lucide icons
+- **Database**: PostgreSQL (SQLite for tests)
+- **AI**: OpenAI, Groq, Anthropic (configurable per task)
+- **Deployment**: Ubuntu/Nginx, Gunicorn, systemd
 
-## Launch docs
-- [Launch checklist](docs/LAUNCH_CHECKLIST.md)
-- [Production runbook](docs/PRODUCTION_RUNBOOK.md)
-- [Error handling policy](docs/ERROR_HANDLING_POLICY.md)
-- [7-day improvement roadmap](docs/IMPROVEMENT_ROADMAP_7_DAYS.md)
-- [30-day quality upgrade plan](docs/QUALITY_UPGRADE_PLAN_30_DAYS.md)
-- [Strict quality checklist](docs/QUALITY_CHECKLIST_STRICT.md)
-- One-command local start (PowerShell): `.\start-local.ps1`
-- Owner hardening (PowerShell): `.\.venv\Scripts\python.exe scripts/harden_owner_account.py`
-- Week-1 quality sprint (PowerShell): `.\scripts\quality_week1.ps1`
-- [User onboarding guide](docs/USER_ONBOARDING.md)
-- [7-day training curriculum](docs/TRAINING_CURRICULUM_7_DAYS.md)
-- [Day-1 onboarding run (Feb 27, 2026)](docs/ONBOARDING_DAY1_2026-02-27.md)
-- [Day-1 metrics tracker (Feb 27, 2026)](docs/DAY1_METRICS_2026-02-27.md)
+## Features
 
+- Executive dashboard with real-time KPIs and intelligence layers
+- Talk mode (conversational AI interface with context memory)
+- Task and project management with priority automation
+- Multi-integration hub: Gmail, Google Calendar, ClickUp, Slack, WhatsApp, GitHub, Notion, Stripe, Calendly, HubSpot, ElevenLabs, LinkedIn, Perplexity, Google Analytics
+- Outgoing webhook management with HMAC signing and delivery logs
+- Approval workflows with human-in-the-loop safety gates
+- Compliance engine and CEO action center
+- RBAC with MFA support
+- Data hub (contacts, notes, goals, finance tracking)
+
+## Quick Start
+
+```bash
+# Clone and setup
+git clone https://github.com/nidinnover-hash/Nidin-BOS.git
+cd Nidin-BOS
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env  # fill in secrets
+
+# Run migrations and start
+alembic upgrade head
+uvicorn app.main:app --host 127.0.0.1 --port 8002
+```
+
+## Testing
+
+```bash
+pytest tests/ -q          # 1052+ tests
+ruff check app tests      # lint
+npm run lint:frontend     # JS lint
+```
+
+## Docs
+
+- [Production Runbook](docs/PRODUCTION_RUNBOOK.md)
+- [Launch Checklist](docs/LAUNCH_CHECKLIST.md)
+- [Error Handling Policy](docs/ERROR_HANDLING_POLICY.md)
+- [Customization Guide](CUSTOMIZATION_GUIDE.md)
+
+## Frontend
+
+- Shared UI utilities in `app/static/js/ui-utils.js` (`PCUI.mapApiError`, `PCUI.setButtonLoading`, `PCUI.confirmDanger`)
+- Visual regression tests via Playwright (`tests/ui/*.visual.spec.ts`)
+- Release gate: `python scripts/check_ready.py`

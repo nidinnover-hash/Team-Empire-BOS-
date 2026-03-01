@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 _DISPATCH_TIMEOUT_SECONDS = 10.0
 _MAX_DELIVERIES_PER_ENDPOINT = 100
+_IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +55,7 @@ def _validate_url(url: str) -> None:
         raise ValueError("Webhook URL must use HTTPS in production")
     if not url.startswith(("http://", "https://")):
         raise ValueError("Webhook URL must start with http:// or https://")
-    def _blocked_ip(ip: ipaddress._BaseAddress) -> bool:
+    def _blocked_ip(ip: _IPAddress) -> bool:
         return (
             ip.is_private
             or ip.is_loopback
