@@ -387,8 +387,17 @@ window.showToast = function(msg, type) {
     el.className = "toast " + t;
     el.setAttribute("role", "status");
     el.setAttribute("aria-live", "polite");
-    el.innerHTML = "<span>" + String(msg).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</span>" +
-      '<button aria-label="Dismiss" onclick="this.parentNode.classList.add(\'removing\');setTimeout(function(){this.parentNode.remove()}.bind(this),250)">\u00d7</button>';
+    var text = document.createElement("span");
+    text.textContent = String(msg);
+    var btn = document.createElement("button");
+    btn.setAttribute("aria-label", "Dismiss");
+    btn.textContent = "\u00d7";
+    btn.addEventListener("click", function() {
+      el.classList.add("removing");
+      setTimeout(function() { el.remove(); }, 250);
+    });
+    el.appendChild(text);
+    el.appendChild(btn);
     var c = document.getElementById("toast-container");
     if (c) c.appendChild(el);
     setTimeout(function() {

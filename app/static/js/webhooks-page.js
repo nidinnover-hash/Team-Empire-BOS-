@@ -113,10 +113,14 @@
     if (!window.confirm("Delete this webhook endpoint? This cannot be undone.")) return;
     try {
       var token = await window.__bootPromise;
-      await fetch("/api/v1/webhooks/" + id, {
+      var res = await fetch("/api/v1/webhooks/" + id, {
         method: "DELETE",
         headers: { "Authorization": "Bearer " + token },
       });
+      if (!res.ok) {
+        var body = await res.json().catch(function () { return {}; });
+        throw new Error(body.detail || ("Delete failed (" + res.status + ")"));
+      }
       if (window.showToast) window.showToast("Endpoint deleted.", "ok");
       await loadEndpoints();
     } catch (e) {

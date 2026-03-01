@@ -9,16 +9,23 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # Keep this guard focused on the hardened dashboard surface.
+BASE_JS_GUARDS: list[tuple[str, str]] = [
+    (r"onclick\s*=", "Inline onclick handler found"),
+    (r"onchange\s*=", "Inline onchange handler found"),
+    (r"insertAdjacentHTML\s*\(", "insertAdjacentHTML usage found"),
+]
+
 CHECKS: dict[str, list[tuple[str, str]]] = {
-    "app/static/js/dashboard-page.js": [
-        (r"onclick\s*=", "Inline onclick handler found"),
-        (r"onchange\s*=", "Inline onchange handler found"),
-        (r"insertAdjacentHTML\s*\(", "insertAdjacentHTML usage found"),
+    "app/static/js/dashboard-page.js": BASE_JS_GUARDS + [
         (r"wrap\.innerHTML\s*=", "wrap.innerHTML usage found"),
         (r"events\.map\s*\(", "events.map renderer found; use DOM renderer"),
         (r"entries\.map\s*\(", "entries.map renderer found; use DOM renderer"),
         (r"steps\.map\s*\(", "steps.map renderer found; use DOM renderer"),
     ],
+    "app/static/js/talk-page.js": BASE_JS_GUARDS,
+    "app/static/js/data-hub-page.js": BASE_JS_GUARDS,
+    "app/static/js/webhooks-page.js": BASE_JS_GUARDS,
+    "app/static/js/notifications.js": BASE_JS_GUARDS,
     "app/templates/dashboard.html": [
         (r"onclick\s*=", "Inline onclick handler found in template"),
         (r"onchange\s*=", "Inline onchange handler found in template"),

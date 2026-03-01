@@ -6,6 +6,7 @@ import ipaddress
 import json
 import logging
 import secrets
+import socket
 import time
 from typing import Any
 from urllib.parse import urlsplit
@@ -53,19 +54,44 @@ def _validate_url(url: str) -> None:
         raise ValueError("Webhook URL must use HTTPS in production")
     if not url.startswith(("http://", "https://")):
         raise ValueError("Webhook URL must start with http:// or https://")
+    def _blocked_ip(ip: ipaddress._BaseAddress) -> bool:
+        return (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_unspecified
+            or ip.is_reserved
+        )
+
     try:
         ip = ipaddress.ip_address(host)
-    except ValueError:
+        if _blocked_ip(ip):
+            raise ValueError("Webhook URL host is not allowed")
         return
-    if (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_multicast
-        or ip.is_unspecified
-        or ip.is_reserved
-    ):
-        raise ValueError("Webhook URL host is not allowed")
+    except ValueError:
+        pass
+
+    # SSRF hardening: resolve DNS and reject private/internal targets.
+    try:
+        infos = socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise ValueError("Webhook URL host is not resolvable") from exc
+    resolved_ips: set[str] = set()
+    for info in infos:
+        sockaddr = info[4]
+        if not sockaddr:
+            continue
+        resolved_ips.add(str(sockaddr[0]))
+    if not resolved_ips:
+        raise ValueError("Webhook URL host is not resolvable")
+    for raw_ip in resolved_ips:
+        try:
+            if _blocked_ip(ipaddress.ip_address(raw_ip)):
+                raise ValueError("Webhook URL host is not allowed")
+        except ValueError as exc:
+            # Non-IP values should not occur from getaddrinfo; block defensively.
+            raise ValueError("Webhook URL host is not allowed") from exc
 
 
 def _validate_event_types(event_types: list[str]) -> None:
