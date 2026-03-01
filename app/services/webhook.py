@@ -16,11 +16,12 @@ from urllib.parse import urlsplit
 
 import httpx
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
 from app.core.token_crypto import decrypt_token, encrypt_token
+from app.db.session import AsyncSessionLocal
 from app.models.webhook import WebhookDelivery, WebhookEndpoint
 from app.schemas.webhook import VALID_WEBHOOK_EVENTS
 
@@ -47,12 +48,12 @@ def _compute_signature(secret: str, body: bytes) -> str:
     ).hexdigest()
 
 
-def _validate_url(url: str) -> None:
+async def _validate_url(url: str) -> None:
     parsed = urlsplit(url)
     host = (parsed.hostname or "").strip().lower()
     if not host:
         raise ValueError("Webhook URL must include a hostname")
-    if host in {"localhost", "0.0.0.0"} or host.endswith(".localhost"):
+    if host in {"localhost", "0.0.0.0"} or host.endswith(".localhost"):  # nosec B104
         raise ValueError("Webhook URL host is not allowed")
     if host.endswith(".local") or host.endswith(".internal"):
         raise ValueError("Webhook URL host is not allowed")
@@ -88,7 +89,9 @@ def _validate_url(url: str) -> None:
     if settings.DEBUG:
         return
     try:
-        infos = socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM)
+        infos = await asyncio.to_thread(
+            socket.getaddrinfo, host, parsed.port or 443, type=socket.SOCK_STREAM
+        )
     except socket.gaierror as exc:
         raise ValueError("Webhook URL host is not resolvable") from exc
     resolved_ips: set[str] = set()
@@ -136,6 +139,29 @@ def _calculate_next_retry_at(attempt: int) -> datetime:
     return datetime.now(UTC) + timedelta(seconds=delay + jitter)
 
 
+def classify_delivery_error(error_message: str | None, status_code: int | None = None) -> str:
+    if status_code is not None and status_code >= 500:
+        return "remote_server_error"
+    if status_code is not None and status_code in {401, 403}:
+        return "auth_error"
+    if status_code is not None and status_code in {404, 410}:
+        return "endpoint_not_found"
+    msg = str(error_message or "").lower()
+    if "timeout" in msg:
+        return "timeout"
+    if "ssrf" in msg or "not allowed" in msg:
+        return "policy_blocked"
+    if "connection" in msg or "dns" in msg or "resolv" in msg:
+        return "network_error"
+    return "unknown"
+
+
+def delivery_error_details(error_message: str | None, status_code: int | None = None) -> tuple[str, bool]:
+    category = classify_delivery_error(error_message, status_code)
+    retryable = category in {"timeout", "network_error", "remote_server_error"} or status_code == 429
+    return category, retryable
+
+
 # ---------------------------------------------------------------------------
 # CRUD
 # ---------------------------------------------------------------------------
@@ -151,7 +177,7 @@ async def create_webhook_endpoint(
     max_retry_attempts: int = 5,
 ) -> tuple[WebhookEndpoint, str]:
     """Create a webhook endpoint. Returns (endpoint, plaintext_secret)."""
-    _validate_url(url)
+    await _validate_url(url)
     events = event_types or []
     if events:
         _validate_event_types(events)
@@ -212,7 +238,7 @@ async def update_webhook_endpoint(
     if endpoint is None:
         return None
     if "url" in fields and fields["url"] is not None:
-        _validate_url(fields["url"])
+        await _validate_url(fields["url"])
         endpoint.url = fields["url"]
     if "description" in fields:
         endpoint.description = fields["description"]
@@ -288,6 +314,26 @@ async def list_all_deliveries(
     return list(result.scalars().all())
 
 
+async def list_dead_letter_deliveries(
+    db: AsyncSession,
+    organization_id: int,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[WebhookDelivery]:
+    result = await db.execute(
+        select(WebhookDelivery)
+        .where(
+            WebhookDelivery.organization_id == organization_id,
+            WebhookDelivery.status == "dead_letter",
+        )
+        .order_by(WebhookDelivery.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    return list(result.scalars().all())
+
+
 async def _prune_old_deliveries(db: AsyncSession, endpoint_id: int) -> None:
     count_result = await db.execute(
         select(func.count(WebhookDelivery.id)).where(
@@ -351,7 +397,7 @@ async def _dispatch_to_endpoint(
         start = time.monotonic()
         try:
             # Re-validate target on each attempt to reduce DNS-rebinding SSRF risk.
-            _validate_url(endpoint.url)
+            await _validate_url(endpoint.url)
             async with httpx.AsyncClient(timeout=_DISPATCH_TIMEOUT_SECONDS) as client:
                 response = await client.post(
                     endpoint.url,
@@ -380,12 +426,16 @@ async def _dispatch_to_endpoint(
             elapsed_ms = int((time.monotonic() - start) * 1000)
             delivery.duration_ms = elapsed_ms
             final_error = f"{type(exc).__name__}: {str(exc)[:500]}"
+            error_category, retryable = delivery_error_details(final_error, None)
             logger.warning(
-                "Webhook dispatch failed endpoint_id=%d url=%s event=%s attempt=%d: %s",
+                "Webhook dispatch failed endpoint_id=%d org_id=%d url=%s event=%s attempt=%d category=%s retryable=%s error_type=%s",
                 endpoint.id,
+                endpoint.organization_id,
                 endpoint.url,
                 event,
                 attempt,
+                error_category,
+                retryable,
                 type(exc).__name__,
             )
             if attempt < max_attempts:
@@ -416,10 +466,58 @@ async def _dispatch_to_endpoint(
     try:
         await _prune_old_deliveries(db, endpoint.id)
         await db.commit()
-    except Exception:
-        logger.debug("Delivery pruning failed", exc_info=True)
+    except (SQLAlchemyError, RuntimeError, TypeError, ValueError, AttributeError):
+        logger.debug("Delivery pruning failed endpoint_id=%d", endpoint.id, exc_info=True)
 
     return delivery
+
+
+async def replay_dead_letter_delivery(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    delivery_id: int,
+) -> WebhookDelivery | None:
+    original = (
+        (
+            await db.execute(
+                select(WebhookDelivery).where(
+                    WebhookDelivery.id == delivery_id,
+                    WebhookDelivery.organization_id == organization_id,
+                    WebhookDelivery.status == "dead_letter",
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if original is None:
+        return None
+    endpoint = (
+        (
+            await db.execute(
+                select(WebhookEndpoint).where(
+                    WebhookEndpoint.id == original.webhook_endpoint_id,
+                    WebhookEndpoint.organization_id == organization_id,
+                    WebhookEndpoint.is_active.is_(True),
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if endpoint is None:
+        return None
+    replayed = await _dispatch_to_endpoint(
+        db,
+        endpoint=endpoint,
+        event=original.event,
+        payload=original.payload_json if isinstance(original.payload_json, dict) else {},
+    )
+    original.status = "replayed"
+    await db.commit()
+    await db.refresh(replayed)
+    return replayed
 
 
 async def _queue_pending_delivery(
@@ -442,8 +540,8 @@ async def _queue_pending_delivery(
     try:
         await _prune_old_deliveries(db, endpoint.id)
         await db.commit()
-    except Exception:
-        logger.debug("Delivery pruning failed", exc_info=True)
+    except (SQLAlchemyError, RuntimeError, TypeError, ValueError, AttributeError):
+        logger.debug("Delivery pruning failed endpoint_id=%d", endpoint.id, exc_info=True)
 
 
 async def trigger_org_webhooks(
@@ -476,22 +574,26 @@ async def trigger_org_webhooks(
     semaphore = asyncio.Semaphore(concurrency)
 
     async def _dispatch_one(endpoint_id: int) -> None:
-        async with semaphore:
-            async with AsyncSessionLocal() as task_db:
-                endpoint = await get_webhook_endpoint(task_db, endpoint_id, organization_id)
-                if endpoint is None or not endpoint.is_active:
-                    return
-                try:
-                    if settings.WEBHOOK_ASYNC_DISPATCH_ONLY:
-                        await _queue_pending_delivery(task_db, endpoint, event, payload)
-                    else:
-                        await _dispatch_to_endpoint(task_db, endpoint, event, payload)
-                except Exception:
-                    logger.warning(
-                        "Webhook dispatch error endpoint_id=%d",
-                        endpoint_id,
-                        exc_info=True,
-                    )
+        async with semaphore, AsyncSessionLocal() as task_db:
+            endpoint = await get_webhook_endpoint(task_db, endpoint_id, organization_id)
+            if endpoint is None or not endpoint.is_active:
+                return
+            try:
+                if settings.WEBHOOK_ASYNC_DISPATCH_ONLY:
+                    await _queue_pending_delivery(task_db, endpoint, event, payload)
+                else:
+                    await _dispatch_to_endpoint(task_db, endpoint, event, payload)
+            except Exception as exc:
+                error_category, retryable = delivery_error_details(str(exc), None)
+                logger.warning(
+                    "Webhook dispatch error endpoint_id=%d org_id=%d event=%s category=%s retryable=%s error_type=%s",
+                    endpoint_id,
+                    organization_id,
+                    event,
+                    error_category,
+                    retryable,
+                    type(exc).__name__,
+                )
 
     await asyncio.gather(*(_dispatch_one(endpoint_id) for endpoint_id in eligible_ids))
 
@@ -562,7 +664,7 @@ async def retry_failed_deliveries(db: AsyncSession) -> int:
         delivery.attempt_count += 1
         start = time.monotonic()
         try:
-            _validate_url(endpoint.url)
+            await _validate_url(endpoint.url)
             async with httpx.AsyncClient(timeout=_DISPATCH_TIMEOUT_SECONDS) as client:
                 response = await client.post(
                     endpoint.url,
@@ -597,9 +699,16 @@ async def retry_failed_deliveries(db: AsyncSession) -> int:
                 delivery.next_retry_at = None
             else:
                 delivery.next_retry_at = _calculate_next_retry_at(delivery.attempt_count)
+            error_category, retryable = delivery_error_details(delivery.error_message, None)
             logger.warning(
-                "Webhook retry failed delivery_id=%d attempt=%d: %s",
-                delivery.id, delivery.attempt_count, type(exc).__name__,
+                "Webhook retry failed delivery_id=%d endpoint_id=%d org_id=%d attempt=%d category=%s retryable=%s error_type=%s",
+                delivery.id,
+                delivery.webhook_endpoint_id,
+                delivery.organization_id,
+                delivery.attempt_count,
+                error_category,
+                retryable,
+                type(exc).__name__,
             )
 
         await db.commit()

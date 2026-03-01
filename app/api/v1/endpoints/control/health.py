@@ -1,6 +1,7 @@
 """Health, system monitoring, storage metrics, and security posture endpoints."""
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -15,21 +16,30 @@ from app.core.rbac import require_roles
 from app.core.request_context import get_current_request_id
 from app.logs.audit import record_action
 from app.models.approval import Approval
+from app.models.ceo_control import SchedulerJobRun
 from app.models.event import Event
 from app.models.integration import Integration
 from app.models.task import Task
+from app.models.webhook import WebhookDelivery
 from app.schemas.control import (
+    BackupCreateRead,
+    BackupListRead,
+    CronHealthRead,
     DataQualityRead,
     HealthSummaryRead,
     IntegrationHealthRead,
     ManagerSLARead,
+    SchedulerSLORead,
     SecurityPostureRead,
     StorageMetricsRead,
     SystemHealthDependency,
     SystemHealthRead,
+    TrendMetricsRead,
+    WebhookReliabilityRead,
 )
 from app.services import clone_control, trend_telemetry
 from app.services import memory as memory_service
+from app.services import webhook as webhook_service
 from app.services.ai_router import get_recent_calls_summary
 
 from ._shared import (
@@ -40,6 +50,7 @@ from ._shared import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/health-summary", response_model=HealthSummaryRead)
@@ -161,8 +172,9 @@ async def system_health(
         await db.execute(text("SELECT 1"))
         dependencies.append(SystemHealthDependency(name="database", status="ok", detail="reachable"))
     except (SQLAlchemyError, RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
+        logger.warning("health probe: database down: %s", type(exc).__name__, exc_info=True)
         dependencies.append(
-            SystemHealthDependency(name="database", status="down", detail=f"probe failed: {type(exc).__name__}")
+            SystemHealthDependency(name="database", status="down", detail="probe failed")
         )
 
     # Redis (optional)
@@ -186,8 +198,9 @@ async def system_health(
                 )
             )
         except (RuntimeError, ValueError, TypeError, TimeoutError, ConnectionError, OSError, ImportError, AttributeError) as exc:
+            logger.warning("health probe: redis down: %s", type(exc).__name__, exc_info=True)
             dependencies.append(
-                SystemHealthDependency(name="redis", status="down", detail=f"probe failed: {type(exc).__name__}")
+                SystemHealthDependency(name="redis", status="down", detail="probe failed")
             )
 
     # Vector store (this project uses DB-backed storage by default)
@@ -306,12 +319,128 @@ async def storage_metrics(
     )
 
 
-@router.get("/trend/metrics")
+@router.get("/trend/metrics", response_model=TrendMetricsRead)
 async def trend_metrics(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
-) -> dict[str, float]:
-    return await trend_telemetry.get_trend_metrics(db, org_id=int(actor["org_id"]))
+) -> TrendMetricsRead:
+    data = await trend_telemetry.get_trend_metrics(db, org_id=int(actor["org_id"]))
+    return TrendMetricsRead(**data)
+
+
+@router.get("/scheduler/slo", response_model=SchedulerSLORead)
+async def scheduler_slo(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> SchedulerSLORead:
+    org_id = int(actor["org_id"])
+    now = datetime.now(UTC)
+    rows = (
+        (
+            await db.execute(
+                select(SchedulerJobRun).where(
+                    SchedulerJobRun.organization_id == org_id,
+                    SchedulerJobRun.started_at >= (now - timedelta(hours=24)),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    total = len(rows)
+    ok = sum(1 for row in rows if str(row.status) == "ok")
+    success_rate = round((ok / total), 4) if total else 1.0
+    durations = sorted(int(row.duration_ms or 0) for row in rows if row.duration_ms is not None)
+    p95_ms = durations[min(len(durations) - 1, int(0.95 * (len(durations) - 1)))] if durations else 0
+    stale_runs = sum(
+        1
+        for row in rows
+        if row.finished_at is None and (now - row.started_at).total_seconds() > 1800
+    )
+    error_type_counts: dict[str, int] = {}
+    for row in rows:
+        if str(row.status) == "ok":
+            continue
+        raw_error = str(row.error or "").strip()
+        error_type = raw_error.split(":", 1)[0].strip() if raw_error else "unknown"
+        if not error_type:
+            error_type = "unknown"
+        error_type_counts[error_type] = int(error_type_counts.get(error_type, 0)) + 1
+    breached = bool(success_rate < 0.97 or p95_ms > 30_000 or stale_runs > 0)
+    return SchedulerSLORead(
+        window_hours=24,
+        total_runs=total,
+        success_rate=success_rate,
+        p95_duration_ms=p95_ms,
+        stale_runs=stale_runs,
+        slo_breached=breached,
+        error_type_counts=error_type_counts,
+    )
+
+
+@router.get("/webhook/reliability", response_model=WebhookReliabilityRead)
+async def webhook_reliability(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> WebhookReliabilityRead:
+    org_id = int(actor["org_id"])
+    now = datetime.now(UTC)
+    window_start = now - timedelta(hours=24)
+    rows = (
+        (
+            await db.execute(
+                select(WebhookDelivery).where(
+                    WebhookDelivery.organization_id == org_id,
+                    WebhookDelivery.created_at >= window_start,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    rows_by_endpoint: dict[int, list[WebhookDelivery]] = {}
+    for row in rows:
+        endpoint_id = int(getattr(row, "webhook_endpoint_id", 0) or 0)
+        rows_by_endpoint.setdefault(endpoint_id, []).append(row)
+    for endpoint_rows in rows_by_endpoint.values():
+        endpoint_rows.sort(key=lambda item: item.created_at)
+
+    replay_success_count = 0
+    for row in rows:
+        if str(row.status) != "replayed":
+            continue
+        endpoint_rows = rows_by_endpoint.get(int(row.webhook_endpoint_id), [])
+        replay_target = next(
+            (
+                candidate
+                for candidate in endpoint_rows
+                if candidate.created_at > row.created_at and candidate.event == row.event and str(candidate.status) == "success"
+            ),
+            None,
+        )
+        if replay_target is not None:
+            replay_success_count += 1
+
+    error_category_counts: dict[str, int] = {}
+    for row in rows:
+        if str(row.status) not in {"failed", "dead_letter"}:
+            continue
+        category = webhook_service.classify_delivery_error(
+            row.error_message,
+            int(row.response_status_code) if row.response_status_code is not None else None,
+        )
+        error_category_counts[category] = int(error_category_counts.get(category, 0)) + 1
+
+    return WebhookReliabilityRead(
+        window_hours=24,
+        total_deliveries=len(rows),
+        success_count=sum(1 for row in rows if str(row.status) == "success"),
+        failed_count=sum(1 for row in rows if str(row.status) == "failed"),
+        dead_letter_count=sum(1 for row in rows if str(row.status) == "dead_letter"),
+        replayed_original_count=sum(1 for row in rows if str(row.status) == "replayed"),
+        replay_success_count=replay_success_count,
+        error_category_counts=error_category_counts,
+    )
 
 
 @router.get("/security/posture", response_model=SecurityPostureRead)
@@ -356,36 +485,40 @@ async def manager_sla(
 # ── Database backup ──────────────────────────────────────────────────────────
 
 
-@router.post("/backup")
+@router.post("/backup", response_model=BackupCreateRead)
 async def create_backup(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
-) -> dict:
+) -> BackupCreateRead:
     """Create a database backup (SQLite file copy or pg_dump)."""
     from app.services.db_backup import create_backup as run_backup
 
-    return await run_backup()
+    data = await run_backup()
+    return BackupCreateRead(**data)
 
 
-@router.get("/backup/list")
+@router.get("/backup/list", response_model=BackupListRead)
 async def list_backups(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
-) -> dict:
+) -> BackupListRead:
     """List existing database backups."""
+    import asyncio
+
     from app.services.db_backup import list_backups as get_backups
 
-    items = get_backups()
-    return {"count": len(items), "backups": items}
+    items = await asyncio.to_thread(get_backups)
+    return BackupListRead(count=len(items), backups=items)
 
 
 # ── Cron dead-man switch ─────────────────────────────────────────────────────
 
 
-@router.get("/cron/health")
+@router.get("/cron/health", response_model=CronHealthRead)
 async def cron_health(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
-) -> dict:
+) -> CronHealthRead:
     """Dead-man switch: detect silent or failing cron jobs."""
     from app.services.cron_monitor import get_cron_health
 
-    return await get_cron_health(db, org_id=int(actor["org_id"]))
+    data = await get_cron_health(db, org_id=int(actor["org_id"]))
+    return CronHealthRead(**data)

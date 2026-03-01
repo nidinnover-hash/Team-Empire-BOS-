@@ -216,6 +216,48 @@ class SecurityPostureRead(BaseModel):
     open_issues: list[str]
 
 
+class TrendMetricsRead(BaseModel):
+    """Trend telemetry counter values."""
+    model_config = {"extra": "allow"}
+
+
+class SchedulerSLORead(BaseModel):
+    window_hours: int
+    total_runs: int
+    success_rate: float
+    p95_duration_ms: int
+    stale_runs: int
+    slo_breached: bool
+    error_type_counts: dict[str, int] = Field(default_factory=dict)
+
+
+class WebhookReliabilityRead(BaseModel):
+    window_hours: int
+    total_deliveries: int
+    success_count: int
+    failed_count: int
+    dead_letter_count: int
+    replayed_original_count: int
+    replay_success_count: int
+    error_category_counts: dict[str, int] = Field(default_factory=dict)
+
+
+class BackupCreateRead(BaseModel):
+    ok: bool = True
+    path: str | None = None
+    size_bytes: int | None = None
+    error: str | None = None
+
+
+class BackupListRead(BaseModel):
+    count: int
+    backups: list[dict]
+
+
+class CronHealthRead(BaseModel):
+    model_config = {"extra": "allow"}
+
+
 class ExecutePlanRequest(BaseModel):
     challenge: str | None = None
     week_start_date: datetime | None = None

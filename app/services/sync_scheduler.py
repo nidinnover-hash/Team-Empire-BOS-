@@ -28,14 +28,17 @@ from app.jobs.maintenance import (
     cleanup_old_chat_messages,
     cleanup_old_job_runs_and_snapshots,
     cleanup_old_logs,
+    cleanup_old_trend_events,
 )
 from app.models.ceo_control import SchedulerJobRun
+from app.services import trend_telemetry
 
 # Backward-compatible aliases so existing code and tests keep working
 _auto_reject_expired_approvals = auto_reject_expired_approvals
 _cleanup_old_chat_messages = cleanup_old_chat_messages
 _cleanup_old_logs = cleanup_old_logs
 _cleanup_old_job_runs_and_snapshots = cleanup_old_job_runs_and_snapshots
+_cleanup_old_trend_events = cleanup_old_trend_events
 
 logger = logging.getLogger(__name__)
 _SYNC_RETRY_POLICY = RetryPolicy(
@@ -56,6 +59,23 @@ _CIRCUIT_BREAKER_COOLDOWN_MINUTES = 60
 # Per-org daily dedup: prevents running the same daily job twice in one day.
 _last_ceo_summary_date_by_org: dict[int, str] = {}
 _last_pending_digest_date_by_org: dict[int, str] = {}
+_last_scheduler_slo_alert_key_by_org: dict[int, str] = {}
+
+
+def _scheduler_error_category(exc: Exception) -> str:
+    if isinstance(exc, SQLAlchemyError):
+        return "database_error"
+    if isinstance(exc, IntegrationSyncError):
+        return "integration_sync_error"
+    if isinstance(exc, TimeoutError | ConnectionError):
+        return "network_error"
+    if isinstance(exc, ImportError | AttributeError):
+        return "dependency_error"
+    if isinstance(exc, ValueError | TypeError):
+        return "validation_error"
+    if isinstance(exc, OSError):
+        return "os_error"
+    return "runtime_error"
 
 
 def get_last_synced_for_org(org_id: int) -> datetime | None:
@@ -681,6 +701,9 @@ async def replay_job_for_org(db: AsyncSession, org_id: int, job_name: str) -> di
         elif job_name == "full_sync":
             await _run_integrations(db, org_id)
             result = {"ok": True}
+        elif job_name == "cleanup_trend_events":
+            await _cleanup_old_trend_events(db, org_id)
+            result = {"ok": True}
         else:
             raise ValueError(f"Unsupported job_name: {job_name}")
 
@@ -1022,7 +1045,13 @@ async def _check_goal_deadlines(db: AsyncSession, org_id: int) -> None:
     except asyncio.CancelledError:
         raise
     except Exception as exc:
-        logger.warning("Goal deadline check failed org=%d: %s", org_id, exc)
+        logger.warning(
+            "Goal deadline check failed org=%d category=%s error_type=%s",
+            org_id,
+            _scheduler_error_category(exc),
+            type(exc).__name__,
+            exc_info=True,
+        )
         await _record_job_run(
             db, org_id=org_id, job_name="goal_deadline_check", status="error",
             started_at=started, finished_at=datetime.now(UTC),
@@ -1064,9 +1093,87 @@ async def _check_token_health_job(db: AsyncSession, org_id: int) -> None:
     except asyncio.CancelledError:
         raise
     except Exception as exc:
-        logger.warning("Token health check failed org=%d: %s", org_id, exc)
+        logger.warning(
+            "Token health check failed org=%d category=%s error_type=%s",
+            org_id,
+            _scheduler_error_category(exc),
+            type(exc).__name__,
+            exc_info=True,
+        )
         await _record_job_run(
             db, org_id=org_id, job_name="token_health_check", status="error",
+            started_at=started, finished_at=datetime.now(UTC),
+            error=f"{type(exc).__name__}: {str(exc)[:200]}",
+        )
+        await db.commit()
+
+
+async def _snapshot_org_trends_job(db: AsyncSession, org_id: int) -> None:
+    """Capture shared trend snapshots on scheduler cadence (hourly/daily via internal throttles)."""
+    started = datetime.now(UTC)
+    try:
+        result = await trend_telemetry.snapshot_org_trends(db, org_id)
+        details: dict[str, object] = {
+            "written": int(result.get("written", 0)),
+            "skipped": int(result.get("skipped", 0)),
+        }
+        await _record_job_run(
+            db,
+            org_id=org_id,
+            job_name="trend_snapshot",
+            status="ok",
+            started_at=started,
+            finished_at=datetime.now(UTC),
+            details=details,
+        )
+        await db.commit()
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning(
+            "Trend snapshot failed org=%d category=%s error_type=%s",
+            org_id,
+            _scheduler_error_category(exc),
+            type(exc).__name__,
+            exc_info=True,
+        )
+        await _record_job_run(
+            db,
+            org_id=org_id,
+            job_name="trend_snapshot",
+            status="error",
+            started_at=started,
+            finished_at=datetime.now(UTC),
+            error=f"{type(exc).__name__}: {str(exc)[:200]}",
+        )
+        await db.commit()
+
+
+async def _snapshot_layer_scores_job(db: AsyncSession, org_id: int) -> None:
+    """Snapshot all layer scores for historical trend tracking (daily dedup)."""
+    started = datetime.now(UTC)
+    try:
+        from app.services.layer_snapshots import snapshot_all_layers
+
+        result = await snapshot_all_layers(db, org_id)
+        await _record_job_run(
+            db, org_id=org_id, job_name="layer_snapshot", status="ok",
+            started_at=started, finished_at=datetime.now(UTC),
+            details=result,
+        )
+        await db.commit()
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning(
+            "Layer snapshot failed org=%d category=%s error_type=%s",
+            org_id,
+            _scheduler_error_category(exc),
+            type(exc).__name__,
+            exc_info=True,
+        )
+        await _record_job_run(
+            db, org_id=org_id, job_name="layer_snapshot", status="error",
             started_at=started, finished_at=datetime.now(UTC),
             error=f"{type(exc).__name__}: {str(exc)[:200]}",
         )
@@ -1091,7 +1198,12 @@ async def _maybe_run_daily_backup() -> None:
         else:
             logger.warning("Daily backup failed: %s", result.get("error"))
     except Exception as exc:
-        logger.warning("Daily backup error: %s", type(exc).__name__)
+        logger.warning(
+            "Daily backup failed category=%s error_type=%s",
+            _scheduler_error_category(exc),
+            type(exc).__name__,
+            exc_info=True,
+        )
 
 
 async def _retry_webhook_deliveries(db: AsyncSession) -> None:
@@ -1102,7 +1214,64 @@ async def _retry_webhook_deliveries(db: AsyncSession) -> None:
         if retried:
             logger.info("Retried %d failed webhook deliveries", retried)
     except Exception as exc:
-        logger.warning("Webhook retry error: %s", type(exc).__name__)
+        logger.warning(
+            "Webhook retry failed category=%s error_type=%s",
+            _scheduler_error_category(exc),
+            type(exc).__name__,
+            exc_info=True,
+        )
+
+
+async def _monitor_scheduler_slos(db: AsyncSession, org_id: int) -> None:
+    """Evaluate lightweight scheduler SLOs and emit at most one alert per org/day."""
+    from app.services.notification import create_notification
+
+    now = datetime.now(UTC)
+    day_key = now.strftime("%Y-%m-%d")
+    if _last_scheduler_slo_alert_key_by_org.get(org_id) == day_key:
+        return
+    window_start = now - timedelta(hours=24)
+    rows = (
+        (
+            await db.execute(
+                select(SchedulerJobRun).where(
+                    SchedulerJobRun.organization_id == org_id,
+                    SchedulerJobRun.started_at >= window_start,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return
+    total = len(rows)
+    success = sum(1 for row in rows if str(row.status) == "ok")
+    success_rate = float(success / total) if total > 0 else 1.0
+    durations = sorted(int(row.duration_ms or 0) for row in rows if row.duration_ms is not None)
+    p95_ms = durations[min(len(durations) - 1, int(0.95 * (len(durations) - 1)))] if durations else 0
+    stale_runs = sum(1 for row in rows if row.finished_at is None and (now - row.started_at).total_seconds() > 1800)
+    breaches: list[str] = []
+    if success_rate < 0.97:
+        breaches.append(f"success_rate={success_rate:.3f}<0.97")
+    if p95_ms > 30_000:
+        breaches.append(f"p95_duration_ms={p95_ms}>30000")
+    if stale_runs > 0:
+        breaches.append(f"stale_runs={stale_runs}>0")
+    if not breaches:
+        return
+    await create_notification(
+        db,
+        organization_id=org_id,
+        type="scheduler_slo_breach",
+        severity="warning",
+        title="Scheduler SLO breach detected",
+        message="; ".join(breaches),
+        source="sync_scheduler",
+        entity_type="scheduler",
+    )
+    _last_scheduler_slo_alert_key_by_org[org_id] = day_key
+    await db.commit()
 
 
 async def _scheduler_loop(interval_minutes: int) -> None:
@@ -1129,7 +1298,11 @@ async def _scheduler_loop(interval_minutes: int) -> None:
                         await _cleanup_old_logs(db, org.id)
                         await _cleanup_old_job_runs_and_snapshots(db, org.id)
                         await _auto_reject_expired_approvals(db, org.id)
+                        await _snapshot_org_trends_job(db, org.id)
+                        await _cleanup_old_trend_events(db, org.id)
+                        await _snapshot_layer_scores_job(db, org.id)
                         await _retry_webhook_deliveries(db)
+                        await _monitor_scheduler_slos(db, org.id)
                         _last_synced[org.id] = datetime.now(UTC)
                 except asyncio.CancelledError:
                     raise
