@@ -74,8 +74,11 @@ class NotionSync(IntegrationSync):
                 continue
             title = _extract_title(page)
             try:
+                async def _get_page_content(pid: str = page_id) -> list[dict[str, Any]]:
+                    return await notion_tool.get_page_content(token, pid, page_size=50)
+
                 blocks = await run_with_retry(
-                    lambda pid=page_id: notion_tool.get_page_content(token, pid, page_size=50),
+                    _get_page_content,
                 )
                 content = _blocks_to_text(blocks)
             except (RuntimeError, ValueError, TypeError, TimeoutError):
