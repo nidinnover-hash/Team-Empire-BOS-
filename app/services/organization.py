@@ -24,8 +24,23 @@ async def list_organizations(db: AsyncSession, limit: int = 200) -> list[Organiz
     return list(result.scalars().all())
 
 
-async def create_organization(db: AsyncSession, name: str, slug: str) -> Organization:
-    org = Organization(name=name, slug=slug, policy_json=json.dumps(default_policy_config()))
+async def create_organization(
+    db: AsyncSession,
+    name: str,
+    slug: str,
+    *,
+    parent_organization_id: int | None = None,
+    country_code: str | None = None,
+    branch_label: str | None = None,
+) -> Organization:
+    org = Organization(
+        name=name,
+        slug=slug,
+        parent_organization_id=parent_organization_id,
+        country_code=(country_code or "").upper() or None,
+        branch_label=branch_label,
+        policy_json=json.dumps(default_policy_config()),
+    )
     db.add(org)
     await db.commit()
     await db.refresh(org)
@@ -37,6 +52,9 @@ async def update_organization(
     organization_id: int,
     name: str | None = None,
     slug: str | None = None,
+    parent_organization_id: int | None = None,
+    country_code: str | None = None,
+    branch_label: str | None = None,
 ) -> Organization | None:
     org = await get_organization_by_id(db, organization_id)
     if org is None:
@@ -45,6 +63,12 @@ async def update_organization(
         org.name = name
     if slug is not None:
         org.slug = slug
+    if parent_organization_id is not None:
+        org.parent_organization_id = parent_organization_id
+    if country_code is not None:
+        org.country_code = country_code.upper()
+    if branch_label is not None:
+        org.branch_label = branch_label
     await db.commit()
     await db.refresh(org)
     return org
@@ -87,6 +111,9 @@ def default_policy_config() -> dict[str, Any]:
             "kill_switch": False,
             "pilot_org_ids": [],
             "max_actions_per_day": 250,
+        },
+        "feature_flags": {
+            "trend_snapshots_enabled": True,
         },
     }
 

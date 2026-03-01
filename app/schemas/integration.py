@@ -221,6 +221,17 @@ class IntegrationSetupGuideRead(BaseModel):
     items: list[IntegrationSetupItem]
 
 
+class SecurityCenterTrendPointRead(BaseModel):
+    timestamp: datetime
+    risk_score: int
+    risk_level: str
+
+
+class SecurityCenterTrendRead(BaseModel):
+    points: list[SecurityCenterTrendPointRead]
+    next_cursor: str | None = None
+
+
 # ── Perplexity (web search) ─────────────────────────────────────────────
 
 class PerplexityConnectRequest(BaseModel):

@@ -2,7 +2,7 @@ import logging
 from datetime import UTC, datetime
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.endpoints import (
@@ -37,8 +37,11 @@ from app.schemas.integration import (
     IntegrationRead,
     IntegrationSetupGuideRead,
     IntegrationTestResult,
+    SecurityCenterTrendPointRead,
+    SecurityCenterTrendRead,
 )
 from app.services import integration as integration_service
+from app.services import trend_telemetry
 from app.services.token_health import get_rotation_report, rotate_oauth_token
 from app.tools.google_calendar import (
     list_events_for_day,
@@ -194,6 +197,60 @@ async def token_rotate(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> dict[str, object]:
     return await rotate_oauth_token(db, int(actor["org_id"]), integration_type)
+
+
+@router.get("/security-center")
+async def security_center(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict[str, object]:
+    org_id = int(actor["org_id"])
+    payload = await trend_telemetry.get_security_center(db, org_id)
+    trend_payload = trend_telemetry.compute_security_risk_payload(payload)
+    await trend_telemetry.record_trend_event(
+        db,
+        org_id=org_id,
+        event_type=trend_telemetry.SECURITY_EVENT,
+        payload_json=trend_payload,
+        actor_user_id=int(actor["id"]),
+        entity_type="integration_security",
+        throttle_minutes=15,
+    )
+    return payload
+
+
+@router.get("/security-center/trend", response_model=SecurityCenterTrendRead)
+async def security_center_trend(
+    limit: int = Query(14, ge=2, le=60),
+    cursor: str | None = Query(None, max_length=128),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> SecurityCenterTrendRead:
+    rows, next_cursor = await trend_telemetry.read_trend_events(
+        db,
+        org_id=int(actor["org_id"]),
+        event_type=trend_telemetry.SECURITY_EVENT,
+        limit=limit,
+        cursor=cursor,
+    )
+    points: list[SecurityCenterTrendPointRead] = []
+    for row in rows:
+        payload = row.payload_json if isinstance(row.payload_json, dict) else {}
+        level = str(payload.get("risk_level", "low")).lower()
+        if level not in {"low", "medium", "high"}:
+            level = "low"
+        try:
+            score = int(payload.get("risk_score", 0))
+        except (TypeError, ValueError):
+            score = 0
+        points.append(
+            SecurityCenterTrendPointRead(
+                timestamp=row.created_at,
+                risk_score=score,
+                risk_level=level,
+            )
+        )
+    return SecurityCenterTrendRead(points=points, next_cursor=next_cursor)
 
 
 @router.post("/{integration_id}/disconnect", response_model=IntegrationRead)

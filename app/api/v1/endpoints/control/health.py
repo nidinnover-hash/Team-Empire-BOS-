@@ -28,7 +28,7 @@ from app.schemas.control import (
     SystemHealthDependency,
     SystemHealthRead,
 )
-from app.services import clone_control
+from app.services import clone_control, trend_telemetry
 from app.services import memory as memory_service
 from app.services.ai_router import get_recent_calls_summary
 
@@ -304,6 +304,14 @@ async def storage_metrics(
             "window_days": _FEEDBACK_METRICS_WINDOW_DAYS,
         },
     )
+
+
+@router.get("/trend/metrics")
+async def trend_metrics(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> dict[str, float]:
+    return await trend_telemetry.get_trend_metrics(db, org_id=int(actor["org_id"]))
 
 
 @router.get("/security/posture", response_model=SecurityPostureRead)
