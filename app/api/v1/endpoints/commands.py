@@ -16,7 +16,13 @@ async def create_command(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> CommandRead:
     """Log a new command and its AI response."""
-    return await command_service.create_command(db, data, organization_id=actor["org_id"])
+    return await command_service.create_command(
+        db,
+        data,
+        organization_id=actor["org_id"],
+        actor_user_id=int(actor["id"]),
+        actor_role=str(actor["role"]),
+    )
 
 
 @router.get("", response_model=list[CommandRead])

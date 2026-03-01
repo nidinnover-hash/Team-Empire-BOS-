@@ -74,6 +74,7 @@ async def run_daily_run_workflow(
     db: AsyncSession,
     org_id: int,
     actor_user_id: int,
+    actor_role: str | None = None,
     draft_email_limit: int = 5,
     team: str | None = None,
 ) -> dict:
@@ -115,6 +116,7 @@ async def run_daily_run_workflow(
             db=db,
             org_id=org_id,
             actor_user_id=actor_user_id,
+            actor_role=actor_role,
             team=team,
         )
 
@@ -408,6 +410,7 @@ async def daily_run_ops(
         db=db,
         org_id=org_id,
         actor_user_id=int(user["id"]),
+        actor_role=str(user["role"]),
         draft_email_limit=draft_email_limit,
         team=team,
     )
@@ -429,11 +432,6 @@ async def list_daily_runs_ops(
         run_date=run_date,
         limit=limit,
     )
-
-
-# ---- Employee Mapping Endpoints ----
-
-
 @router.post("/employees", response_model=EmployeeRead, status_code=201)
 async def create_employee(
     data: EmployeeCreate,
@@ -458,11 +456,13 @@ async def create_employee(
 @router.get("/employees", response_model=list[EmployeeRead])
 async def list_employees(
     active_only: bool = Query(True),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> list[EmployeeRead]:
     return await employee_service.list_employees(
-        db=db, org_id=int(user["org_id"]), active_only=active_only,
+        db=db, org_id=int(user["org_id"]), active_only=active_only, skip=skip, limit=limit,
     )
 
 
@@ -504,9 +504,27 @@ async def update_employee(
     return emp
 
 
-# ---- Signal Ingestion Endpoints (draft-only, observer mode) ----
-
-
+@router.post("/employees/{employee_id}/offboard", response_model=EmployeeRead)
+async def offboard_employee(
+    employee_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> EmployeeRead:
+    emp = await employee_service.offboard_employee(
+        db=db, org_id=int(user["org_id"]), employee_id=employee_id,
+    )
+    if emp is None:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    await record_action(
+        db,
+        event_type="employee_offboarded",
+        actor_user_id=user["id"],
+        organization_id=user["org_id"],
+        entity_type="employee",
+        entity_id=emp.id,
+        payload_json={"name": emp.name, "email": emp.email},
+    )
+    return emp
 @router.post("/sync/clickup", response_model=SyncResultRead)
 async def sync_clickup_signals(
     db: AsyncSession = Depends(get_db),
@@ -588,11 +606,6 @@ async def sync_gmail_signals(
         payload_json={"synced": result.get("synced", 0), "skipped": result.get("skipped_non_work", 0)},
     )
     return result
-
-
-# ---- Metrics Computation ----
-
-
 @router.post("/compute/weekly-metrics", response_model=WeeklyMetricsResponse)
 async def compute_weekly_metrics(
     weeks: int = Query(1, ge=1, le=12),
@@ -612,11 +625,6 @@ async def compute_weekly_metrics(
         payload_json=result,
     )
     return result
-
-
-# ---- Weekly Reports ----
-
-
 @router.get("/reports/weekly", response_model=WeeklyReportRead | None)
 async def get_weekly_report(
     week_start: date = Query(...),
@@ -647,11 +655,6 @@ async def generate_weekly_report(
         payload_json={"week_start": str(week_start), "report_type": report_type},
     )
     return report
-
-
-# ---- Decision Log ----
-
-
 @router.post("/decision-log", response_model=DecisionLogRead, status_code=201)
 async def create_decision(
     data: DecisionLogCreate,
@@ -683,11 +686,6 @@ async def list_decision_log(
     return await policy_service.list_decisions(
         db, int(user["org_id"]), start_date=start_date, end_date=end_date, limit=limit,
     )
-
-
-# ---- Policy Engine ----
-
-
 @router.post("/policy/generate", response_model=list[PolicyRuleRead])
 async def generate_policies(
     db: AsyncSession = Depends(get_db),
@@ -738,11 +736,6 @@ async def activate_policy(
         payload_json={"title": policy.title},
     )
     return policy
-
-
-# ---- Clone Brain (data-driven training) ----
-
-
 @router.post("/clones/train", response_model=CloneTrainingRunRead)
 async def train_clone_brain(
     week_start: date = Query(...),

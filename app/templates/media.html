@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Media Library — Nidin BOS" />
+  <meta name="theme-color" content="#f5f5f7" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Media — Nidin BOS</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/media.css" />
+  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+</head>
+<body>
+{% set active_page = "media" %}
+{% include "partials/sidebar.html" %}
+
+<main class="main-content">
+  <header class="page-header">
+    <h1><i data-lucide="image" style="width:1.1rem;height:1.1rem"></i> Media Library</h1>
+    <div class="header-actions">
+      <button class="btn" id="btn-upload"><i data-lucide="upload" style="width:.85rem;height:.85rem"></i> Upload</button>
+    </div>
+  </header>
+
+  <!-- KPI Row -->
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-label">Total Files</div><div class="kpi-val" id="k-files">0</div></div>
+    <div class="kpi-card"><div class="kpi-label">Storage Used</div><div class="kpi-val" id="k-storage">0 MB</div></div>
+    <div class="kpi-card"><div class="kpi-label">AI Processed</div><div class="kpi-val" id="k-processed">0</div></div>
+    <div class="kpi-card"><div class="kpi-label">Unprocessed</div><div class="kpi-val" id="k-unprocessed">0</div></div>
+  </div>
+
+  <!-- Search Bar -->
+  <div class="search-bar">
+    <input type="text" id="search-input" placeholder="Search media by name, tags, or AI summary..." />
+    <button class="btn" id="btn-search"><i data-lucide="search" style="width:.85rem;height:.85rem"></i></button>
+  </div>
+
+  <!-- Filter Row -->
+  <div class="filter-row">
+    <select id="filter-type">
+      <option value="">All types</option>
+      <option value="image/">Images</option>
+      <option value="video/">Videos</option>
+      <option value="audio/">Audio</option>
+      <option value="application/pdf">PDFs</option>
+      <option value="application/vnd">Documents</option>
+    </select>
+  </div>
+
+  <!-- Media Grid -->
+  <div class="media-grid" id="media-grid">
+    <div class="empty">Loading...</div>
+  </div>
+
+  <!-- Upload Modal -->
+  <div class="modal-overlay" id="modal-upload" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Upload Files</h3>
+        <button class="modal-close" id="modal-upload-close">&times;</button>
+      </div>
+      <div class="upload-zone" id="upload-zone">
+        <i data-lucide="upload-cloud" style="width:2rem;height:2rem;color:var(--text-faint)"></i>
+        <p>Drag and drop files here or click to browse</p>
+        <input type="file" id="file-input" multiple style="display:none" />
+        <p style="font-size:.65rem;color:var(--text-faint)">Images, Videos, PDFs, Documents — max 50MB each</p>
+      </div>
+      <div id="upload-progress" style="margin-top:.5rem"></div>
+    </div>
+  </div>
+</main>
+
+<script nonce="{{ csp_nonce }}" src="/static/js/media-page.js"></script>
+</body>
+</html>

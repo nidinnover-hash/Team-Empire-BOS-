@@ -16,6 +16,7 @@ CHECKS: list[list[str]] = [
     [sys.executable, "scripts/check_migration_heads.py"],
     [sys.executable, "scripts/check_endpoint_file_sizes.py"],
     [sys.executable, "scripts/check_endpoint_complexity.py"],
+    [sys.executable, "scripts/check_critical_indexes.py"],
     [sys.executable, "-m", "pytest", "-q", "-m", "not flaky", "-p", "no:cacheprovider"],
     [sys.executable, "-m", "pip", "check"],
     [sys.executable, "-m", "pip_audit", "-r", "requirements.txt"],

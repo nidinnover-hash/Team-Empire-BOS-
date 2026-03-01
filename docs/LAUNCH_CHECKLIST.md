@@ -1,6 +1,7 @@
 # Launch Checklist
 
 Use this checklist before each production release.
+For full canary/rollback procedure, also follow `docs/RELEASE_SAFETY_PLAYBOOK.md`.
 
 ## 1) Config and secrets
 - [ ] `DEBUG=false`

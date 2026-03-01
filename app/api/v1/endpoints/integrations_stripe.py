@@ -33,6 +33,7 @@ async def stripe_connect(
         )
     except CONNECT_EXCEPTIONS as exc:
         await handle_connect_error(db, integration_type="stripe", actor=actor, exc=exc)
+        raise  # handle_connect_error raises HTTPException, but guard against silent fall-through
     await audit_connect_success(db, integration_type="stripe", actor=actor, entity_id=info["id"])
     return StripeStatusRead(connected=True)
 

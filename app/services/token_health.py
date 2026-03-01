@@ -18,6 +18,7 @@ _OAUTH_TYPES = {"gmail", "google_calendar", "google_analytics"}
 _PAT_TYPES = {"clickup", "github", "slack", "notion", "stripe", "hubspot", "calendly", "digitalocean", "elevenlabs", "perplexity"}
 # Default staleness threshold for PAT tokens (days)
 _PAT_ROTATION_WARNING_DAYS = 90
+_PAT_ROTATION_DUE_SOON_DAYS = 75
 
 
 async def check_token_health(
@@ -43,6 +44,8 @@ async def check_token_health(
             "type": row.type,
             "status": "healthy",
             "token_type": "oauth" if row.type in _OAUTH_TYPES else "pat",
+            "rotation_status": "current",
+            "last_rotated_at": row.updated_at.isoformat() if row.updated_at else None,
             "days_since_update": None,
             "expires_in_hours": None,
             "recommendation": None,
@@ -70,12 +73,15 @@ async def check_token_health(
                         entry["expires_in_hours"] = round(hours_left, 1)
                         if hours_left < 0:
                             entry["status"] = "expired"
+                            entry["rotation_status"] = "overdue"
                             entry["recommendation"] = "Token expired. Re-authenticate via OAuth."
                         elif hours_left < 1:
                             entry["status"] = "expiring_soon"
+                            entry["rotation_status"] = "due_soon"
                             entry["recommendation"] = "Token expires within 1 hour. Refresh recommended."
                         elif hours_left < 24:
                             entry["status"] = "warning"
+                            entry["rotation_status"] = "due_soon"
                             entry["recommendation"] = "Token expires within 24 hours."
                 except (ValueError, TypeError, OSError):
                     pass
@@ -84,6 +90,7 @@ async def check_token_health(
             if not config.get("refresh_token"):
                 if entry["status"] == "healthy":
                     entry["status"] = "warning"
+                entry["rotation_status"] = "manual_required"
                 entry["recommendation"] = "No refresh_token available. Re-authenticate via OAuth to enable auto-refresh."
 
         elif row.type in _PAT_TYPES:
@@ -91,7 +98,13 @@ async def check_token_health(
             age_days = entry.get("days_since_update")  # type: ignore[assignment]
             if isinstance(age_days, int | float) and age_days > _PAT_ROTATION_WARNING_DAYS:
                 entry["status"] = "stale"
+                entry["rotation_status"] = "overdue"
                 entry["recommendation"] = f"Token is {int(age_days)} days old. Consider rotating for security."
+            elif isinstance(age_days, int | float) and age_days > _PAT_ROTATION_DUE_SOON_DAYS:
+                if entry["status"] == "healthy":
+                    entry["status"] = "warning"
+                entry["rotation_status"] = "due_soon"
+                entry["recommendation"] = f"Token is {int(age_days)} days old. Schedule rotation this week."
 
         if entry["status"] == "healthy":
             entry["recommendation"] = "Token is healthy."
@@ -168,11 +181,76 @@ async def get_rotation_report(
     healthy = sum(1 for i in items if i["status"] == "healthy")
     warnings = sum(1 for i in items if i["status"] in ("warning", "stale", "expiring_soon"))
     critical = sum(1 for i in items if i["status"] == "expired")
+    rotation_overdue = sum(1 for i in items if i.get("rotation_status") == "overdue")
+    rotation_due_soon = sum(1 for i in items if i.get("rotation_status") == "due_soon")
+    manual_required = sum(1 for i in items if i.get("rotation_status") == "manual_required")
     return {
         "generated_at": datetime.now(UTC).isoformat(),
         "total_integrations": len(items),
         "healthy": healthy,
         "warnings": warnings,
         "critical": critical,
+        "rotation_overdue": rotation_overdue,
+        "rotation_due_soon": rotation_due_soon,
+        "manual_required": manual_required,
         "items": items,
+    }
+
+
+async def get_security_center(
+    db: AsyncSession,
+    organization_id: int,
+) -> dict[str, object]:
+    """Security center snapshot focused on token hygiene and rotation readiness."""
+    def _to_int(value: object) -> int:
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                return 0
+        return 0
+
+    report = await get_rotation_report(db, organization_id)
+    critical_count = _to_int(report.get("critical"))
+    warning_count = _to_int(report.get("warnings"))
+    overdue_count = _to_int(report.get("rotation_overdue"))
+    due_soon_count = _to_int(report.get("rotation_due_soon"))
+    manual_required = _to_int(report.get("manual_required"))
+    total_integrations = _to_int(report.get("total_integrations"))
+    healthy = _to_int(report.get("healthy"))
+
+    level = "low"
+    if critical_count > 0 or overdue_count > 0:
+        level = "high"
+    elif warning_count > 0 or due_soon_count > 0:
+        level = "medium"
+
+    next_actions: list[str] = []
+    if critical_count > 0:
+        next_actions.append("Reconnect expired OAuth integrations immediately.")
+    if overdue_count > 0:
+        next_actions.append("Rotate overdue PAT/API tokens in priority order.")
+    if manual_required > 0:
+        next_actions.append("Re-authenticate OAuth integrations missing refresh_token.")
+    if not next_actions:
+        next_actions.append("No urgent token actions required.")
+
+    return {
+        "generated_at": report.get("generated_at"),
+        "risk_level": level,
+        "summary": {
+            "total_integrations": total_integrations,
+            "healthy": healthy,
+            "warnings": warning_count,
+            "critical": critical_count,
+            "rotation_overdue": overdue_count,
+            "rotation_due_soon": due_soon_count,
+            "manual_required": manual_required,
+        },
+        "next_actions": next_actions,
+        "items": report.get("items", []),
     }

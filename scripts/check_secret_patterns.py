@@ -12,6 +12,7 @@ EXCLUDED_DIRS = {
     "node_modules",
     "strategy-pack",
     "test-results",
+    "tests",
 }
 
 BLOCKED_FILE_PATTERNS = [

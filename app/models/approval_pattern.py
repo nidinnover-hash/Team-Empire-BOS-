@@ -25,3 +25,8 @@ class ApprovalPattern(Base):
     is_auto_approve_enabled: Mapped[bool] = mapped_column(default=False)
     auto_approve_threshold: Mapped[float] = mapped_column(Float, default=0.9)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )

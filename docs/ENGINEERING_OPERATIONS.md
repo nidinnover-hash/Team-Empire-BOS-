@@ -25,6 +25,15 @@
 - Rate-limit blocked requests
 - P95 latency for `/api/v1/health`, `/api/v1/ops/daily-run`, `/api/v1/integrations`
 
+## Nightly Sandboxes
+- Run `.github/workflows/integration-sandbox-nightly.yml` with sandbox provider tokens.
+- Required secrets:
+  - `SANDBOX_GITHUB_TOKEN`
+  - `SANDBOX_SLACK_BOT_TOKEN`
+  - `SANDBOX_NOTION_TOKEN`
+- Contract suite:
+  - `tests/test_integration_sandbox_contracts.py`
+
 ## Release Checklist
 - Ensure single Alembic head.
 - Run `python3.12 scripts/preflight_python.py`.

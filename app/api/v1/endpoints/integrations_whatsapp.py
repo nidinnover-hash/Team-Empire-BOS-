@@ -223,6 +223,8 @@ async def whatsapp_webhook_receive(
         raise HTTPException(status_code=409, detail="Webhook replay detected")
 
     entries = payload.get("entry")
+    if isinstance(entries, list) and len(entries) > 200:
+        raise HTTPException(status_code=413, detail="Payload too large")
     count = len(entries) if isinstance(entries, list) else 0
     try:
         telemetry = await whatsapp_service.ingest_webhook_payload(db, payload)

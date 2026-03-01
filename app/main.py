@@ -6,7 +6,6 @@ Route modules:
   - Web pages (dashboard, talk): app.web.pages
   - Web chat (agent, history): app.web.chat
 """
-# ruff: noqa: E402
 
 import asyncio
 import hashlib
@@ -15,8 +14,6 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from alembic.config import Config as AlembicConfig
-from alembic.script import ScriptDirectory
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -27,6 +24,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from alembic.config import Config as AlembicConfig
+from alembic.script import ScriptDirectory
 from app.api.v1.router import api_router
 from app.core.config import format_startup_issues, settings, validate_startup_settings
 from app.core.contracts import error_envelope

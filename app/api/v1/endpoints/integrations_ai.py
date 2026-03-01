@@ -16,6 +16,7 @@ from app.schemas.integration import (
     CodingProjectDiscoveryRead,
 )
 from app.services import integration as integration_service
+from app.services.context_builder import build_brain_context
 
 router = APIRouter(tags=["Integrations"])
 
@@ -66,6 +67,13 @@ async def ai_provider_connect(
     from app.services.ai_router import call_ai, set_ai_key_cache
 
     org_id = int(actor["org_id"])
+    brain_context = await build_brain_context(
+        db,
+        organization_id=org_id,
+        actor_user_id=int(actor["id"]),
+        actor_role=str(actor["role"]),
+        request_purpose=str(actor.get("purpose") or "professional"),
+    )
     set_ai_key_cache(provider, data.api_key, org_id=org_id)
 
     response = await call_ai(
@@ -74,6 +82,7 @@ async def ai_provider_connect(
         provider=provider,
         max_tokens=20,
         organization_id=org_id,
+        brain_context=brain_context,
     )
     if response.startswith("Error:"):
         from app.services.ai_router import clear_ai_key_cache
@@ -164,6 +173,13 @@ async def test_ai_provider(
         )
 
     org_id = int(actor["org_id"])
+    brain_context = await build_brain_context(
+        db,
+        organization_id=org_id,
+        actor_user_id=int(actor["id"]),
+        actor_role=str(actor["role"]),
+        request_purpose=str(actor.get("purpose") or "professional"),
+    )
     if not _key_ok(_get_key(chosen, org_id=org_id)):
         return AITestResult(
             provider=chosen,
@@ -177,6 +193,7 @@ async def test_ai_provider(
         provider=chosen,
         max_tokens=20,
         organization_id=actor["org_id"],
+        brain_context=brain_context,
     )
     if response.startswith("Error:"):
         await record_action(

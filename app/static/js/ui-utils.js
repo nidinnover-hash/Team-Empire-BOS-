@@ -167,6 +167,24 @@
       .replace(/"/g, "&quot;");
   }
 
+  function setSectionState(el, state, message) {
+    if (!el) return;
+    var safeState = String(state || "loading").toLowerCase();
+    var msg = String(message || "");
+    if (safeState === "loading") {
+      el.innerHTML = '<div class="empty" style="opacity:.6">Loading...</div>';
+      return;
+    }
+    if (safeState === "error") {
+      el.innerHTML = '<div class="empty" style="color:#b91c1c">' + escapeHtml(msg || "Failed to load.") + "</div>";
+      return;
+    }
+    if (safeState === "empty") {
+      el.innerHTML = '<div class="empty">' + escapeHtml(msg || "No data available.") + "</div>";
+      return;
+    }
+  }
+
   function getCsrfToken() {
     var pair = document.cookie.split("; ").find(function (c) { return c.startsWith("pc_csrf="); });
     return pair ? decodeURIComponent(pair.split("=").slice(1).join("=") || "") : "";
@@ -233,6 +251,7 @@
     confirmDanger: confirmDanger,
     requestJson: requestJson,
     escapeHtml: escapeHtml,
+    setSectionState: setSectionState,
     getCsrfToken: getCsrfToken,
     showRetryToast: showRetryToast,
   };

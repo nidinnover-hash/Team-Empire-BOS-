@@ -3,9 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TypeVar
 
-T = TypeVar("T")
 _retry_stats: dict[str, int] = {
     "attempts": 0,
     "retries": 0,
@@ -35,7 +33,7 @@ def get_retry_stats() -> dict[str, int]:
     return dict(_retry_stats)
 
 
-async def run_with_retry(
+async def run_with_retry[T](
     operation: Callable[[], Awaitable[T]],
     *,
     attempts: int = 3,

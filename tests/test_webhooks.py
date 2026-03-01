@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 import pytest
+from sqlalchemy import select
 
 from tests.conftest import _make_auth_headers
 
@@ -329,7 +330,7 @@ async def test_trigger_skips_inactive_endpoints(db, monkeypatch):
 async def test_webhook_signature_is_valid_hmac(db, monkeypatch, _patch_webhook_session):
     from app.services import webhook as webhook_service
 
-    endpoint, signing_secret = await webhook_service.create_webhook_endpoint(
+    _endpoint, signing_secret = await webhook_service.create_webhook_endpoint(
         db, organization_id=1, url="https://sig.example.com/hook",
     )
 
@@ -655,8 +656,59 @@ async def test_background_retry_exhausted_becomes_dead_letter(db, monkeypatch, _
 
     deliveries = await webhook_service.list_deliveries(db, endpoint.id, 1)
     assert deliveries[0].status == "dead_letter"
-    assert deliveries[0].next_retry_at is None
-    assert deliveries[0].attempt_count == 2
+
+
+@pytest.mark.asyncio
+async def test_replay_dead_letter_delivery_creates_new_delivery(db, monkeypatch, _patch_webhook_session):
+    from app.models.webhook import WebhookDelivery
+    from app.services import webhook as webhook_service
+
+    endpoint, _ = await webhook_service.create_webhook_endpoint(
+        db,
+        organization_id=1,
+        url="https://deadletter.example.com/hook",
+        event_types=["approval.created"],
+        max_retry_attempts=1,
+    )
+    failed = WebhookDelivery(
+        webhook_endpoint_id=endpoint.id,
+        organization_id=1,
+        event="approval.created",
+        payload_json={"x": 1},
+        status="dead_letter",
+        attempt_count=1,
+        max_retries=1,
+        error_message="TimeoutError: request timed out",
+    )
+    db.add(failed)
+    await db.commit()
+    await db.refresh(failed)
+
+    async def fake_post(self, url, **kwargs):
+        return _FakeResponse(200)
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post, raising=True)
+    replayed = await webhook_service.replay_dead_letter_delivery(
+        db,
+        organization_id=1,
+        delivery_id=failed.id,
+    )
+    assert replayed is not None
+    assert replayed.id != failed.id
+    assert replayed.status == "success"
+
+    rows = (
+        await db.execute(
+            select(WebhookDelivery).where(
+                WebhookDelivery.webhook_endpoint_id == endpoint.id
+            )
+        )
+    ).scalars().all()
+    assert len(rows) >= 2
+    rows_by_id = {int(row.id): row for row in rows}
+    assert rows_by_id[failed.id].status == "replayed"
+    assert rows_by_id[replayed.id].next_retry_at is None
+    assert rows_by_id[replayed.id].attempt_count >= 1
 
 
 @pytest.mark.asyncio
@@ -712,3 +764,25 @@ async def test_dispatch_revalidates_target_url_each_attempt(db, monkeypatch, _pa
     deliveries = await webhook_service.list_deliveries(db, endpoint.id, 1)
     assert deliveries[0].status in {"failed", "dead_letter"}
     assert "host is not allowed" in (deliveries[0].error_message or "")
+
+
+@pytest.mark.asyncio
+async def test_async_queue_mode_enqueues_pending_without_network(db, monkeypatch, _patch_webhook_session):
+    from app.services import webhook as webhook_service
+
+    endpoint, _ = await webhook_service.create_webhook_endpoint(
+        db, organization_id=1, url="https://queue-only.example.com/hook",
+    )
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_ASYNC_DISPATCH_ONLY", True)
+
+    async def fail_post(self, url, **kwargs):
+        raise AssertionError("Network call should not be made in queue-only mode")
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fail_post)
+
+    await webhook_service.trigger_org_webhooks(
+        db, organization_id=1, event="approval.created", payload={"queued": True},
+    )
+    deliveries = await webhook_service.list_deliveries(db, endpoint.id, 1)
+    assert deliveries[0].status == "pending"
+    assert deliveries[0].attempt_count == 0

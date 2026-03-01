@@ -188,9 +188,13 @@ async def start_workflow(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> WorkflowRead:
-    wf = await automation_service.start_workflow(db, workflow_id, int(actor["org_id"]))
+    org_id = int(actor["org_id"])
+    existing = await automation_service.get_workflow(db, workflow_id, org_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    wf = await automation_service.start_workflow(db, workflow_id, org_id)
     if wf is None:
-        raise HTTPException(status_code=400, detail="Workflow not found or cannot be started")
+        raise HTTPException(status_code=409, detail="Workflow cannot be started in its current state")
     await record_action(
         db,
         event_type="workflow_started",
@@ -210,11 +214,13 @@ async def advance_workflow(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> WorkflowRead:
-    wf = await automation_service.advance_workflow(
-        db, workflow_id, int(actor["org_id"]), step_result=step_result
-    )
+    org_id = int(actor["org_id"])
+    existing = await automation_service.get_workflow(db, workflow_id, org_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    wf = await automation_service.advance_workflow(db, workflow_id, org_id, step_result=step_result)
     if wf is None:
-        raise HTTPException(status_code=400, detail="Workflow not found or not running")
+        raise HTTPException(status_code=409, detail="Workflow is not in a state that can be advanced")
     await record_action(
         db,
         event_type="workflow_advanced",
@@ -223,5 +229,31 @@ async def advance_workflow(
         entity_type="workflow",
         entity_id=wf.id,
         payload_json={"current_step": wf.current_step, "status": wf.status},
+    )
+    return WorkflowRead.model_validate(wf)
+
+
+@router.post("/workflows/{workflow_id}/run", response_model=WorkflowRead)
+async def run_workflow(
+    workflow_id: int,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> WorkflowRead:
+    """Execute all remaining steps of a workflow sequentially."""
+    org_id = int(actor["org_id"])
+    existing = await automation_service.get_workflow(db, workflow_id, org_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    wf = await automation_service.run_workflow(db, workflow_id, org_id)
+    if wf is None:
+        raise HTTPException(status_code=409, detail="Workflow cannot be run in its current state")
+    await record_action(
+        db,
+        event_type="workflow_run_completed",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="workflow",
+        entity_id=wf.id,
+        payload_json={"status": wf.status, "current_step": wf.current_step},
     )
     return WorkflowRead.model_validate(wf)

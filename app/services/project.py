@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.project import Project
-from app.schemas.project import ProjectCreate, ProjectStatusUpdate
+from app.schemas.project import ProjectCreate, ProjectStatusUpdate, ProjectUpdate
 
 
 async def create_project(
@@ -48,3 +48,38 @@ async def update_project_status(
     await db.commit()
     await db.refresh(project)
     return project
+
+
+async def get_project(
+    db: AsyncSession, project_id: int, organization_id: int,
+) -> Project | None:
+    result = await db.execute(
+        select(Project).where(
+            Project.id == project_id, Project.organization_id == organization_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def update_project(
+    db: AsyncSession, project_id: int, data: ProjectUpdate, organization_id: int,
+) -> Project | None:
+    project = await get_project(db, project_id, organization_id)
+    if project is None:
+        return None
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(project, field, value)
+    await db.commit()
+    await db.refresh(project)
+    return project
+
+
+async def delete_project(
+    db: AsyncSession, project_id: int, organization_id: int,
+) -> bool:
+    project = await get_project(db, project_id, organization_id)
+    if project is None:
+        return False
+    await db.delete(project)
+    await db.commit()
+    return True

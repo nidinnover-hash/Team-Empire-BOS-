@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles
-from app.schemas.note import NoteCreate, NoteRead
+from app.schemas.note import NoteCreate, NoteRead, NoteUpdate
 from app.services import note as note_service
 
 router = APIRouter(prefix="/notes", tags=["Notes"])
@@ -28,3 +28,39 @@ async def list_notes(
 ) -> list[NoteRead]:
     """Return notes, newest first. Use limit/offset for pagination."""
     return await note_service.list_notes(db, limit=limit, offset=offset, organization_id=actor["org_id"])
+
+
+@router.get("/{note_id}", response_model=NoteRead)
+async def get_note(
+    note_id: int,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+) -> NoteRead:
+    note = await note_service.get_note(db, note_id, organization_id=actor["org_id"])
+    if note is None:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return note
+
+
+@router.patch("/{note_id}", response_model=NoteRead)
+async def update_note(
+    note_id: int,
+    data: NoteUpdate,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> NoteRead:
+    note = await note_service.update_note(db, note_id, data, organization_id=actor["org_id"])
+    if note is None:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return note
+
+
+@router.delete("/{note_id}", status_code=204)
+async def delete_note(
+    note_id: int,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> None:
+    deleted = await note_service.delete_note(db, note_id, organization_id=actor["org_id"])
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Note not found")

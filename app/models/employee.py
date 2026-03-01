@@ -16,11 +16,20 @@ class Employee(Base):
     organization_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True,
     )
+    department_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("departments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(100), nullable=True)
     email: Mapped[str] = mapped_column(String(320), nullable=False)
     github_username: Mapped[str | None] = mapped_column(String(100), nullable=True)
     clickup_user_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    employment_status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", index=True)
+    hired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    offboarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

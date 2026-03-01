@@ -80,3 +80,23 @@ async def update_goal_status(
     await db.commit()
     await db.refresh(goal)
     return goal
+
+
+async def get_goal(
+    db: AsyncSession, goal_id: int, organization_id: int,
+) -> Goal | None:
+    result = await db.execute(
+        select(Goal).where(Goal.id == goal_id, Goal.organization_id == organization_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def delete_goal(
+    db: AsyncSession, goal_id: int, organization_id: int,
+) -> bool:
+    goal = await get_goal(db, goal_id, organization_id)
+    if goal is None:
+        return False
+    await db.delete(goal)
+    await db.commit()
+    return True

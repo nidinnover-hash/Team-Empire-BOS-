@@ -170,7 +170,7 @@ async def test_api_key_read_scope_cannot_write(client):
         headers=headers,
     )
     assert resp.status_code == 403
-    assert "required scope: api_keys:write" in resp.json()["detail"]
+    assert "required permissions" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -189,7 +189,7 @@ async def test_api_key_resource_scope_blocks_other_resources(client):
     headers = {"Authorization": f"Bearer {full_key}"}
     resp = await client.get("/api/v1/integrations", headers=headers)
     assert resp.status_code == 403
-    assert "required scope: integrations:read" in resp.json()["detail"]
+    assert "required permissions" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio

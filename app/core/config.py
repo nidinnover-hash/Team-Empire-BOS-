@@ -158,6 +158,7 @@ class Settings(BaseSettings):
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
     DB_POOL_TIMEOUT: int = 30
+    DB_SLOW_QUERY_MS: int = 200
 
     # Compose rate limiting
     COMPOSE_MAX_PER_HOUR: int = 20
@@ -201,6 +202,19 @@ class Settings(BaseSettings):
     LOGIN_FAIL_WINDOW_SECONDS: int = 900   # sliding window for login failure tracking
     LOGIN_FAIL_MAX_ATTEMPTS: int = 10      # max failures before IP lockout
 
+    # Layer scoring thresholds (tunable without code changes)
+    LAYER_MIN_NEW_CONTACTS: int = 5            # marketing: min new contacts before bottleneck
+    LAYER_MAX_FOLLOWUP_TASKS: int = 12         # marketing: max follow-up before backlog alert
+    LAYER_SPEND_REVENUE_RATIO: float = 0.35    # marketing: max ad-spend / revenue ratio
+    LAYER_MIN_AI_LEVEL: float = 2.5            # training: minimum avg AI maturity target
+    LAYER_MIN_TRAINING_TASKS: int = 3          # training: min open training tasks
+    LAYER_MAX_DUE_SOON_TASKS: int = 10         # training: max due-soon before overload
+    LAYER_IDENTITY_COVERAGE: float = 0.6       # management: min GitHub/ClickUp mapping ratio
+    LAYER_UNMAPPED_THRESHOLD: float = 0.35     # management: max unmapped employee ratio
+    LAYER_RECURRING_EXPENSE_CAP: float = 0.55  # revenue: max recurring expense ratio
+    LAYER_QUERY_LIMIT: int = 2000              # max rows per layer service query
+    TREND_RETENTION_DAYS: int = 90             # trend events older than this are pruned
+
     # Optional OpenTelemetry tracing (set OTEL_EXPORTER_OTLP_ENDPOINT to activate)
     # Packages required: opentelemetry-api opentelemetry-sdk
     #   opentelemetry-instrumentation-fastapi opentelemetry-instrumentation-sqlalchemy
@@ -214,6 +228,10 @@ class Settings(BaseSettings):
     FEATURE_TALK_MODE: bool = True       # Voice/chat Talk Mode page
     FEATURE_OPS_INTEL: bool = True       # Ops Intelligence page
     FEATURE_DAILY_RUN: bool = True       # Daily run draft generation
+    FEATURE_ORG_CHART_INTEL: bool = True
+    FEATURE_WORKLOAD_BALANCER: bool = True
+    FEATURE_DEPARTMENT_OKR_AUTOPROGRESS: bool = True
+    FEATURE_SKILL_MATRIX: bool = True
     CLONE_REQUIRE_CLARIFYING_QUESTION: bool = True
     CLONE_PATTERN_AUTOMATION_ENABLED: bool = False
     CLONE_PATTERN_WINDOW: int = 50
@@ -259,6 +277,17 @@ class Settings(BaseSettings):
     def _normalize_log_level(cls, value: Any) -> Any:
         if isinstance(value, str):
             return value.strip().upper()
+        return value
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def _normalize_debug_flag(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "prod", "production"}:
+                return False
+            if normalized in {"debug", "dev", "development"}:
+                return True
         return value
 
     @property

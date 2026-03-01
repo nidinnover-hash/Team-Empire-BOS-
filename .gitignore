@@ -54,5 +54,8 @@ nidin-bos-strategy-pack.zip
 personal-clone-strategy-pack.zip
 strategy-pack/
 
+# Media uploads
+uploads/
+
 # Node
 node_modules/

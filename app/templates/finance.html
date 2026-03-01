@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Finance - Nidin BOS</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+</head>
+<body>
+  {% set active_page = "finance" %}
+  {% include "partials/sidebar.html" %}
+
+  <div class="main-wrap">
+    <div class="page-header"><h1>Finance Overview</h1></div>
+    <div class="kpi-row">
+      <div class="kpi"><div class="label">Revenue (30d)</div><div class="val" id="k-revenue">$0</div></div>
+      <div class="kpi"><div class="label">Charges</div><div class="val" id="k-charges">0</div></div>
+      <div class="kpi"><div class="label">Refunded</div><div class="val" id="k-refund">$0</div></div>
+      <div class="kpi"><div class="label">Disputes</div><div class="val" id="k-disputes">0</div></div>
+    </div>
+    <div class="card" style="margin-top:1.5rem">
+      <h3>Recent Transactions</h3>
+      <table class="data-table">
+        <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th></tr></thead>
+        <tbody id="tbody"><tr><td colspan="4" style="text-align:center;opacity:.5">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+  <script nonce="{{ csp_nonce }}" src="/static/js/finance-page.js"></script>
+</body>
+</html>

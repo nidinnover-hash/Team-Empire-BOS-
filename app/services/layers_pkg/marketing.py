@@ -1,6 +1,7 @@
 """Marketing and Study layers — lead flow, ad spend, education pipeline."""
 from __future__ import annotations
 
+import logging
 from datetime import date, timedelta
 
 from sqlalchemy import select
@@ -12,15 +13,70 @@ from app.models.finance import FinanceEntry
 from app.models.note import Note
 from app.models.task import Task
 from app.schemas.layers import MarketingLayerReport, StudyLayerReport
+from app.services.layers_pkg.helpers import (
+    MARKETING_TASK_KEYWORDS,
+    PenaltyRule,
+    apply_penalties,
+    contains_any,
+    safe_query,
+)
 
-_MARKETING_TASK_KEYWORDS = ("lead", "follow", "campaign", "outreach", "marketing", "sales")
+logger = logging.getLogger(__name__)
 _AD_SPEND_KEYWORDS = ("ads", "marketing", "campaign", "meta ads", "google ads")
 _STUDY_KEYWORDS = ("student", "applicant", "admission", "visa", "ielts", "offer letter", "university")
 
+# ── Penalty rule sets ────────────────────────────────────────────────────────
 
-def _contains_any(text: str | None, keywords: tuple[str, ...]) -> bool:
-    t = (text or "").strip().lower()
-    return any(k in t for k in keywords)
+_MARKETING_PENALTIES: list[PenaltyRule] = [
+    (
+        lambda ctx: ctx["new_contacts"] < settings.LAYER_MIN_NEW_CONTACTS,
+        20,
+        "Low new business-contact inflow in the selected window.",
+        "Increase lead capture cadence and track source quality daily.",
+    ),
+    (
+        lambda ctx: ctx["follow_ups"] > settings.LAYER_MAX_FOLLOWUP_TASKS,
+        20,
+        "High follow-up backlog may reduce conversion speed.",
+        "Run a 48-hour follow-up sprint and clear old leads first.",
+    ),
+    (
+        lambda ctx: ctx["ad_spend"] > 0 and ctx["revenue"] <= 0,
+        30,
+        "Ad spend recorded without income in the same window.",
+        "Pause weak campaigns and reallocate spend to proven channels.",
+    ),
+    (
+        lambda ctx: ctx["ad_spend"] > 0 and ctx["revenue"] > 0 and ctx["spend_ratio"] > settings.LAYER_SPEND_REVENUE_RATIO,
+        20,
+        "Marketing spend-to-revenue ratio is elevated.",
+        "Set weekly ROI thresholds for each campaign.",
+    ),
+]
+
+_STUDY_PENALTIES: list[PenaltyRule] = [
+    (
+        lambda ctx: ctx["pipeline_contacts"] < settings.LAYER_MIN_NEW_CONTACTS,
+        15,
+        "Study pipeline contact volume appears low.",
+        "Audit counselor lead sources and increase weekly intake targets.",
+    ),
+    (
+        lambda ctx: ctx["due_soon"] > 8,
+        25,
+        "Many study-related tasks are due soon, increasing deadline risk.",
+        "Create a same-day visa/admission deadline triage board.",
+    ),
+    (
+        lambda ctx: ctx["recent_notes"] < 3,
+        10,
+        "Low recent study operations notes may hide execution gaps.",
+        "Capture daily counselor updates into Data Hub > daily_context.",
+    ),
+]
+
+
+# ── Layer functions ──────────────────────────────────────────────────────────
 
 
 async def get_marketing_layer(
@@ -30,72 +86,65 @@ async def get_marketing_layer(
 ) -> MarketingLayerReport:
     today = date.today()
     since = today - timedelta(days=max(window_days - 1, 0))
+    ql = settings.LAYER_QUERY_LIMIT
 
-    contacts_result = await db.execute(
-        select(Contact).where(Contact.organization_id == organization_id).limit(1000)
+    # Filter business contacts in the DB instead of loading all contacts
+    business_contacts = await safe_query(
+        db,
+        select(Contact).where(
+            Contact.organization_id == organization_id,
+            Contact.relationship == "business",
+        ).limit(ql),
+        "marketing:contacts", organization_id,
     )
-    contacts = list(contacts_result.scalars().all())
-    business_contacts = [c for c in contacts if (c.relationship or "").lower() == "business"]
-
     new_business_contacts = [
         c for c in business_contacts
         if c.created_at is not None and c.created_at.date() >= since
     ]
 
-    tasks_result = await db.execute(
+    tasks = await safe_query(
+        db,
         select(Task).where(
             Task.organization_id == organization_id,
             Task.is_done.is_(False),
-        ).limit(1000)
+        ).limit(ql),
+        "marketing:tasks", organization_id,
     )
-    tasks = list(tasks_result.scalars().all())
     open_follow_up_tasks = [
         t for t in tasks
-        if _contains_any(t.title, _MARKETING_TASK_KEYWORDS)
-        or _contains_any(t.description, _MARKETING_TASK_KEYWORDS)
-        or (t.category or "").lower() in {"business"}
+        if contains_any(t.title, MARKETING_TASK_KEYWORDS)
+        or contains_any(t.description, MARKETING_TASK_KEYWORDS)
+        or (t.category or "").lower() == "business"
     ]
 
-    finance_result = await db.execute(
+    entries = await safe_query(
+        db,
         select(FinanceEntry).where(
             FinanceEntry.organization_id == organization_id,
             FinanceEntry.entry_date >= since,
             FinanceEntry.entry_date <= today,
-        )
+        ),
+        "marketing:finance", organization_id,
     )
-    entries = list(finance_result.scalars().all())
     ad_spend = float(sum(
-        e.amount for e in entries
+        (e.amount or 0) for e in entries
         if e.type == "expense"
-        and (_contains_any(e.category, _AD_SPEND_KEYWORDS) or _contains_any(e.description, _AD_SPEND_KEYWORDS))
+        and (contains_any(e.category, _AD_SPEND_KEYWORDS) or contains_any(e.description, _AD_SPEND_KEYWORDS))
     ))
-    revenue = float(sum(e.amount for e in entries if e.type == "income"))
+    revenue = float(sum((e.amount or 0) for e in entries if e.type == "income"))
     spend_to_revenue_ratio = (ad_spend / revenue) if revenue > 0 else (1.0 if ad_spend > 0 else 0.0)
 
-    score = 100
-    bottlenecks: list[str] = []
-    next_actions: list[str] = []
-
-    if len(new_business_contacts) < 5:
-        score -= 20
-        bottlenecks.append("Low new business-contact inflow in the selected window.")
-        next_actions.append("Increase lead capture cadence and track source quality daily.")
-    if len(open_follow_up_tasks) > 12:
-        score -= 20
-        bottlenecks.append("High follow-up backlog may reduce conversion speed.")
-        next_actions.append("Run a 48-hour follow-up sprint and clear old leads first.")
-    if ad_spend > 0 and revenue <= 0:
-        score -= 30
-        bottlenecks.append("Ad spend recorded without income in the same window.")
-        next_actions.append("Pause weak campaigns and reallocate spend to proven channels.")
-    elif spend_to_revenue_ratio > 0.35:
-        score -= 20
-        bottlenecks.append("Marketing spend-to-revenue ratio is elevated.")
-        next_actions.append("Set weekly ROI thresholds for each campaign.")
-
-    if not next_actions:
-        next_actions.append("Maintain current marketing execution and review funnel metrics weekly.")
-    score = max(0, min(100, score))
+    penalty_ctx = {
+        "new_contacts": len(new_business_contacts),
+        "follow_ups": len(open_follow_up_tasks),
+        "ad_spend": ad_spend,
+        "revenue": revenue,
+        "spend_ratio": spend_to_revenue_ratio,
+    }
+    score, bottlenecks, next_actions = apply_penalties(
+        _MARKETING_PENALTIES, penalty_ctx,
+        "Maintain current marketing execution and review funnel metrics weekly.",
+    )
 
     privacy_guardrails = [
         f"Privacy profile: {settings.PRIVACY_POLICY_PROFILE}",
@@ -137,7 +186,7 @@ async def get_marketing_layer(
         legal_guardrails=legal_guardrails,
         account_guardrails=account_guardrails,
         bottlenecks=bottlenecks,
-        next_actions=next_actions[:4],
+        next_actions=next_actions,
     )
 
 
@@ -148,76 +197,70 @@ async def get_study_layer(
 ) -> StudyLayerReport:
     today = date.today()
     since = today - timedelta(days=max(window_days - 1, 0))
+    ql = settings.LAYER_QUERY_LIMIT
 
-    contacts_result = await db.execute(
-        select(Contact).where(Contact.organization_id == organization_id).limit(1000)
+    contacts = await safe_query(
+        db,
+        select(Contact).where(Contact.organization_id == organization_id).limit(ql),
+        "study:contacts", organization_id,
     )
-    contacts = list(contacts_result.scalars().all())
     study_pipeline_contacts = [
         c for c in contacts
-        if _contains_any(c.role, _STUDY_KEYWORDS)
-        or _contains_any(c.notes, _STUDY_KEYWORDS)
-        or _contains_any(c.company, _STUDY_KEYWORDS)
+        if contains_any(c.role, _STUDY_KEYWORDS)
+        or contains_any(c.notes, _STUDY_KEYWORDS)
+        or contains_any(c.company, _STUDY_KEYWORDS)
     ]
 
-    tasks_result = await db.execute(
+    tasks = await safe_query(
+        db,
         select(Task).where(
             Task.organization_id == organization_id,
             Task.is_done.is_(False),
-        ).limit(2000)
+        ).limit(ql),
+        "study:tasks", organization_id,
     )
-    tasks = list(tasks_result.scalars().all())
     open_study_tasks = [
         t for t in tasks
-        if _contains_any(t.title, _STUDY_KEYWORDS) or _contains_any(t.description, _STUDY_KEYWORDS)
+        if contains_any(t.title, _STUDY_KEYWORDS) or contains_any(t.description, _STUDY_KEYWORDS)
     ]
     due_soon_study_tasks = [
         t for t in open_study_tasks
         if t.due_date is not None and t.due_date <= (today + timedelta(days=14))
     ]
 
-    notes_result = await db.execute(
+    notes = await safe_query(
+        db,
         select(Note).where(
             Note.organization_id == organization_id,
-        ).order_by(Note.created_at.desc()).limit(40)
+        ).order_by(Note.created_at.desc()).limit(40),
+        "study:notes", organization_id,
     )
-    notes = list(notes_result.scalars().all())
-    recent_study_notes = [n for n in notes if _contains_any(n.content, _STUDY_KEYWORDS)]
+    recent_study_notes = [n for n in notes if contains_any(n.content, _STUDY_KEYWORDS)]
 
-    finance_result = await db.execute(
+    entries = await safe_query(
+        db,
         select(FinanceEntry).where(
             FinanceEntry.organization_id == organization_id,
             FinanceEntry.entry_date >= since,
             FinanceEntry.entry_date <= today,
-        )
+        ),
+        "study:finance", organization_id,
     )
-    entries = list(finance_result.scalars().all())
     study_revenue = float(sum(
-        e.amount for e in entries
+        (e.amount or 0) for e in entries
         if e.type == "income"
-        and (_contains_any(e.category, _STUDY_KEYWORDS) or _contains_any(e.description, _STUDY_KEYWORDS))
+        and (contains_any(e.category, _STUDY_KEYWORDS) or contains_any(e.description, _STUDY_KEYWORDS))
     ))
 
-    score = 100
-    blockers: list[str] = []
-    next_actions: list[str] = []
-
-    if len(study_pipeline_contacts) < 5:
-        score -= 15
-        blockers.append("Study pipeline contact volume appears low.")
-        next_actions.append("Audit counselor lead sources and increase weekly intake targets.")
-    if len(due_soon_study_tasks) > 8:
-        score -= 25
-        blockers.append("Many study-related tasks are due soon, increasing deadline risk.")
-        next_actions.append("Create a same-day visa/admission deadline triage board.")
-    if len(recent_study_notes) < 3:
-        score -= 10
-        blockers.append("Low recent study operations notes may hide execution gaps.")
-        next_actions.append("Capture daily counselor updates into Data Hub > daily_context.")
-
-    if not next_actions:
-        next_actions.append("Keep current study operations cadence and monitor deadline queue daily.")
-    score = max(0, min(100, score))
+    penalty_ctx = {
+        "pipeline_contacts": len(study_pipeline_contacts),
+        "due_soon": len(due_soon_study_tasks),
+        "recent_notes": len(recent_study_notes),
+    }
+    score, blockers, next_actions = apply_penalties(
+        _STUDY_PENALTIES, penalty_ctx,
+        "Keep current study operations cadence and monitor deadline queue daily.",
+    )
 
     return StudyLayerReport(
         window_days=window_days,
@@ -227,5 +270,5 @@ async def get_study_layer(
         study_related_revenue=study_revenue,
         operational_score=score,
         blockers=blockers,
-        next_actions=next_actions[:4],
+        next_actions=next_actions,
     )

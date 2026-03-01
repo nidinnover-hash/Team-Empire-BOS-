@@ -111,6 +111,28 @@ def _reset_redis_module_state():
     email_mod._compose_redis_client = saved_modules["email_client"]
 
 
+@pytest.fixture(autouse=True)
+def _reset_auth_runtime_state():
+    """Stabilize auth-related mutable globals between tests."""
+    from app.core import middleware as middleware_mod
+    from app.core.config import settings
+
+    saved_values = {
+        "ACCOUNT_SSO_REQUIRED": settings.ACCOUNT_SSO_REQUIRED,
+        "ACCESS_TOKEN_EXPIRE_MINUTES": settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        "ACCOUNT_SESSION_MAX_HOURS": settings.ACCOUNT_SESSION_MAX_HOURS,
+    }
+    object.__setattr__(settings, "ACCOUNT_SSO_REQUIRED", False)
+
+    with middleware_mod._login_lock:
+        middleware_mod._login_failures.clear()
+
+    yield
+
+    object.__setattr__(settings, "ACCOUNT_SSO_REQUIRED", saved_values["ACCOUNT_SSO_REQUIRED"])
+    object.__setattr__(settings, "ACCESS_TOKEN_EXPIRE_MINUTES", saved_values["ACCESS_TOKEN_EXPIRE_MINUTES"])
+    object.__setattr__(settings, "ACCOUNT_SESSION_MAX_HOURS", saved_values["ACCOUNT_SESSION_MAX_HOURS"])
+
 async def _seed_db(session_factory, *, full: bool = True):
     """Seed standard test orgs and users.
 

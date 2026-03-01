@@ -14,6 +14,13 @@ class ProjectCreate(BaseModel):
     due_date: date | None = None
 
 
+class ProjectUpdate(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = Field(None, max_length=2000)
+    category: ProjectCategory | None = None
+    due_date: date | None = None
+
+
 class ProjectStatusUpdate(BaseModel):
     status: ProjectStatus
 

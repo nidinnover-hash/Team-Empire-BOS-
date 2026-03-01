@@ -172,7 +172,7 @@ async def get_current_api_user(
         if not _api_key_allows_scope(key.scopes, required_scope, request=request):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"API key missing required scope: {resource}:{action}",
+                detail="API key does not have the required permissions for this operation",
             )
         return {
             "id": int(db_user.id),

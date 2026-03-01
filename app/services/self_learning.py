@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -13,6 +14,8 @@ from app.models.decision_log import DecisionLog
 from app.models.policy_rule import PolicyRule
 from app.models.self_learning_run import SelfLearningRun
 from app.services import clone_brain, clone_control, policy_service
+
+logger = logging.getLogger(__name__)
 
 
 async def learning_signals(
@@ -93,6 +96,14 @@ async def learning_signals(
         )
     )
 
+    # Coaching outcome effectiveness
+    coaching_effectiveness: dict[str, Any] = {}
+    try:
+        from app.services.learning_feedback import analyze_effectiveness
+        coaching_effectiveness = await analyze_effectiveness(db, organization_id, days=lookback_days)
+    except (RuntimeError, ValueError, TypeError) as exc:
+        logger.warning("Coaching effectiveness analysis failed for org %s: %s", organization_id, type(exc).__name__)
+
     return {
         "window_days": int(lookback_days),
         "approval_counts": approval_counts,
@@ -102,6 +113,7 @@ async def learning_signals(
         "decision_counts": decision_counts,
         "active_policy_count": int(active_policy_count or 0),
         "learning_intelligence_score": learning_intelligence_score,
+        "coaching_effectiveness": coaching_effectiveness,
     }
 
 

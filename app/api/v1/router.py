@@ -13,24 +13,30 @@ from app.api.v1.endpoints import (
     control,
     dashboard_kpi,
     data_collection,
+    departments,
     email,
     executions,
     export,
     finance,
     github,
     goals,
+    governance,
     health,
     inbox,
+    innovation,
     integrations,
     intelligence,
     layers,
+    media,
     memory,
     mfa,
     notes,
     notifications,
     observability,
     ops,
+    ops_incident,
     orgs,
+    performance,
     projects,
     search,
     slack_commands,
@@ -68,6 +74,7 @@ api_router.include_router(finance.router)
 api_router.include_router(layers.router)
 api_router.include_router(observability.router)
 api_router.include_router(ops.router)
+api_router.include_router(ops_incident.router)
 api_router.include_router(export.router)
 api_router.include_router(search.router)
 api_router.include_router(github.router)
@@ -79,3 +86,8 @@ api_router.include_router(api_keys.router)
 api_router.include_router(dashboard_kpi.router)
 api_router.include_router(automation.router)
 api_router.include_router(slack_commands.router)
+api_router.include_router(departments.router)
+api_router.include_router(performance.router)
+api_router.include_router(governance.router)
+api_router.include_router(media.router)
+api_router.include_router(innovation.router)

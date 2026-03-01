@@ -2,7 +2,6 @@
 
 import pytest
 
-
 # ── Trigger CRUD ─────────────────────────────────────────────────────────────
 
 
@@ -197,7 +196,7 @@ async def test_start_already_running_workflow_fails(client):
     wid = r1.json()["id"]
     await client.post(f"/api/v1/automations/workflows/{wid}/start")
     r2 = await client.post(f"/api/v1/automations/workflows/{wid}/start")
-    assert r2.status_code == 400
+    assert r2.status_code == 409
 
 
 # ── Trigger service fire_matching_triggers ───────────────────────────────────

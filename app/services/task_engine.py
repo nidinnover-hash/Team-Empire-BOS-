@@ -18,7 +18,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.logs.audit import record_action
 from app.models.daily_plan import DailyTaskPlan
 from app.models.memory import TeamMember
+from app.schemas.brain_context import BrainContext
 from app.services.ai_router import call_ai
+from app.services.context_builder import build_brain_context
 from app.services.memory import build_memory_context
 
 
@@ -43,6 +45,7 @@ async def draft_plan_for_member(
     org_id: int,
     actor_user_id: int,
     memory_context: str = "",
+    brain_context: BrainContext | None = None,
 ) -> DailyTaskPlan:
     """Draft an AI task plan for one team member."""
 
@@ -77,6 +80,7 @@ async def draft_plan_for_member(
         user_message=user_message,
         memory_context=memory_context,
         organization_id=org_id,
+        brain_context=brain_context,
     )
 
     # Parse AI response into structured tasks
@@ -130,6 +134,7 @@ async def draft_team_plans(
     db: AsyncSession,
     org_id: int,
     actor_user_id: int,
+    actor_role: str | None = None,
     team: str | None = None,
     plan_date: date | None = None,
 ) -> list[DailyTaskPlan]:
@@ -140,6 +145,13 @@ async def draft_team_plans(
     """
     target_date = plan_date or date.today()
     memory_context = await build_memory_context(db, organization_id=org_id)
+    brain_context = await build_brain_context(
+        db,
+        organization_id=org_id,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+        request_purpose="professional",
+    )
 
     # Get active team members
     query = select(TeamMember).where(
@@ -172,6 +184,7 @@ async def draft_team_plans(
             org_id=org_id,
             actor_user_id=actor_user_id,
             memory_context=memory_context,
+            brain_context=brain_context,
         )
         new_plans.append(plan)
 

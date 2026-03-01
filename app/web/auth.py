@@ -40,6 +40,8 @@ async def web_login(
     totp_code: str | None = Form(None, min_length=6, max_length=6),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
+    # Note: CSRF is intentionally NOT applied to login — no session exists yet.
+    # Protection is via rate limiting + IP brute-force controls in authenticate_user.
     from app.core.middleware import get_client_ip
 
     enforce_password_login_policy()

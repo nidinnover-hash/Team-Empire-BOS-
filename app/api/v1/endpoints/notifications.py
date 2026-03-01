@@ -92,10 +92,9 @@ async def mark_notifications_read(
     if payload.notification_ids:
         updated = await notification_service.mark_read(db, org_id, payload.notification_ids, user_id=user_id)
     else:
-        user_id = int(actor["id"])
         updated = await notification_service.mark_all_read(db, org_id, user_id)
     await db.commit()
-    return {"ok": True, "marked_read": updated}
+    return NotificationMarkReadResponse(ok=True, marked_read=updated)
 
 
 @router.get("/stream")

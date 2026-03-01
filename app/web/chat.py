@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_current_web_user, get_db, verify_csrf
 from app.services import memory as memory_service
 from app.services import talk_commands as talk_command_service
+from app.services.context_builder import build_brain_context
 from app.web._helpers import read_avatar_scope, write_avatar_scope
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,13 @@ async def web_agent_chat(
     write_mode = write_avatar_scope(user, avatar_mode)
 
     org_id = int(user["org_id"])
+    brain_context = await build_brain_context(
+        db,
+        organization_id=org_id,
+        actor_user_id=int(user["id"]),
+        actor_role=str(user["role"]),
+        request_purpose=str(user.get("purpose") or "professional"),
+    )
     memory_context = await build_memory_context(
         db,
         organization_id=org_id,
@@ -91,6 +99,7 @@ async def web_agent_chat(
         memory_context=memory_context,
         conversation_history=history,
         organization_id=org_id,
+        brain_context=brain_context,
     )
 
     await chat_history_service.save_message(

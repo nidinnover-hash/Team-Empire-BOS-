@@ -18,6 +18,7 @@ from app.core.rbac import require_roles
 from app.schemas.mfa import (
     MFAConfirmRequest,
     MFADisableRequest,
+    MFAMutationResponse,
     MFASetupResponse,
     MFAStatusResponse,
 )
@@ -79,7 +80,7 @@ async def mfa_setup(
     )
 
 
-@router.post("/confirm", status_code=status.HTTP_200_OK)
+@router.post("/confirm", status_code=status.HTTP_200_OK, response_model=MFAMutationResponse)
 async def mfa_confirm(
     body: MFAConfirmRequest,
     current_user: dict = Depends(require_roles("CEO", "ADMIN")),
@@ -117,7 +118,7 @@ async def mfa_confirm(
 
     await record_action(
         db=db,
-        event_type="mfa_enabled",
+        event_type="security_mfa_enabled",
         actor_user_id=user.id,
         organization_id=user.organization_id,
         entity_type="user",
@@ -129,7 +130,7 @@ async def mfa_confirm(
     return {"status": "ok", "message": "MFA enabled successfully."}
 
 
-@router.post("/disable", status_code=status.HTTP_200_OK)
+@router.post("/disable", status_code=status.HTTP_200_OK, response_model=MFAMutationResponse)
 async def mfa_disable(
     body: MFADisableRequest,
     current_user: dict = Depends(require_roles("CEO", "ADMIN")),
@@ -168,7 +169,7 @@ async def mfa_disable(
 
     await record_action(
         db=db,
-        event_type="mfa_disabled",
+        event_type="security_mfa_disabled",
         actor_user_id=user.id,
         organization_id=user.organization_id,
         entity_type="user",

@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +16,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.automation import AutomationTrigger, Workflow
 
 logger = logging.getLogger(__name__)
+
+_STEP_TIMEOUT_SECONDS = 30
+
+
+class WorkflowStatus(StrEnum):
+    DRAFT = "draft"
+    RUNNING = "running"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 # ── Automation Triggers ──────────────────────────────────────────────────────
@@ -115,17 +130,21 @@ async def fire_matching_triggers(
     The actual action execution is left to the caller (endpoint or scheduler)
     so we can respect the requires_approval flag.
     """
-    triggers = await list_triggers(db, organization_id, active_only=True)
+    result = await db.execute(
+        select(AutomationTrigger).where(
+            AutomationTrigger.organization_id == organization_id,
+            AutomationTrigger.is_active.is_(True),
+            AutomationTrigger.source_event == event_type,
+        )
+    )
+    triggers = list(result.scalars().all())
     matched: list[AutomationTrigger] = []
     for t in triggers:
-        if t.source_event != event_type:
-            continue
         # Optional filter matching (simple key-value subset check)
-        if t.filter_json and event_payload:
-            if not all(
-                event_payload.get(k) == v for k, v in t.filter_json.items()
-            ):
-                continue
+        if t.filter_json and event_payload and not all(
+            event_payload.get(k) == v for k, v in t.filter_json.items()
+        ):
+            continue
         t.fire_count += 1
         t.last_fired_at = datetime.now(UTC)
         matched.append(t)
@@ -189,9 +208,9 @@ async def start_workflow(
     db: AsyncSession, workflow_id: int, organization_id: int
 ) -> Workflow | None:
     wf = await get_workflow(db, workflow_id, organization_id)
-    if wf is None or wf.status not in ("draft", "paused"):
+    if wf is None or wf.status not in (WorkflowStatus.DRAFT, WorkflowStatus.PAUSED):
         return None
-    wf.status = "running"
+    wf.status = WorkflowStatus.RUNNING
     wf.started_at = datetime.now(UTC)
     wf.current_step = 0
     await db.commit()
@@ -207,14 +226,15 @@ async def advance_workflow(
 ) -> Workflow | None:
     """Mark current step complete and advance to next. Returns None if not found."""
     wf = await get_workflow(db, workflow_id, organization_id)
-    if wf is None or wf.status != "running":
+    if wf is None or wf.status != WorkflowStatus.RUNNING:
         return None
-    results = wf.result_json or {}
+    # Create new dict to ensure SQLAlchemy detects JSON mutation
+    results = dict(wf.result_json or {})
     results[f"step_{wf.current_step}"] = step_result or {}
     wf.result_json = results
     wf.current_step += 1
     if wf.current_step >= len(wf.steps_json):
-        wf.status = "completed"
+        wf.status = WorkflowStatus.COMPLETED
         wf.finished_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(wf)
@@ -230,9 +250,108 @@ async def fail_workflow(
     wf = await get_workflow(db, workflow_id, organization_id)
     if wf is None:
         return None
-    wf.status = "failed"
+    wf.status = WorkflowStatus.FAILED
     wf.error_text = error_text
     wf.finished_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(wf)
+    return wf
+
+
+# ── Workflow Step Executor ──────────────────────────────────────────────────
+
+
+def _get_step_handlers() -> dict[str, Callable[..., Any]]:
+    """Lazily import execution_engine HANDLERS to avoid circular imports."""
+    from app.services.execution_engine import HANDLERS
+
+    return HANDLERS
+
+
+async def _run_step_handler(
+    handler: Callable[..., Any],
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    """Run a step handler (sync or async) with timeout."""
+    if asyncio.iscoroutinefunction(handler) or inspect.isasyncgenfunction(handler):
+        result = await asyncio.wait_for(handler(params), timeout=_STEP_TIMEOUT_SECONDS)
+    else:
+        result = handler(params)
+        if asyncio.iscoroutine(result):
+            result = await asyncio.wait_for(result, timeout=_STEP_TIMEOUT_SECONDS)
+    if not isinstance(result, dict):
+        return {"output": str(result)}
+    return result
+
+
+async def execute_current_step(
+    db: AsyncSession,
+    workflow_id: int,
+    organization_id: int,
+) -> Workflow | None:
+    """Execute the current step of a running workflow, then advance or fail.
+
+    Steps have an ``action_type`` that maps to a handler in execution_engine.
+    If no handler exists, the step is auto-advanced with a ``skipped`` result.
+    """
+    wf = await get_workflow(db, workflow_id, organization_id)
+    if wf is None or wf.status != WorkflowStatus.RUNNING:
+        return wf
+
+    if wf.current_step >= len(wf.steps_json):
+        wf.status = WorkflowStatus.COMPLETED
+        wf.finished_at = datetime.now(UTC)
+        await db.commit()
+        await db.refresh(wf)
+        return wf
+
+    step = wf.steps_json[wf.current_step]
+    action_type = step.get("action_type", "")
+    params = step.get("params") or {}
+    handlers = _get_step_handlers()
+    handler = handlers.get(action_type)
+
+    if handler is None:
+        # No handler — auto-advance with skip note
+        return await advance_workflow(
+            db, workflow_id, organization_id,
+            step_result={"status": "skipped", "reason": f"no handler for {action_type}"},
+        )
+
+    try:
+        output = await _run_step_handler(handler, params)
+        return await advance_workflow(
+            db, workflow_id, organization_id,
+            step_result={"status": "succeeded", "output": output},
+        )
+    except TimeoutError:
+        return await fail_workflow(
+            db, workflow_id, organization_id,
+            error_text=f"Step {wf.current_step} ({action_type}) timed out after {_STEP_TIMEOUT_SECONDS}s",
+        )
+    except Exception as exc:
+        return await fail_workflow(
+            db, workflow_id, organization_id,
+            error_text=f"Step {wf.current_step} ({action_type}) failed: {type(exc).__name__}: {str(exc)[:200]}",
+        )
+
+
+async def run_workflow(
+    db: AsyncSession,
+    workflow_id: int,
+    organization_id: int,
+) -> Workflow | None:
+    """Execute all remaining steps of a workflow sequentially."""
+    wf = await get_workflow(db, workflow_id, organization_id)
+    if wf is None:
+        return None
+
+    if wf.status in (WorkflowStatus.DRAFT, WorkflowStatus.PAUSED):
+        wf = await start_workflow(db, workflow_id, organization_id)
+        if wf is None:
+            return None
+
+    while wf and wf.status == WorkflowStatus.RUNNING:
+        wf = await execute_current_step(db, workflow_id, organization_id)
+
     return wf

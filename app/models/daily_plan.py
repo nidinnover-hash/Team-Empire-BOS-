@@ -43,3 +43,8 @@ class DailyTaskPlan(Base):
         DateTime(timezone=True),
         default=lambda: dt.datetime.now(dt.UTC),
     )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: dt.datetime.now(dt.UTC),
+        onupdate=lambda: dt.datetime.now(dt.UTC),
+    )

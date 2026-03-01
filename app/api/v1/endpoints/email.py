@@ -224,6 +224,7 @@ async def gmail_callback(
     code: str = Query(..., min_length=1, max_length=2000),
     state: str = Query(..., min_length=1, max_length=1000),
     db: AsyncSession = Depends(get_db),
+    _actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> RedirectResponse:
     """
     Handle Gmail OAuth callback. Exchange code for tokens and save to DB.

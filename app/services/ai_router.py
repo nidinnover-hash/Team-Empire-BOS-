@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 from app.core.config import PLACEHOLDER_AI_KEYS, settings
 from app.core.request_context import get_current_request_id
+from app.schemas.brain_context import BrainContext
 
 logger = logging.getLogger(__name__)
 
@@ -328,6 +329,7 @@ async def call_ai(
     max_tokens: int = 800,
     conversation_history: list[dict] | None = None,
     organization_id: int | None = None,
+    brain_context: BrainContext | None = None,
     request_id: str | None = None,
     db: "AsyncSession | None" = None,
 ) -> str:
@@ -345,7 +347,7 @@ async def call_ai(
     if requested not in {"openai", "anthropic", "groq", "gemini"}:
         requested = "groq"
 
-    org_id = organization_id or 1
+    org_id = organization_id or (brain_context.organization_id if brain_context else 1)
     configured = _configured_providers(org_id=org_id)
     if not configured:
         return (
@@ -359,6 +361,8 @@ async def call_ai(
     # Inject memory into system prompt if provided.
     # Sanitize user-controlled content to prevent prompt injection.
     full_system = system_prompt
+    if brain_context is not None:
+        full_system = _prepend_brain_context(system_prompt, brain_context)
     if memory_context:
         # Escape any tokens that could be interpreted as system-level instructions.
         # These originate from user-written memory entries, emails, and task titles —
@@ -377,7 +381,6 @@ async def call_ai(
     effective_request_id = request_id or get_current_request_id()
 
     # Try primary provider
-    effective_org_id = organization_id or 1
     t0 = time.monotonic()
     primary_raw = await _call_provider(
         chosen,
@@ -385,7 +388,7 @@ async def call_ai(
         user_message,
         max_tokens,
         conversation_history,
-        org_id=effective_org_id,
+        org_id=org_id,
     )
     result, is_transient, in_tok, out_tok = _normalize_provider_result(primary_raw)
     latency = int((time.monotonic() - t0) * 1000)
@@ -416,7 +419,7 @@ async def call_ai(
                 user_message,
                 max_tokens,
                 conversation_history,
-                org_id=effective_org_id,
+                org_id=org_id,
             )
             fb_result, _, fb_in_tok, fb_out_tok = _normalize_provider_result(fb_raw)
             fb_latency = int((time.monotonic() - t1) * 1000)
@@ -438,6 +441,39 @@ async def call_ai(
         db=db,
     )
     return result  # Return the original error if all fail
+
+
+def _prepend_brain_context(system_prompt: str, brain_context: BrainContext) -> str:
+    policy = brain_context.org.policy if isinstance(brain_context.org.policy, dict) else {}
+    autonomy_policy_obj = policy.get("autonomy_policy")
+    autonomy_policy: dict[str, object] = (
+        autonomy_policy_obj if isinstance(autonomy_policy_obj, dict) else {}
+    )
+    policy_mode = (
+        str(autonomy_policy.get("current_mode") or "unknown")
+    )
+    lines = [
+        "[BRAIN CONTEXT - TENANT SCOPED]",
+        f"organization_id={brain_context.organization_id}",
+        f"organization_slug={brain_context.org.slug}",
+        f"organization_country={brain_context.org.country_code or 'NA'}",
+        f"organization_branch={brain_context.org.branch_label or 'NA'}",
+        f"policy_mode={policy_mode}",
+        f"actor_role={brain_context.actor_role or 'unknown'}",
+        f"request_purpose={brain_context.request_purpose}",
+        f"capabilities={','.join(brain_context.capabilities)}",
+    ]
+    if brain_context.employee is not None:
+        lines.extend(
+            [
+                f"employee_id={brain_context.employee.employee_id}",
+                f"employee_role={brain_context.employee.role or 'unknown'}",
+                f"employee_department_id={brain_context.employee.department_id or 0}",
+                f"employee_status={brain_context.employee.employment_status or 'unknown'}",
+            ]
+        )
+    lines.append("[END BRAIN CONTEXT]")
+    return "\n".join(lines) + "\n\n" + system_prompt
 
 
 def _get_model(provider: str) -> str:
