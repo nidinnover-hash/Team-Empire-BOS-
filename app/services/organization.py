@@ -55,9 +55,12 @@ async def update_organization(
     parent_organization_id: int | None = None,
     country_code: str | None = None,
     branch_label: str | None = None,
+    expected_config_version: int | None = None,
 ) -> Organization | None:
     org = await get_organization_by_id(db, organization_id)
     if org is None:
+        return None
+    if expected_config_version is not None and int(org.config_version) != int(expected_config_version):
         return None
     if name is not None:
         org.name = name
@@ -69,6 +72,7 @@ async def update_organization(
         org.country_code = country_code.upper()
     if branch_label is not None:
         org.branch_label = branch_label
+    org.config_version = int(org.config_version) + 1
     await db.commit()
     await db.refresh(org)
     return org
@@ -143,6 +147,66 @@ async def update_policy_config(db: AsyncSession, organization_id: int, config: d
     current = await get_policy_config(db, organization_id)
     current.update(config)
     org.policy_json = json.dumps(current)
+    org.config_version = int(org.config_version) + 1
     await db.commit()
     await db.refresh(org)
     return current
+
+
+def _parse_feature_flags(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    def _safe_rollout_percentage(raw_value: Any, default: int) -> int:
+        try:
+            if raw_value is None:
+                return default
+            return int(raw_value)
+        except (TypeError, ValueError):
+            return default
+
+    raw_flags = config.get("feature_flags", {})
+    if not isinstance(raw_flags, dict):
+        return {}
+    parsed: dict[str, dict[str, Any]] = {}
+    for key, raw in raw_flags.items():
+        if not isinstance(key, str) or not key.strip():
+            continue
+        if isinstance(raw, dict):
+            enabled = bool(raw.get("enabled", True))
+            rollout_default = 100 if enabled else 0
+            rollout = _safe_rollout_percentage(raw.get("rollout_percentage"), rollout_default)
+        else:
+            enabled = bool(raw)
+            rollout = 100 if enabled else 0
+        parsed[key.strip()] = {
+            "enabled": enabled,
+            "rollout_percentage": max(0, min(100, rollout)),
+        }
+    return parsed
+
+
+async def get_feature_flags(db: AsyncSession, organization_id: int) -> tuple[int, dict[str, dict[str, Any]]]:
+    org = await get_organization_by_id(db, organization_id)
+    if org is None:
+        return 1, {}
+    config = await get_policy_config(db, organization_id)
+    return int(org.config_version), _parse_feature_flags(config)
+
+
+async def update_feature_flags(
+    db: AsyncSession,
+    organization_id: int,
+    flags: dict[str, dict[str, Any]],
+    *,
+    expected_config_version: int | None = None,
+) -> tuple[int, dict[str, dict[str, Any]]] | None:
+    org = await get_organization_by_id(db, organization_id)
+    if org is None:
+        return None
+    if expected_config_version is not None and int(org.config_version) != int(expected_config_version):
+        return None
+    current = await get_policy_config(db, organization_id)
+    current["feature_flags"] = _parse_feature_flags({"feature_flags": flags})
+    org.policy_json = json.dumps(current)
+    org.config_version = int(org.config_version) + 1
+    await db.commit()
+    await db.refresh(org)
+    return int(org.config_version), _parse_feature_flags(current)
