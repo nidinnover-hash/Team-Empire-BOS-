@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.logs.audit import record_action
@@ -47,34 +47,61 @@ def _as_counter_name(name: str) -> str:
     return f"trend_{name}"
 
 
-async def _inc_db_metric(db: AsyncSession, *, org_id: int, name: str, amount: float = 1.0) -> None:
-    counter_name = _as_counter_name(name)
-    row = (
-        (
-            await db.execute(
-                select(TrendTelemetryCounter).where(
-                    TrendTelemetryCounter.organization_id == org_id,
-                    TrendTelemetryCounter.metric_name == counter_name,
+async def _inc_db_metrics(db: AsyncSession, *, org_id: int, deltas: dict[str, float]) -> None:
+    if not deltas:
+        return
+
+    now = datetime.now(UTC)
+    for name, amount in deltas.items():
+        counter_name = _as_counter_name(name)
+        row = (
+            (
+                await db.execute(
+                    select(TrendTelemetryCounter).where(
+                        TrendTelemetryCounter.organization_id == org_id,
+                        TrendTelemetryCounter.metric_name == counter_name,
+                    )
                 )
             )
+            .scalars()
+            .first()
         )
-        .scalars()
-        .first()
-    )
-    now = datetime.now(UTC)
-    if row is None:
-        db.add(
-            TrendTelemetryCounter(
-                organization_id=org_id,
-                metric_name=counter_name,
-                metric_value=float(amount),
-                updated_at=now,
+        if row is None:
+            db.add(
+                TrendTelemetryCounter(
+                    organization_id=org_id,
+                    metric_name=counter_name,
+                    metric_value=float(amount),
+                    updated_at=now,
+                )
             )
-        )
-    else:
-        row.metric_value = float(row.metric_value or 0.0) + float(amount)
-        row.updated_at = now
-    await db.commit()
+        else:
+            row.metric_value = float(row.metric_value or 0.0) + float(amount)
+            row.updated_at = now
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Handle concurrent inserts for the same org/metric by retrying as updates.
+        await db.rollback()
+        for name, amount in deltas.items():
+            counter_name = _as_counter_name(name)
+            row = (
+                (
+                    await db.execute(
+                        select(TrendTelemetryCounter).where(
+                            TrendTelemetryCounter.organization_id == org_id,
+                            TrendTelemetryCounter.metric_name == counter_name,
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if row is None:
+                continue
+            row.metric_value = float(row.metric_value or 0.0) + float(amount)
+            row.updated_at = now
+        await db.commit()
 
 
 async def get_trend_metrics(db: AsyncSession, *, org_id: int) -> dict[str, float]:
@@ -105,9 +132,6 @@ async def get_trend_metrics(db: AsyncSession, *, org_id: int) -> dict[str, float
         metric_key = str(row.metric_name).removeprefix("trend_")
         if metric_key in stats:
             stats[metric_key] = float(row.metric_value or 0.0)
-    # Backward-compatible fallback values if DB counters are absent.
-    if not rows:
-        stats.update({k: float(v) for k, v in _metrics.items()})
     samples = max(1.0, float(stats.get("read_latency_samples", 0.0) or 0.0))
     stats["read_latency_ms_avg"] = round(float(stats.get("read_latency_ms_total", 0.0)) / samples, 3)
     return stats
@@ -265,10 +289,7 @@ async def record_trend_event(
     throttle_minutes: int = 15,
 ) -> bool:
     _inc("write_attempted")
-    try:
-        await _inc_db_metric(db, org_id=org_id, name="write_attempted")
-    except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
-        logger.debug("Trend metric persist failed for write_attempted org=%s", org_id)
+    metric_deltas: dict[str, float] = {"write_attempted": 1.0}
     try:
         latest = (
             (
@@ -291,10 +312,7 @@ async def record_trend_event(
             and latest.created_at >= (datetime.now(UTC) - timedelta(minutes=throttle_minutes))
         ):
             _inc("write_skipped_throttled")
-            try:
-                await _inc_db_metric(db, org_id=org_id, name="write_skipped_throttled")
-            except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
-                logger.debug("Trend metric persist failed for write_skipped_throttled org=%s", org_id)
+            metric_deltas["write_skipped_throttled"] = metric_deltas.get("write_skipped_throttled", 0.0) + 1.0
             return False
         await record_action(
             db=db,
@@ -306,19 +324,18 @@ async def record_trend_event(
             payload_json=payload_json,
         )
         _inc("write_success")
-        try:
-            await _inc_db_metric(db, org_id=org_id, name="write_success")
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
-            logger.debug("Trend metric persist failed for write_success org=%s", org_id)
+        metric_deltas["write_success"] = metric_deltas.get("write_success", 0.0) + 1.0
         return True
     except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as exc:
         logger.warning("Trend write failed org=%s event=%s: %s", org_id, event_type, type(exc).__name__)
         _inc("write_errors")
-        try:
-            await _inc_db_metric(db, org_id=org_id, name="write_errors")
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
-            logger.debug("Trend metric persist failed for write_errors org=%s", org_id)
+        metric_deltas["write_errors"] = metric_deltas.get("write_errors", 0.0) + 1.0
         return False
+    finally:
+        try:
+            await _inc_db_metrics(db, org_id=org_id, deltas=metric_deltas)
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
+            logger.debug("Trend metric persist failed for write deltas org=%s", org_id)
 
 
 def parse_cursor(cursor: str | None) -> tuple[datetime, int] | None:
@@ -354,10 +371,7 @@ async def read_trend_events(
     cursor: str | None = None,
 ) -> tuple[list[Event], str | None]:
     _inc("read_requests")
-    try:
-        await _inc_db_metric(db, org_id=org_id, name="read_requests")
-    except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
-        logger.debug("Trend metric persist failed for read_requests org=%s", org_id)
+    metric_deltas: dict[str, float] = {"read_requests": 1.0}
     start = time.perf_counter()
     try:
         cursor_data = parse_cursor(cursor)
@@ -392,27 +406,22 @@ async def read_trend_events(
             next_cursor = encode_cursor(created_at=oldest.created_at, event_id=oldest.id)
         points = list(reversed(trimmed))
         _inc("read_points_returned", float(len(points)))
-        try:
-            await _inc_db_metric(db, org_id=org_id, name="read_points_returned", amount=float(len(points)))
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
-            logger.debug("Trend metric persist failed for read_points_returned org=%s", org_id)
+        metric_deltas["read_points_returned"] = metric_deltas.get("read_points_returned", 0.0) + float(len(points))
         return points, next_cursor
     except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
         _inc("read_errors")
-        try:
-            await _inc_db_metric(db, org_id=org_id, name="read_errors")
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
-            logger.debug("Trend metric persist failed for read_errors org=%s", org_id)
+        metric_deltas["read_errors"] = metric_deltas.get("read_errors", 0.0) + 1.0
         return [], None
     finally:
         latency_ms = (time.perf_counter() - start) * 1000.0
         _inc("read_latency_ms_total", latency_ms)
         _inc("read_latency_samples")
+        metric_deltas["read_latency_ms_total"] = metric_deltas.get("read_latency_ms_total", 0.0) + latency_ms
+        metric_deltas["read_latency_samples"] = metric_deltas.get("read_latency_samples", 0.0) + 1.0
         try:
-            await _inc_db_metric(db, org_id=org_id, name="read_latency_ms_total", amount=latency_ms)
-            await _inc_db_metric(db, org_id=org_id, name="read_latency_samples")
+            await _inc_db_metrics(db, org_id=org_id, deltas=metric_deltas)
         except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
-            logger.debug("Trend metric persist failed for latency org=%s", org_id)
+            logger.debug("Trend metric persist failed for read deltas org=%s", org_id)
 
 
 async def trend_snapshots_enabled(db: AsyncSession, org_id: int) -> bool:

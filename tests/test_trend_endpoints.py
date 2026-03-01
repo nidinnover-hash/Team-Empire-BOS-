@@ -3,6 +3,7 @@
 import pytest
 
 from app.core.deps import get_db
+from app.core.security import create_access_token
 from app.main import app as fastapi_app
 from app.services import trend_telemetry
 
@@ -12,6 +13,15 @@ async def _get_session():
     agen = override()
     session = await agen.__anext__()
     return session, agen
+
+
+def _ceo_headers(org_id: int = 1) -> dict[str, str]:
+    user_id = 1 if org_id == 1 else 2
+    email = "ceo@org1.com" if org_id == 1 else "ceo@org2.com"
+    token = create_access_token(
+        {"id": user_id, "email": email, "role": "CEO", "org_id": org_id}
+    )
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.asyncio
@@ -127,6 +137,22 @@ async def test_trend_metrics_endpoint(client):
     assert "write_attempted" in data
     assert "read_requests" in data
     assert "read_latency_ms_avg" in data
+
+
+@pytest.mark.asyncio
+async def test_trend_metrics_are_org_scoped(client):
+    first = await client.get("/api/v1/integrations/security-center", headers=_ceo_headers(1))
+    assert first.status_code == 200
+
+    org1 = await client.get("/api/v1/control/trend/metrics", headers=_ceo_headers(1))
+    assert org1.status_code == 200
+    org1_body = org1.json()
+    assert float(org1_body.get("write_attempted", 0.0)) >= 1.0
+
+    org2 = await client.get("/api/v1/control/trend/metrics", headers=_ceo_headers(2))
+    assert org2.status_code == 200
+    org2_body = org2.json()
+    assert float(org2_body.get("write_attempted", 0.0)) == 0.0
 
 
 @pytest.mark.asyncio
