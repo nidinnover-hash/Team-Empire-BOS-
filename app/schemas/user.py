@@ -36,6 +36,24 @@ class UserCreate(BaseModel):
     ] = "STAFF"
 
 
+class RoleChangeRequest(BaseModel):
+    role: Literal[
+        "CEO",
+        "ADMIN",
+        "MANAGER",
+        "STAFF",
+        "OWNER",
+        "TECH_LEAD",
+        "OPS_MANAGER",
+        "DEVELOPER",
+        "VIEWER",
+    ]
+
+
+class UserToggleActive(BaseModel):
+    is_active: bool
+
+
 class UserRead(BaseModel):
     id: int
     organization_id: int

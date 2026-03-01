@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
-from app.schemas.user import UserCreate, UserRead
+from app.schemas.user import RoleChangeRequest, UserCreate, UserRead, UserToggleActive
 from app.services import user as user_service
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -42,3 +42,51 @@ async def create_user(
         payload_json={"email": created.email, "role": created.role},
     )
     return created
+
+
+@router.patch("/{user_id}/role", response_model=UserRead)
+async def change_user_role(
+    user_id: int,
+    data: RoleChangeRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO")),
+) -> UserRead:
+    updated = await user_service.update_user_role(
+        db, user_id=user_id, organization_id=int(actor["org_id"]), new_role=data.role,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="User not found or invalid role")
+    await record_action(
+        db,
+        event_type="user_role_changed",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="user",
+        entity_id=user_id,
+        payload_json={"new_role": data.role},
+    )
+    return updated
+
+
+@router.patch("/{user_id}/active", response_model=UserRead)
+async def toggle_user_active(
+    user_id: int,
+    data: UserToggleActive,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO")),
+) -> UserRead:
+    updated = await user_service.toggle_user_active(
+        db, user_id=user_id, organization_id=int(actor["org_id"]), is_active=data.is_active,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    await record_action(
+        db,
+        event_type="user_active_toggled",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="user",
+        entity_id=user_id,
+        payload_json={"is_active": data.is_active},
+    )
+    return updated

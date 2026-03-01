@@ -13,7 +13,7 @@ from app.core.config import settings
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
-def create_access_token(data: dict, expires_minutes: int = 30) -> str:
+def create_access_token(data: dict[str, object], expires_minutes: int = 30) -> str:
     payload = data.copy()
     expire = datetime.now(UTC) + timedelta(minutes=expires_minutes)
     payload["exp"] = int(expire.timestamp())
@@ -26,7 +26,7 @@ def create_access_token(data: dict, expires_minutes: int = 30) -> str:
     return token
 
 
-def decode_access_token(token: str) -> dict:
+def decode_access_token(token: str) -> dict[str, object]:
     try:
         payload = jwt.decode(
             token,

@@ -14,6 +14,19 @@ from app.models.api_key import ApiKey
 _PREFIX = "nbos_"
 
 
+def _normalize_scopes(scopes: str) -> str:
+    parts = [part.strip().lower() for part in scopes.split(",") if part.strip()]
+    if not parts:
+        raise ValueError("At least one scope is required")
+    allowed = {"*", "read", "write"}
+    for part in parts:
+        if part not in allowed:
+            raise ValueError(f"Unknown scope: {part}")
+    if "*" in parts and len(parts) > 1:
+        raise ValueError("'*' scope cannot be combined with other scopes")
+    return ",".join(dict.fromkeys(parts))
+
+
 def _generate_key() -> tuple[str, str, str]:
     """Generate API key. Returns (full_key, prefix, key_hash)."""
     raw = secrets.token_hex(32)
@@ -29,10 +42,11 @@ async def create_api_key(
     organization_id: int,
     user_id: int,
     name: str,
-    scopes: str = "*",
+    scopes: str = "read,write",
     expires_in_days: int | None = None,
 ) -> tuple[ApiKey, str]:
     """Create a new API key. Returns (ApiKey, full_key_plaintext)."""
+    scopes = _normalize_scopes(scopes)
     full_key, prefix, key_hash = _generate_key()
     expires_at = (
         datetime.now(UTC) + timedelta(days=expires_in_days)

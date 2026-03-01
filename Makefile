@@ -22,13 +22,15 @@ audit:  ## Run pip-audit for known CVEs
 	pip-audit -r requirements.txt --progress-spinner off
 
 coverage:  ## Run tests with coverage report
-	python -m pytest tests/ -q --cov=app --cov-config=.coveragerc --cov-report=term-missing --cov-fail-under=61
+	python -m pytest tests/ -q --cov=app --cov-config=.coveragerc --cov-report=term-missing --cov-fail-under=65
 
 check:  ## Run all pre-launch checks (lint + typecheck + security + audit + tests + coverage)
 	@echo "=== Lint ==="
 	ruff check app tests
 	@echo "=== Type Check ==="
 	python -m mypy
+	@echo "=== Endpoint Size Guard ==="
+	python scripts/check_endpoint_file_sizes.py
 	@echo "=== Security Lint ==="
 	bandit -r app -ll -q
 	@echo "=== Dependency Audit ==="
@@ -36,7 +38,7 @@ check:  ## Run all pre-launch checks (lint + typecheck + security + audit + test
 	@echo "=== Dependency Integrity ==="
 	python -m pip check
 	@echo "=== Tests + Coverage ==="
-	python -m pytest tests/ -q --cov=app --cov-config=.coveragerc --cov-report=term-missing --cov-fail-under=61
+	python -m pytest tests/ -q --cov=app --cov-config=.coveragerc --cov-report=term-missing --cov-fail-under=65
 	@echo "=== All checks passed ==="
 
 migrate:  ## Run alembic migrations

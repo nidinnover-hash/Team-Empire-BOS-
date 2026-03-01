@@ -6,7 +6,7 @@ Task orchestration, multi-integration management, and intelligent decision suppo
 
 ## Stack
 
-- **Backend**: Python 3.12+, FastAPI, SQLAlchemy (async), Alembic
+- **Backend**: Python 3.12, FastAPI, SQLAlchemy (async), Alembic
 - **Frontend**: Server-rendered Jinja2 templates, vanilla JS, Lucide icons
 - **Database**: PostgreSQL (SQLite for tests)
 - **AI**: OpenAI, Groq, Anthropic (configurable per task)

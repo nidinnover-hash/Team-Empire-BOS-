@@ -1,12 +1,13 @@
 from app.api.v1.endpoints import integrations as integrations_endpoint
+from app.api.v1.endpoints import integrations_google_calendar as gcal_endpoint
 from tests.conftest import _make_auth_headers
 
 
 async def test_google_auth_url_and_oauth_callback_redacts_tokens(client, monkeypatch):
-    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_ID", "cid")
-    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_SECRET", "csecret")
-    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_REDIRECT_URI", "https://example.com/callback")
-    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CALENDAR_REDIRECT_URI", "https://example.com/cal-callback")
+    monkeypatch.setattr(gcal_endpoint.settings, "GOOGLE_CLIENT_ID", "cid")
+    monkeypatch.setattr(gcal_endpoint.settings, "GOOGLE_CLIENT_SECRET", "csecret")
+    monkeypatch.setattr(gcal_endpoint.settings, "GOOGLE_REDIRECT_URI", "https://example.com/callback")
+    monkeypatch.setattr(gcal_endpoint.settings, "GOOGLE_CALENDAR_REDIRECT_URI", "https://example.com/cal-callback")
 
     async def fake_exchange_code_for_tokens(code: str, client_id: str, client_secret: str, redirect_uri: str):
         return {
@@ -18,7 +19,7 @@ async def test_google_auth_url_and_oauth_callback_redacts_tokens(client, monkeyp
         }
 
     monkeypatch.setattr(
-        integrations_endpoint,
+        gcal_endpoint,
         "exchange_code_for_tokens",
         fake_exchange_code_for_tokens,
     )
@@ -43,9 +44,9 @@ async def test_google_auth_url_and_oauth_callback_redacts_tokens(client, monkeyp
 
 async def test_google_calendar_get_callback_handles_browser_redirect(client, monkeypatch):
     """GET callback should exchange code for tokens without Bearer auth (browser redirect)."""
-    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_ID", "cid")
-    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_SECRET", "csecret")
-    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CALENDAR_REDIRECT_URI", "https://example.com/cal-callback")
+    monkeypatch.setattr(gcal_endpoint.settings, "GOOGLE_CLIENT_ID", "cid")
+    monkeypatch.setattr(gcal_endpoint.settings, "GOOGLE_CLIENT_SECRET", "csecret")
+    monkeypatch.setattr(gcal_endpoint.settings, "GOOGLE_CALENDAR_REDIRECT_URI", "https://example.com/cal-callback")
 
     async def fake_exchange(code, client_id, client_secret, redirect_uri):
         return {
@@ -56,10 +57,10 @@ async def test_google_calendar_get_callback_handles_browser_redirect(client, mon
             "expires_in": 3600,
         }
 
-    monkeypatch.setattr(integrations_endpoint, "exchange_code_for_tokens", fake_exchange)
+    monkeypatch.setattr(gcal_endpoint, "exchange_code_for_tokens", fake_exchange)
 
     # Generate a valid signed state for org 1
-    state = integrations_endpoint._sign_google_calendar_state(1)
+    state = gcal_endpoint._sign_google_calendar_state(1)
 
     # Call GET callback (no auth header — simulates browser redirect from Google)
     resp = await client.get(
@@ -80,9 +81,9 @@ async def test_google_calendar_get_callback_handles_browser_redirect(client, mon
 
 async def test_google_calendar_get_callback_invalid_state(client, monkeypatch):
     """GET callback should reject tampered state."""
-    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_ID", "cid")
-    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_SECRET", "csecret")
-    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CALENDAR_REDIRECT_URI", "https://example.com/cal-callback")
+    monkeypatch.setattr(gcal_endpoint.settings, "GOOGLE_CLIENT_ID", "cid")
+    monkeypatch.setattr(gcal_endpoint.settings, "GOOGLE_CLIENT_SECRET", "csecret")
+    monkeypatch.setattr(gcal_endpoint.settings, "GOOGLE_CALENDAR_REDIRECT_URI", "https://example.com/cal-callback")
 
     resp = await client.get(
         "/api/v1/integrations/google-calendar/oauth/callback",
@@ -92,14 +93,14 @@ async def test_google_calendar_get_callback_invalid_state(client, monkeypatch):
 
 
 async def test_google_calendar_auth_url_derives_redirect_from_google_redirect_uri(client, monkeypatch):
-    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_ID", "cid")
-    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_SECRET", "csecret")
+    monkeypatch.setattr(gcal_endpoint.settings, "GOOGLE_CLIENT_ID", "cid")
+    monkeypatch.setattr(gcal_endpoint.settings, "GOOGLE_CLIENT_SECRET", "csecret")
     monkeypatch.setattr(
-        integrations_endpoint.settings,
+        gcal_endpoint.settings,
         "GOOGLE_REDIRECT_URI",
         "https://example.com/api/v1/email/callback",
     )
-    monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CALENDAR_REDIRECT_URI", None)
+    monkeypatch.setattr(gcal_endpoint.settings, "GOOGLE_CALENDAR_REDIRECT_URI", None)
 
     headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     auth_url = await client.get("/api/v1/integrations/google-calendar/auth-url", headers=headers)

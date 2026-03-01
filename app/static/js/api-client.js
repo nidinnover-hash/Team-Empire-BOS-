@@ -105,6 +105,15 @@
         _clearToken();
         window.location.href = "/web/login";
       }
+      if (response.status === 429) {
+        var retryAfter = parseInt(response.headers.get("Retry-After") || "30", 10);
+        if (isNaN(retryAfter) || retryAfter < 1) retryAfter = 30;
+        if (window.PCUI && window.PCUI.showRetryToast) {
+          window.PCUI.showRetryToast(retryAfter);
+        } else if (window.showToast) {
+          window.showToast("Rate limited. Retry in " + retryAfter + "s.", "error");
+        }
+      }
       var detail = body && body.detail ? body.detail : ("Request failed (" + response.status + ")");
       var err = new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
       err.status = response.status;

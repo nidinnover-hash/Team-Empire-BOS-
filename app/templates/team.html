@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="AI Agent Factory — Nidin BOS" />
+  <meta name="theme-color" content="#f5f5f7" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Team Management — Nidin BOS</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/team.css" />
+  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+</head>
+<body>
+  {% set active_page = "team" %}
+  {% include "partials/sidebar.html" %}
+
+  <div class="main-wrap">
+    <div class="page-header">
+      <h1>Team Management</h1>
+      <button class="btn-primary" id="invite-btn" type="button">+ Invite Member</button>
+    </div>
+
+    <div class="kpi-row">
+      <div class="kpi"><div class="label">Total Members</div><div class="val" id="k-total">0</div></div>
+      <div class="kpi"><div class="label">Active</div><div class="val" id="k-active">0</div></div>
+      <div class="kpi"><div class="label">Inactive</div><div class="val" id="k-inactive">0</div></div>
+    </div>
+
+    <div id="member-list" class="member-list"><div class="empty">Loading team members...</div></div>
+  </div>
+
+  <!-- Invite Modal -->
+  <div class="modal-overlay" id="invite-modal" style="display:none">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Invite Team Member</h2>
+        <button class="modal-close" id="invite-modal-close" type="button">&times;</button>
+      </div>
+      <form id="invite-form">
+        <label for="inv-name">Name</label>
+        <input id="inv-name" name="name" type="text" placeholder="Full name" required minlength="1" maxlength="100" />
+        <label for="inv-email">Email</label>
+        <input id="inv-email" name="email" type="email" placeholder="email@example.com" required />
+        <label for="inv-password">Temporary Password</label>
+        <input id="inv-password" name="password" type="password" placeholder="Min 8 chars, upper+lower+digit+special" required minlength="8" maxlength="128" />
+        <label for="inv-role">Role</label>
+        <select id="inv-role" name="role">
+          <option value="STAFF">Staff</option>
+          <option value="MANAGER">Manager</option>
+          <option value="ADMIN">Admin</option>
+          <option value="DEVELOPER">Developer</option>
+          <option value="TECH_LEAD">Tech Lead</option>
+          <option value="OPS_MANAGER">Ops Manager</option>
+          <option value="VIEWER">Viewer</option>
+        </select>
+        <div class="form-actions">
+          <button type="button" class="btn-secondary" id="invite-cancel">Cancel</button>
+          <button type="submit" class="btn-primary" id="invite-submit">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/team-page.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
+</body>
+</html>

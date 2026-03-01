@@ -3,6 +3,7 @@ import json
 from hashlib import sha256
 
 from app.api.v1.endpoints import integrations as integrations_endpoint
+from app.api.v1.endpoints import integrations_whatsapp as whatsapp_endpoint
 from app.core import oauth_nonce
 from tests.conftest import _make_auth_headers
 
@@ -43,7 +44,7 @@ async def test_whatsapp_send_test_message_success(client, monkeypatch):
         return {"messages": [{"id": "wamid.123"}]}
 
     monkeypatch.setattr(
-        integrations_endpoint,
+        whatsapp_endpoint,
         "send_text_message",
         fake_send_text_message,
     )
@@ -74,7 +75,7 @@ async def test_whatsapp_send_test_message_success(client, monkeypatch):
 
 
 async def test_whatsapp_webhook_verify_success(client, monkeypatch):
-    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_WEBHOOK_VERIFY_TOKEN", "verify-me")
+    monkeypatch.setattr(whatsapp_endpoint.settings, "WHATSAPP_WEBHOOK_VERIFY_TOKEN", "verify-me")
     response = await client.get(
         "/api/v1/integrations/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=verify-me&hub.challenge=abc123"
     )
@@ -83,8 +84,8 @@ async def test_whatsapp_webhook_verify_success(client, monkeypatch):
 
 
 async def test_whatsapp_webhook_replay_detected_when_signature_reused(client, monkeypatch):
-    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
-    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS", 300)
+    monkeypatch.setattr(whatsapp_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
+    monkeypatch.setattr(whatsapp_endpoint.settings, "WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS", 300)
     oauth_nonce._used_nonces.clear()
     oauth_nonce._redis_initialized = False
     oauth_nonce._redis_client = None
@@ -119,7 +120,7 @@ async def test_whatsapp_webhook_replay_detected_when_signature_reused(client, mo
 
 
 async def test_whatsapp_webhook_rejects_missing_content_type(client, monkeypatch):
-    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
+    monkeypatch.setattr(whatsapp_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
 
     payload = {"entry": [{"changes": [{"value": {"messages": [{"id": "wamid.CT1"}]}}]}]}
     raw = json.dumps(payload, separators=(",", ":"))
@@ -139,7 +140,7 @@ async def test_whatsapp_webhook_rejects_missing_content_type(client, monkeypatch
 
 
 async def test_whatsapp_webhook_rejects_non_json_content_type(client, monkeypatch):
-    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
+    monkeypatch.setattr(whatsapp_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
 
     payload = {"entry": [{"changes": [{"value": {"messages": [{"id": "wamid.CT2"}]}}]}]}
     raw = json.dumps(payload, separators=(",", ":"))
@@ -162,7 +163,7 @@ async def test_whatsapp_webhook_rejects_non_json_content_type(client, monkeypatc
 
 
 async def test_whatsapp_webhook_received_event_contains_telemetry_fields(client, monkeypatch):
-    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
+    monkeypatch.setattr(whatsapp_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
     connected = await client.post(
         "/api/v1/integrations/connect",
         headers=_make_auth_headers(1, "ceo@org1.com", "CEO", 1),
@@ -237,14 +238,14 @@ async def test_whatsapp_webhook_received_event_contains_telemetry_fields(client,
 
 
 async def test_whatsapp_webhook_rejects_invalid_signature_and_records_failure(client, monkeypatch):
-    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
+    monkeypatch.setattr(whatsapp_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
     called = {"resolved": False}
 
     async def track_resolution(_db, _payload):
         called["resolved"] = True
         return None, None, None
 
-    monkeypatch.setattr(integrations_endpoint, "_resolve_whatsapp_context", track_resolution)
+    monkeypatch.setattr(whatsapp_endpoint, "_resolve_whatsapp_context", track_resolution)
 
     payload = {"entry": [{"changes": [{"value": {"messages": [{"id": "wamid.BADSIG"}]}}]}]}
     raw = json.dumps(payload, separators=(",", ":"))
@@ -262,8 +263,8 @@ async def test_whatsapp_webhook_rejects_invalid_signature_and_records_failure(cl
 
 
 async def test_whatsapp_webhook_retry_after_ingest_failure_succeeds(client, monkeypatch):
-    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
-    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS", 300)
+    monkeypatch.setattr(whatsapp_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
+    monkeypatch.setattr(whatsapp_endpoint.settings, "WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS", 300)
     oauth_nonce._used_nonces.clear()
     oauth_nonce._redis_initialized = False
     oauth_nonce._redis_client = None
@@ -283,7 +284,7 @@ async def test_whatsapp_webhook_retry_after_ingest_failure_succeeds(client, monk
             "skipped_unknown_integration": 0,
         }
 
-    monkeypatch.setattr(integrations_endpoint.whatsapp_service, "ingest_webhook_payload", flaky_ingest)
+    monkeypatch.setattr(whatsapp_endpoint.whatsapp_service, "ingest_webhook_payload", flaky_ingest)
 
     payload = {"entry": [{"changes": [{"value": {"messages": [{"id": "wamid.RETRY1"}]}}]}]}
     raw = json.dumps(payload, separators=(",", ":"))

@@ -29,55 +29,12 @@ from app.core.deps import get_db
 from app.core.security import create_access_token
 from app.db.base import Base
 from app.main import app as fastapi_app
-from app.models import ai_call_log as _model_ai_call_log  # noqa: F401
-
-# Register all models so Base.metadata knows about the tables
-from app.models import api_key as _model_api_key  # noqa: F401
-from app.models import approval as _model_approval  # noqa: F401
-from app.models import approval_pattern as _model_approval_pattern  # noqa: F401
-from app.models import autonomy_policy as _model_autonomy_policy  # noqa: F401
-from app.models import ceo_control as _model_ceo_control  # noqa: F401
-from app.models import chat_message as _model_chat_message  # noqa: F401
-from app.models import clone_control as _model_clone_control  # noqa: F401
-from app.models import clone_performance as _model_clone_performance  # noqa: F401
-from app.models import clone_persona as _model_clone_persona  # noqa: F401
-from app.models import coaching_report as _model_coaching_report  # noqa: F401
-from app.models import command as _model_command  # noqa: F401
-from app.models import contact as _model_contact  # noqa: F401
-from app.models import conversation as _model_conversation  # noqa: F401
-from app.models import daily_plan as _model_daily_plan  # noqa: F401
-from app.models import daily_run as _model_daily_run  # noqa: F401
-from app.models import decision_log as _model_decision_log  # noqa: F401
-from app.models import decision_trace as _model_decision_trace  # noqa: F401
-from app.models import email as _model_email  # noqa: F401
-from app.models import employee as _model_employee  # noqa: F401
-from app.models import event as _model_event  # noqa: F401
-from app.models import execution as _model_execution  # noqa: F401
-from app.models import finance as _model_finance  # noqa: F401
-from app.models import github as _model_github  # noqa: F401
-from app.models import goal as _model_goal  # noqa: F401
-from app.models import integration as _model_integration  # noqa: F401
-from app.models import integration_signal as _model_integration_signal  # noqa: F401
-from app.models import invite_token as _model_invite_token  # noqa: F401
-from app.models import media_project as _model_media_project  # noqa: F401
-from app.models import memory as _model_memory  # noqa: F401
-from app.models import note as _model_note  # noqa: F401
-from app.models import notification as _model_notification  # noqa: F401
-from app.models import ops_metrics as _model_ops_metrics  # noqa: F401
-from app.models import org_membership as _model_org_membership  # noqa: F401
-from app.models import organization as _model_organization  # noqa: F401
-from app.models import policy_rule as _model_policy_rule  # noqa: F401
-from app.models import project as _model_project  # noqa: F401
-from app.models import self_learning_run as _model_self_learning_run  # noqa: F401
-from app.models import social as _model_social  # noqa: F401
-from app.models import task as _model_task  # noqa: F401
-from app.models import threat_signal as _model_threat_signal  # noqa: F401
-from app.models import user as _model_user  # noqa: F401
-from app.models import webhook as _model_webhook  # noqa: F401
-from app.models import weekly_report as _model_weekly_report  # noqa: F401
-from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
 from app.models.organization import Organization
+from app.models.registry import load_all_models
 from app.models.user import User
+
+# Register all models so Base.metadata knows about every table.
+load_all_models()
 
 # StaticPool + check_same_thread=False makes all connections share one
 # in-memory SQLite database — required for :memory: to work across requests.

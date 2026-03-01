@@ -163,7 +163,7 @@ def test_whatsapp_verify_uses_hmac_compare():
     """The WhatsApp webhook verify endpoint uses hmac.compare_digest."""
     import inspect
 
-    from app.api.v1.endpoints import integrations
-    source = inspect.getsource(integrations.whatsapp_webhook_verify)
+    from app.api.v1.endpoints import integrations_whatsapp
+    source = inspect.getsource(integrations_whatsapp.whatsapp_webhook_verify)
     assert "hmac.compare_digest" in source
     assert "hub_verify_token ==" not in source

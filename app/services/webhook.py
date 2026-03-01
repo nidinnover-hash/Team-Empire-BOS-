@@ -19,6 +19,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.db.session import AsyncSessionLocal
 from app.core.token_crypto import decrypt_token, encrypt_token
 from app.models.webhook import WebhookDelivery, WebhookEndpoint
 from app.schemas.webhook import VALID_WEBHOOK_EVENTS
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 _DISPATCH_TIMEOUT_SECONDS = 10.0
 _MAX_DELIVERIES_PER_ENDPOINT = 100
+_DISPATCH_CONCURRENCY = 5
 _IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 
@@ -325,6 +327,8 @@ async def _dispatch_to_endpoint(
         delivery.attempt_count = attempt
         start = time.monotonic()
         try:
+            # Re-validate target on each attempt to reduce DNS-rebinding SSRF risk.
+            _validate_url(endpoint.url)
             async with httpx.AsyncClient(timeout=_DISPATCH_TIMEOUT_SECONDS) as client:
                 response = await client.post(
                     endpoint.url,
@@ -411,18 +415,35 @@ async def trigger_org_webhooks(
     )
     endpoints = list(result.scalars().all())
 
+    eligible_ids: list[int] = []
     for endpoint in endpoints:
         subscribed = endpoint.event_types or []
         if subscribed and event not in subscribed:
             continue
-        try:
-            await _dispatch_to_endpoint(db, endpoint, event, payload)
-        except Exception as exc:
-            logger.warning(
-                "Webhook dispatch error endpoint_id=%d: %s",
-                endpoint.id,
-                type(exc).__name__,
-            )
+        eligible_ids.append(int(endpoint.id))
+
+    if not eligible_ids:
+        return
+
+    concurrency = max(1, min(_DISPATCH_CONCURRENCY, len(eligible_ids)))
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def _dispatch_one(endpoint_id: int) -> None:
+        async with semaphore:
+            async with AsyncSessionLocal() as task_db:
+                endpoint = await get_webhook_endpoint(task_db, endpoint_id, organization_id)
+                if endpoint is None or not endpoint.is_active:
+                    return
+                try:
+                    await _dispatch_to_endpoint(task_db, endpoint, event, payload)
+                except Exception:
+                    logger.warning(
+                        "Webhook dispatch error endpoint_id=%d",
+                        endpoint_id,
+                        exc_info=True,
+                    )
+
+    await asyncio.gather(*(_dispatch_one(endpoint_id) for endpoint_id in eligible_ids))
 
 
 async def send_test_webhook(

@@ -173,10 +173,18 @@
         return;
       }
       container.innerHTML = items.map(function (d) {
+        var retryInfo = "";
+        if (d.attempt_count > 1 || d.max_retries) {
+          retryInfo = '<span class="dlv-retry">attempt ' + (d.attempt_count || 1) + '/' + (d.max_retries || 5) + '</span>';
+        }
+        if (d.next_retry_at && d.status === "failed") {
+          retryInfo += '<span class="dlv-next-retry">next retry: ' + fmtTime(d.next_retry_at) + '</span>';
+        }
         return '<div class="dlv-row">' +
           '<span class="dlv-event">' + escHtml(d.event) + "</span>" +
           '<span class="dlv-status ' + escHtml(d.status) + '">' + escHtml(d.status) + (d.response_status_code ? " (" + d.response_status_code + ")" : "") + "</span>" +
           '<span class="dlv-ms">' + (d.duration_ms != null ? d.duration_ms + "ms" : "-") + "</span>" +
+          retryInfo +
           '<span class="dlv-time">' + fmtTime(d.created_at) + "</span>" +
         "</div>";
       }).join("");

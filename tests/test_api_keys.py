@@ -18,10 +18,10 @@ BASE = "/api/v1/api-keys"
 # ---------------------------------------------------------------------------
 
 
-async def _create_key(client, name="Test Key", headers=None):
+async def _create_key(client, name="Test Key", scopes="*", headers=None):
     return await client.post(
         BASE,
-        json={"name": name, "scopes": "*"},
+        json={"name": name, "scopes": scopes},
         headers=headers or CEO_HEADERS,
     )
 
@@ -147,3 +147,27 @@ async def test_validate_revoked_key(db):
     await api_key_service.revoke_api_key(db, api_key.id, organization_id=1, user_id=1)
     result = await api_key_service.validate_api_key(db, full_key)
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_api_key_can_access_read_endpoint(client):
+    create_resp = await _create_key(client, scopes="read")
+    full_key = create_resp.json()["key"]
+    headers = {"Authorization": f"Bearer {full_key}"}
+    resp = await client.get("/api/v1/auth/me", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["email"] == "ceo@org1.com"
+
+
+@pytest.mark.asyncio
+async def test_api_key_read_scope_cannot_write(client):
+    create_resp = await _create_key(client, scopes="read")
+    full_key = create_resp.json()["key"]
+    headers = {"Authorization": f"Bearer {full_key}"}
+    resp = await client.post(
+        BASE,
+        json={"name": "Blocked Write", "scopes": "read"},
+        headers=headers,
+    )
+    assert resp.status_code == 403
+    assert "required scope: write" in resp.json()["detail"]

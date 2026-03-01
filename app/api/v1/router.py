@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     commands,
     contacts,
     control,
+    dashboard_kpi,
     data_collection,
     email,
     executions,
@@ -73,3 +74,4 @@ api_router.include_router(notifications.router)
 api_router.include_router(mfa.router)
 api_router.include_router(webhooks.router)
 api_router.include_router(api_keys.router)
+api_router.include_router(dashboard_kpi.router)

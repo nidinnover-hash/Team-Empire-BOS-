@@ -23,14 +23,17 @@ async def create_api_key(
     user: dict = Depends(require_roles("CEO", "ADMIN")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    api_key, full_key = await api_key_service.create_api_key(
-        db,
-        organization_id=int(user["org_id"]),
-        user_id=int(user["id"]),
-        name=body.name,
-        scopes=body.scopes,
-        expires_in_days=body.expires_in_days,
-    )
+    try:
+        api_key, full_key = await api_key_service.create_api_key(
+            db,
+            organization_id=int(user["org_id"]),
+            user_id=int(user["id"]),
+            name=body.name,
+            scopes=body.scopes,
+            expires_in_days=body.expires_in_days,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {
         "id": api_key.id,
         "name": api_key.name,

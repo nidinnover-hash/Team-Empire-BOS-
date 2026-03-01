@@ -189,6 +189,44 @@
     }
   });
 
+  var _retryToastTimer = null;
+  function showRetryToast(seconds) {
+    if (_retryToastTimer) { clearInterval(_retryToastTimer); _retryToastTimer = null; }
+    var remaining = Math.max(1, seconds);
+    var toastEl = document.getElementById("retry-toast");
+    if (!toastEl) {
+      toastEl = document.createElement("div");
+      toastEl.id = "retry-toast";
+      toastEl.style.cssText = "position:fixed;top:16px;right:16px;z-index:10000;background:#2d3748;color:#fff;padding:12px 18px;border-radius:8px;font-size:.82rem;box-shadow:0 4px 16px rgba(0,0,0,.3);display:flex;align-items:center;gap:10px;";
+      var msgSpan = document.createElement("span");
+      msgSpan.id = "retry-toast-msg";
+      toastEl.appendChild(msgSpan);
+      var closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.textContent = "Dismiss";
+      closeBtn.style.cssText = "background:none;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:4px;padding:2px 8px;font-size:.7rem;cursor:pointer;";
+      closeBtn.addEventListener("click", function () {
+        if (_retryToastTimer) { clearInterval(_retryToastTimer); _retryToastTimer = null; }
+        toastEl.style.display = "none";
+      });
+      toastEl.appendChild(closeBtn);
+      document.body.appendChild(toastEl);
+    }
+    toastEl.style.display = "flex";
+    var msgEl = document.getElementById("retry-toast-msg");
+    function update() {
+      if (remaining <= 0) {
+        toastEl.style.display = "none";
+        if (_retryToastTimer) { clearInterval(_retryToastTimer); _retryToastTimer = null; }
+        return;
+      }
+      msgEl.textContent = "Rate limited. Retry in " + remaining + "s...";
+      remaining--;
+    }
+    update();
+    _retryToastTimer = setInterval(update, 1000);
+  }
+
   window.PCUI = {
     mapApiError: mapApiError,
     setButtonLoading: setButtonLoading,
@@ -196,6 +234,7 @@
     requestJson: requestJson,
     escapeHtml: escapeHtml,
     getCsrfToken: getCsrfToken,
+    showRetryToast: showRetryToast,
   };
 
   if (document.readyState === "loading") {

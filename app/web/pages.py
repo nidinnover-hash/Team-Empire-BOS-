@@ -100,6 +100,9 @@ router.get("/web/webhooks", response_class=HTMLResponse, include_in_schema=False
 router.get("/web/notifications", response_class=HTMLResponse, include_in_schema=False)(_web_page("notifications.html"))
 router.get("/web/security", response_class=HTMLResponse, include_in_schema=False)(_web_page("security.html"))
 router.get("/web/api-keys", response_class=HTMLResponse, include_in_schema=False)(_web_page("api_keys.html"))
+router.get("/web/audit", response_class=HTMLResponse, include_in_schema=False)(_web_page("activity.html"))
+router.get("/web/team", response_class=HTMLResponse, include_in_schema=False)(_web_page("team.html"))
+router.get("/web/health", response_class=HTMLResponse, include_in_schema=False)(_web_page("health.html"))
 
 
 @router.get("/web/login", response_class=HTMLResponse, include_in_schema=False)

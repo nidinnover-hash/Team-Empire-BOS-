@@ -1,0 +1,108 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Team Management
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.main-wrap { margin-left: var(--sb-width); padding: 1.5rem 2rem; max-width: 1000px; }
+h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+
+/* ── KPI Row ───────────────────────────────────────────────────────────── */
+.kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: .8rem; margin-bottom: 1.2rem; }
+.kpi {
+  background: var(--surface); border: none; border-radius: var(--radius);
+  padding: .65rem .85rem; box-shadow: var(--shadow-sm);
+}
+.kpi .label { font-size: .62rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint); }
+.kpi .val { font-size: 1.2rem; font-weight: 700; color: var(--text); margin-top: .15rem; font-feature-settings: 'tnum' 1; }
+
+/* ── Member Cards ─────────────────────────────────────────────────────── */
+.member-list { display: flex; flex-direction: column; gap: 6px; }
+
+.member-card {
+  background: var(--surface); border-radius: var(--radius); padding: .75rem 1rem;
+  box-shadow: var(--shadow-sm); display: flex; align-items: center; gap: .8rem;
+  transition: box-shadow .15s;
+}
+.member-card:hover { box-shadow: var(--shadow-md); }
+
+.member-avatar {
+  width: 36px; height: 36px; border-radius: 50%; background: var(--brand);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: .78rem; flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.member-info { flex: 1; min-width: 0; }
+.member-name { font-size: .82rem; font-weight: 600; color: var(--text); }
+.member-email { font-size: .68rem; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.role-badge {
+  font-size: .6rem; font-weight: 700; text-transform: uppercase; padding: .12rem .4rem;
+  border-radius: 4px; letter-spacing: .04em; background: var(--bg); border: 1px solid var(--line);
+  color: var(--text-muted);
+}
+.role-badge.CEO { background: #e9d5ff; color: #6b21a8; border-color: #c4b5fd; }
+.role-badge.ADMIN { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+.role-badge.MANAGER { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.status-dot.active { background: var(--ok, #38a169); }
+.status-dot.inactive { background: var(--text-faint); }
+
+.member-actions { display: flex; gap: .3rem; flex-shrink: 0; }
+.member-actions select {
+  padding: .2rem .3rem; font-size: .65rem; border: 1px solid var(--line);
+  border-radius: 4px; background: var(--surface); color: var(--text-muted); cursor: pointer;
+}
+.member-actions button {
+  background: var(--surface); border: 1px solid var(--line); color: var(--text-muted);
+  border-radius: 6px; padding: .2rem .45rem; font-size: .65rem; cursor: pointer;
+}
+.member-actions button:hover { border-color: var(--brand); color: var(--brand); }
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+.btn-primary {
+  background: var(--brand); color: #fff; border: none; border-radius: var(--radius);
+  padding: .4rem .9rem; font-size: .78rem; font-weight: 600; cursor: pointer; transition: opacity .15s;
+}
+.btn-primary:hover { opacity: .85; }
+.btn-secondary {
+  background: var(--surface); color: var(--text-muted); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: .4rem .9rem; font-size: .78rem; cursor: pointer;
+}
+.btn-secondary:hover { border-color: var(--text-faint); }
+
+/* ── Modal ─────────────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-card {
+  background: var(--surface); border-radius: var(--radius-lg, 12px);
+  padding: 1.4rem; width: 95%; max-width: 460px; box-shadow: var(--shadow-lg, 0 8px 30px rgba(0,0,0,.15));
+  max-height: 90vh; overflow-y: auto;
+}
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.modal-header h2 { font-size: .95rem; font-weight: 700; color: var(--text); margin: 0; }
+.modal-close { background: none; border: none; font-size: 1.3rem; color: var(--text-muted); cursor: pointer; padding: .2rem; }
+.modal-close:hover { color: var(--text); }
+
+/* ── Form ──────────────────────────────────────────────────────────────── */
+#invite-form label { display: block; font-size: .72rem; font-weight: 600; color: var(--text-muted); margin-top: .7rem; margin-bottom: .25rem; }
+#invite-form input, #invite-form select {
+  width: 100%; padding: .45rem .6rem; font-size: .82rem; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--bg); color: var(--text); box-sizing: border-box;
+}
+#invite-form input:focus, #invite-form select:focus { outline: none; border-color: var(--brand); }
+.form-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
+
+.empty { color: var(--text-faint); text-align: center; padding: 3rem; font-size: .82rem; }
+
+/* ── Responsive ───────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .main-wrap { padding: 1rem; padding-top: 3.5rem; }
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .member-card { flex-wrap: wrap; }
+  .member-actions { width: 100%; justify-content: flex-end; margin-top: .3rem; }
+}
