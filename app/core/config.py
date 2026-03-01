@@ -91,6 +91,7 @@ class Settings(BaseSettings):
     WEBHOOK_DELIVERY_MAX_ATTEMPTS: int = 3
     WEBHOOK_DELIVERY_BACKOFF_SECONDS: float = 1.0
     WEBHOOK_DELIVERY_MAX_BACKOFF_SECONDS: float = 8.0
+    WEBHOOK_ASYNC_DISPATCH_ONLY: bool = False
     CLONE_API_KEY: str | None = None
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_WINDOW_SECONDS: int = 60
@@ -112,6 +113,7 @@ class Settings(BaseSettings):
     ENFORCE_STARTUP_VALIDATION: bool = False
     AUTO_CREATE_SCHEMA: bool = False
     AUTO_SEED_DEFAULTS: bool = False
+    DB_SCHEMA_ENFORCE_HEAD: bool = True
     COOKIE_SECURE: bool = False  # Set True in production (requires HTTPS)
     SECRET_KEY: str = ""  # Must be set in .env (min 32 chars)
     ADMIN_EMAIL: str = "demo@ai.com"
@@ -338,6 +340,8 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("SYNC_INTERVAL_MINUTES must be >= 1")
     if s.SYNC_INTERVAL_MINUTES > 1_440:  # 24 hours
         issues.append("SYNC_INTERVAL_MINUTES must be <= 1440 (24 hours)")
+    if not s.DEBUG and not bool(s.DB_SCHEMA_ENFORCE_HEAD):
+        issues.append("DB_SCHEMA_ENFORCE_HEAD should be true when DEBUG=false")
     if s.SYNC_THROTTLE_MINUTES < 0:
         issues.append("SYNC_THROTTLE_MINUTES must be >= 0")
     if s.SYNC_STALE_HOURS < 1:

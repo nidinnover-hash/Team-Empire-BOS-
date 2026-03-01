@@ -6,9 +6,9 @@ Related controls:
 - `docs/BACKUP_RESTORE_DRILL.md`
 
 ## Deploy
-1. Confirm release gate: `python scripts/check_ready.py`
+1. Confirm release gate: `python3.12 scripts/check_ready.py`
 2. Confirm production config smoke check:
-   - `python scripts/smoke_prod_config.py --import-app`
+   - `python3.12 scripts/smoke_prod_config.py --import-app`
    - Must pass with production-like env (`DEBUG=false`, `COOKIE_SECURE=true`, `AUTO_CREATE_SCHEMA=false`, `AUTO_SEED_DEFAULTS=false`).
 3. Confirm critical regression suite is green in CI fast-checks:
    - `tests/test_api_smoke_fast.py`
@@ -24,6 +24,13 @@ Related controls:
    - `curl -fsS http://127.0.0.1:8000/health`
    - `journalctl -u nidin-bos --since "10 minutes ago"`
    - `journalctl -u nidin-bos-scheduler --since "10 minutes ago"`
+
+## Webhook queue mode
+To use DB-backed async webhook dispatch:
+- Set `WEBHOOK_ASYNC_DISPATCH_ONLY=true`
+- Run webhook worker process:
+  - `python3.12 run_webhook_worker.py`
+This mode queues deliveries in DB and lets worker retries handle dispatch.
 
 ## Security-critical env defaults
 Set these explicitly in production:
@@ -64,7 +71,7 @@ Otherwise `X-Forwarded-For` can be spoofed and weaken rate-limits/login lockout.
    - Treat as product-path regression.
    - Reproduce locally with the same subset and fix before merge.
 2. `Production config smoke` fails:
-   - Run `python scripts/smoke_prod_config.py --import-app` locally with production-like env.
+   - Run `python3.12 scripts/smoke_prod_config.py --import-app` locally with production-like env.
    - Fix invalid env values first (startup validation), then import/runtime issues.
 3. `check_ready.py` fails:
    - Follow failing stage order (`ruff`, `mypy`, migrations, tests, security tools).
@@ -74,6 +81,9 @@ Otherwise `X-Forwarded-For` can be spoofed and weaken rate-limits/login lockout.
 1. Rotate one provider token/key at a time.
 2. Update `.env`, restart services, verify provider health endpoint.
 3. Revoke old credentials after validation.
+4. Run rotation drill monthly:
+   - `python3.12 scripts/rotation_drill.py`
+   - Optional apply mode for webhook secrets: `python3.12 scripts/rotation_drill.py --apply`
 
 ## Forensics and audit
 1. Capture request IDs and timestamps from logs.

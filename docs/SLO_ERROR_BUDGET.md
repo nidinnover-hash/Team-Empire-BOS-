@@ -26,6 +26,11 @@ This policy covers API availability and latency for production organizations.
   - p95 latency > `1200ms` for 10 minutes, or
   - `/health` fails 3 checks in a row.
 
+## Deploy and rollback policy
+- If rolling 24h error budget burn is above `30%`, block non-critical deploys.
+- If rolling 24h error budget burn is above `50%`, require rollback plan approval before deploy.
+- If rolling 24h error budget burn is above `70%`, auto-recommend rollback to last known-good release.
+
 ## Weekly review
 - Review:
   - 5xx trend

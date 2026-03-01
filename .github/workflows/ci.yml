@@ -44,6 +44,12 @@ jobs:
       - name: Dependency security audit
         run: pip-audit -r requirements.txt --progress-spinner off
 
+      - name: Env schema guard
+        run: python scripts/check_env_schema.py
+
+      - name: Secret pattern guard
+        run: python scripts/check_secret_patterns.py
+
       - name: Lint
         run: ruff check app tests
 
@@ -61,6 +67,9 @@ jobs:
 
       - name: Endpoint size guards
         run: python scripts/check_endpoint_file_sizes.py
+
+      - name: Endpoint complexity guards
+        run: python scripts/check_endpoint_complexity.py
 
       - name: Pre-commit policy checks (main tree only)
         run: |
@@ -170,6 +179,14 @@ jobs:
             tests/test_compliance_engine.py \
             tests/test_control_api.py \
             tests/test_sync_scheduler.py \
+            -m "not flaky" \
+            -p no:cacheprovider
+
+      - name: Tenant isolation gate
+        run: |
+          python -m pytest -q \
+            tests/test_org_isolation.py \
+            tests/test_org_isolation_extended.py \
             -m "not flaky" \
             -p no:cacheprovider
 

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
+
+_RESOURCE_SCOPE_RE = re.compile(r"^[a-z0-9_]+:(read|write|\*)$")
 
 
 class ApiKeyCreate(BaseModel):
@@ -20,19 +23,21 @@ class ApiKeyCreate(BaseModel):
             raise ValueError("At least one scope is required")
         allowed = {"*", "read", "write"}
         for part in parts:
-            if part not in allowed:
+            if part in allowed:
+                continue
+            normalized = part.replace("-", "_")
+            if not _RESOURCE_SCOPE_RE.match(normalized):
                 raise ValueError(f"Unknown scope: {part}")
-        # "*" is exclusive to avoid ambiguous combinations.
         if "*" in parts and len(parts) > 1:
             raise ValueError("'*' scope cannot be combined with other scopes")
-        deduped = list(dict.fromkeys(parts))
+        deduped = list(dict.fromkeys(part.replace("-", "_") for part in parts))
         return ",".join(deduped)
 
 
 class ApiKeyCreateResponse(BaseModel):
     id: int
     name: str
-    key: str  # Full key — shown only once
+    key: str  # Full key - shown only once
     key_prefix: str
     scopes: str
     expires_at: datetime | None

@@ -120,7 +120,7 @@
   // ── Modal Logic ─────────────────────────────────────────────────────
   function openCreateModal() {
     $("key-name").value = "";
-    $("key-scopes").value = "*";
+    $("key-scopes").value = "read,write";
     $("key-expiry").value = "";
     $("create-modal").style.display = "";
     $("key-name").focus();
@@ -153,7 +153,7 @@
     var btn = $("create-submit");
     var data = {
       name: $("key-name").value.trim(),
-      scopes: $("key-scopes").value.trim() || "*",
+      scopes: $("key-scopes").value.trim() || "read,write",
     };
     var expiry = $("key-expiry").value.trim();
     if (expiry) data.expires_in_days = Number(expiry);

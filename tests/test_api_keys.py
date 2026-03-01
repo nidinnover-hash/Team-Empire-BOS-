@@ -170,4 +170,36 @@ async def test_api_key_read_scope_cannot_write(client):
         headers=headers,
     )
     assert resp.status_code == 403
-    assert "required scope: write" in resp.json()["detail"]
+    assert "required scope: api_keys:write" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_api_key_resource_scope_allows_matching_read(client):
+    create_resp = await _create_key(client, scopes="webhooks:read")
+    full_key = create_resp.json()["key"]
+    headers = {"Authorization": f"Bearer {full_key}"}
+    resp = await client.get("/api/v1/webhooks", headers=headers)
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_api_key_resource_scope_blocks_other_resources(client):
+    create_resp = await _create_key(client, scopes="webhooks:read")
+    full_key = create_resp.json()["key"]
+    headers = {"Authorization": f"Bearer {full_key}"}
+    resp = await client.get("/api/v1/integrations", headers=headers)
+    assert resp.status_code == 403
+    assert "required scope: integrations:read" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_api_key_resource_write_scope_allows_matching_write(client):
+    create_resp = await _create_key(client, scopes="api_keys:write")
+    full_key = create_resp.json()["key"]
+    headers = {"Authorization": f"Bearer {full_key}"}
+    resp = await client.post(
+        BASE,
+        json={"name": "Resource Writer", "scopes": "api_keys:read"},
+        headers=headers,
+    )
+    assert resp.status_code == 201

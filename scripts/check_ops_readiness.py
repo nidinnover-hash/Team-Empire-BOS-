@@ -39,6 +39,11 @@ def main() -> int:
         ["Rollback", "Credential rotation", "Incident response priorities"],
         failures,
     )
+    _must_contain(
+        ROOT / "docs" / "MONTHLY_HARDENING_CHECKLIST.md",
+        ["Monthly Hardening Checklist", "Security", "Reliability", "Testing and Isolation"],
+        failures,
+    )
 
     if failures:
         print("Ops readiness check failed:")

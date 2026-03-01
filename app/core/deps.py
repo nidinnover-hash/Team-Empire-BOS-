@@ -1,5 +1,6 @@
 import hmac
 import logging
+import re
 from collections.abc import AsyncGenerator
 from typing import TypedDict
 
@@ -78,13 +79,55 @@ def _parse_api_key_scopes(raw_scopes: object) -> list[str]:
     return ordered
 
 
-def _api_key_allows_scope(raw_scopes: object, required_scope: str) -> bool:
+_API_SCOPE_RESOURCE_RE = re.compile(r"^[a-z0-9_]+$")
+
+
+def _normalize_scope_resource(value: str) -> str:
+    return value.strip().lower().replace("-", "_")
+
+
+def _required_api_scope_for_request(request: Request) -> tuple[str, str]:
+    action = "read" if request.method in {"GET", "HEAD", "OPTIONS"} else "write"
+    path = request.url.path or ""
+
+    # Root authenticated profile endpoint.
+    if path == "/me":
+        return ("auth", action)
+
+    # Default fallback for unexpected paths.
+    resource = "api"
+    prefix = "/api/v1/"
+    if path.startswith(prefix):
+        remainder = path[len(prefix):]
+        first_segment = remainder.split("/", 1)[0].strip().lower()
+        if first_segment:
+            resource = _normalize_scope_resource(first_segment)
+
+    return (resource, action)
+
+
+def _api_key_allows_scope(raw_scopes: object, required_scope: str, *, request: Request) -> bool:
     scopes = _parse_api_key_scopes(raw_scopes)
     if not scopes:
         return False
     if "*" in scopes:
         return True
-    return required_scope.lower() in scopes
+    if required_scope.lower() in scopes:
+        return True
+    resource, action = _required_api_scope_for_request(request)
+    if action in scopes:
+        return True
+    scoped_action = f"{resource}:{action}"
+    scoped_all = f"{resource}:*"
+    if scoped_action in scopes or scoped_all in scopes:
+        return True
+    # Backward-compatible acceptance for keys that still use "api:read/write".
+    if f"api:{action}" in scopes or "api:*" in scopes:
+        return True
+    # Defensive guard: reject malformed dynamic resources.
+    if not _API_SCOPE_RESOURCE_RE.match(resource):
+        return False
+    return False
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -125,10 +168,11 @@ async def get_current_api_user(
             logger.warning("API key rejected key_id=%s reason=%s", key.id, "inactive_user")
             raise credentials_exception
         required_scope = "read" if request.method in {"GET", "HEAD", "OPTIONS"} else "write"
-        if not _api_key_allows_scope(key.scopes, required_scope):
+        resource, action = _required_api_scope_for_request(request)
+        if not _api_key_allows_scope(key.scopes, required_scope, request=request):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"API key missing required scope: {required_scope}",
+                detail=f"API key missing required scope: {resource}:{action}",
             )
         return {
             "id": int(db_user.id),

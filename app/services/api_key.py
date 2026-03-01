@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -12,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.api_key import ApiKey
 
 _PREFIX = "nbos_"
+_RESOURCE_SCOPE_RE = re.compile(r"^[a-z0-9_]+:(read|write|\*)$")
 
 
 def _normalize_scopes(scopes: str) -> str:
@@ -20,11 +22,15 @@ def _normalize_scopes(scopes: str) -> str:
         raise ValueError("At least one scope is required")
     allowed = {"*", "read", "write"}
     for part in parts:
-        if part not in allowed:
+        if part in allowed:
+            continue
+        normalized = part.replace("-", "_")
+        if not _RESOURCE_SCOPE_RE.match(normalized):
             raise ValueError(f"Unknown scope: {part}")
     if "*" in parts and len(parts) > 1:
         raise ValueError("'*' scope cannot be combined with other scopes")
-    return ",".join(dict.fromkeys(parts))
+    normalized_parts = [part.replace("-", "_") for part in parts]
+    return ",".join(dict.fromkeys(normalized_parts))
 
 
 def _generate_key() -> tuple[str, str, str]:

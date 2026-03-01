@@ -15,6 +15,8 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from alembic.config import Config as AlembicConfig
+from alembic.script import ScriptDirectory
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -121,6 +123,37 @@ _verify_static_asset_integrity(
 _server_start_time: float | None = None
 
 
+def _expected_alembic_heads() -> set[str]:
+    cfg = AlembicConfig(str(_APP_DIR.parent / "alembic.ini"))
+    script = ScriptDirectory.from_config(cfg)
+    return {str(head) for head in script.get_heads() if head}
+
+
+async def _current_db_heads() -> set[str]:
+    from sqlalchemy import inspect, text
+
+    def _read_heads(sync_conn) -> set[str]:
+        inspector = inspect(sync_conn)
+        if "alembic_version" not in inspector.get_table_names():
+            return set()
+        rows = sync_conn.execute(text("SELECT version_num FROM alembic_version")).fetchall()
+        return {str(row[0]) for row in rows if row and row[0]}
+
+    async with engine.connect() as conn:
+        return await conn.run_sync(_read_heads)
+
+
+async def _enforce_schema_head() -> None:
+    expected = _expected_alembic_heads()
+    current = await _current_db_heads()
+    if current != expected:
+        raise RuntimeError(
+            "Database schema is not at migration head. "
+            f"Current heads={sorted(current)}, expected={sorted(expected)}. "
+            "Run `alembic upgrade head` before starting the app."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.core.logging_config import configure_logging
@@ -134,6 +167,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from sqlalchemy import text
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
+    if settings.DB_SCHEMA_ENFORCE_HEAD and not settings.DEBUG:
+        await _enforce_schema_head()
 
     if settings.AUTO_CREATE_SCHEMA:
         async with engine.begin() as conn:
