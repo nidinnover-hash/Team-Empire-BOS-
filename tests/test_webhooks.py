@@ -82,6 +82,25 @@ async def test_create_webhook_rejects_private_ip_targets(client):
 
 
 @pytest.mark.asyncio
+async def test_create_webhook_rejects_dns_resolving_to_private_ip(db, monkeypatch):
+    from app.services import webhook as webhook_service
+
+    def fake_getaddrinfo(*_args, **_kwargs):
+        # Simulate DNS resolving a public host to loopback.
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 443))]
+
+    import socket
+    monkeypatch.setattr(webhook_service.socket, "getaddrinfo", fake_getaddrinfo)
+
+    with pytest.raises(ValueError, match="host is not allowed"):
+        await webhook_service.create_webhook_endpoint(
+            db,
+            organization_id=1,
+            url="https://example.com/hook",
+        )
+
+
+@pytest.mark.asyncio
 async def test_list_webhook_endpoints(client):
     await _create_webhook(client, url="https://example.com/hook1")
     await _create_webhook(client, url="https://example.com/hook2")
