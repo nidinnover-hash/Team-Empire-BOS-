@@ -117,7 +117,7 @@ jobs:
           ADMIN_EMAIL: "ci-only@example.com"
           ADMIN_PASSWORD: "CiOnlyPassword123!"
           TOKEN_ENCRYPTION_KEY: "ci-only-abcdef0123456789abcdef0123456789"
-          OPENAI_API_KEY: "sk-ci-only-not-a-real-key"
+          OPENAI_API_KEY: "openai-ci-only-not-a-real-key"
           DEFAULT_AI_PROVIDER: "openai"
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/nidin_bos
           PURPOSE_PERSONAL_EMAILS: "ci@example.com"
@@ -134,7 +134,7 @@ jobs:
           ADMIN_EMAIL: "ci-only@example.com"
           ADMIN_PASSWORD: "CiOnlyPassword123!"
           TOKEN_ENCRYPTION_KEY: "ci-only-abcdef0123456789abcdef0123456789"
-          OPENAI_API_KEY: "sk-ci-only-not-a-real-key"
+          OPENAI_API_KEY: "openai-ci-only-not-a-real-key"
           DEFAULT_AI_PROVIDER: "openai"
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/nidin_bos
           PURPOSE_PERSONAL_EMAILS: "ci@example.com"
@@ -229,7 +229,7 @@ jobs:
           SECRET_KEY: "ci-only-0123456789abcdef0123456789abcdef"
           ADMIN_PASSWORD: "CiOnlyPassword123!"
           TOKEN_ENCRYPTION_KEY: "ci-only-abcdef0123456789abcdef0123456789"
-          OPENAI_API_KEY: "sk-ci-only-not-a-real-key"
+          OPENAI_API_KEY: "openai-ci-only-not-a-real-key"
           DEFAULT_AI_PROVIDER: "openai"
           DATABASE_URL: sqlite:///./ci.db
         run: |
@@ -293,7 +293,7 @@ jobs:
           SECRET_KEY: "ci-only-0123456789abcdef0123456789abcdef"
           ADMIN_PASSWORD: "CiOnlyPassword123!"
           TOKEN_ENCRYPTION_KEY: "ci-only-abcdef0123456789abcdef0123456789"
-          OPENAI_API_KEY: "sk-ci-only-not-a-real-key"
+          OPENAI_API_KEY: "openai-ci-only-not-a-real-key"
           DEFAULT_AI_PROVIDER: "openai"
           DATABASE_URL: sqlite:///./ci.db
         run: |
