@@ -1,0 +1,29 @@
+# Gitleaks configuration — allowlist CI-only dummy/placeholder secrets.
+# These values are NOT real secrets — they exist solely so CI environment
+# variables satisfy validation without exposing actual credentials.
+
+[allowlist]
+description = "CI-only placeholder values"
+
+# Exact dummy keys used in GitHub Actions workflow env blocks
+regexTarget = "line"
+regexes = [
+  '''sk-ci-only-not-a-real-key''',
+  '''sk-live-valid-key-value''',
+  '''sk-your-key-here''',
+  '''sk-xxxxxxxxxxxxxxxxxxxxxxxx''',
+  '''0123456789abcdef0123456789abcdef''',
+  '''abcdef0123456789abcdef0123456789''',
+  '''StrongPassword123!''',
+  '''TestPassword2026!''',
+  '''ghp_XXXX''',
+  '''xoxb-XXXX-YYYY''',
+]
+
+# Placeholder patterns in example / documentation files
+paths = [
+  '''\.env\.example''',
+  '''\.env\.production\.example''',
+  '''deploy/env\.personal\.example''',
+  '''docs/.*\.md''',
+]

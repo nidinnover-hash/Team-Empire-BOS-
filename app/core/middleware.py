@@ -217,7 +217,7 @@ class RequestBodyLimitMiddleware(BaseHTTPMiddleware):
                         )
                     chunks.append(chunk)
                 # Stash the already-read body so downstream can access it.
-                request._body = b"".join(chunks)  # noqa: SLF001
+                request._body = b"".join(chunks)
         return cast(Response, await call_next(request))
 
 

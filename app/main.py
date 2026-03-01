@@ -58,10 +58,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 from app.models import ai_call_log as _model_ai_call_log  # noqa: F401
 from app.models import approval as _model_approval  # noqa: F401
+from app.models import approval_pattern as _model_approval_pattern  # noqa: F401
+from app.models import autonomy_policy as _model_autonomy_policy  # noqa: F401
 from app.models import ceo_control as _model_ceo_control  # noqa: F401
 from app.models import chat_message as _model_chat_message  # noqa: F401
 from app.models import clone_control as _model_clone_control  # noqa: F401
 from app.models import clone_performance as _model_clone_performance  # noqa: F401
+from app.models import clone_persona as _model_clone_persona  # noqa: F401
+from app.models import coaching_report as _model_coaching_report  # noqa: F401
 from app.models import command as _model_command  # noqa: F401
 from app.models import contact as _model_contact  # noqa: F401
 from app.models import conversation as _model_conversation  # noqa: F401
@@ -78,6 +82,7 @@ from app.models import github as _model_github  # noqa: F401
 from app.models import goal as _model_goal  # noqa: F401
 from app.models import integration as _model_integration  # noqa: F401
 from app.models import integration_signal as _model_integration_signal  # noqa: F401
+from app.models import invite_token as _model_invite_token  # noqa: F401
 from app.models import media_project as _model_media_project  # noqa: F401
 from app.models import memory as _model_memory  # noqa: F401
 from app.models import note as _model_note  # noqa: F401
@@ -87,19 +92,14 @@ from app.models import org_membership as _model_org_membership  # noqa: F401
 from app.models import organization as _model_organization  # noqa: F401
 from app.models import policy_rule as _model_policy_rule  # noqa: F401
 from app.models import project as _model_project  # noqa: F401
+from app.models import self_learning_run as _model_self_learning_run  # noqa: F401
 from app.models import social as _model_social  # noqa: F401
 from app.models import task as _model_task  # noqa: F401
 from app.models import threat_signal as _model_threat_signal  # noqa: F401
 from app.models import user as _model_user  # noqa: F401
-from app.models import weekly_report as _model_weekly_report  # noqa: F401
 from app.models import webhook as _model_webhook  # noqa: F401
+from app.models import weekly_report as _model_weekly_report  # noqa: F401
 from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
-from app.models import approval_pattern as _model_approval_pattern  # noqa: F401
-from app.models import autonomy_policy as _model_autonomy_policy  # noqa: F401
-from app.models import clone_persona as _model_clone_persona  # noqa: F401
-from app.models import coaching_report as _model_coaching_report  # noqa: F401
-from app.models import invite_token as _model_invite_token  # noqa: F401
-from app.models import self_learning_run as _model_self_learning_run  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Startup safety guards
@@ -213,9 +213,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Close all module-level httpx clients to avoid resource leaks
     from app.tools import (
-        calendly, clickup, digitalocean, elevenlabs, github, github_admin,
-        google_analytics, google_calendar, hubspot, linkedin, notion,
-        perplexity, slack, stripe_api, whatsapp_business,
+        calendly,
+        clickup,
+        digitalocean,
+        elevenlabs,
+        github,
+        github_admin,
+        google_analytics,
+        google_calendar,
+        hubspot,
+        linkedin,
+        notion,
+        perplexity,
+        slack,
+        stripe_api,
+        whatsapp_business,
     )
     for mod in (
         calendly, clickup, digitalocean, elevenlabs, github, github_admin,

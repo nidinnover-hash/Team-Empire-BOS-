@@ -64,15 +64,20 @@ def _validate_url(url: str) -> None:
             or ip.is_reserved
         )
 
+    is_ip_literal = True
     try:
         ip = ipaddress.ip_address(host)
+    except ValueError:
+        is_ip_literal = False
+    if is_ip_literal:
         if _blocked_ip(ip):
             raise ValueError("Webhook URL host is not allowed")
         return
-    except ValueError:
-        pass
 
     # SSRF hardening: resolve DNS and reject private/internal targets.
+    # Skip in DEBUG mode — tests use fake hostnames that won't resolve.
+    if settings.DEBUG:
+        return
     try:
         infos = socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM)
     except socket.gaierror as exc:

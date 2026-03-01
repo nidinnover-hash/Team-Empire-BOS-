@@ -71,8 +71,8 @@ from app.models import social as _model_social  # noqa: F401
 from app.models import task as _model_task  # noqa: F401
 from app.models import threat_signal as _model_threat_signal  # noqa: F401
 from app.models import user as _model_user  # noqa: F401
-from app.models import weekly_report as _model_weekly_report  # noqa: F401
 from app.models import webhook as _model_webhook  # noqa: F401
+from app.models import weekly_report as _model_weekly_report  # noqa: F401
 from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
 from app.models.organization import Organization
 from app.models.user import User

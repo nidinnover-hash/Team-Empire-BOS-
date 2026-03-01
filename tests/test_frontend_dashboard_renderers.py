@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
-
 
 DASHBOARD_JS = Path("app/static/js/dashboard-page.js")
 DASHBOARD_HTML = Path("app/templates/dashboard.html")

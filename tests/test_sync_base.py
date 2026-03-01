@@ -1,15 +1,14 @@
 """Tests for the IntegrationSync base class and the three refactored services."""
 from __future__ import annotations
 
-import asyncio
 import inspect
+from collections.abc import Hashable
 from datetime import UTC, datetime
-from typing import Any, Hashable
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.db.base import Base as ORMBase
 from app.services.sync_base import IntegrationSync, SyncResult
 
 
@@ -115,17 +114,15 @@ class TestIntegrationSyncTemplate:
     @pytest.mark.asyncio
     async def test_not_connected_raises(self):
         syncer = StubSync()
-        with patch("app.services.sync_base.get_integration_by_type", new_callable=AsyncMock, return_value=None):
-            with pytest.raises(ValueError, match="not connected"):
-                await syncer.sync(AsyncMock(), org_id=1)
+        with patch("app.services.sync_base.get_integration_by_type", new_callable=AsyncMock, return_value=None), pytest.raises(ValueError, match="not connected"):
+            await syncer.sync(AsyncMock(), org_id=1)
 
     @pytest.mark.asyncio
     async def test_disconnected_raises(self):
         syncer = StubSync()
         integ = _make_integration(connected=False)
-        with patch("app.services.sync_base.get_integration_by_type", new_callable=AsyncMock, return_value=integ):
-            with pytest.raises(ValueError, match="not connected"):
-                await syncer.sync(AsyncMock(), org_id=1)
+        with patch("app.services.sync_base.get_integration_by_type", new_callable=AsyncMock, return_value=integ), pytest.raises(ValueError, match="not connected"):
+            await syncer.sync(AsyncMock(), org_id=1)
 
     @pytest.mark.asyncio
     async def test_happy_path_syncs_items(self):

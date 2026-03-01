@@ -86,7 +86,6 @@ def consume_oauth_nonce_once(namespace: str, nonce: str, *, max_age_seconds: int
 
 def oauth_nonce_seen(namespace: str, nonce: str, *, max_age_seconds: int) -> bool:
     """Return True when nonce is already marked within the replay window."""
-    ttl = max(max_age_seconds, 1)
     now = time()
     key = f"{namespace}:{nonce}"
     redis_client = _get_redis_client()

@@ -15,14 +15,11 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.decision_log import DecisionLog
 from app.models.employee import Employee
 from app.models.ops_metrics import CodeMetricWeekly, CommsMetricWeekly, TaskMetricWeekly
-from app.models.policy_rule import PolicyRule
 from app.models.weekly_report import WeeklyReport
 from app.services.report_service import generate_weekly_report, get_report
 
@@ -211,7 +208,7 @@ async def test_generate_overwrites_existing(db: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_report_content_format(db: AsyncSession):
-    emp = await _add_employee(db, org_id=1, name="Bob Format", role="Senior Dev")
+    await _add_employee(db, org_id=1, name="Bob Format", role="Senior Dev")
     await db.flush()
 
     report = await generate_weekly_report(db, org_id=1, week_start=WEEK, report_type="team_health")
@@ -228,7 +225,7 @@ async def test_report_content_format(db: AsyncSession):
     assert "## Metric Definitions" in md
     # Detailed breakdown section with employee name and role
     assert "## Detailed Breakdown" in md
-    assert f"### Bob Format (Senior Dev)" in md
+    assert "### Bob Format (Senior Dev)" in md
 
 
 # ---------------------------------------------------------------------------

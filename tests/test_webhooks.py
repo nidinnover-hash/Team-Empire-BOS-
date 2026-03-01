@@ -91,6 +91,7 @@ async def test_create_webhook_rejects_dns_resolving_to_private_ip(db, monkeypatc
 
     import socket
     monkeypatch.setattr(webhook_service.socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(webhook_service.settings, "DEBUG", False)
 
     with pytest.raises(ValueError, match="host is not allowed"):
         await webhook_service.create_webhook_endpoint(

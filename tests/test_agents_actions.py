@@ -12,7 +12,6 @@ from app.api.v1.endpoints import agents as agents_endpoint
 from app.services import email_service as real_email_service
 from tests.conftest import _make_auth_headers
 
-
 # ── Fake orchestrator responses ───────────────────────────────────────────────
 
 async def _fake_run_agent_task(*_args, **_kwargs) -> AgentChatResponse:

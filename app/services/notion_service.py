@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Hashable
 from datetime import UTC, datetime
-from typing import Any, Hashable
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +16,7 @@ from app.services.integration import (
     connect_integration,
     get_integration_by_type,
 )
-from app.services.sync_base import IntegrationSync, SyncResult
+from app.services.sync_base import IntegrationSync
 from app.tools import notion as notion_tool
 
 logger = logging.getLogger(__name__)

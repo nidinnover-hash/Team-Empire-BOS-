@@ -13,7 +13,6 @@ Covers:
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -31,7 +30,6 @@ from app.services.signal_ingestion import (
     ingest_github_signals,
     ingest_gmail_signals,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers — seed data factories
@@ -663,8 +661,8 @@ async def test_employee_mapping_gmail(db, monkeypatch):
     def fake_fetch_emails(access_token, refresh_token, expires_at, max_results=50):
         return fake_emails, False
 
-    from app.tools import gmail as gmail_mod
     from app.core.config import settings
+    from app.tools import gmail as gmail_mod
 
     monkeypatch.setattr(gmail_mod, "fetch_recent_emails", fake_fetch_emails)
     monkeypatch.setattr(settings, "WORK_EMAIL_DOMAINS", "")
@@ -707,8 +705,8 @@ async def test_gmail_domain_filter(db, monkeypatch):
     def fake_fetch_emails(access_token, refresh_token, expires_at, max_results=50):
         return fake_emails, False
 
-    from app.tools import gmail as gmail_mod
     from app.core.config import settings
+    from app.tools import gmail as gmail_mod
 
     monkeypatch.setattr(gmail_mod, "fetch_recent_emails", fake_fetch_emails)
     monkeypatch.setattr(settings, "WORK_EMAIL_DOMAINS", "empire.com")

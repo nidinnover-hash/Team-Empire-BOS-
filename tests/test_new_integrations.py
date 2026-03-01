@@ -17,10 +17,7 @@ from app.services import (
     perplexity_service,
     stripe_service,
 )
-
-
 from tests.conftest import _make_auth_headers
-
 
 # ── Perplexity ──────────────────────────────────────────────────────────
 

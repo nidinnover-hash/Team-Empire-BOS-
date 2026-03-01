@@ -1,5 +1,6 @@
 """Tests for super-admin cross-org analytics layer."""
 import json
+
 import pytest
 
 from app.core.security import create_access_token

@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Hashable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Hashable
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

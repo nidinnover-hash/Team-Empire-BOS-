@@ -1,9 +1,11 @@
 """Calendly integration service — connect, sync events to daily context."""
 from __future__ import annotations
 
+import contextlib
 import logging
+from collections.abc import Hashable
 from datetime import UTC, date, datetime, timedelta
-from typing import Any, Hashable
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +17,7 @@ from app.services.integration import (
     connect_integration,
     get_integration_by_type,
 )
-from app.services.sync_base import IntegrationSync, SyncResult
+from app.services.sync_base import IntegrationSync
 from app.tools import calendly as calendly_tool
 
 logger = logging.getLogger(__name__)
@@ -62,10 +64,8 @@ class CalendlySync(IntegrationSync):
         start = item.get("start_time", "")
         event_date = datetime.now(UTC).date()
         if start:
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 event_date = datetime.fromisoformat(start.replace("Z", "+00:00")).date()
-            except (ValueError, TypeError):
-                pass
         # Stash parsed date on item for to_model() to reuse
         item["_parsed_date"] = event_date
         return (name[:100], event_date)
