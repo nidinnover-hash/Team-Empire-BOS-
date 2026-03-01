@@ -31,7 +31,7 @@ def _base_settings(**overrides) -> Settings:
         "AUTO_SEED_DEFAULTS": False,
         "MARKETING_EXPORT_PII_ALLOWED": False,
         "PURPOSE_PERSONAL_EMAILS": "nidinnover@gmail.com",
-        "DATABASE_URL": "postgresql+asyncpg://user:pass@localhost:5432/nidin_nover_ai_test",
+        "DATABASE_URL": "postgresql+asyncpg://user:pass@localhost:5432/nidin_bos_test",
     }
     data.update(overrides)
     return Settings(**data)
@@ -244,7 +244,7 @@ def test_validate_startup_flags_web_api_token_ttl_bounds():
 def test_validate_startup_flags_unknown_env_keys(tmp_path, monkeypatch):
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/nidin_nover_ai_test\n"
+        "DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/nidin_bos_test\n"
         "UNKNOWN_CONFIG_FLAG=true\n",
         encoding="utf-8",
     )
@@ -258,7 +258,7 @@ def test_validate_startup_flags_unknown_env_keys(tmp_path, monkeypatch):
 def test_validate_startup_flags_unknown_env_keys_even_when_debug_true(tmp_path, monkeypatch):
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/nidin_nover_ai_test\n"
+        "DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/nidin_bos_test\n"
         "UNKNOWN_CONFIG_FLAG=true\n",
         encoding="utf-8",
     )
@@ -334,3 +334,12 @@ def test_format_startup_issues_groups_by_domain():
     assert "security:" in text
     assert "integrations:" in text
     assert "runtime:" in text
+
+
+def test_validate_startup_flags_invalid_ai_retry_bounds():
+    low_attempts = _base_settings(AI_RETRY_ATTEMPTS=0)
+    high_backoff = _base_settings(AI_RETRY_BACKOFF_SECONDS=31)
+    reversed_backoff = _base_settings(AI_RETRY_BACKOFF_SECONDS=2, AI_RETRY_MAX_BACKOFF_SECONDS=1)
+    assert any("AI_RETRY_ATTEMPTS" in i for i in validate_startup_settings(low_attempts))
+    assert any("AI_RETRY_BACKOFF_SECONDS" in i for i in validate_startup_settings(high_backoff))
+    assert any("AI_RETRY_MAX_BACKOFF_SECONDS must be >=" in i for i in validate_startup_settings(reversed_backoff))

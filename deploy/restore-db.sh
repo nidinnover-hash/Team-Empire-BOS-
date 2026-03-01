@@ -2,9 +2,9 @@
 # Restore database from a backup produced by deploy/deploy.sh.
 #
 # Usage:
-#   bash restore-db.sh --yes /opt/nidin-nover-ai/Data/backups/postgres_predeploy_YYYYmmdd_HHMMSS.sql /opt/nidin-nover-ai/.env
-#   bash restore-db.sh --yes /opt/nidin-nover-ai/Data/backups/postgres_predeploy_YYYYmmdd_HHMMSS.sql.gz /opt/nidin-nover-ai/.env
-#   bash restore-db.sh --yes /opt/nidin-nover-ai/Data/backups/sqlite_predeploy_YYYYmmdd_HHMMSS.db /opt/nidin-nover-ai/.env
+#   bash restore-db.sh --yes /opt/nidin-bos/Data/backups/postgres_predeploy_YYYYmmdd_HHMMSS.sql /opt/nidin-bos/.env
+#   bash restore-db.sh --yes /opt/nidin-bos/Data/backups/postgres_predeploy_YYYYmmdd_HHMMSS.sql.gz /opt/nidin-bos/.env
+#   bash restore-db.sh --yes /opt/nidin-bos/Data/backups/sqlite_predeploy_YYYYmmdd_HHMMSS.db /opt/nidin-bos/.env
 set -euo pipefail
 
 CONFIRM=false
@@ -25,7 +25,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 BACKUP_FILE="${1:-}"
-ENV_FILE="${2:-/opt/nidin-nover-ai/.env}"
+ENV_FILE="${2:-/opt/nidin-bos/.env}"
 
 if [[ -z "$BACKUP_FILE" ]]; then
     echo "ERROR: BACKUP_FILE is required."

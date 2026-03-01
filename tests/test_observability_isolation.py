@@ -1,18 +1,11 @@
 from __future__ import annotations
 
 from app.core.deps import get_db
-from app.core.security import create_access_token
 from app.main import app as fastapi_app
 from app.models.ai_call_log import AiCallLog
 from app.models.approval import Approval
 from app.models.decision_trace import DecisionTrace
-
-
-def _auth_headers(user_id: int, email: str, role: str, org_id: int) -> dict[str, str]:
-    token = create_access_token(
-        {"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1}
-    )
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import _make_auth_headers
 
 
 async def _create_second_org(client, headers: dict[str, str]) -> int:
@@ -86,7 +79,7 @@ async def _seed_observability_rows() -> None:
 
 
 async def test_observability_endpoints_are_org_scoped(client):
-    ceo_org1 = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    ceo_org1 = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     await _create_second_org(client, ceo_org1)
     await _seed_observability_rows()
 
@@ -114,10 +107,10 @@ async def test_observability_endpoints_are_org_scoped(client):
 
 
 async def test_observability_isolation_for_org2_actor(client):
-    ceo_org1 = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    ceo_org1 = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     await _create_second_org(client, ceo_org1)
     await _seed_observability_rows()
-    ceo_org2 = _auth_headers(2, "ceo@org2.com", "CEO", 2)
+    ceo_org2 = _make_auth_headers(2, "ceo@org2.com", "CEO", 2)
 
     summary_resp = await client.get("/api/v1/observability/summary", headers=ceo_org2)
     assert summary_resp.status_code == 200

@@ -1,13 +1,8 @@
 """Tests for employee mapping endpoints (POST + GET /api/v1/ops/employees)."""
 from app.core.deps import get_db
-from app.core.security import create_access_token
 from app.main import app as fastapi_app
 from app.models.organization import Organization
-
-
-def _auth_headers(user_id: int = 1, email: str = "ceo@org1.com", role: str = "CEO", org_id: int = 1) -> dict:
-    token = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1})
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import _make_auth_headers
 
 
 async def _seed_org(org_id: int = 1) -> None:
@@ -117,13 +112,13 @@ async def test_employee_cross_org_isolation(client):
     await client.post(
         "/api/v1/ops/employees",
         json={"name": "Org1 Employee", "email": "emp@org1.com"},
-        headers=_auth_headers(org_id=1),
+        headers=_make_auth_headers(org_id=1),
     )
 
     # List as org 2
     resp = await client.get(
         "/api/v1/ops/employees",
-        headers=_auth_headers(user_id=2, email="ceo@org2.com", org_id=2),
+        headers=_make_auth_headers(user_id=2, email="ceo@org2.com", org_id=2),
     )
     assert resp.status_code == 200
     assert len(resp.json()) == 0
@@ -131,7 +126,7 @@ async def test_employee_cross_org_isolation(client):
 
 async def test_employee_requires_admin_role(client):
     """STAFF cannot access employee endpoints."""
-    staff_headers = _auth_headers(user_id=4, email="staff@org1.com", role="STAFF")
+    staff_headers = _make_auth_headers(user_id=4, email="staff@org1.com", role="STAFF")
     resp = await client.get("/api/v1/ops/employees", headers=staff_headers)
     assert resp.status_code == 403
 

@@ -1,19 +1,12 @@
 from app.api.v1.endpoints import email as email_endpoint
 from app.core.deps import get_db
-from app.core.security import create_access_token
 from app.main import app as fastapi_app
 from app.services.integration import get_integration_by_type
-
-
-def _auth_headers(user_id: int, email: str, role: str, org_id: int = 1) -> dict:
-    token = create_access_token(
-        {"id": user_id, "email": email, "role": role, "org_id": org_id}
-    )
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import _make_auth_headers
 
 
 async def test_gmail_callback_keeps_existing_refresh_token_when_missing(client, monkeypatch):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
 
     connected = await client.post(
         "/api/v1/integrations/connect",

@@ -19,14 +19,7 @@ from app.services import (
 )
 
 
-def _auth_headers(org_id: int = 1, role: str = "CEO", user_id: int = 1, email: str = "ceo@org1.com"):
-    from app.core.security import create_access_token
-    token = create_access_token({
-        "id": user_id, "email": email, "role": role,
-        "org_id": org_id, "token_version": 1, "purpose": "professional",
-        "default_theme": "light", "default_avatar_mode": "professional",
-    })
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import _make_auth_headers
 
 
 # ── Perplexity ──────────────────────────────────────────────────────────
@@ -363,7 +356,7 @@ async def test_setup_guide_includes_new_integrations(client):
 
 @pytest.mark.asyncio
 async def test_staff_cannot_connect_perplexity(client):
-    headers = _auth_headers(org_id=1, role="STAFF", user_id=4, email="staff@org1.com")
+    headers = _make_auth_headers(org_id=1, role="STAFF", user_id=4, email="staff@org1.com")
     resp = await client.post(
         "/api/v1/integrations/perplexity/connect",
         json={"api_key": "test"},
@@ -374,7 +367,7 @@ async def test_staff_cannot_connect_perplexity(client):
 
 @pytest.mark.asyncio
 async def test_staff_cannot_connect_stripe(client):
-    headers = _auth_headers(org_id=1, role="STAFF", user_id=4, email="staff@org1.com")
+    headers = _make_auth_headers(org_id=1, role="STAFF", user_id=4, email="staff@org1.com")
     resp = await client.post(
         "/api/v1/integrations/stripe/connect",
         json={"secret_key": "test"},
@@ -387,7 +380,7 @@ async def test_staff_cannot_connect_stripe(client):
 
 @pytest.mark.asyncio
 async def test_org_isolation_perplexity_status(client):
-    headers = _auth_headers(org_id=2, role="CEO", user_id=2, email="ceo@org2.com")
+    headers = _make_auth_headers(org_id=2, role="CEO", user_id=2, email="ceo@org2.com")
     resp = await client.get("/api/v1/integrations/perplexity/status", headers=headers)
     assert resp.status_code == 200
     assert resp.json()["connected"] is False
@@ -395,7 +388,7 @@ async def test_org_isolation_perplexity_status(client):
 
 @pytest.mark.asyncio
 async def test_org_isolation_linkedin_status(client):
-    headers = _auth_headers(org_id=2, role="CEO", user_id=2, email="ceo@org2.com")
+    headers = _make_auth_headers(org_id=2, role="CEO", user_id=2, email="ceo@org2.com")
     resp = await client.get("/api/v1/integrations/linkedin/status", headers=headers)
     assert resp.status_code == 200
     assert resp.json()["connected"] is False

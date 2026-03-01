@@ -3,21 +3,14 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 
 from app.core.deps import get_db
-from app.core.security import create_access_token
 from app.main import app as fastapi_app
 from app.models.integration import Integration
 from app.services import integration as integration_service
-
-
-def _auth_headers(user_id: int, email: str, role: str, org_id: int) -> dict:
-    token = create_access_token(
-        {"id": user_id, "email": email, "role": role, "org_id": org_id}
-    )
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import _make_auth_headers
 
 
 async def test_connect_and_list_integrations(client):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     connected = await client.post(
         "/api/v1/integrations/connect",
         json={
@@ -35,7 +28,7 @@ async def test_connect_and_list_integrations(client):
 
 
 async def test_test_integration_reports_config_failure(client):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     connected = await client.post(
         "/api/v1/integrations/connect",
         json={"type": "google_calendar", "config_json": {}},
@@ -53,7 +46,7 @@ async def test_test_integration_reports_config_failure(client):
 
 
 async def test_cross_org_disconnect_is_denied_by_not_found(client):
-    org1_headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    org1_headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     connected = await client.post(
         "/api/v1/integrations/connect",
         json={
@@ -65,7 +58,7 @@ async def test_cross_org_disconnect_is_denied_by_not_found(client):
     assert connected.status_code == 201
     integration_id = connected.json()["id"]
 
-    org2_headers = _auth_headers(2, "ceo@org2.com", "CEO", 2)
+    org2_headers = _make_auth_headers(2, "ceo@org2.com", "CEO", 2)
     response = await client.post(
         f"/api/v1/integrations/{integration_id}/disconnect",
         headers=org2_headers,
@@ -74,7 +67,7 @@ async def test_cross_org_disconnect_is_denied_by_not_found(client):
 
 
 async def test_generic_connect_blocks_provider_specific_types(client):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     blocked = await client.post(
         "/api/v1/integrations/connect",
         json={"type": "github", "config_json": {"access_token": "ghp_x"}},
@@ -85,7 +78,7 @@ async def test_generic_connect_blocks_provider_specific_types(client):
 
 
 async def test_decrypted_read_does_not_persist_plaintext_tokens_on_commit(client):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     connected = await client.post(
         "/api/v1/integrations/connect",
         json={

@@ -1,12 +1,5 @@
 from app.api.v1.endpoints import integrations as integrations_endpoint
-from app.core.security import create_access_token
-
-
-def _auth_headers(user_id: int, email: str, role: str, org_id: int) -> dict:
-    token = create_access_token(
-        {"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1}
-    )
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import _make_auth_headers
 
 
 async def test_google_auth_url_and_oauth_callback_redacts_tokens(client, monkeypatch):
@@ -30,7 +23,7 @@ async def test_google_auth_url_and_oauth_callback_redacts_tokens(client, monkeyp
         fake_exchange_code_for_tokens,
     )
 
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     auth_url = await client.get("/api/v1/integrations/google-calendar/auth-url", headers=headers)
     assert auth_url.status_code == 200
     assert "accounts.google.com" in auth_url.json()["auth_url"]
@@ -108,7 +101,7 @@ async def test_google_calendar_auth_url_derives_redirect_from_google_redirect_ur
     )
     monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CALENDAR_REDIRECT_URI", None)
 
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     auth_url = await client.get("/api/v1/integrations/google-calendar/auth-url", headers=headers)
     assert auth_url.status_code == 200
     assert "redirect_uri=https%3A%2F%2Fexample.com%2Fapi%2Fv1%2Fintegrations%2Fgoogle-calendar%2Foauth%2Fcallback" in auth_url.json()["auth_url"]
@@ -120,7 +113,7 @@ async def test_google_integration_test_provider_ping_success(client, monkeypatch
 
     monkeypatch.setattr(integrations_endpoint, "list_events_for_day", fake_list_events_for_day)
 
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     connected = await client.post(
         "/api/v1/integrations/connect",
         json={
@@ -149,7 +142,7 @@ async def test_google_integration_test_refresh_flow(client, monkeypatch):
     monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_ID", "cid")
     monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_SECRET", "csecret")
 
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     connected = await client.post(
         "/api/v1/integrations/connect",
         json={
@@ -182,7 +175,7 @@ async def test_google_integration_test_refresh_failure_is_sanitized(client, monk
     monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_ID", "cid")
     monkeypatch.setattr(integrations_endpoint.settings, "GOOGLE_CLIENT_SECRET", "csecret")
 
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     connected = await client.post(
         "/api/v1/integrations/connect",
         json={

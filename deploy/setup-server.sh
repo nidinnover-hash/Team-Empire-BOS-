@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════════
-# Server Setup Script for Nidin Nover AI / Empire OE AI
+# Server Setup Script for Nidin BOS / Empire OE AI
 # Run on a fresh Ubuntu 22.04/24.04 droplet as root.
 #
 # Usage:
@@ -22,8 +22,8 @@ if [[ -z "$DOMAIN" ]]; then
 fi
 
 if [[ "$MODE" == "personal" ]]; then
-    APP_DIR="/opt/nidin-nover-ai"
-    SERVICE_NAME="nidin-nover-ai"
+    APP_DIR="/opt/nidin-bos"
+    SERVICE_NAME="nidin-bos"
     REPO_BRANCH="main"
 elif [[ "$MODE" == "empireoe" ]]; then
     APP_DIR="/opt/empireoe-clone"
@@ -40,23 +40,25 @@ echo "  App dir:    $APP_DIR"
 echo "══════════════════════════════════════"
 
 # 1. System packages
-echo "[1/8] Installing system packages..."
+# NOTE: PostgreSQL is NOT installed here — we use DigitalOcean Managed PostgreSQL.
+# If you need a local Postgres, add: postgresql postgresql-contrib
+echo "[1/9] Installing system packages..."
 apt-get update -qq
 apt-get install -y -qq \
     python3.11 python3.11-venv python3.11-dev \
     nginx certbot python3-certbot-nginx \
     redis-server \
     git curl build-essential \
-    libpq-dev  # needed for asyncpg
+    libpq-dev  # needed for asyncpg (client lib only, no server)
 
 # 2. Create deploy user
-echo "[2/8] Creating deploy user..."
+echo "[2/9] Creating deploy user..."
 if ! id -u deploy &>/dev/null; then
     useradd -m -s /bin/bash deploy
 fi
 
 # 3. Clone repo
-echo "[3/8] Setting up application..."
+echo "[3/9] Setting up application..."
 if [[ ! -d "$APP_DIR" ]]; then
     mkdir -p "$APP_DIR"
     chown deploy:deploy "$APP_DIR"
@@ -67,9 +69,9 @@ if [[ ! -d "$APP_DIR" ]]; then
 fi
 
 # 4. Python venv + dependencies
-echo "[4/8] Setting up Python environment..."
+echo "[4/9] Setting up Python environment..."
 sudo -u deploy bash -c "
-    cd $APP_DIR
+    cd \"$APP_DIR\"
     python3.11 -m venv venv
     source venv/bin/activate
     pip install --upgrade pip wheel
@@ -77,7 +79,7 @@ sudo -u deploy bash -c "
 "
 
 # 5. Configure .env
-echo "[5/8] Checking .env..."
+echo "[5/9] Checking .env..."
 if [[ ! -f "$APP_DIR/.env" ]]; then
     if [[ "$MODE" == "personal" ]]; then
         cp "$APP_DIR/deploy/env.personal.example" "$APP_DIR/.env"
@@ -92,20 +94,20 @@ chmod 600 "$APP_DIR/.env"
 chown deploy:deploy "$APP_DIR/.env"
 
 # 6. Database migration
-echo "[6/8] Running database migrations..."
+echo "[6/9] Running database migrations..."
 sudo -u deploy bash -c "
-    cd $APP_DIR
+    cd \"$APP_DIR\"
     source venv/bin/activate
     alembic upgrade head
 "
 
 # 7. Nginx + SSL
-echo "[7/8] Configuring Nginx..."
+echo "[7/9] Configuring Nginx..."
 if [[ "$MODE" == "personal" ]]; then
     cp "$APP_DIR/deploy/nginx-personal.conf" "/etc/nginx/sites-available/$DOMAIN"
 else
     # Adjust static path for empireoe
-    sed "s|/opt/nidin-nover-ai|$APP_DIR|g" \
+    sed "s|/opt/nidin-bos|$APP_DIR|g" \
         "$APP_DIR/deploy/nginx-empireoe.conf" > "/etc/nginx/sites-available/$DOMAIN"
 fi
 ln -sf "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
@@ -121,20 +123,26 @@ certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "nidinnover@gmail.
 nginx -t && systemctl reload nginx
 
 # 8. Systemd services
-echo "[8/8] Installing systemd services..."
+echo "[8/9] Installing systemd services..."
 # Web server service
-sed "s|/opt/nidin-nover-ai|$APP_DIR|g; s|nidin-nover-ai|$SERVICE_NAME|g" \
-    "$APP_DIR/deploy/nidin-nover-ai.service" > "/etc/systemd/system/$SERVICE_NAME.service"
+sed "s|/opt/nidin-bos|$APP_DIR|g; s|nidin-bos|$SERVICE_NAME|g" \
+    "$APP_DIR/deploy/nidin-bos.service" > "/etc/systemd/system/$SERVICE_NAME.service"
 
 # Scheduler service
-sed "s|/opt/nidin-nover-ai|$APP_DIR|g; s|nidin-nover-ai|$SERVICE_NAME|g" \
-    "$APP_DIR/deploy/nidin-nover-ai-scheduler.service" > "/etc/systemd/system/$SERVICE_NAME-scheduler.service"
+sed "s|/opt/nidin-bos|$APP_DIR|g; s|nidin-bos|$SERVICE_NAME|g" \
+    "$APP_DIR/deploy/nidin-bos-scheduler.service" > "/etc/systemd/system/$SERVICE_NAME-scheduler.service"
 
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME" "$SERVICE_NAME-scheduler"
 systemctl start "$SERVICE_NAME" "$SERVICE_NAME-scheduler"
 systemctl enable redis-server
 systemctl start redis-server
+
+# 9. Journal log rotation (prevent disk exhaustion on small droplets)
+echo "[9/9] Configuring journal log rotation..."
+mkdir -p /etc/systemd/journald.conf.d
+cp "$APP_DIR/deploy/journald.conf" /etc/systemd/journald.conf.d/nidin-bos.conf
+systemctl restart systemd-journald
 
 echo ""
 echo "══════════════════════════════════════"

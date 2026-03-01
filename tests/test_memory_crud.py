@@ -41,13 +41,13 @@ async def test_list_profile_memory_requires_ceo_staff_blocked(client):
 
 # ── POST /api/v1/memory/profile ───────────────────────────────────────────────
 
-async def test_create_profile_memory_returns_200(client):
+async def test_create_profile_memory_returns_201(client):
     r = await client.post(
         "/api/v1/memory/profile",
         json={"key": "name", "value": "Nidin Nover", "category": "personal"},
         headers=CEO,
     )
-    assert r.status_code == 200
+    assert r.status_code == 201
 
 
 async def test_create_profile_memory_returns_correct_fields(client):
@@ -70,7 +70,7 @@ async def test_create_profile_memory_null_category(client):
         json={"key": "company", "value": "AI Corp"},
         headers=CEO,
     )
-    assert r.status_code == 200
+    assert r.status_code == 201
     assert r.json()["category"] is None
 
 
@@ -85,7 +85,7 @@ async def test_upsert_profile_memory_updates_value(client):
         json={"key": "timezone", "value": "Asia/Dubai"},
         headers=CEO,
     )
-    assert r2.status_code == 200
+    assert r2.status_code == 201
     assert r2.json()["value"] == "Asia/Dubai"
 
 

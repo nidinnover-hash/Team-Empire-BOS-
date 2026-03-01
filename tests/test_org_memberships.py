@@ -1,13 +1,8 @@
-from app.core.security import create_access_token
-
-
-def _auth_headers(user_id: int, email: str, role: str, org_id: int) -> dict[str, str]:
-    token = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1})
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import _make_auth_headers
 
 
 async def test_org_membership_upsert_and_list(client):
-    ceo_headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    ceo_headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     user_resp = await client.post(
         "/api/v1/users",
         json={

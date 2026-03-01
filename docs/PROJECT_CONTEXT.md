@@ -1,7 +1,7 @@
 ﻿# Project Context
 
 ## Product
-Nidin Nover AI — autonomous agent platform for work operations.
+Nidin BOS — autonomous agent platform for work operations.
 
 ## Phase
 Phase 1: Me First (personal dashboard, task/notes/projects workflows).

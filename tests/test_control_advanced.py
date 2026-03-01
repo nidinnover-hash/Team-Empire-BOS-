@@ -1,13 +1,8 @@
-from app.core.security import create_access_token
-
-
-def _auth_headers(user_id: int = 1, email: str = "ceo@org1.com", role: str = "CEO", org_id: int = 1) -> dict[str, str]:
-    token = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1})
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import _make_auth_headers
 
 
 async def test_control_advanced_endpoints(client):
-    headers = _auth_headers()
+    headers = _make_auth_headers()
 
     run = await client.post("/api/v1/control/execute-plan", json={"challenge": "Resolve complex tech blockers"}, headers=headers)
     assert run.status_code == 200

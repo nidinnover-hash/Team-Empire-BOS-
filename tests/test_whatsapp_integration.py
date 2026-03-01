@@ -4,14 +4,7 @@ from hashlib import sha256
 
 from app.api.v1.endpoints import integrations as integrations_endpoint
 from app.core import oauth_nonce
-from app.core.security import create_access_token
-
-
-def _auth_headers(user_id: int, email: str, role: str, org_id: int) -> dict:
-    token = create_access_token(
-        {"id": user_id, "email": email, "role": role, "org_id": org_id}
-    )
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import _make_auth_headers
 
 
 async def test_whatsapp_connect_and_test_success(client, monkeypatch):
@@ -24,7 +17,7 @@ async def test_whatsapp_connect_and_test_success(client, monkeypatch):
         fake_get_phone_number_details,
     )
 
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     connected = await client.post(
         "/api/v1/integrations/connect",
         json={
@@ -55,7 +48,7 @@ async def test_whatsapp_send_test_message_success(client, monkeypatch):
         fake_send_text_message,
     )
 
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     connected = await client.post(
         "/api/v1/integrations/connect",
         json={
@@ -172,7 +165,7 @@ async def test_whatsapp_webhook_received_event_contains_telemetry_fields(client,
     monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
     connected = await client.post(
         "/api/v1/integrations/connect",
-        headers=_auth_headers(1, "ceo@org1.com", "CEO", 1),
+        headers=_make_auth_headers(1, "ceo@org1.com", "CEO", 1),
         json={
             "type": "whatsapp_business",
             "config_json": {"access_token": "wa-token", "phone_number_id": "pn-telemetry"},
@@ -225,7 +218,7 @@ async def test_whatsapp_webhook_received_event_contains_telemetry_fields(client,
 
     events = await client.get(
         "/api/v1/observability/events?event_type=whatsapp_webhook_received&days=30&limit=10",
-        headers=_auth_headers(1, "ceo@org1.com", "CEO", 1),
+        headers=_make_auth_headers(1, "ceo@org1.com", "CEO", 1),
     )
     assert events.status_code == 200
     rows = events.json()
@@ -241,3 +234,65 @@ async def test_whatsapp_webhook_received_event_contains_telemetry_fields(client,
         "skipped_unknown_integration",
     ):
         assert key in payload_json
+
+
+async def test_whatsapp_webhook_rejects_invalid_signature_and_records_failure(client, monkeypatch):
+    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
+    called = {"resolved": False}
+
+    async def track_resolution(_db, _payload):
+        called["resolved"] = True
+        return None, None, None
+
+    monkeypatch.setattr(integrations_endpoint, "_resolve_whatsapp_context", track_resolution)
+
+    payload = {"entry": [{"changes": [{"value": {"messages": [{"id": "wamid.BADSIG"}]}}]}]}
+    raw = json.dumps(payload, separators=(",", ":"))
+    response = await client.post(
+        "/api/v1/integrations/whatsapp/webhook",
+        content=raw,
+        headers={
+            "X-Hub-Signature-256": "sha256=invalid",
+            "Content-Type": "application/json",
+        },
+    )
+    assert response.status_code == 403
+    # Context is now resolved to record failure audit event for monitoring
+    assert called["resolved"] is True
+
+
+async def test_whatsapp_webhook_retry_after_ingest_failure_succeeds(client, monkeypatch):
+    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_APP_SECRET", "wa-app-secret")
+    monkeypatch.setattr(integrations_endpoint.settings, "WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS", 300)
+    oauth_nonce._used_nonces.clear()
+    oauth_nonce._redis_initialized = False
+    oauth_nonce._redis_client = None
+
+    calls = {"count": 0}
+
+    async def flaky_ingest(_db, _payload):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("temporary db error")
+        return {
+            "stored": 1,
+            "inbound_inserted": 1,
+            "status_inserted": 0,
+            "status_updated": 0,
+            "skipped_invalid": 0,
+            "skipped_unknown_integration": 0,
+        }
+
+    monkeypatch.setattr(integrations_endpoint.whatsapp_service, "ingest_webhook_payload", flaky_ingest)
+
+    payload = {"entry": [{"changes": [{"value": {"messages": [{"id": "wamid.RETRY1"}]}}]}]}
+    raw = json.dumps(payload, separators=(",", ":"))
+    signature = "sha256=" + hmac.new(b"wa-app-secret", raw.encode("utf-8"), sha256).hexdigest()
+    headers = {"X-Hub-Signature-256": signature, "Content-Type": "application/json"}
+
+    first = await client.post("/api/v1/integrations/whatsapp/webhook", content=raw, headers=headers)
+    assert first.status_code == 500
+
+    second = await client.post("/api/v1/integrations/whatsapp/webhook", content=raw, headers=headers)
+    assert second.status_code == 200
+    assert second.json()["stored"] == 1

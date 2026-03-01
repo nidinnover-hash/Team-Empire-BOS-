@@ -1,15 +1,8 @@
-from app.core.security import create_access_token
-
-
-def _auth_headers(user_id: int, email: str, role: str, org_id: int = 1) -> dict:
-    token = create_access_token(
-        {"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1}
-    )
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import _make_auth_headers
 
 
 async def test_execution_runs_and_succeeds(client):
-    requester = _auth_headers(3, "manager@org1.com", "MANAGER", 1)
+    requester = _make_auth_headers(3, "manager@org1.com", "MANAGER", 1)
     req = await client.post(
         "/api/v1/approvals/request",
         json={"organization_id": 1, "approval_type": "assign_leads", "payload_json": {"count": 5}},
@@ -18,7 +11,7 @@ async def test_execution_runs_and_succeeds(client):
     assert req.status_code == 201
     approval_id = req.json()["id"]
 
-    approver = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    approver = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     approve = await client.post(
         f"/api/v1/approvals/{approval_id}/approve",
         json={"note": "YES EXECUTE"},
@@ -35,7 +28,7 @@ async def test_execution_runs_and_succeeds(client):
 
 
 async def test_execution_failure_is_recorded(client):
-    requester = _auth_headers(3, "manager@org1.com", "MANAGER", 1)
+    requester = _make_auth_headers(3, "manager@org1.com", "MANAGER", 1)
     req = await client.post(
         "/api/v1/approvals/request",
         json={"organization_id": 1, "approval_type": "spend", "payload_json": {"amount": -5}},
@@ -44,7 +37,7 @@ async def test_execution_failure_is_recorded(client):
     assert req.status_code == 201
     approval_id = req.json()["id"]
 
-    approver = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    approver = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     approve = await client.post(
         f"/api/v1/approvals/{approval_id}/approve",
         json={"note": "YES EXECUTE"},
@@ -60,7 +53,7 @@ async def test_execution_failure_is_recorded(client):
 
 
 async def test_approval_without_yes_execute_does_not_run_execution(client):
-    requester = _auth_headers(3, "manager@org1.com", "MANAGER", 1)
+    requester = _make_auth_headers(3, "manager@org1.com", "MANAGER", 1)
     req = await client.post(
         "/api/v1/approvals/request",
         json={"organization_id": 1, "approval_type": "archive_note", "payload_json": {"note_id": 1}},
@@ -69,7 +62,7 @@ async def test_approval_without_yes_execute_does_not_run_execution(client):
     assert req.status_code == 201
     approval_id = req.json()["id"]
 
-    approver = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    approver = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     approve = await client.post(
         f"/api/v1/approvals/{approval_id}/approve",
         json={"note": "Approved"},
@@ -82,7 +75,7 @@ async def test_approval_without_yes_execute_does_not_run_execution(client):
 
 
 async def test_calendar_digest_execution_output(client):
-    requester = _auth_headers(3, "manager@org1.com", "MANAGER", 1)
+    requester = _make_auth_headers(3, "manager@org1.com", "MANAGER", 1)
     req = await client.post(
         "/api/v1/approvals/request",
         json={
@@ -109,7 +102,7 @@ async def test_calendar_digest_execution_output(client):
     assert req.status_code == 201
     approval_id = req.json()["id"]
 
-    approver = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    approver = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     approve = await client.post(
         f"/api/v1/approvals/{approval_id}/approve",
         json={"note": "YES EXECUTE"},

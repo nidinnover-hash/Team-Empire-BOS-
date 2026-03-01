@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from app.core.deps import get_db
 from app.core.security import hash_password
+from app.logs import audit as audit_log
 from app.main import app as fastapi_app
 from app.models.organization import Organization
 from app.models.user import User
@@ -147,3 +148,23 @@ async def test_web_logout_invalidates_only_current_user_session(client):
     me2 = await client.get("/me", headers={"Authorization": f"Bearer {token2}"})
     assert me1.status_code == 401
     assert me2.status_code == 200
+
+
+async def test_web_login_failure_audit_redacts_raw_username(client, monkeypatch):
+    await _seed_web_user()
+    captured: dict = {}
+
+    async def fake_record_action(*_args, **kwargs):
+        captured["payload_json"] = kwargs.get("payload_json") or {}
+        return None
+
+    monkeypatch.setattr(audit_log, "record_action", fake_record_action)
+
+    resp = await client.post(
+        "/web/login",
+        data={"username": "web.ceo@example.com", "password": "wrong-password"},
+    )
+    assert resp.status_code == 401
+    payload = captured.get("payload_json", {})
+    assert "username" not in payload
+    assert payload.get("username_fingerprint")

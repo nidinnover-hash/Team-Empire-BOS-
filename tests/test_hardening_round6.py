@@ -76,14 +76,19 @@ def test_dashboard_docs_link_has_target_blank():
     """Dashboard /docs link must have target=_blank like all other pages."""
     from pathlib import Path
 
-    html_file = Path("app/templates/dashboard.html")
-    if not html_file.exists():
-        pytest.skip("dashboard.html not found")
-    content = html_file.read_text(encoding="utf-8", errors="ignore")
+    # Sidebar may be inlined or in a partial include
+    content = ""
+    for candidate in [
+        Path("app/templates/dashboard.html"),
+        Path("app/templates/partials/sidebar.html"),
+    ]:
+        if candidate.exists():
+            content += candidate.read_text(encoding="utf-8", errors="ignore")
+    assert content, "dashboard.html and sidebar partial not found"
     # Find the /docs link and verify it has target="_blank"
     import re
     docs_links = re.findall(r'<a[^>]*href="/docs"[^>]*>', content)
-    assert docs_links, "No /docs link found in dashboard.html"
+    assert docs_links, "No /docs link found in dashboard or sidebar partial"
     for link in docs_links:
         assert 'target="_blank"' in link, f"/docs link missing target=_blank: {link}"
 

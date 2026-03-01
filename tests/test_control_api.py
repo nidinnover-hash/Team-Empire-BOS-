@@ -1,15 +1,8 @@
-from app.core.security import create_access_token
-
-
-def _auth_headers(user_id: int, email: str, role: str, org_id: int) -> dict:
-    token = create_access_token(
-        {"id": user_id, "email": email, "role": role, "org_id": org_id}
-    )
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import _make_auth_headers
 
 
 async def test_control_compliance_run_and_report(client):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     run = await client.post("/api/v1/control/compliance/run", headers=headers)
     assert run.status_code == 200
     assert run.json()["mode"] == "suggest_only"
@@ -20,7 +13,7 @@ async def test_control_compliance_run_and_report(client):
 
 
 async def test_control_message_draft(client):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     resp = await client.post(
         "/api/v1/control/message-draft",
         json={"to": "mano", "topic": "Access cleanup", "violations": [{"title": "X", "severity": "HIGH"}]},
@@ -33,7 +26,7 @@ async def test_control_message_draft(client):
 
 
 async def test_control_health_summary_counts(client):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
 
     # one open task
     task_resp = await client.post("/api/v1/tasks", json={"title": "Health summary task"}, headers=headers)
@@ -66,7 +59,7 @@ async def test_control_health_summary_counts(client):
 
 
 async def test_control_ceo_status_contains_risk_buckets(client):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     resp = await client.get("/api/v1/control/ceo/status", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
@@ -76,7 +69,7 @@ async def test_control_ceo_status_contains_risk_buckets(client):
 
 
 async def test_control_github_identity_map_upsert_and_list(client):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     upsert = await client.post(
         "/api/v1/control/github-identity-map/upsert",
         json={"company_email": "sharon@empireoe.com", "github_login": "sharonempire"},
@@ -93,7 +86,7 @@ async def test_control_github_identity_map_upsert_and_list(client):
 
 
 async def test_control_integrations_health_endpoint(client):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     resp = await client.get("/api/v1/control/integrations/health", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
@@ -106,7 +99,7 @@ async def test_control_integrations_health_endpoint(client):
 
 
 async def test_control_system_health_endpoint(client):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     resp = await client.get("/api/v1/control/system-health", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
@@ -116,7 +109,7 @@ async def test_control_system_health_endpoint(client):
 
 
 async def test_control_storage_metrics_endpoint(client):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     resp = await client.get("/api/v1/control/storage/metrics", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
@@ -132,7 +125,7 @@ async def test_control_storage_metrics_endpoint(client):
 
 
 async def test_control_scheduler_jobs_endpoints(client):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     replay = await client.post(
         "/api/v1/control/jobs/replay",
         json={"job_name": "compliance_run"},
@@ -151,7 +144,7 @@ async def test_control_scheduler_jobs_endpoints(client):
 
 
 async def test_control_ceo_morning_brief(client):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     resp = await client.get("/api/v1/control/ceo/morning-brief", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
@@ -161,7 +154,7 @@ async def test_control_ceo_morning_brief(client):
 
 
 async def test_control_self_learning_train_endpoint(client):
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     resp = await client.post("/api/v1/control/brain/self-learning-train", headers=headers)
     assert resp.status_code == 200
     body = resp.json()

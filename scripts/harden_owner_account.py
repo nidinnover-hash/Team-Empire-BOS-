@@ -25,7 +25,7 @@ def _backup_sqlite_if_local() -> None:
     db_url = (settings.DATABASE_URL or "").strip()
     if not db_url.startswith("sqlite"):
         return
-    # Handles sqlite:///./nidin_nover_ai.db style values.
+    # Handles sqlite:///./nidin_bos.db style values.
     candidate = db_url.split("sqlite:///", 1)[-1].strip()
     if not candidate:
         return

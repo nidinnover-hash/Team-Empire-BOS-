@@ -33,6 +33,40 @@ def _check_required_env_vars() -> list[str]:
     return missing
 
 
+def _check_env_quality() -> list[str]:
+    issues: list[str] = []
+    weak_values = {"", "change_me_in_env", "secret", "changeme", "your_32_plus_char_secret_here"}
+
+    secret_key = (os.environ.get("SECRET_KEY") or "").strip()
+    token_key = (os.environ.get("TOKEN_ENCRYPTION_KEY") or "").strip()
+    admin_password = (os.environ.get("ADMIN_PASSWORD") or "").strip()
+    database_url = (os.environ.get("DATABASE_URL") or "").strip().lower()
+
+    if secret_key in weak_values or len(secret_key) < 32:
+        issues.append("SECRET_KEY is weak/placeholder (must be random, 32+ chars)")
+    if token_key in weak_values or len(token_key) < 32:
+        issues.append("TOKEN_ENCRYPTION_KEY is weak/placeholder (must be random, 32+ chars)")
+    if secret_key and token_key and secret_key == token_key:
+        issues.append("TOKEN_ENCRYPTION_KEY must differ from SECRET_KEY")
+    if admin_password in {"", "demo", "password", "admin", "123456", "changeme"} or len(admin_password) < 12:
+        issues.append("ADMIN_PASSWORD is weak/too short (must be 12+ chars)")
+    if database_url.startswith("sqlite"):
+        issues.append("DATABASE_URL must point to PostgreSQL for release preflight")
+
+    return issues
+
+
+def _check_git_hygiene() -> list[str]:
+    """Ensure local secret files are not tracked by git."""
+    proc = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", ".env"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return [".env is tracked by git; remove it from version control and rotate exposed secrets"] if proc.returncode == 0 else []
+
+
 def _run_subprocess(cmd: list[str], label: str) -> None:
     print(f"[preflight] {label}: {' '.join(cmd)}")
     proc = subprocess.run(cmd, check=False)
@@ -69,6 +103,18 @@ def main() -> int:
         print("Preflight failed: missing required environment variables:")
         for key in missing:
             print(f"- {key}")
+        return 1
+    quality_issues = _check_env_quality()
+    if quality_issues:
+        print("Preflight failed: insecure environment values:")
+        for issue in quality_issues:
+            print(f"- {issue}")
+        return 1
+    git_hygiene_issues = _check_git_hygiene()
+    if git_hygiene_issues:
+        print("Preflight failed: repository secret hygiene issues:")
+        for issue in git_hygiene_issues:
+            print(f"- {issue}")
         return 1
 
     _run_subprocess(

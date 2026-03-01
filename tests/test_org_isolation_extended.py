@@ -3,17 +3,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.core.deps import get_db
-from app.core.security import create_access_token
 from app.main import app as fastapi_app
 from app.models.decision_trace import DecisionTrace
 from app.models.event import Event
-
-
-def _auth_headers(user_id: int, email: str, role: str, org_id: int) -> dict[str, str]:
-    token = create_access_token(
-        {"id": user_id, "email": email, "role": role, "org_id": org_id}
-    )
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import _make_auth_headers
 
 
 async def _create_second_org(client, headers: dict[str, str]) -> int:
@@ -73,7 +66,7 @@ async def _seed_cross_org_rows() -> None:
 
 
 async def test_cross_org_intelligence_traces_are_isolated(client):
-    ceo_org1 = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    ceo_org1 = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     await _create_second_org(client, ceo_org1)
     await _seed_cross_org_rows()
 
@@ -83,7 +76,7 @@ async def test_cross_org_intelligence_traces_are_isolated(client):
     assert "Org1 trace" in titles_org1
     assert "Org2 trace" not in titles_org1
 
-    ceo_org2 = _auth_headers(2, "ceo@org2.com", "CEO", 2)
+    ceo_org2 = _make_auth_headers(2, "ceo@org2.com", "CEO", 2)
     resp_org2 = await client.get("/api/v1/intelligence/traces", headers=ceo_org2)
     assert resp_org2.status_code == 200
     titles_org2 = {item["title"] for item in resp_org2.json()}
@@ -92,7 +85,7 @@ async def test_cross_org_intelligence_traces_are_isolated(client):
 
 
 async def test_cross_org_ops_events_are_isolated(client):
-    ceo_org1 = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    ceo_org1 = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     await _create_second_org(client, ceo_org1)
     await _seed_cross_org_rows()
 
@@ -102,7 +95,7 @@ async def test_cross_org_ops_events_are_isolated(client):
     assert "org1_event" in events_org1
     assert "org2_event" not in events_org1
 
-    ceo_org2 = _auth_headers(2, "ceo@org2.com", "CEO", 2)
+    ceo_org2 = _make_auth_headers(2, "ceo@org2.com", "CEO", 2)
     resp_org2 = await client.get("/api/v1/ops/events", headers=ceo_org2)
     assert resp_org2.status_code == 200
     events_org2 = {item["event_type"] for item in resp_org2.json()}
@@ -111,7 +104,7 @@ async def test_cross_org_ops_events_are_isolated(client):
 
 
 async def test_cross_org_integration_list_is_isolated(client):
-    ceo_org1 = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    ceo_org1 = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     await _create_second_org(client, ceo_org1)
 
     create = await client.post(
@@ -126,7 +119,7 @@ async def test_cross_org_integration_list_is_isolated(client):
     types_org1 = {item["type"] for item in resp_org1.json()}
     assert "gmail" in types_org1
 
-    ceo_org2 = _auth_headers(2, "ceo@org2.com", "CEO", 2)
+    ceo_org2 = _make_auth_headers(2, "ceo@org2.com", "CEO", 2)
     resp_org2 = await client.get("/api/v1/integrations", headers=ceo_org2)
     assert resp_org2.status_code == 200
     types_org2 = {item["type"] for item in resp_org2.json()}

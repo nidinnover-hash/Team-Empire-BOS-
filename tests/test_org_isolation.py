@@ -1,16 +1,9 @@
 from typing import cast
 
 from app.core.deps import get_db
-from app.core.security import create_access_token
 from app.main import app as fastapi_app
 from app.models.email import Email
-
-
-def _auth_headers(user_id: int, email: str, role: str, org_id: int) -> dict:
-    token = create_access_token(
-        {"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1}
-    )
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import _make_auth_headers
 
 
 async def _create_second_org(client, headers: dict) -> int:
@@ -24,7 +17,7 @@ async def _create_second_org(client, headers: dict) -> int:
 
 
 async def test_orgs_create_and_list(client):
-    ceo_headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    ceo_headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     org2_id = await _create_second_org(client, ceo_headers)
     assert org2_id >= 1
 
@@ -37,7 +30,7 @@ async def test_orgs_create_and_list(client):
 
 
 async def test_cross_org_project_update_is_denied(client):
-    ceo_org1 = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    ceo_org1 = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     await _create_second_org(client, ceo_org1)
 
     project = await client.post(
@@ -48,7 +41,7 @@ async def test_cross_org_project_update_is_denied(client):
     assert project.status_code == 201
     project_id = project.json()["id"]
 
-    ceo_org2 = _auth_headers(2, "ceo@org2.com", "CEO", 2)
+    ceo_org2 = _make_auth_headers(2, "ceo@org2.com", "CEO", 2)
     patch_response = await client.patch(
         f"/api/v1/ops/projects/{project_id}/status",
         json={"status": "paused"},
@@ -58,10 +51,10 @@ async def test_cross_org_project_update_is_denied(client):
 
 
 async def test_cross_org_approval_approve_is_denied(client):
-    ceo_org1 = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    ceo_org1 = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     await _create_second_org(client, ceo_org1)
 
-    manager_org1 = _auth_headers(3, "manager@org1.com", "MANAGER", 1)
+    manager_org1 = _make_auth_headers(3, "manager@org1.com", "MANAGER", 1)
     req = await client.post(
         "/api/v1/approvals/request",
         json={"organization_id": 1, "approval_type": "spend", "payload_json": {"amount": 100}},
@@ -70,7 +63,7 @@ async def test_cross_org_approval_approve_is_denied(client):
     assert req.status_code == 201
     approval_id = req.json()["id"]
 
-    ceo_org2 = _auth_headers(2, "ceo@org2.com", "CEO", 2)
+    ceo_org2 = _make_auth_headers(2, "ceo@org2.com", "CEO", 2)
     approve = await client.post(
         f"/api/v1/approvals/{approval_id}/approve",
         json={"note": "approve"},
@@ -80,10 +73,10 @@ async def test_cross_org_approval_approve_is_denied(client):
 
 
 async def test_cross_org_approval_reject_is_denied(client):
-    ceo_org1 = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    ceo_org1 = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     await _create_second_org(client, ceo_org1)
 
-    manager_org1 = _auth_headers(3, "manager@org1.com", "MANAGER", 1)
+    manager_org1 = _make_auth_headers(3, "manager@org1.com", "MANAGER", 1)
     req = await client.post(
         "/api/v1/approvals/request",
         json={"organization_id": 1, "approval_type": "spend", "payload_json": {"amount": 100}},
@@ -92,7 +85,7 @@ async def test_cross_org_approval_reject_is_denied(client):
     assert req.status_code == 201
     approval_id = req.json()["id"]
 
-    ceo_org2 = _auth_headers(2, "ceo@org2.com", "CEO", 2)
+    ceo_org2 = _make_auth_headers(2, "ceo@org2.com", "CEO", 2)
     reject = await client.post(
         f"/api/v1/approvals/{approval_id}/reject",
         json={"note": "reject"},
@@ -102,7 +95,7 @@ async def test_cross_org_approval_reject_is_denied(client):
 
 
 async def test_same_gmail_id_allowed_across_orgs(client):
-    ceo_org1 = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    ceo_org1 = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     await _create_second_org(client, ceo_org1)
 
     override = fastapi_app.dependency_overrides[get_db]

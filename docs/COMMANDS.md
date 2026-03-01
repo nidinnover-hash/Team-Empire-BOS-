@@ -62,7 +62,7 @@ Base URL: `http://127.0.0.1:8000`
   "reports_to_id": null,
   "skills": "Python, FastAPI, SQLAlchemy",
   "ai_level": 3,
-  "current_project": "Nidin Nover API",
+  "current_project": "Nidin BOS API",
   "notes": "Owns backend stability",
   "user_id": null
 }

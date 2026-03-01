@@ -3,16 +3,9 @@ from types import SimpleNamespace
 from typing import cast
 
 from app.core.deps import get_db
-from app.core.security import create_access_token
 from app.main import app as fastapi_app
 from app.models.email import Email
-
-
-def _auth_headers(user_id: int, email: str, role: str, org_id: int = 1) -> dict:
-    token = create_access_token(
-        {"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1}
-    )
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import _make_auth_headers
 
 
 async def _seed_email_for_org1(gmail_id: str = "draft-flow-gmail-id") -> int:
@@ -55,7 +48,7 @@ async def test_draft_reply_creates_gmail_draft_and_pending_approval(client, monk
     monkeypatch.setattr(email_service.gmail_tool, "create_draft", lambda **_kwargs: "gd_123")
 
     email_id = await _seed_email_for_org1()
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
 
     response = await client.post(
         f"/api/v1/email/{email_id}/draft-reply",
@@ -101,7 +94,7 @@ async def test_draft_reply_never_sends_email(client, monkeypatch):
     monkeypatch.setattr(email_service.gmail_tool, "send_email", fake_send_email)
 
     email_id = await _seed_email_for_org1(gmail_id="draft-flow-gmail-id-2")
-    headers = _auth_headers(1, "ceo@org1.com", "CEO", 1)
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
 
     response = await client.post(
         f"/api/v1/email/{email_id}/draft-reply",

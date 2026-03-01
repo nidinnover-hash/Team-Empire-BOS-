@@ -1,15 +1,10 @@
 from datetime import date
 
-from app.core.security import create_access_token
-
-
-def _auth_headers(user_id: int = 1, email: str = "ceo@org1.com", role: str = "CEO", org_id: int = 1) -> dict[str, str]:
-    token = create_access_token({"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1})
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import _make_auth_headers
 
 
 async def test_clone_identity_profile_feedback_training_flow(client):
-    headers = _auth_headers()
+    headers = _make_auth_headers()
     emp = await client.post(
         "/api/v1/ops/employees",
         json={"name": "Flow User", "email": "flow@org.com", "role": "Developer"},

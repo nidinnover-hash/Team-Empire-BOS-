@@ -1,6 +1,6 @@
 # User Onboarding Guide
 
-This guide is for first-time users of the Nidin Nover AI command center.
+This guide is for first-time users of the Nidin BOS command center.
 
 ## 1) First-Run Setup (10-15 minutes)
 

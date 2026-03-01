@@ -72,6 +72,7 @@ from app.models import task as _model_task  # noqa: F401
 from app.models import threat_signal as _model_threat_signal  # noqa: F401
 from app.models import user as _model_user  # noqa: F401
 from app.models import weekly_report as _model_weekly_report  # noqa: F401
+from app.models import webhook as _model_webhook  # noqa: F401
 from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
 from app.models.organization import Organization
 from app.models.user import User
@@ -151,37 +152,33 @@ def _reset_redis_module_state():
     email_mod._compose_redis_client = saved_modules["email_client"]
 
 
-def _seed_test_data(session_factory):
-    """Seed standard test users so JWT auth resolves against the DB."""
-    import asyncio
+async def _seed_db(session_factory, *, full: bool = True):
+    """Seed standard test orgs and users.
 
-    async def _seed():
-        async with session_factory() as seed_session:
-            seed_session.add(Organization(id=1, name="Test Org", slug="test-org"))
-            seed_session.add(Organization(id=2, name="Test Org 2", slug="test-org-2"))
-            seed_session.add(User(id=1, organization_id=1, name="Test CEO",
-                                  email="ceo@org1.com", password_hash="unused",
-                                  role="CEO", is_active=True, token_version=1,
-                                  is_super_admin=True))
-            seed_session.add(User(id=2, organization_id=2, name="Test CEO 2",
-                                  email="ceo@org2.com", password_hash="unused",
-                                  role="CEO", is_active=True, token_version=1))
-            seed_session.add(User(id=3, organization_id=1, name="Test Manager",
-                                  email="manager@org1.com", password_hash="unused",
-                                  role="MANAGER", is_active=True, token_version=1))
-            seed_session.add(User(id=4, organization_id=1, name="Test Staff",
-                                  email="staff@org1.com", password_hash="unused",
-                                  role="STAFF", is_active=True, token_version=1))
-            seed_session.add(User(id=5, organization_id=1, name="Personal CEO",
-                                  email="nidinnover@gmail.com", password_hash="unused",
-                                  role="CEO", is_active=True, token_version=1))
-            # The default test data no longer seeds a GitHub integration.
-            # Individual tests should create integrations explicitly when needed.
-            # This prevents unexpected token/config state and unique constraint
-            # violations caused by duplicate inserts.
-            await seed_session.commit()
-
-    asyncio.get_event_loop().run_until_complete(_seed())
+    When ``full=True`` (used by the ``client`` fixture), seeds all 5 users.
+    When ``full=False`` (used by the ``db`` fixture), seeds only the 2 CEOs.
+    """
+    async with session_factory() as s:
+        s.add(Organization(id=1, name="Test Org", slug="test-org"))
+        s.add(Organization(id=2, name="Test Org 2", slug="test-org-2"))
+        s.add(User(id=1, organization_id=1, name="Test CEO",
+                    email="ceo@org1.com", password_hash="unused",
+                    role="CEO", is_active=True, token_version=1,
+                    is_super_admin=True))
+        s.add(User(id=2, organization_id=2, name="Test CEO 2",
+                    email="ceo@org2.com", password_hash="unused",
+                    role="CEO", is_active=True, token_version=1))
+        if full:
+            s.add(User(id=3, organization_id=1, name="Test Manager",
+                        email="manager@org1.com", password_hash="unused",
+                        role="MANAGER", is_active=True, token_version=1))
+            s.add(User(id=4, organization_id=1, name="Test Staff",
+                        email="staff@org1.com", password_hash="unused",
+                        role="STAFF", is_active=True, token_version=1))
+            s.add(User(id=5, organization_id=1, name="Personal CEO",
+                        email="nidinnover@gmail.com", password_hash="unused",
+                        role="CEO", is_active=True, token_version=1))
+        await s.commit()
 
 
 @pytest_asyncio.fixture
@@ -212,18 +209,7 @@ async def db(_test_engine):
         class_=AsyncSession,
         expire_on_commit=False,
     )
-    async with TestSession() as seed_session:
-        seed_session.add(Organization(id=1, name="Test Org", slug="test-org"))
-        seed_session.add(Organization(id=2, name="Test Org 2", slug="test-org-2"))
-        seed_session.add(User(id=1, organization_id=1, name="Test CEO",
-                              email="ceo@org1.com", password_hash="unused",
-                              role="CEO", is_active=True, token_version=1,
-                              is_super_admin=True))
-        seed_session.add(User(id=2, organization_id=2, name="Test CEO 2",
-                              email="ceo@org2.com", password_hash="unused",
-                              role="CEO", is_active=True, token_version=1))
-        # GitHub integration seeding removed; tests must add explicitly if needed
-        await seed_session.commit()
+    await _seed_db(TestSession, full=False)
 
     async with TestSession() as session:
         yield session
@@ -237,29 +223,7 @@ async def client(_test_engine):
         expire_on_commit=False,
     )
 
-    # Seed standard test users so JWT auth resolves against the DB.
-    # Tests that use _auth_headers() must match these emails and user IDs.
-    async with TestSession() as seed_session:
-        seed_session.add(Organization(id=1, name="Test Org", slug="test-org"))
-        seed_session.add(Organization(id=2, name="Test Org 2", slug="test-org-2"))
-        seed_session.add(User(id=1, organization_id=1, name="Test CEO",
-                              email="ceo@org1.com", password_hash="unused",
-                              role="CEO", is_active=True, token_version=1,
-                              is_super_admin=True))
-        seed_session.add(User(id=2, organization_id=2, name="Test CEO 2",
-                              email="ceo@org2.com", password_hash="unused",
-                              role="CEO", is_active=True, token_version=1))
-        seed_session.add(User(id=3, organization_id=1, name="Test Manager",
-                              email="manager@org1.com", password_hash="unused",
-                              role="MANAGER", is_active=True, token_version=1))
-        seed_session.add(User(id=4, organization_id=1, name="Test Staff",
-                              email="staff@org1.com", password_hash="unused",
-                              role="STAFF", is_active=True, token_version=1))
-        seed_session.add(User(id=5, organization_id=1, name="Personal CEO",
-                              email="nidinnover@gmail.com", password_hash="unused",
-                              role="CEO", is_active=True, token_version=1))
-        # GitHub integration seeding removed; tests must add explicitly if needed
-        await seed_session.commit()
+    await _seed_db(TestSession, full=True)
 
     async def override_get_db():
         async with TestSession() as session:
@@ -288,3 +252,16 @@ async def client(_test_engine):
 
     # Teardown: remove overrides and wipe the test database
     fastapi_app.dependency_overrides.clear()
+
+
+def _make_auth_headers(
+    user_id: int = 1,
+    email: str = "ceo@org1.com",
+    role: str = "CEO",
+    org_id: int = 1,
+) -> dict[str, str]:
+    """Create Authorization headers with a JWT for the specified user."""
+    token = create_access_token(
+        {"id": user_id, "email": email, "role": role, "org_id": org_id, "token_version": 1},
+    )
+    return {"Authorization": f"Bearer {token}"}

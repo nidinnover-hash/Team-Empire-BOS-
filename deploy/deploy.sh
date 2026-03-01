@@ -7,7 +7,7 @@
 # restored and services restarted.
 #
 # Usage:
-#   bash deploy.sh [--dry-run] [--require-backup] /opt/nidin-nover-ai nidin-nover-ai /opt/nidin-nover-ai/.env
+#   bash deploy.sh [--dry-run] [--require-backup] /opt/nidin-bos nidin-bos /opt/nidin-bos/.env
 #   bash deploy.sh [--dry-run] [--require-backup] /opt/empireoe-clone empireoe-clone /opt/empireoe-clone/.env
 set -euo pipefail
 
@@ -37,8 +37,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-APP_DIR="${1:-/opt/nidin-nover-ai}"
-SERVICE_NAME="${2:-nidin-nover-ai}"
+APP_DIR="${1:-/opt/nidin-bos}"
+SERVICE_NAME="${2:-nidin-bos}"
 ENV_FILE="${3:-$APP_DIR/.env}"
 HEALTH_RETRIES=5
 HEALTH_DELAY=3

@@ -17,13 +17,13 @@ Related controls:
    - `tests/test_talk_mode.py`
    - `tests/test_config_validation.py`
 4. Run deploy:
-   - `bash deploy/deploy.sh /opt/nidin-nover-ai nidin-nover-ai /opt/nidin-nover-ai/.env`
-   - Optional preflight only (no changes): `bash deploy/deploy.sh --dry-run /opt/nidin-nover-ai nidin-nover-ai /opt/nidin-nover-ai/.env`
-   - Require backup tooling before deploy: `bash deploy/deploy.sh --require-backup /opt/nidin-nover-ai nidin-nover-ai /opt/nidin-nover-ai/.env`
+   - `bash deploy/deploy.sh /opt/nidin-bos nidin-bos /opt/nidin-bos/.env`
+   - Optional preflight only (no changes): `bash deploy/deploy.sh --dry-run /opt/nidin-bos nidin-bos /opt/nidin-bos/.env`
+   - Require backup tooling before deploy: `bash deploy/deploy.sh --require-backup /opt/nidin-bos nidin-bos /opt/nidin-bos/.env`
 5. Verify:
    - `curl -fsS http://127.0.0.1:8000/health`
-   - `journalctl -u nidin-nover-ai --since "10 minutes ago"`
-   - `journalctl -u nidin-nover-ai-scheduler --since "10 minutes ago"`
+   - `journalctl -u nidin-bos --since "10 minutes ago"`
+   - `journalctl -u nidin-bos-scheduler --since "10 minutes ago"`
 
 ## Security-critical env defaults
 Set these explicitly in production:
@@ -47,10 +47,10 @@ Otherwise `X-Forwarded-For` can be spoofed and weaken rate-limits/login lockout.
 1. Checkout previous release tag/commit in app directory.
 2. Reinstall dependencies if needed.
 3. Run backward-compatible migration or restore DB backup.
-   - Restore DB backup: `bash deploy/restore-db.sh --yes /opt/nidin-nover-ai/Data/backups/<backup-file> /opt/nidin-nover-ai/.env`
+   - Restore DB backup: `bash deploy/restore-db.sh --yes /opt/nidin-bos/Data/backups/<backup-file> /opt/nidin-bos/.env`
 4. Restart services:
-   - `systemctl restart nidin-nover-ai`
-   - `systemctl restart nidin-nover-ai-scheduler`
+   - `systemctl restart nidin-bos`
+   - `systemctl restart nidin-bos-scheduler`
 5. Re-check health and logs.
 
 ## Incident response priorities

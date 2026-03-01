@@ -45,7 +45,7 @@ async def test_talk_mode_bootstrap_includes_learned_memory(client):
         "/api/v1/memory/profile",
         json={"key": "preference.general", "value": "concise updates", "category": "learned"},
     )
-    assert created.status_code == 200
+    assert created.status_code == 201
 
     response = await client.get("/web/talk/bootstrap")
     assert response.status_code == 200
