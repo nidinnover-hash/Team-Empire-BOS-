@@ -50,6 +50,8 @@ npm run lint:frontend     # JS lint
 ## Docs
 
 - [Production Runbook](docs/PRODUCTION_RUNBOOK.md)
+- [Ops Runbook](docs/RUNBOOK.md)
+- [GitHub Branch Protection](docs/GITHUB_BRANCH_PROTECTION.md)
 - [Launch Checklist](docs/LAUNCH_CHECKLIST.md)
 - [Error Handling Policy](docs/ERROR_HANDLING_POLICY.md)
 - [Customization Guide](CUSTOMIZATION_GUIDE.md)

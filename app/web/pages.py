@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time as _time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -25,6 +26,41 @@ from app.services import task as task_service
 
 logger = logging.getLogger(__name__)
 templates = Jinja2Templates(directory="app/templates")
+
+# ── Dashboard Cache ──────────────────────────────────────────────────────
+_dashboard_cache: dict[int, tuple[float, dict]] = {}
+_DASHBOARD_CACHE_MAX_ORGS = 200
+
+
+def _get_cached_dashboard(org_id: int) -> dict | None:
+    if settings.DASHBOARD_CACHE_TTL_SECONDS <= 0:
+        return None
+    cached = _dashboard_cache.get(org_id)
+    if cached is None:
+        return None
+    ts, data = cached
+    if _time.time() - ts >= settings.DASHBOARD_CACHE_TTL_SECONDS:
+        _dashboard_cache.pop(org_id, None)
+        return None
+    return data
+
+
+def _set_dashboard_cache(org_id: int, data: dict) -> None:
+    if settings.DASHBOARD_CACHE_TTL_SECONDS <= 0:
+        return
+    now = _time.time()
+    stale = [k for k, (ts, _) in _dashboard_cache.items() if now - ts >= settings.DASHBOARD_CACHE_TTL_SECONDS]
+    for k in stale:
+        _dashboard_cache.pop(k, None)
+    while len(_dashboard_cache) >= _DASHBOARD_CACHE_MAX_ORGS:
+        oldest = min(_dashboard_cache.items(), key=lambda item: item[1][0])[0]
+        _dashboard_cache.pop(oldest, None)
+    _dashboard_cache[org_id] = (now, data)
+
+
+def invalidate_dashboard_cache(org_id: int) -> None:
+    """Clear cached dashboard data for an org."""
+    _dashboard_cache.pop(org_id, None)
 
 
 async def _get_web_user_or_none(request: Request, db: AsyncSession) -> dict | None:
@@ -61,6 +97,9 @@ router.get("/web/observe", response_class=HTMLResponse, include_in_schema=False)
 router.get("/web/ops-intel", response_class=HTMLResponse, include_in_schema=False)(_web_page("ops_intel.html"))
 router.get("/web/tasks", response_class=HTMLResponse, include_in_schema=False)(_web_page("tasks.html"))
 router.get("/web/webhooks", response_class=HTMLResponse, include_in_schema=False)(_web_page("webhooks.html"))
+router.get("/web/notifications", response_class=HTMLResponse, include_in_schema=False)(_web_page("notifications.html"))
+router.get("/web/security", response_class=HTMLResponse, include_in_schema=False)(_web_page("security.html"))
+router.get("/web/api-keys", response_class=HTMLResponse, include_in_schema=False)(_web_page("api_keys.html"))
 
 
 @router.get("/web/login", response_class=HTMLResponse, include_in_schema=False)
@@ -168,6 +207,15 @@ async def dashboard(
     from app.services.sync_scheduler import get_last_synced_for_org
     last_synced_at = get_last_synced_for_org(org_id)
 
+    # Check dashboard cache
+    cached = _get_cached_dashboard(org_id)
+    if cached is not None:
+        cached["request"] = request
+        cached["session_user"] = user
+        cached["csp_nonce"] = getattr(request.state, "csp_nonce", "")
+        cached["last_synced_at"] = last_synced_at
+        return templates.TemplateResponse(request, "dashboard.html", cached)
+
     _DASHBOARD_DEFAULTS: list[Any] = [
         [], [], [], [], [], [],
         {"total_income": 0, "total_expense": 0, "balance": 0},
@@ -220,31 +268,34 @@ async def dashboard(
 
     ceo_action = _extract_ceo_action(compliance_report)
 
-    return templates.TemplateResponse(
-        request,
-        "dashboard.html",
-        {
-            "request": request,
-            "commands": commands,
-            "tasks": tasks,
-            "notes": notes,
-            "projects": projects,
-            "goals": goals,
-            "contacts": contacts,
-            "finance": finance,
-            "finance_efficiency": finance_efficiency,
-            "marketing_layer": marketing_layer,
-            "study_layer": study_layer,
-            "training_layer": training_layer,
-            "executive": executive,
-            "intelligence_summary": intelligence_summary,
-            "intelligence_diff": intelligence_diff,
-            "ceo_action": ceo_action,
-            "session_user": user,
-            "last_synced_at": last_synced_at,
-            "csp_nonce": getattr(request.state, "csp_nonce", ""),
-        },
-    )
+    ctx = {
+        "request": request,
+        "commands": commands,
+        "tasks": tasks,
+        "notes": notes,
+        "projects": projects,
+        "goals": goals,
+        "contacts": contacts,
+        "finance": finance,
+        "finance_efficiency": finance_efficiency,
+        "marketing_layer": marketing_layer,
+        "study_layer": study_layer,
+        "training_layer": training_layer,
+        "executive": executive,
+        "intelligence_summary": intelligence_summary,
+        "intelligence_diff": intelligence_diff,
+        "ceo_action": ceo_action,
+        "session_user": user,
+        "last_synced_at": last_synced_at,
+        "csp_nonce": getattr(request.state, "csp_nonce", ""),
+    }
+    # Cache data (exclude request-specific fields)
+    _set_dashboard_cache(org_id, {
+        k: v for k, v in ctx.items()
+        if k not in ("request", "session_user", "csp_nonce", "last_synced_at")
+    })
+
+    return templates.TemplateResponse(request, "dashboard.html", ctx)
 
 
 def _extract_ceo_action(compliance_report) -> dict:

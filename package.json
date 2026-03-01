@@ -1,8 +1,9 @@
 {
   "scripts": {
-    "lint:frontend": "eslint app/static/js/dashboard-page.js app/static/js/integrations-page.js app/static/js/webhooks-page.js"
+    "lint:frontend": "eslint app/static/js/dashboard-page.js app/static/js/integrations-page.js app/static/js/webhooks-page.js app/static/js/notifications-page.js app/static/js/security-page.js app/static/js/api-keys-page.js"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.0",
     "@playwright/test": "^1.58.2",
     "eslint": "^8.57.1"
   },

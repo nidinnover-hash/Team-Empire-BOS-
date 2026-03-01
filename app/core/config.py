@@ -87,6 +87,10 @@ class Settings(BaseSettings):
     # Internal API and rate limiting
     WHATSAPP_APP_SECRET: str | None = None   # Used to verify X-Hub-Signature-256 on webhook POSTs
     WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS: int = 60
+    WEBHOOK_HOST_ALLOWLIST: str = ""  # Comma-separated host patterns, e.g. "hooks.slack.com,*.example.com"
+    WEBHOOK_DELIVERY_MAX_ATTEMPTS: int = 3
+    WEBHOOK_DELIVERY_BACKOFF_SECONDS: float = 1.0
+    WEBHOOK_DELIVERY_MAX_BACKOFF_SECONDS: float = 8.0
     CLONE_API_KEY: str | None = None
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_WINDOW_SECONDS: int = 60
@@ -135,6 +139,7 @@ class Settings(BaseSettings):
     ACCOUNT_SSO_REQUIRED: bool = False
     ACCOUNT_MFA_REQUIRED: bool = True
     ACCOUNT_SESSION_MAX_HOURS: int = 12
+    DASHBOARD_CACHE_TTL_SECONDS: int = 30
     MARKETING_EXPORT_PII_ALLOWED: bool = False
 
     # CORS
@@ -430,6 +435,14 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("PRIVACY_AUDIT_MAX_VALUE_CHARS must be >= 32")
     if s.WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS < 30:
         issues.append("WHATSAPP_WEBHOOK_REPLAY_WINDOW_SECONDS must be >= 30")
+    if s.WEBHOOK_DELIVERY_MAX_ATTEMPTS < 1 or s.WEBHOOK_DELIVERY_MAX_ATTEMPTS > 10:
+        issues.append("WEBHOOK_DELIVERY_MAX_ATTEMPTS must be between 1 and 10")
+    if s.WEBHOOK_DELIVERY_BACKOFF_SECONDS < 0 or s.WEBHOOK_DELIVERY_BACKOFF_SECONDS > 60:
+        issues.append("WEBHOOK_DELIVERY_BACKOFF_SECONDS must be between 0 and 60")
+    if s.WEBHOOK_DELIVERY_MAX_BACKOFF_SECONDS < 0 or s.WEBHOOK_DELIVERY_MAX_BACKOFF_SECONDS > 120:
+        issues.append("WEBHOOK_DELIVERY_MAX_BACKOFF_SECONDS must be between 0 and 120")
+    if s.WEBHOOK_DELIVERY_MAX_BACKOFF_SECONDS < s.WEBHOOK_DELIVERY_BACKOFF_SECONDS:
+        issues.append("WEBHOOK_DELIVERY_MAX_BACKOFF_SECONDS must be >= WEBHOOK_DELIVERY_BACKOFF_SECONDS")
     if s.WEB_API_TOKEN_EXPIRE_MINUTES < 1 or s.WEB_API_TOKEN_EXPIRE_MINUTES > 120:
         issues.append("WEB_API_TOKEN_EXPIRE_MINUTES must be between 1 and 120")
     if s.AI_RETRY_ATTEMPTS < 1 or s.AI_RETRY_ATTEMPTS > 5:

@@ -19,6 +19,7 @@ os.environ.setdefault("PURPOSE_PERSONAL_EMAILS", "nidinnover@gmail.com,purpose-l
 os.environ.setdefault("WHATSAPP_APP_SECRET", "test-whatsapp-secret")
 os.environ["DEBUG"] = "true"
 os.environ["ENFORCE_STARTUP_VALIDATION"] = "false"
+os.environ.setdefault("DASHBOARD_CACHE_TTL_SECONDS", "0")
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -31,6 +32,7 @@ from app.main import app as fastapi_app
 from app.models import ai_call_log as _model_ai_call_log  # noqa: F401
 
 # Register all models so Base.metadata knows about the tables
+from app.models import api_key as _model_api_key  # noqa: F401
 from app.models import approval as _model_approval  # noqa: F401
 from app.models import approval_pattern as _model_approval_pattern  # noqa: F401
 from app.models import autonomy_policy as _model_autonomy_policy  # noqa: F401

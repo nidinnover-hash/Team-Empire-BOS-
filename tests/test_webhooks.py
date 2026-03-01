@@ -82,6 +82,30 @@ async def test_create_webhook_rejects_private_ip_targets(client):
 
 
 @pytest.mark.asyncio
+async def test_create_webhook_enforces_host_allowlist(db, monkeypatch):
+    from app.services import webhook as webhook_service
+
+    monkeypatch.setattr(
+        webhook_service.settings,
+        "WEBHOOK_HOST_ALLOWLIST",
+        "hooks.slack.com,*.trusted.example",
+    )
+    with pytest.raises(ValueError, match="allowlisted"):
+        await webhook_service.create_webhook_endpoint(
+            db,
+            organization_id=1,
+            url="https://evil.example/hook",
+        )
+
+    endpoint, _ = await webhook_service.create_webhook_endpoint(
+        db,
+        organization_id=1,
+        url="https://alerts.trusted.example/hook",
+    )
+    assert endpoint.id > 0
+
+
+@pytest.mark.asyncio
 async def test_create_webhook_rejects_dns_resolving_to_private_ip(db, monkeypatch):
     from app.services import webhook as webhook_service
 
@@ -351,8 +375,13 @@ async def test_delivery_logged_on_success(db, monkeypatch):
 async def test_delivery_records_failure_on_non_2xx(db, monkeypatch):
     from app.services import webhook as webhook_service
 
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_ATTEMPTS", 2)
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_BACKOFF_SECONDS", 0.0)
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_BACKOFF_SECONDS", 0.0)
+
     endpoint, _ = await webhook_service.create_webhook_endpoint(
         db, organization_id=1, url="https://fail.example.com/hook",
+        max_retry_attempts=2,
     )
 
     async def fake_post(self, url, **kwargs):
@@ -365,16 +394,22 @@ async def test_delivery_records_failure_on_non_2xx(db, monkeypatch):
     )
 
     deliveries = await webhook_service.list_deliveries(db, endpoint.id, 1)
-    assert deliveries[0].status == "failed"
+    assert deliveries[0].status == "dead_letter"
     assert deliveries[0].response_status_code == 500
+    assert deliveries[0].attempt_count == 2
 
 
 @pytest.mark.asyncio
 async def test_delivery_records_failure_on_timeout(db, monkeypatch):
     from app.services import webhook as webhook_service
 
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_ATTEMPTS", 3)
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_BACKOFF_SECONDS", 0.0)
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_BACKOFF_SECONDS", 0.0)
+
     endpoint, _ = await webhook_service.create_webhook_endpoint(
         db, organization_id=1, url="https://timeout.example.com/hook",
+        max_retry_attempts=3,
     )
 
     async def fake_post(self, url, **kwargs):
@@ -387,7 +422,8 @@ async def test_delivery_records_failure_on_timeout(db, monkeypatch):
     )
 
     deliveries = await webhook_service.list_deliveries(db, endpoint.id, 1)
-    assert deliveries[0].status == "failed"
+    assert deliveries[0].status == "dead_letter"
+    assert deliveries[0].attempt_count == 3
     assert "ConnectTimeout" in deliveries[0].error_message
 
 
@@ -493,3 +529,139 @@ async def test_send_pending_alert_skips_slack_when_no_channel(db, monkeypatch):
         title="No slack",
         detail="Should not send to Slack",
     )
+
+
+# ---------------------------------------------------------------------------
+# Background retry
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_failed_delivery_sets_next_retry_at(db, monkeypatch):
+    from app.services import webhook as webhook_service
+
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_ATTEMPTS", 1)
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_BACKOFF_SECONDS", 0.0)
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_BACKOFF_SECONDS", 0.0)
+
+    endpoint, _ = await webhook_service.create_webhook_endpoint(
+        db, organization_id=1, url="https://retry.example.com/hook",
+    )
+
+    async def fake_post(self, url, **kwargs):
+        return _FakeResponse(500)
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+    await webhook_service.trigger_org_webhooks(
+        db, organization_id=1, event="approval.created", payload={"retry": True},
+    )
+
+    deliveries = await webhook_service.list_deliveries(db, endpoint.id, 1)
+    assert deliveries[0].status == "failed"
+    assert deliveries[0].next_retry_at is not None
+
+
+@pytest.mark.asyncio
+async def test_background_retry_succeeds(db, monkeypatch):
+    from app.services import webhook as webhook_service
+
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_ATTEMPTS", 1)
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_BACKOFF_SECONDS", 0.0)
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_BACKOFF_SECONDS", 0.0)
+
+    endpoint, _ = await webhook_service.create_webhook_endpoint(
+        db, organization_id=1, url="https://retry-ok.example.com/hook",
+    )
+
+    call_count = 0
+
+    async def fake_post(self, url, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return _FakeResponse(500)
+        return _FakeResponse(200)
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+    await webhook_service.trigger_org_webhooks(
+        db, organization_id=1, event="approval.created", payload={"retry_ok": True},
+    )
+
+    deliveries = await webhook_service.list_deliveries(db, endpoint.id, 1)
+    assert deliveries[0].status == "failed"
+
+    # Move next_retry_at to the past so retry picks it up
+    from datetime import UTC, datetime, timedelta
+    deliveries[0].next_retry_at = datetime.now(UTC) - timedelta(minutes=1)
+    await db.commit()
+
+    retried = await webhook_service.retry_failed_deliveries(db)
+    assert retried == 1
+
+    deliveries = await webhook_service.list_deliveries(db, endpoint.id, 1)
+    assert deliveries[0].status == "success"
+    assert deliveries[0].next_retry_at is None
+
+
+@pytest.mark.asyncio
+async def test_background_retry_exhausted_becomes_dead_letter(db, monkeypatch):
+    from app.services import webhook as webhook_service
+
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_ATTEMPTS", 1)
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_BACKOFF_SECONDS", 0.0)
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_BACKOFF_SECONDS", 0.0)
+
+    # Endpoint with max_retry_attempts=2 (so only 2 total attempts before dead_letter)
+    endpoint, _ = await webhook_service.create_webhook_endpoint(
+        db, organization_id=1, url="https://exhaust.example.com/hook",
+    )
+    endpoint.max_retry_attempts = 2
+    await db.commit()
+
+    async def fake_post(self, url, **kwargs):
+        return _FakeResponse(500)
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+    await webhook_service.trigger_org_webhooks(
+        db, organization_id=1, event="approval.created", payload={"exhaust": True},
+    )
+
+    deliveries = await webhook_service.list_deliveries(db, endpoint.id, 1)
+    assert deliveries[0].status == "failed"
+    assert deliveries[0].attempt_count == 1
+
+    # Move next_retry_at to the past
+    from datetime import UTC, datetime, timedelta
+    deliveries[0].next_retry_at = datetime.now(UTC) - timedelta(minutes=1)
+    await db.commit()
+
+    await webhook_service.retry_failed_deliveries(db)
+
+    deliveries = await webhook_service.list_deliveries(db, endpoint.id, 1)
+    assert deliveries[0].status == "dead_letter"
+    assert deliveries[0].next_retry_at is None
+    assert deliveries[0].attempt_count == 2
+
+
+@pytest.mark.asyncio
+async def test_backoff_increases_exponentially(db):
+    from datetime import UTC, datetime
+
+    from app.services.webhook import _calculate_next_retry_at
+
+    now = datetime.now(UTC)
+    retry1 = _calculate_next_retry_at(1)
+    retry2 = _calculate_next_retry_at(2)
+    retry3 = _calculate_next_retry_at(3)
+
+    # Attempt 1 -> ~10s, Attempt 2 -> ~20s, Attempt 3 -> ~40s
+    delta1 = (retry1 - now).total_seconds()
+    delta2 = (retry2 - now).total_seconds()
+    delta3 = (retry3 - now).total_seconds()
+
+    assert 9 < delta1 < 12  # 10s + up to 10% jitter
+    assert 19 < delta2 < 23  # 20s + up to 10% jitter
+    assert 39 < delta3 < 45  # 40s + up to 10% jitter

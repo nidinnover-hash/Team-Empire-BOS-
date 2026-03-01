@@ -1,0 +1,41 @@
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "app/**/*.py"
+          - "alembic/**/*.py"
+          - "tests/**/*.py"
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "app/static/**/*.js"
+          - "app/static/**/*.css"
+          - "app/templates/**/*.html"
+          - "tests/ui/**/*.ts"
+          - "playwright.config.ts"
+          - "package.json"
+          - "package-lock.json"
+
+security:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "app/core/config.py"
+          - "app/core/middleware.py"
+          - "app/services/webhook.py"
+          - ".gitleaks.toml"
+          - ".github/workflows/secret-scan.yml"
+          - ".github/workflows/ci.yml"
+
+infra:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "deploy/**"
+          - "Dockerfile"
+          - "docker-compose.yml"
+          - ".github/workflows/**"
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "*.md"

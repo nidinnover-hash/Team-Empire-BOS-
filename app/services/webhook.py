@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import ipaddress
 import json
 import logging
+import random
 import secrets
 import socket
 import time
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -51,6 +54,9 @@ def _validate_url(url: str) -> None:
         raise ValueError("Webhook URL host is not allowed")
     if host.endswith(".local") or host.endswith(".internal"):
         raise ValueError("Webhook URL host is not allowed")
+    allowlist_raw = (settings.WEBHOOK_HOST_ALLOWLIST or "").strip()
+    if allowlist_raw and not _host_allowed_by_allowlist(host, allowlist_raw):
+        raise ValueError("Webhook URL host is not allowlisted")
     if not settings.DEBUG and not url.startswith("https://"):
         raise ValueError("Webhook URL must use HTTPS in production")
     if not url.startswith(("http://", "https://")):
@@ -100,10 +106,32 @@ def _validate_url(url: str) -> None:
             raise ValueError("Webhook URL host is not allowed") from exc
 
 
+def _host_allowed_by_allowlist(host: str, allowlist_raw: str) -> bool:
+    entries = [item.strip().lower() for item in allowlist_raw.split(",") if item.strip()]
+    if not entries:
+        return True
+    for entry in entries:
+        if entry == host:
+            return True
+        if entry.startswith("*."):
+            suffix = entry[1:]  # keep leading dot for strict suffix match
+            if host.endswith(suffix) and host != suffix[1:]:
+                return True
+    return False
+
+
 def _validate_event_types(event_types: list[str]) -> None:
     for et in event_types:
         if et not in VALID_WEBHOOK_EVENTS:
             raise ValueError(f"Unknown event type: {et}")
+
+
+def _calculate_next_retry_at(attempt: int) -> datetime:
+    """Exponential backoff: 10s base, 2x growth, 1hr cap, 10% jitter."""
+    base_seconds = 10.0
+    delay = min(base_seconds * (2 ** (attempt - 1)), 3600.0)
+    jitter = delay * 0.1 * random.random()
+    return datetime.now(UTC) + timedelta(seconds=delay + jitter)
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +146,7 @@ async def create_webhook_endpoint(
     url: str,
     description: str | None = None,
     event_types: list[str] | None = None,
+    max_retry_attempts: int = 5,
 ) -> tuple[WebhookEndpoint, str]:
     """Create a webhook endpoint. Returns (endpoint, plaintext_secret)."""
     _validate_url(url)
@@ -132,6 +161,7 @@ async def create_webhook_endpoint(
         secret_encrypted=encrypt_token(plaintext_secret),
         event_types=events,
         is_active=True,
+        max_retry_attempts=max(1, min(max_retry_attempts, 20)),
     )
     db.add(endpoint)
     await db.commit()
@@ -270,53 +300,88 @@ async def _dispatch_to_endpoint(
     event: str,
     payload: dict[str, Any],
 ) -> WebhookDelivery:
+    max_attempts = max(1, int(settings.WEBHOOK_DELIVERY_MAX_ATTEMPTS))
+    base_backoff = max(0.0, float(settings.WEBHOOK_DELIVERY_BACKOFF_SECONDS))
+    max_backoff = max(0.0, float(settings.WEBHOOK_DELIVERY_MAX_BACKOFF_SECONDS))
+
     body_bytes = json.dumps(payload, default=str).encode("utf-8")
     secret = decrypt_token(endpoint.secret_encrypted)
     signature = _compute_signature(secret, body_bytes)
 
+    bg_max_retries = max(1, int(endpoint.max_retry_attempts))
     delivery = WebhookDelivery(
         webhook_endpoint_id=endpoint.id,
         organization_id=endpoint.organization_id,
         event=event,
         payload_json=payload,
         status="pending",
-        attempt_count=1,
+        attempt_count=0,
+        max_retries=bg_max_retries,
     )
     db.add(delivery)
 
-    start = time.monotonic()
-    try:
-        async with httpx.AsyncClient(timeout=_DISPATCH_TIMEOUT_SECONDS) as client:
-            response = await client.post(
+    final_error: str | None = None
+    for attempt in range(1, max_attempts + 1):
+        delivery.attempt_count = attempt
+        start = time.monotonic()
+        try:
+            async with httpx.AsyncClient(timeout=_DISPATCH_TIMEOUT_SECONDS) as client:
+                response = await client.post(
+                    endpoint.url,
+                    content=body_bytes,
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Webhook-Event": event,
+                        "X-Webhook-Signature-256": signature,
+                        "User-Agent": "NidinNoverAI-Webhook/1.0",
+                    },
+                )
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            delivery.response_status_code = response.status_code
+            delivery.duration_ms = elapsed_ms
+            if 200 <= response.status_code < 300:
+                delivery.status = "success"
+                final_error = None
+                break
+            final_error = f"HTTP {response.status_code}"
+            if attempt < max_attempts:
+                delay = min(base_backoff * (2 ** (attempt - 1)), max_backoff) if base_backoff > 0 else 0.0
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                continue
+        except Exception as exc:
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            delivery.duration_ms = elapsed_ms
+            final_error = f"{type(exc).__name__}: {str(exc)[:500]}"
+            logger.warning(
+                "Webhook dispatch failed endpoint_id=%d url=%s event=%s attempt=%d: %s",
+                endpoint.id,
                 endpoint.url,
-                content=body_bytes,
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Webhook-Event": event,
-                    "X-Webhook-Signature-256": signature,
-                    "User-Agent": "NidinNoverAI-Webhook/1.0",
-                },
+                event,
+                attempt,
+                type(exc).__name__,
             )
-        elapsed_ms = int((time.monotonic() - start) * 1000)
-        delivery.response_status_code = response.status_code
-        delivery.duration_ms = elapsed_ms
-        if 200 <= response.status_code < 300:
-            delivery.status = "success"
+            if attempt < max_attempts:
+                delay = min(base_backoff * (2 ** (attempt - 1)), max_backoff) if base_backoff > 0 else 0.0
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                continue
+        # Non-2xx response path lands here.
+        break
+
+    if delivery.status != "success":
+        delivery.error_message = final_error
+        if max_attempts > 1 and delivery.attempt_count >= max_attempts:
+            # Schedule for background retry if under max_retries
+            if delivery.attempt_count < delivery.max_retries:
+                delivery.status = "failed"
+                delivery.next_retry_at = _calculate_next_retry_at(delivery.attempt_count)
+            else:
+                delivery.status = "dead_letter"
         else:
             delivery.status = "failed"
-            delivery.error_message = f"HTTP {response.status_code}"
-    except Exception as exc:
-        elapsed_ms = int((time.monotonic() - start) * 1000)
-        delivery.status = "failed"
-        delivery.duration_ms = elapsed_ms
-        delivery.error_message = f"{type(exc).__name__}: {str(exc)[:500]}"
-        logger.warning(
-            "Webhook dispatch failed endpoint_id=%d url=%s event=%s: %s",
-            endpoint.id,
-            endpoint.url,
-            event,
-            type(exc).__name__,
-        )
+            if delivery.attempt_count < delivery.max_retries:
+                delivery.next_retry_at = _calculate_next_retry_at(delivery.attempt_count)
 
     await db.commit()
     await db.refresh(delivery)
@@ -381,3 +446,88 @@ async def send_test_webhook(
         "error": delivery.error_message,
         "duration_ms": delivery.duration_ms,
     }
+
+
+# ---------------------------------------------------------------------------
+# Background retry (called by scheduler)
+# ---------------------------------------------------------------------------
+
+
+async def retry_failed_deliveries(db: AsyncSession) -> int:
+    """Re-dispatch failed deliveries whose next_retry_at has passed.
+
+    Returns the number of deliveries retried.
+    """
+    now = datetime.now(UTC)
+    result = await db.execute(
+        select(WebhookDelivery).where(
+            WebhookDelivery.status == "failed",
+            WebhookDelivery.next_retry_at.isnot(None),
+            WebhookDelivery.next_retry_at <= now,
+        ).limit(50)
+    )
+    deliveries = list(result.scalars().all())
+    if not deliveries:
+        return 0
+
+    retried = 0
+    for delivery in deliveries:
+        endpoint = await get_webhook_endpoint(
+            db, delivery.webhook_endpoint_id, delivery.organization_id,
+        )
+        if endpoint is None or not endpoint.is_active:
+            delivery.status = "dead_letter"
+            delivery.next_retry_at = None
+            await db.commit()
+            continue
+
+        body_bytes = json.dumps(delivery.payload_json, default=str).encode("utf-8")
+        secret = decrypt_token(endpoint.secret_encrypted)
+        signature = _compute_signature(secret, body_bytes)
+
+        delivery.attempt_count += 1
+        start = time.monotonic()
+        try:
+            async with httpx.AsyncClient(timeout=_DISPATCH_TIMEOUT_SECONDS) as client:
+                response = await client.post(
+                    endpoint.url,
+                    content=body_bytes,
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Webhook-Event": delivery.event,
+                        "X-Webhook-Signature-256": signature,
+                        "User-Agent": "NidinNoverAI-Webhook/1.0",
+                    },
+                )
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            delivery.response_status_code = response.status_code
+            delivery.duration_ms = elapsed_ms
+            if 200 <= response.status_code < 300:
+                delivery.status = "success"
+                delivery.next_retry_at = None
+                delivery.error_message = None
+            else:
+                delivery.error_message = f"HTTP {response.status_code}"
+                if delivery.attempt_count >= delivery.max_retries:
+                    delivery.status = "dead_letter"
+                    delivery.next_retry_at = None
+                else:
+                    delivery.next_retry_at = _calculate_next_retry_at(delivery.attempt_count)
+        except Exception as exc:
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            delivery.duration_ms = elapsed_ms
+            delivery.error_message = f"{type(exc).__name__}: {str(exc)[:500]}"
+            if delivery.attempt_count >= delivery.max_retries:
+                delivery.status = "dead_letter"
+                delivery.next_retry_at = None
+            else:
+                delivery.next_retry_at = _calculate_next_retry_at(delivery.attempt_count)
+            logger.warning(
+                "Webhook retry failed delivery_id=%d attempt=%d: %s",
+                delivery.id, delivery.attempt_count, type(exc).__name__,
+            )
+
+        await db.commit()
+        retried += 1
+
+    return retried

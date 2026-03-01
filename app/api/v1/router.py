@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     admin,
     agents,
+    api_keys,
     approvals,
     auth,
     briefing,
@@ -71,3 +72,4 @@ api_router.include_router(social.router)
 api_router.include_router(notifications.router)
 api_router.include_router(mfa.router)
 api_router.include_router(webhooks.router)
+api_router.include_router(api_keys.router)

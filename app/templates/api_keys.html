@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="AI Agent Factory — Nidin BOS" />
+  <meta name="theme-color" content="#f5f5f7" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>API Keys — Nidin BOS</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/api-keys.css" />
+  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+</head>
+<body>
+  {% set active_page = "api-keys" %}
+  {% include "partials/sidebar.html" %}
+
+  <div class="main-wrap">
+    <div class="page-header">
+      <h1>API Keys</h1>
+      <button class="btn-primary" id="add-key-btn" type="button">+ Create Key</button>
+    </div>
+
+    <div class="kpi-row">
+      <div class="kpi"><div class="label">Total</div><div class="val" id="k-total">0</div></div>
+      <div class="kpi"><div class="label">Active</div><div class="val" id="k-active">0</div></div>
+      <div class="kpi"><div class="label">Revoked</div><div class="val" id="k-revoked">0</div></div>
+    </div>
+
+    <div id="key-list" class="key-list"><div class="empty">Loading API keys...</div></div>
+  </div>
+
+  <!-- Create Modal -->
+  <div class="modal-overlay" id="create-modal" style="display:none">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Create API Key</h2>
+        <button class="modal-close" id="create-modal-close" type="button">&times;</button>
+      </div>
+      <form id="create-form">
+        <label for="key-name">Name</label>
+        <input id="key-name" name="name" type="text" placeholder="My integration key" required maxlength="100" />
+        <label for="key-scopes">Scopes</label>
+        <input id="key-scopes" name="scopes" type="text" placeholder="*" value="*" maxlength="500" />
+        <p class="hint">Use * for full access. Comma-separated for specific scopes.</p>
+        <label for="key-expiry">Expires in (days, optional)</label>
+        <input id="key-expiry" name="expires_in_days" type="number" min="1" max="365" placeholder="No expiry" />
+        <div class="form-actions">
+          <button type="button" class="btn-secondary" id="create-cancel">Cancel</button>
+          <button type="submit" class="btn-primary" id="create-submit">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Secret Reveal Modal -->
+  <div class="modal-overlay" id="secret-modal" style="display:none">
+    <div class="modal-card modal-narrow">
+      <div class="modal-header">
+        <h2>Your API Key</h2>
+        <button class="modal-close" id="secret-modal-close" type="button">&times;</button>
+      </div>
+      <p class="hint">Copy this key now. It will not be shown again.</p>
+      <code class="secret-display" id="secret-value"></code>
+      <div class="form-actions">
+        <button class="btn-primary" id="secret-copy" type="button">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/api-keys-page.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
+</body>
+</html>

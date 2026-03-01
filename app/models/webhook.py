@@ -39,6 +39,7 @@ class WebhookEndpoint(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
     )
+    max_retry_attempts: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
@@ -74,6 +75,10 @@ class WebhookDelivery(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     attempt_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    next_retry_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True,
+    )
+    max_retries: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

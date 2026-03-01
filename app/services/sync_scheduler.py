@@ -1094,6 +1094,17 @@ async def _maybe_run_daily_backup() -> None:
         logger.warning("Daily backup error: %s", type(exc).__name__)
 
 
+async def _retry_webhook_deliveries(db: AsyncSession) -> None:
+    """Retry failed webhook deliveries whose next_retry_at has passed."""
+    try:
+        from app.services.webhook import retry_failed_deliveries
+        retried = await retry_failed_deliveries(db)
+        if retried:
+            logger.info("Retried %d failed webhook deliveries", retried)
+    except Exception as exc:
+        logger.warning("Webhook retry error: %s", type(exc).__name__)
+
+
 async def _scheduler_loop(interval_minutes: int) -> None:
     """Runs forever; wakes up every interval_minutes and syncs all orgs."""
     from app.services.organization import list_organizations
@@ -1118,6 +1129,7 @@ async def _scheduler_loop(interval_minutes: int) -> None:
                         await _cleanup_old_logs(db, org.id)
                         await _cleanup_old_job_runs_and_snapshots(db, org.id)
                         await _auto_reject_expired_approvals(db, org.id)
+                        await _retry_webhook_deliveries(db)
                         _last_synced[org.id] = datetime.now(UTC)
                 except asyncio.CancelledError:
                     raise

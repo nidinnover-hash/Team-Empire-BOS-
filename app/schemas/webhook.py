@@ -20,6 +20,7 @@ class WebhookEndpointCreate(BaseModel):
     url: str = Field(..., min_length=10, max_length=2048)
     description: str | None = Field(None, max_length=500)
     event_types: list[str] = Field(default_factory=list)
+    max_retry_attempts: int = Field(5, ge=1, le=20)
 
 
 class WebhookEndpointUpdate(BaseModel):
@@ -35,6 +36,7 @@ class WebhookEndpointRead(BaseModel):
     description: str | None
     event_types: list[str]
     is_active: bool
+    max_retry_attempts: int = 5
     created_at: datetime
     updated_at: datetime
 
@@ -68,6 +70,8 @@ class WebhookDeliveryRead(BaseModel):
     error_message: str | None
     duration_ms: int | None
     attempt_count: int
+    max_retries: int = 5
+    next_retry_at: datetime | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

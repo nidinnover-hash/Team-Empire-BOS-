@@ -21,3 +21,11 @@ repos:
       - id: bandit
         args: [-r, app, -ll, -q]
         pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: python -m mypy
+        language: system
+        pass_filenames: false

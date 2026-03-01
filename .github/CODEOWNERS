@@ -1,0 +1,17 @@
+* @nidinnover-hash
+
+# Backend/API
+/app/ @nidinnover-hash
+/alembic/ @nidinnover-hash
+/tests/ @nidinnover-hash
+
+# Frontend
+/app/static/ @nidinnover-hash
+/app/templates/ @nidinnover-hash
+/tests/ui/ @nidinnover-hash
+
+# Infrastructure / CI
+/.github/ @nidinnover-hash
+/deploy/ @nidinnover-hash
+/Dockerfile @nidinnover-hash
+/docker-compose.yml @nidinnover-hash
