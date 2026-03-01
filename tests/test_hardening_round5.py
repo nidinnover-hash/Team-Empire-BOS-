@@ -28,9 +28,9 @@ def test_get_current_user_removed_from_security():
 # ── 2. _DUMMY_HASH uses 600k iterations ──────────────────────────────────
 
 def test_auth_dummy_hash_uses_600k():
-    """_DUMMY_HASH in auth.py uses 600k iterations to match live hashes."""
-    from app.api.v1.endpoints import auth
-    parts = auth._DUMMY_HASH.split("$")
+    """_DUMMY_HASH in _helpers.py uses 600k iterations to match live hashes."""
+    from app.web._helpers import _DUMMY_HASH
+    parts = _DUMMY_HASH.split("$")
     assert parts[0] == "pbkdf2_sha256"
     assert int(parts[1]) == 600_000
 

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="AI Agent Factory — Nidin BOS" />
+  <meta name="theme-color" content="#f5f5f7" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Webhooks — Nidin BOS</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/webhooks.css" />
+  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+</head>
+<body>
+  {% set active_page = "webhooks" %}
+  {% include "partials/sidebar.html" %}
+
+  <div class="main-wrap">
+    <div class="page-header">
+      <h1>Outgoing Webhooks</h1>
+      <button class="btn-primary" id="add-webhook-btn" type="button">+ Add Endpoint</button>
+    </div>
+
+    <div class="kpi-row">
+      <div class="kpi"><div class="label">Total</div><div class="val" id="k-total">0</div></div>
+      <div class="kpi"><div class="label">Active</div><div class="val" id="k-active">0</div></div>
+      <div class="kpi"><div class="label">Inactive</div><div class="val" id="k-inactive">0</div></div>
+    </div>
+
+    <div id="webhook-list" class="wh-list"><div class="empty">Loading webhooks...</div></div>
+  </div>
+
+  <!-- Create / Edit Modal -->
+  <div class="modal-overlay" id="wh-modal" style="display:none">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="wh-modal-title">Add Webhook Endpoint</h2>
+        <button class="modal-close" id="wh-modal-close" type="button">&times;</button>
+      </div>
+      <form id="wh-form">
+        <input type="hidden" id="wh-edit-id" value="" />
+        <label for="wh-url">URL</label>
+        <input id="wh-url" name="url" type="url" placeholder="https://example.com/webhook" required />
+        <label for="wh-desc">Description (optional)</label>
+        <input id="wh-desc" name="description" type="text" placeholder="Slack notification relay" maxlength="500" />
+        <label>Event Types</label>
+        <div class="event-grid" id="wh-events">
+          <label class="ev-check"><input type="checkbox" value="approval.created" /> approval.created</label>
+          <label class="ev-check"><input type="checkbox" value="approval.approved" /> approval.approved</label>
+          <label class="ev-check"><input type="checkbox" value="approval.rejected" /> approval.rejected</label>
+          <label class="ev-check"><input type="checkbox" value="task.created" /> task.created</label>
+          <label class="ev-check"><input type="checkbox" value="task.completed" /> task.completed</label>
+          <label class="ev-check"><input type="checkbox" value="coaching_report.created" /> coaching_report.created</label>
+          <label class="ev-check"><input type="checkbox" value="coaching_report.approved" /> coaching_report.approved</label>
+          <label class="ev-check"><input type="checkbox" value="coaching_report.rejected" /> coaching_report.rejected</label>
+        </div>
+        <p class="hint">Leave all unchecked to receive all events.</p>
+        <div class="form-actions">
+          <button type="button" class="btn-secondary" id="wh-cancel">Cancel</button>
+          <button type="submit" class="btn-primary" id="wh-submit">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Secret reveal modal -->
+  <div class="modal-overlay" id="secret-modal" style="display:none">
+    <div class="modal-card modal-narrow">
+      <div class="modal-header">
+        <h2>Signing Secret</h2>
+        <button class="modal-close" id="secret-modal-close" type="button">&times;</button>
+      </div>
+      <p class="hint">Copy this secret now. It will not be shown again.</p>
+      <code class="secret-display" id="secret-value"></code>
+      <div class="form-actions">
+        <button class="btn-primary" id="secret-copy" type="button">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deliveries modal -->
+  <div class="modal-overlay" id="deliveries-modal" style="display:none">
+    <div class="modal-card modal-wide">
+      <div class="modal-header">
+        <h2>Recent Deliveries</h2>
+        <button class="modal-close" id="deliveries-modal-close" type="button">&times;</button>
+      </div>
+      <div id="deliveries-list" class="deliveries-list"><div class="empty">Loading...</div></div>
+    </div>
+  </div>
+
+  <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/webhooks-page.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
+</body>
+</html>

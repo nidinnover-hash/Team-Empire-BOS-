@@ -43,10 +43,10 @@ async def _get_notification_stream_actor(
     auth_header = (request.headers.get("Authorization") or "").strip()
     if auth_header.lower().startswith("bearer "):
         token = auth_header.split(" ", 1)[1].strip()
-        return await get_current_api_user(token=token, db=db)
+        return await get_current_api_user(request=request, token=token, db=db)
     session_token = request.cookies.get("pc_session")
     if session_token:
-        return await get_current_web_user(session_token=session_token, db=db)
+        return await get_current_web_user(request=request, session_token=session_token, db=db)
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not logged in")
 
 

@@ -141,7 +141,7 @@ async def web_session(request: Request, db: AsyncSession = Depends(get_db)) -> d
     except ValueError:
         return {"logged_in": False}
     try:
-        user = await get_current_web_user(session_token=token, db=db)
+        user = await get_current_web_user(request=request, session_token=token, db=db)
     except HTTPException:
         return {"logged_in": False}
     return {

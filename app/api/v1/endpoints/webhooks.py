@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
@@ -147,10 +147,14 @@ async def delete_webhook(
 
 @router.post("/{endpoint_id}/test", response_model=WebhookTestResponse)
 async def test_webhook(
+    request: Request,
     endpoint_id: int,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> WebhookTestResponse:
+    from app.core.middleware import check_per_route_rate_limit, get_client_ip
+    if not check_per_route_rate_limit(get_client_ip(request), "webhook_test", max_requests=5, window_seconds=60):
+        raise HTTPException(status_code=429, detail="Too many test requests. Try again later.")
     result = await webhook_service.send_test_webhook(
         db, endpoint_id, int(actor["org_id"])
     )

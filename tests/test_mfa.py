@@ -353,3 +353,125 @@ async def test_login_mfa_correct_code_succeeds(mfa_enabled_client):
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
     assert "pc_session" in r.cookies
+
+
+@pytest.mark.asyncio
+async def test_api_login_mfa_required_when_no_code(mfa_enabled_client):
+    """API login with correct password but no TOTP code -> 401 + MFA-required signal."""
+    client, _ = mfa_enabled_client
+    r = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "ceo@org1.com", "password": "TestPass2026!"},
+    )
+    assert r.status_code == 401
+    assert (
+        r.headers.get("x-mfa-required") == "true"
+        or "mfa" in r.json().get("detail", "").lower()
+    )
+
+
+@pytest.mark.asyncio
+async def test_api_login_mfa_wrong_code_rejected(mfa_enabled_client):
+    """API login with correct password + wrong TOTP code -> 401."""
+    import pyotp as _pyotp
+
+    client, secret = mfa_enabled_client
+    _totp = _pyotp.TOTP(secret)
+    wrong_code = "000000"
+    for _c in ("000000", "111111", "222222", "333333"):
+        if not _totp.verify(_c, valid_window=1):
+            wrong_code = _c
+            break
+    r = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "ceo@org1.com", "password": "TestPass2026!", "totp_code": wrong_code},
+    )
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_api_login_mfa_correct_code_succeeds(mfa_enabled_client):
+    """API login with correct password + valid TOTP code returns bearer token."""
+    import pyotp
+
+    client, secret = mfa_enabled_client
+    code = pyotp.TOTP(secret).now()
+    r = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "ceo@org1.com", "password": "TestPass2026!", "totp_code": code},
+    )
+    assert r.status_code == 200
+    token = r.json().get("access_token")
+    assert token
+
+    me = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+
+
+@pytest_asyncio.fixture
+async def mfa_required_unenrolled_client():
+    """Client fixture where MFA policy is enabled but user is not yet enrolled."""
+    from app.core.security import hash_password
+
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    Session = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+
+    pw_hash = hash_password("TestPass2026!")
+    async with Session() as s:
+        s.add(Organization(id=1, name="Test Org", slug="test-org"))
+        s.add(
+            User(
+                id=1,
+                organization_id=1,
+                name="CEO",
+                email="ceo@org1.com",
+                password_hash=pw_hash,
+                role="CEO",
+                is_active=True,
+                token_version=1,
+                mfa_enabled=False,
+            )
+        )
+        await s.commit()
+
+    from app.core.deps import get_db
+
+    async def _override():
+        async with Session() as s:
+            yield s
+
+    app.dependency_overrides[get_db] = _override
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+    app.dependency_overrides.clear()
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_mfa_required_policy_issues_bootstrap_token(mfa_required_unenrolled_client):
+    pytest.importorskip("pyotp")
+    client = mfa_required_unenrolled_client
+    login = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "ceo@org1.com", "password": "TestPass2026!"},
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Bootstrap token must not access regular business endpoints.
+    blocked = await client.get("/api/v1/tasks", headers=headers)
+    assert blocked.status_code == 403
+    assert "MFA enrollment required" in blocked.json().get("detail", "")
+
+    # Bootstrap token is allowed to reach MFA setup endpoints.
+    setup = await client.post("/api/v1/mfa/setup", headers=headers)
+    assert setup.status_code == 200

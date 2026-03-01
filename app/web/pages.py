@@ -33,7 +33,7 @@ async def _get_web_user_or_none(request: Request, db: AsyncSession) -> dict | No
     if not token:
         return None
     try:
-        return await get_current_web_user(session_token=token, db=db)
+        return await get_current_web_user(request=request, session_token=token, db=db)
     except HTTPException:
         return None
 
@@ -60,6 +60,7 @@ router.get("/web/data-hub", response_class=HTMLResponse, include_in_schema=False
 router.get("/web/observe", response_class=HTMLResponse, include_in_schema=False)(_web_page("observe.html"))
 router.get("/web/ops-intel", response_class=HTMLResponse, include_in_schema=False)(_web_page("ops_intel.html"))
 router.get("/web/tasks", response_class=HTMLResponse, include_in_schema=False)(_web_page("tasks.html"))
+router.get("/web/webhooks", response_class=HTMLResponse, include_in_schema=False)(_web_page("webhooks.html"))
 
 
 @router.get("/web/login", response_class=HTMLResponse, include_in_schema=False)

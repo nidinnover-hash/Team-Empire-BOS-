@@ -70,6 +70,18 @@ async def test_create_webhook_rejects_invalid_event_types(client):
 
 
 @pytest.mark.asyncio
+async def test_create_webhook_rejects_localhost_targets(client):
+    resp = await _create_webhook(client, url="https://localhost/hook")
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_create_webhook_rejects_private_ip_targets(client):
+    resp = await _create_webhook(client, url="https://127.0.0.1/hook")
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_list_webhook_endpoints(client):
     await _create_webhook(client, url="https://example.com/hook1")
     await _create_webhook(client, url="https://example.com/hook2")

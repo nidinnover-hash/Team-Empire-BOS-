@@ -150,7 +150,7 @@ async def authenticate_user(
     return user
 
 
-def create_jwt(user) -> str:
+def create_jwt(user, *, mfa_bootstrap: bool = False) -> str:
     """Create a JWT token for the authenticated user."""
     purpose_profile = resolve_login_profile_cached(user.email)
     token_version = int(getattr(user, "token_version", 1) or 1)
@@ -164,8 +164,9 @@ def create_jwt(user) -> str:
             "purpose": purpose_profile["purpose"],
             "default_theme": purpose_profile["default_theme"],
             "default_avatar_mode": purpose_profile["default_avatar_mode"],
+            "mfa_bootstrap": mfa_bootstrap,
         },
-        expires_minutes=effective_token_expiry_minutes(),
+        expires_minutes=10 if mfa_bootstrap else effective_token_expiry_minutes(),
     )
 
 

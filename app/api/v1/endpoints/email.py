@@ -6,7 +6,7 @@ from importlib import import_module
 from time import time
 from typing import Protocol
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -220,6 +220,7 @@ async def gmail_auth_url(
 
 @router.get("/callback")
 async def gmail_callback(
+    request: Request,
     code: str = Query(..., min_length=1, max_length=2000),
     state: str = Query(..., min_length=1, max_length=1000),
     db: AsyncSession = Depends(get_db),
@@ -228,6 +229,9 @@ async def gmail_callback(
     Handle Gmail OAuth callback. Exchange code for tokens and save to DB.
     Google redirects here after the user grants permission.
     """
+    from app.core.middleware import check_per_route_rate_limit, get_client_ip
+    if not check_per_route_rate_limit(get_client_ip(request), "gmail_oauth_cb", max_requests=10, window_seconds=60):
+        raise HTTPException(status_code=429, detail="Too many OAuth callback attempts. Try again later.")
     org_id = _verify_email_state(state)
     if not consume_oauth_nonce_once(namespace="gmail_oauth", nonce=state, max_age_seconds=600):
         raise HTTPException(status_code=409, detail="OAuth callback already processed (replay rejected)")

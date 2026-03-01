@@ -3,7 +3,7 @@ import logging
 from collections.abc import AsyncGenerator
 from typing import TypedDict
 
-from fastapi import Cookie, Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,17 @@ from app.db.session import AsyncSessionLocal
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
+
+_MFA_BOOTSTRAP_ALLOWED_PREFIXES = (
+    "/api/v1/mfa/",
+    "/api/v1/auth/login",
+    "/api/v1/auth/me",
+    "/me",
+)
+_MFA_BOOTSTRAP_ALLOWED_WEB_PATHS = {
+    "/web/logout",
+    "/web/session",
+}
 
 
 class ActorDict(TypedDict):
@@ -32,6 +43,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def get_current_api_user(
+    request: Request,
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -84,6 +96,13 @@ async def get_current_api_user(
             reason = "mismatch"
         logger.warning("API auth rejected user_id=%s reason=%s org_id=%s", user_id, reason, org_id)
         raise credentials_exception
+    if bool(payload.get("mfa_bootstrap")) and not any(
+        request.url.path.startswith(prefix) for prefix in _MFA_BOOTSTRAP_ALLOWED_PREFIXES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="MFA enrollment required before accessing this endpoint",
+        )
     return {
         "id": int(db_user.id),
         "email": str(db_user.email),
@@ -101,6 +120,7 @@ def get_current_org_id(user: dict = Depends(get_current_api_user)) -> int:
 
 
 async def get_current_web_user(
+    request: Request,
     session_token: str | None = Cookie(default=None, alias="pc_session"),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -126,6 +146,11 @@ async def get_current_web_user(
         or int(getattr(db_user, "token_version", 1)) != token_version
     ):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+    if bool(payload.get("mfa_bootstrap")) and request.url.path not in _MFA_BOOTSTRAP_ALLOWED_WEB_PATHS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="MFA enrollment required before accessing web features",
+        )
     return {
         "id": int(db_user.id),
         "email": str(db_user.email),

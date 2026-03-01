@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import secrets
 import time
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 from sqlalchemy import delete, func, select
@@ -39,10 +41,31 @@ def _compute_signature(secret: str, body: bytes) -> str:
 
 
 def _validate_url(url: str) -> None:
+    parsed = urlsplit(url)
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        raise ValueError("Webhook URL must include a hostname")
+    if host in {"localhost", "0.0.0.0"} or host.endswith(".localhost"):
+        raise ValueError("Webhook URL host is not allowed")
+    if host.endswith(".local") or host.endswith(".internal"):
+        raise ValueError("Webhook URL host is not allowed")
     if not settings.DEBUG and not url.startswith("https://"):
         raise ValueError("Webhook URL must use HTTPS in production")
     if not url.startswith(("http://", "https://")):
         raise ValueError("Webhook URL must start with http:// or https://")
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return
+    if (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_unspecified
+        or ip.is_reserved
+    ):
+        raise ValueError("Webhook URL host is not allowed")
 
 
 def _validate_event_types(event_types: list[str]) -> None:

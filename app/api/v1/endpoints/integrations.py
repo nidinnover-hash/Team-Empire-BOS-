@@ -256,10 +256,14 @@ async def google_calendar_auth_url(
 
 @router.post("/google-calendar/oauth/callback", response_model=IntegrationRead)
 async def google_calendar_oauth_callback(
+    request: Request,
     data: GoogleOAuthCallbackRequest,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> IntegrationRead:
+    from app.core.middleware import check_per_route_rate_limit, get_client_ip
+    if not check_per_route_rate_limit(get_client_ip(request), "gcal_oauth_cb", max_requests=10, window_seconds=60):
+        raise HTTPException(status_code=429, detail="Too many OAuth callback attempts. Try again later.")
     redir = calendar_redirect_uri()
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET or not redir:
         raise HTTPException(status_code=400, detail="Google OAuth is not configured")
@@ -315,6 +319,9 @@ async def google_calendar_oauth_callback_redirect(
     Google redirects here with ?code=XXX&state=YYY after user grants permission.
     No Bearer token required — org_id is extracted from the signed state.
     """
+    from app.core.middleware import check_per_route_rate_limit, get_client_ip
+    if not check_per_route_rate_limit(get_client_ip(request), "gcal_oauth_cb", max_requests=10, window_seconds=60):
+        raise HTTPException(status_code=429, detail="Too many OAuth callback attempts. Try again later.")
     redir = calendar_redirect_uri()
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET or not redir:
         raise HTTPException(status_code=400, detail="Google OAuth is not configured")
@@ -775,6 +782,9 @@ async def whatsapp_webhook_receive(
     Verifies X-Hub-Signature-256 when WHATSAPP_APP_SECRET is configured.
     Acks quickly - processing pipelines can be added behind this endpoint.
     """
+    from app.core.middleware import check_per_route_rate_limit, get_client_ip
+    if not check_per_route_rate_limit(get_client_ip(request), "whatsapp_webhook", max_requests=60, window_seconds=60):
+        raise HTTPException(status_code=429, detail="Too many webhook deliveries. Try again later.")
     import json as _json
 
     _MAX_WEBHOOK_BODY = 1_048_576  # 1 MB guard against oversized payloads
