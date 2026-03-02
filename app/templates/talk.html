@@ -37,6 +37,20 @@
     <div class="panel-head">Live Conversation</div>
     <div id="chat-log"></div>
     <div id="interim-display"></div>
+    <div class="ai-provider-bar">
+      <label for="provider-select">AI:</label>
+      <select id="provider-select">
+        <option value="">Default</option>
+        <option value="openai">OpenAI</option>
+        <option value="anthropic">Claude</option>
+        <option value="groq">Groq</option>
+        <option value="gemini">Gemini</option>
+      </select>
+      <select id="model-select" title="AI model">
+        <option value="">Default Model</option>
+      </select>
+      <label class="stream-label"><input type="checkbox" id="stream-toggle" checked /> Stream</label>
+    </div>
     <div class="composer">
       <textarea id="message-input" placeholder="Tell your agent what to do next..." aria-label="Chat message"></textarea>
       <button id="send-btn" type="button">Send</button>

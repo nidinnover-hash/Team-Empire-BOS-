@@ -38,8 +38,8 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str | None = None
     DEFAULT_AI_PROVIDER: AIProvider = "openai"
     EMAIL_AI_PROVIDER: AIProvider | None = None  # Override AI provider for email; falls back to DEFAULT_AI_PROVIDER
-    AGENT_MODEL_OPENAI: str = "gpt-4o-mini"
-    AGENT_MODEL_ANTHROPIC: str = "claude-haiku-4-5-20251001"
+    AGENT_MODEL_OPENAI: str = "gpt-4o"
+    AGENT_MODEL_ANTHROPIC: str = "claude-sonnet-4-5-20250514"
     AGENT_MODEL_GROQ: str = "llama-3.3-70b-versatile"
     AGENT_MODEL_GEMINI: str = "gemini-2.0-flash"
     GOOGLE_CLIENT_ID: str | None = None

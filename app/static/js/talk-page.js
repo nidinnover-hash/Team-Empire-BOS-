@@ -39,12 +39,16 @@ function getCookie(name) {
     var personalAvatarBtn = document.getElementById("avatar-personal-btn");
     var entertainmentAvatarBtn = document.getElementById("avatar-entertainment-btn");
     var modeFocusCopyEl = document.getElementById("mode-focus-copy");
+    var providerSelect = document.getElementById("provider-select");
+    var modelSelect = document.getElementById("model-select");
+    var streamToggle = document.getElementById("stream-toggle");
     var apiToken = null;
     var csrfToken = null;
     var avatarMode = "professional";
     var loginPurpose = "professional";
     var isMicOn = false;
     var recognition = null;
+    var aiModelsCache = null;
 
     var esc = window.PCUI.escapeHtml;
     function setStatus(text, cls) {
@@ -211,6 +215,102 @@ function getCookie(name) {
       }
     }
 
+    async function loadAiModels() {
+      if (!apiToken) return;
+      try {
+        var r = await fetch("/api/v1/ai/models", { headers: { "Authorization": "Bearer " + apiToken } });
+        if (!r.ok) return;
+        aiModelsCache = await r.json();
+        updateModelDropdown();
+      } catch (_e) { /* ignore */ }
+    }
+
+    function updateModelDropdown() {
+      if (!modelSelect || !aiModelsCache) return;
+      var provider = (providerSelect ? providerSelect.value : "") || "";
+      modelSelect.innerHTML = '<option value="">Default Model</option>';
+      if (!provider) return;
+      var entry = aiModelsCache.find(function (e) { return e.provider === provider; });
+      if (!entry || !entry.configured) return;
+      entry.models.forEach(function (m) {
+        var opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = m + (m === entry.default_model ? " (default)" : "");
+        modelSelect.appendChild(opt);
+      });
+    }
+
+    if (providerSelect) {
+      providerSelect.addEventListener("change", function () {
+        updateModelDropdown();
+        localStorage.setItem("pc_ai_provider", providerSelect.value);
+      });
+      var savedProvider = localStorage.getItem("pc_ai_provider") || "";
+      if (savedProvider) providerSelect.value = savedProvider;
+    }
+
+    async function sendStreamingMessage(message) {
+      if (!apiToken) {
+        setStatus("Missing API token. Refresh and sign in again.", "err");
+        return;
+      }
+      var provider = (providerSelect ? providerSelect.value : "") || undefined;
+      var model = (modelSelect ? modelSelect.value : "") || undefined;
+
+      var div = document.createElement("div");
+      div.className = "msg agent";
+      div.innerHTML = '<span class="tag">Agent</span>';
+      var textNode = document.createTextNode("");
+      div.appendChild(textNode);
+      chatLog.appendChild(div);
+
+      try {
+        var r = await fetch("/api/v1/ai/chat", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + apiToken, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: message,
+            provider: provider,
+            model: model,
+            stream: true,
+            max_tokens: 2048,
+          }),
+        });
+        if (!r.ok) {
+          var err = await r.json().catch(function () { return {}; });
+          throw new Error(err.detail || "Streaming request failed");
+        }
+        var reader = r.body.getReader();
+        var decoder = new TextDecoder();
+        var fullText = "";
+        while (true) {
+          var result = reader.read ? await reader.read() : { done: true };
+          if (result.done) break;
+          var chunk = decoder.decode(result.value, { stream: true });
+          var lines = chunk.split("\n");
+          for (var li = 0; li < lines.length; li++) {
+            var line = lines[li];
+            if (line.indexOf("data: ") !== 0) continue;
+            var payload = line.slice(6).trim();
+            if (payload === "[DONE]") continue;
+            try {
+              var parsed = JSON.parse(payload);
+              if (parsed.text) {
+                fullText += parsed.text;
+                textNode.textContent = fullText;
+                chatLog.scrollTop = chatLog.scrollHeight;
+              }
+            } catch (_pe) { /* ignore parse errors */ }
+          }
+        }
+        if (!fullText) textNode.textContent = "(No response)";
+        setStatus("Streamed from " + (provider || "default") + ".", "ok");
+      } catch (err) {
+        textNode.textContent = "Error: " + (err.message || "Streaming failed");
+        setStatus(mapUiError(err), "err");
+      }
+    }
+
     async function loadHistoryOrWelcome() {
       var history = await fetch("/web/chat/history?avatar_mode=" + encodeURIComponent(avatarMode)).then(function (r) {
         if (!r.ok) throw new Error("Failed to load chat history");
@@ -247,7 +347,8 @@ function getCookie(name) {
     async function sendMessage() {
       var message = (input.value || "").trim();
       if (!message) return;
-      if (!csrfToken) {
+      var useStreaming = streamToggle && streamToggle.checked && apiToken && (providerSelect && providerSelect.value);
+      if (!useStreaming && !csrfToken) {
         setStatus("Missing CSRF token. Refresh and sign in again.", "err");
         return;
       }
@@ -255,32 +356,36 @@ function getCookie(name) {
       input.value = "";
       if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(sendBtn, true, "Sending...");
       else sendBtn.disabled = true;
-      setStatus("Agent is thinking...");
+      setStatus(useStreaming ? "Streaming..." : "Agent is thinking...");
 
       try {
-        var form = new FormData();
-        form.set("message", message);
-        form.set("avatar_mode", avatarMode);
-        var r = await fetch("/web/agents/chat", {
-          method: "POST",
-          headers: { "X-CSRF-Token": csrfToken },
-          body: form
-        });
-        var body = await r.json().catch(function () { return {}; });
-        if (!r.ok) throw new Error(body.detail || "Chat request failed");
-        appendMessage("agent", body.response || "Done.", {
-          confidence_score: body.confidence_score,
-          confidence_level: body.confidence_level,
-          needs_human_review: body.needs_human_review,
-          policy_score: body.policy_score,
-          blocked_by_policy: body.blocked_by_policy,
-          proposed_actions: body.proposed_actions,
-        });
-        var statusMsg = "Reply ready.";
-        if (body.blocked_by_policy) statusMsg = "Response blocked by policy.";
-        else if (body.requires_approval) statusMsg = "Reply generated. Some actions require approval.";
-        else if (body.needs_human_review) statusMsg = "Reply generated. Human review recommended.";
-        setStatus(statusMsg, body.blocked_by_policy ? "err" : "ok");
+        if (useStreaming) {
+          await sendStreamingMessage(message);
+        } else {
+          var form = new FormData();
+          form.set("message", message);
+          form.set("avatar_mode", avatarMode);
+          var r = await fetch("/web/agents/chat", {
+            method: "POST",
+            headers: { "X-CSRF-Token": csrfToken },
+            body: form
+          });
+          var body = await r.json().catch(function () { return {}; });
+          if (!r.ok) throw new Error(body.detail || "Chat request failed");
+          appendMessage("agent", body.response || "Done.", {
+            confidence_score: body.confidence_score,
+            confidence_level: body.confidence_level,
+            needs_human_review: body.needs_human_review,
+            policy_score: body.policy_score,
+            blocked_by_policy: body.blocked_by_policy,
+            proposed_actions: body.proposed_actions,
+          });
+          var statusMsg = "Reply ready.";
+          if (body.blocked_by_policy) statusMsg = "Response blocked by policy.";
+          else if (body.requires_approval) statusMsg = "Reply generated. Some actions require approval.";
+          else if (body.needs_human_review) statusMsg = "Reply generated. Human review recommended.";
+          setStatus(statusMsg, body.blocked_by_policy ? "err" : "ok");
+        }
       } catch (err) {
         appendMessage("agent", "I hit an error while processing that. Please try again.");
         setStatus(mapUiError(err), "err");
@@ -408,6 +513,7 @@ function getCookie(name) {
       renderAvatarMode();
       setupSpeech();
       await loadApiToken();
+      await loadAiModels();
       await loadHistoryOrWelcome();
       await loadBootstrap();
     } catch (e) {

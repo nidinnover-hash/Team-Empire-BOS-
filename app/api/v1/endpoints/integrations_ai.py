@@ -1,6 +1,8 @@
+import json
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -8,6 +10,9 @@ from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
 from app.schemas.integration import (
+    AIChatRequest,
+    AIChatResponse,
+    AIModelsResponse,
     AIProviderConnectRequest,
     AIProviderConnectResult,
     AIProviderName,
@@ -221,6 +226,123 @@ async def test_ai_provider(
         status="ok",
         message=f"{chosen.capitalize()} is connected and responding.",
         sample_response=response,
+    )
+
+
+@router.get("/ai/models", response_model=list[AIModelsResponse])
+async def ai_available_models(
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+) -> list[AIModelsResponse]:
+    """Return available models per provider with configuration status."""
+    from app.services.ai_router import AVAILABLE_MODELS, _get_key, _key_ok
+
+    org_id = int(actor["org_id"])
+    default_models = {
+        "openai": settings.AGENT_MODEL_OPENAI,
+        "anthropic": settings.AGENT_MODEL_ANTHROPIC,
+        "groq": settings.AGENT_MODEL_GROQ,
+        "gemini": settings.AGENT_MODEL_GEMINI,
+    }
+    return [
+        AIModelsResponse(
+            provider=prov,
+            configured=_key_ok(_get_key(prov, org_id=org_id)),
+            models=models,
+            default_model=default_models.get(prov, models[0]),
+        )
+        for prov, models in AVAILABLE_MODELS.items()
+    ]
+
+
+@router.post("/ai/chat")
+async def ai_chat(
+    data: AIChatRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+):
+    """Direct AI chat endpoint with optional streaming.
+
+    - ``stream=false`` (default): returns JSON ``AIChatResponse``
+    - ``stream=true``: returns ``text/event-stream`` SSE with text delta chunks
+    """
+    from app.services.ai_router import AVAILABLE_MODELS, call_ai, stream_ai
+
+    org_id = int(actor["org_id"])
+    provider = (data.provider or settings.DEFAULT_AI_PROVIDER or "openai").strip().lower()
+    if provider == "claude":
+        provider = "anthropic"
+    if provider not in {"openai", "anthropic", "groq", "gemini"}:
+        provider = "openai"
+
+    model = data.model
+    if model:
+        allowed = AVAILABLE_MODELS.get(provider, [])
+        if model not in allowed:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model '{model}' not available for {provider}. Options: {allowed}",
+            )
+
+    brain_context = await build_brain_context(
+        db,
+        organization_id=org_id,
+        actor_user_id=int(actor["id"]),
+        actor_role=str(actor["role"]),
+        request_purpose=str(actor.get("purpose") or "professional"),
+    )
+
+    await record_action(
+        db,
+        event_type="ai_chat",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="ai_chat",
+        entity_id=None,
+        payload_json={"provider": provider, "model": model, "stream": data.stream},
+    )
+
+    if data.stream:
+        async def sse_generator():
+            async for chunk in stream_ai(
+                system_prompt=data.system_prompt,
+                user_message=data.message,
+                provider=provider,
+                model=model,
+                max_tokens=data.max_tokens,
+                conversation_history=data.conversation_history,
+                organization_id=org_id,
+                brain_context=brain_context,
+            ):
+                yield f"data: {json.dumps({'text': chunk})}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            sse_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    # Non-streaming: use call_ai with provider override
+    response = await call_ai(
+        system_prompt=data.system_prompt,
+        user_message=data.message,
+        provider=provider,
+        max_tokens=data.max_tokens,
+        conversation_history=data.conversation_history,
+        organization_id=org_id,
+        brain_context=brain_context,
+    )
+    used_model = model or {
+        "openai": settings.AGENT_MODEL_OPENAI,
+        "anthropic": settings.AGENT_MODEL_ANTHROPIC,
+        "groq": settings.AGENT_MODEL_GROQ,
+        "gemini": settings.AGENT_MODEL_GEMINI,
+    }.get(provider, "unknown")
+
+    return AIChatResponse(
+        provider=provider,
+        model=used_model,
+        response=response,
     )
 
 
