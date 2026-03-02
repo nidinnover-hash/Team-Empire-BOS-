@@ -203,3 +203,37 @@ async def test_api_key_resource_write_scope_allows_matching_write(client):
         headers=headers,
     )
     assert resp.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_api_key_daily_quota_enforced(client, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.API_KEY_QUOTA_ENABLED", True)
+    monkeypatch.setattr("app.core.config.settings.API_KEY_REQUESTS_PER_DAY", 1)
+
+    create_resp = await _create_key(client, scopes="read", headers=ORG2_HEADERS)
+    assert create_resp.status_code == 201
+    full_key = create_resp.json()["key"]
+    headers = {"Authorization": f"Bearer {full_key}"}
+
+    first = await client.get("/api/v1/auth/me", headers=headers)
+    assert first.status_code == 200
+
+    second = await client.get("/api/v1/auth/me", headers=headers)
+    assert second.status_code == 429
+    assert "quota exceeded" in second.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_api_key_daily_quota_disabled_allows_requests(client, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.API_KEY_QUOTA_ENABLED", False)
+    monkeypatch.setattr("app.core.config.settings.API_KEY_REQUESTS_PER_DAY", 1)
+
+    create_resp = await _create_key(client, scopes="read", headers=ORG2_HEADERS)
+    assert create_resp.status_code == 201
+    full_key = create_resp.json()["key"]
+    headers = {"Authorization": f"Bearer {full_key}"}
+
+    first = await client.get("/api/v1/auth/me", headers=headers)
+    second = await client.get("/api/v1/auth/me", headers=headers)
+    assert first.status_code == 200
+    assert second.status_code == 200

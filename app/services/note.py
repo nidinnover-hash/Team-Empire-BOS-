@@ -1,8 +1,15 @@
+import logging
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.note import Note
 from app.schemas.note import NoteCreate, NoteUpdate
+
+logger = logging.getLogger(__name__)
+
+
+_UPDATE_FIELDS = {"title", "content", "tags"}
 
 
 async def create_note(
@@ -12,6 +19,7 @@ async def create_note(
     db.add(note)
     await db.commit()
     await db.refresh(note)
+    logger.info("note created id=%d org=%d", note.id, organization_id)
     return note
 
 
@@ -44,9 +52,11 @@ async def update_note(
     if note is None:
         return None
     for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(note, field, value)
+        if field in _UPDATE_FIELDS:
+            setattr(note, field, value)
     await db.commit()
     await db.refresh(note)
+    logger.info("note updated id=%d org=%d", note_id, organization_id)
     return note
 
 
@@ -58,4 +68,5 @@ async def delete_note(
         return False
     await db.delete(note)
     await db.commit()
+    logger.info("note deleted id=%d org=%d", note_id, organization_id)
     return True

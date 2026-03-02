@@ -1,3 +1,5 @@
+import logging
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +20,7 @@ from app.schemas.integration import (
 )
 from app.services import calendly_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Integrations"])
 
 
@@ -54,7 +57,8 @@ async def calendly_sync(
     try:
         result = await calendly_service.sync_events(db, org_id=int(actor["org_id"]))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("Calendly sync rejected: %s", exc)
+        raise HTTPException(status_code=400, detail="Calendly sync configuration error") from exc
     except (httpx.HTTPError, RuntimeError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
         raise HTTPException(status_code=502, detail="Calendly sync failed due to upstream error. Retry shortly.") from exc
     normalized = normalize_sync_result(

@@ -186,7 +186,7 @@ async def generate_role_training_plans(
             select(ClonePerformanceWeekly).where(
                 ClonePerformanceWeekly.organization_id == organization_id,
                 ClonePerformanceWeekly.week_start_date == week_start_date,
-            )
+            ).limit(1000)
         )
     ).scalars().all()
     employees = (
@@ -258,7 +258,7 @@ async def list_role_training_plans(
     query = select(RoleTrainingPlan).where(RoleTrainingPlan.organization_id == organization_id)
     if week_start_date is not None:
         query = query.where(RoleTrainingPlan.week_start_date == week_start_date)
-    query = query.order_by(RoleTrainingPlan.week_start_date.desc(), RoleTrainingPlan.employee_id.asc())
+    query = query.order_by(RoleTrainingPlan.week_start_date.desc(), RoleTrainingPlan.employee_id.asc()).limit(1000)
     rows = (await db.execute(query)).scalars().all()
     return list(rows)
 
@@ -291,7 +291,7 @@ async def update_role_training_plan_status(
 async def data_quality_snapshot(db: AsyncSession, *, organization_id: int) -> dict[str, object]:
     employees = (
         await db.execute(
-            select(Employee).where(Employee.organization_id == organization_id, Employee.is_active.is_(True))
+            select(Employee).where(Employee.organization_id == organization_id, Employee.is_active.is_(True)).limit(1000)
         )
     ).scalars().all()
     emp_ids = [e.id for e in employees]

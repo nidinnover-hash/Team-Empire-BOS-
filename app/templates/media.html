@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <title>Media — Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/media.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
 </head>
@@ -52,7 +53,7 @@
 
   <!-- Media Grid -->
   <div class="media-grid" id="media-grid">
-    <div class="empty">Loading...</div>
+    <div class="empty loading">Loading...</div>
   </div>
 
   <!-- Upload Modal -->
@@ -60,7 +61,7 @@
     <div class="modal">
       <div class="modal-header">
         <h3>Upload Files</h3>
-        <button class="modal-close" id="modal-upload-close">&times;</button>
+        <button class="modal-close" id="modal-upload-close" type="button" aria-label="Close">&times;</button>
       </div>
       <div class="upload-zone" id="upload-zone">
         <i data-lucide="upload-cloud" style="width:2rem;height:2rem;color:var(--text-faint)"></i>

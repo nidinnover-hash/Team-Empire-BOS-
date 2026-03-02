@@ -672,7 +672,7 @@ async def compose_email(
                 timeout=_GMAIL_THREAD_TIMEOUT,
             )
         except (RuntimeError, ValueError, TypeError, TimeoutError) as exc:
-            logger.warning("Gmail draft creation failed for compose to %s: %s", to, type(exc).__name__)
+            logger.warning("Gmail draft creation failed for compose: %s", type(exc).__name__)
 
     # Require approval before anything can be sent
     approval = await request_approval(

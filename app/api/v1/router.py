@@ -27,6 +27,7 @@ from app.api.v1.endpoints import (
     integrations,
     intelligence,
     layers,
+    locations,
     media,
     memory,
     mfa,
@@ -90,4 +91,5 @@ api_router.include_router(departments.router)
 api_router.include_router(performance.router)
 api_router.include_router(governance.router)
 api_router.include_router(media.router)
+api_router.include_router(locations.router)
 api_router.include_router(innovation.router)

@@ -1,0 +1,32 @@
+{
+  "base_ref": "main",
+  "changed_files": 259,
+  "risks": [
+    {
+      "area": "migration",
+      "score": 8,
+      "level": "high"
+    },
+    {
+      "area": "api_contract",
+      "score": 7,
+      "level": "high"
+    },
+    {
+      "area": "sdk_drift",
+      "score": 2,
+      "level": "low"
+    },
+    {
+      "area": "flaky_tests",
+      "score": 5,
+      "level": "medium",
+      "count": 1
+    },
+    {
+      "area": "dependencies",
+      "score": 6,
+      "level": "medium"
+    }
+  ]
+}

@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles
+from app.logs.audit import record_action
 from app.schemas.note import NoteCreate, NoteRead, NoteUpdate
 from app.services import note as note_service
 
@@ -16,7 +17,12 @@ async def create_note(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> NoteRead:
     """Save a short memory snippet."""
-    return await note_service.create_note(db, data, organization_id=actor["org_id"])
+    note = await note_service.create_note(db, data, organization_id=actor["org_id"])
+    await record_action(
+        db, event_type="note_created", actor_user_id=actor["id"],
+        organization_id=actor["org_id"], entity_type="note", entity_id=note.id,
+    )
+    return note
 
 
 @router.get("", response_model=list[NoteRead])
@@ -52,6 +58,11 @@ async def update_note(
     note = await note_service.update_note(db, note_id, data, organization_id=actor["org_id"])
     if note is None:
         raise HTTPException(status_code=404, detail="Note not found")
+    await record_action(
+        db, event_type="note_updated", actor_user_id=actor["id"],
+        organization_id=actor["org_id"], entity_type="note", entity_id=note_id,
+        payload_json=data.model_dump(exclude_unset=True),
+    )
     return note
 
 
@@ -64,3 +75,7 @@ async def delete_note(
     deleted = await note_service.delete_note(db, note_id, organization_id=actor["org_id"])
     if not deleted:
         raise HTTPException(status_code=404, detail="Note not found")
+    await record_action(
+        db, event_type="note_deleted", actor_user_id=actor["id"],
+        organization_id=actor["org_id"], entity_type="note", entity_id=note_id,
+    )

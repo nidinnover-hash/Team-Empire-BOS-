@@ -33,7 +33,7 @@ async def create_goal(
 @router.get("", response_model=list[GoalRead])
 async def list_goals(
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=10_000),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> list[GoalRead]:

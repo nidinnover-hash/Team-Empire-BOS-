@@ -273,3 +273,33 @@ async def test_workflow_lifecycle(db):
     assert wf is not None
     assert wf.status == "failed"
     assert wf.error_text == "step 2 failed"
+
+
+@pytest.mark.asyncio
+async def test_create_workflow_rejects_invalid_step_params_service(db):
+    from app.services.automation import create_workflow
+
+    with pytest.raises(ValueError, match="params must be an object"):
+        await create_workflow(
+            db,
+            organization_id=1,
+            name="Invalid Params",
+            steps_json=[
+                {"name": "bad", "action_type": "assign_task", "params": "not-a-dict"},
+            ],
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_workflow_normalizes_action_type_service(db):
+    from app.services.automation import create_workflow
+
+    wf = await create_workflow(
+        db,
+        organization_id=1,
+        name="Normalize Action Type",
+        steps_json=[
+            {"name": "step1", "action_type": "Assign_Task", "params": {"task_id": 1}},
+        ],
+    )
+    assert wf.steps_json[0]["action_type"] == "assign_task"

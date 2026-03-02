@@ -73,12 +73,16 @@ async def authenticate_user(
     user = await user_service.get_user_by_email(db, username)
 
     # Constant-time: always run PBKDF2 so response time doesn't leak
-    # whether the username exists.
+    # whether the username exists.  Use the real hash when available,
+    # otherwise the dummy hash, so the crypto work is always performed.
+    hash_to_verify = (
+        user.password_hash
+        if (user is not None and user.is_active)
+        else _DUMMY_HASH
+    )
+    valid = await asyncio.to_thread(verify_password, password, hash_to_verify)
     if user is None or not user.is_active:
-        await asyncio.to_thread(verify_password, password, _DUMMY_HASH)
         valid = False
-    else:
-        valid = await asyncio.to_thread(verify_password, password, user.password_hash)
 
     # Transparent rehash: upgrade old iteration counts to current OWASP minimum.
     if valid and user is not None:

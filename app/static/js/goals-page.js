@@ -17,6 +17,10 @@
   var headers = function () {
     return { Authorization: "Bearer " + token, "Content-Type": "application/json" };
   };
+  var askInput = async function (title, message, defaultValue) {
+    if (window.PCUI && window.PCUI.promptText) return window.PCUI.promptText(title, message, defaultValue);
+    return window.prompt(message || "", defaultValue || "");
+  };
 
   async function loadGoals() {
     var response = await fetch("/api/v1/goals?limit=100", { headers: headers() });
@@ -49,7 +53,7 @@
   var addButton = document.getElementById("add-btn");
   if (addButton) {
     addButton.onclick = async function () {
-      var title = prompt("Goal title:");
+      var title = await askInput("New Goal", "Goal title:", "");
       if (!title) return;
       await fetch("/api/v1/goals", {
         method: "POST",

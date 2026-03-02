@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <title>Integration Health — Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/health.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
 </head>
@@ -30,13 +31,13 @@
     </div>
 
     <h2 class="section-title">Integrations</h2>
-    <div id="integration-list" class="health-list"><div class="empty">Loading integration health...</div></div>
+    <div id="integration-list" class="health-list"><div class="empty loading">Loading integration health...</div></div>
 
     <h2 class="section-title">Token Health</h2>
-    <div id="token-list" class="health-list"><div class="empty">Loading token health...</div></div>
+    <div id="token-list" class="health-list"><div class="empty loading">Loading token health...</div></div>
 
     <h2 class="section-title">System Health</h2>
-    <div id="system-list" class="health-list"><div class="empty">Loading system health...</div></div>
+    <div id="system-list" class="health-list"><div class="empty loading">Loading system health...</div></div>
   </div>
 
   <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +13,7 @@ from app.core.rbac import require_roles
 from app.logs.audit import record_action
 from app.services import media_agent, media_storage
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/media", tags=["Media"])
 
 
@@ -46,7 +49,8 @@ async def upload_media(
             entity_type=entity_type, entity_id=entity_id,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        logger.warning("Media upload rejected: %s", e)
+        raise HTTPException(status_code=400, detail=str(e)[:200]) from e
     await record_action(
         db,
         event_type="media_uploaded",

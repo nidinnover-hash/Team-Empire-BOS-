@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <title>Webhooks — Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/webhooks.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
 </head>
@@ -28,7 +29,20 @@
       <div class="kpi"><div class="label">Inactive</div><div class="val" id="k-inactive">0</div></div>
     </div>
 
-    <div id="webhook-list" class="wh-list"><div class="empty">Loading webhooks...</div></div>
+    <div class="kpi-row" id="wh-reliability" style="display:none">
+      <div class="kpi"><div class="label">Success Rate (24h)</div><div class="val" id="wh-success-rate">100%</div></div>
+      <div class="kpi"><div class="label">Dead Letter (24h)</div><div class="val" id="wh-dead-count">0</div></div>
+      <div class="kpi"><div class="label">Replay Success</div><div class="val" id="wh-replay-success">0</div></div>
+    </div>
+
+    <div class="wh-dead-letter-panel">
+      <div class="wh-dead-header">
+        <h2>Dead Letter Queue</h2>
+      </div>
+      <div id="dead-letter-list" class="dead-letter-list"><div class="empty loading">Loading dead-letter deliveries...</div></div>
+    </div>
+
+    <div id="webhook-list" class="wh-list"><div class="empty loading">Loading webhooks...</div></div>
   </div>
 
   <!-- Create / Edit Modal -->
@@ -36,7 +50,7 @@
     <div class="modal-card">
       <div class="modal-header">
         <h2 id="wh-modal-title">Add Webhook Endpoint</h2>
-        <button class="modal-close" id="wh-modal-close" type="button">&times;</button>
+        <button class="modal-close" id="wh-modal-close" type="button" aria-label="Close">&times;</button>
       </div>
       <form id="wh-form">
         <input type="hidden" id="wh-edit-id" value="" />
@@ -69,7 +83,7 @@
     <div class="modal-card modal-narrow">
       <div class="modal-header">
         <h2>Signing Secret</h2>
-        <button class="modal-close" id="secret-modal-close" type="button">&times;</button>
+        <button class="modal-close" id="secret-modal-close" type="button" aria-label="Close">&times;</button>
       </div>
       <p class="hint">Copy this secret now. It will not be shown again.</p>
       <code class="secret-display" id="secret-value"></code>
@@ -84,9 +98,9 @@
     <div class="modal-card modal-wide">
       <div class="modal-header">
         <h2>Recent Deliveries</h2>
-        <button class="modal-close" id="deliveries-modal-close" type="button">&times;</button>
+        <button class="modal-close" id="deliveries-modal-close" type="button" aria-label="Close">&times;</button>
       </div>
-      <div id="deliveries-list" class="deliveries-list"><div class="empty">Loading...</div></div>
+      <div id="deliveries-list" class="deliveries-list"><div class="empty loading">Loading...</div></div>
     </div>
   </div>
 

@@ -10,6 +10,10 @@
   var headers = function () {
     return { Authorization: "Bearer " + token, "Content-Type": "application/json" };
   };
+  var askInput = async function (title, message, defaultValue) {
+    if (window.PCUI && window.PCUI.promptText) return window.PCUI.promptText(title, message, defaultValue);
+    return window.prompt(message || "", defaultValue || "");
+  };
 
   async function loadContacts() {
     var response = await fetch("/api/v1/contacts?limit=200", { headers: headers() });
@@ -38,9 +42,10 @@
   var addButton = document.getElementById("add-btn");
   if (addButton) {
     addButton.onclick = async function () {
-      var name = prompt("Contact name:");
+      var name = await askInput("New Contact", "Contact name:", "");
       if (!name) return;
-      var email = prompt("Email (optional):") || undefined;
+      var email = await askInput("New Contact", "Email (optional):", "");
+      email = email || undefined;
       await fetch("/api/v1/contacts", {
         method: "POST",
         headers: headers(),

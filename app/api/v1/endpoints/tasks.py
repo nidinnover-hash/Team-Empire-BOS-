@@ -67,7 +67,7 @@ async def delete_task(
     task_id: int,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
-):
+) -> None:
     """Delete a task. CEO/ADMIN only."""
     deleted = await task_service.delete_task(db, task_id, organization_id=actor["org_id"])
     if not deleted:

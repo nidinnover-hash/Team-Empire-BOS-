@@ -1,6 +1,7 @@
 import logging
 from datetime import UTC, datetime
 
+import fastapi
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -192,7 +193,7 @@ async def token_health(
 
 @router.post("/token-rotate/{integration_type}")
 async def token_rotate(
-    integration_type: str,
+    integration_type: str = fastapi.Path(..., max_length=50, pattern=r"^[a-z][a-z0-9_-]*$"),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> dict[str, object]:

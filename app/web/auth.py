@@ -135,6 +135,9 @@ async def web_api_token(request: Request, user: dict = Depends(get_current_web_u
 
 @router.get("/web/session", response_model=WebSessionResponse)
 async def web_session(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
+    from app.core.middleware import check_per_route_rate_limit, get_client_ip
+    if not check_per_route_rate_limit(get_client_ip(request), "web_session", max_requests=30, window_seconds=60):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many session checks. Please wait.")
     token = request.cookies.get("pc_session")
     if not token:
         return {"logged_in": False}

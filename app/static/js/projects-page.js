@@ -17,6 +17,14 @@
   var headers = function () {
     return { Authorization: "Bearer " + token, "Content-Type": "application/json" };
   };
+  var askInput = async function (title, message, defaultValue) {
+    if (window.PCUI && window.PCUI.promptText) return window.PCUI.promptText(title, message, defaultValue);
+    return window.prompt(message || "", defaultValue || "");
+  };
+  var askConfirm = async function (message) {
+    if (window.PCUI && window.PCUI.confirmDanger) return window.PCUI.confirmDanger(message);
+    return window.confirm(message);
+  };
 
   async function loadProjects() {
     var response = await fetch("/api/v1/projects?limit=100", { headers: headers() });
@@ -45,7 +53,8 @@
 
     body.querySelectorAll("[data-del]").forEach(function (button) {
       button.addEventListener("click", async function () {
-        if (!confirm("Delete project?")) return;
+        var confirmed = await askConfirm("Delete project?");
+        if (!confirmed) return;
         var projectId = button.getAttribute("data-del");
         await fetch("/api/v1/projects/" + encodeURIComponent(projectId), { method: "DELETE", headers: headers() });
         await loadProjects();
@@ -56,7 +65,7 @@
   var addButton = document.getElementById("add-btn");
   if (addButton) {
     addButton.onclick = async function () {
-      var title = prompt("Project title:");
+      var title = await askInput("New Project", "Project title:", "");
       if (!title) return;
       await fetch("/api/v1/projects", {
         method: "POST",

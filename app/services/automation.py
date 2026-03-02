@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -18,6 +19,8 @@ from app.models.automation import AutomationTrigger, Workflow
 logger = logging.getLogger(__name__)
 
 _STEP_TIMEOUT_SECONDS = 30
+_MAX_WORKFLOW_STEPS = 20
+_ACTION_TYPE_RE = re.compile(r"^[a-z0-9_.-]{1,100}$")
 
 
 class WorkflowStatus(StrEnum):
@@ -26,6 +29,39 @@ class WorkflowStatus(StrEnum):
     PAUSED = "paused"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+def _validate_and_normalize_steps(steps_json: list) -> list[dict[str, Any]]:
+    if not isinstance(steps_json, list) or not steps_json:
+        raise ValueError("Workflow must include at least one step")
+    if len(steps_json) > _MAX_WORKFLOW_STEPS:
+        raise ValueError(f"Workflow cannot exceed {_MAX_WORKFLOW_STEPS} steps")
+
+    normalized: list[dict[str, Any]] = []
+    for index, raw_step in enumerate(steps_json):
+        if not isinstance(raw_step, dict):
+            raise ValueError(f"Step {index} must be an object")
+        action_type = str(raw_step.get("action_type") or "").strip().lower()
+        if not action_type:
+            raise ValueError(f"Step {index} is missing action_type")
+        if not _ACTION_TYPE_RE.fullmatch(action_type):
+            raise ValueError(
+                f"Step {index} has invalid action_type '{action_type}'. "
+                "Use lowercase letters, numbers, '.', '_' or '-'."
+            )
+        params_raw = raw_step.get("params", {})
+        if not isinstance(params_raw, dict):
+            raise ValueError(f"Step {index} params must be an object")
+        normalized.append(
+            {
+                "name": str(raw_step.get("name") or f"step-{index + 1}").strip(),
+                "action_type": action_type,
+                "integration": raw_step.get("integration"),
+                "params": dict(params_raw),
+                "requires_approval": bool(raw_step.get("requires_approval", False)),
+            }
+        )
+    return normalized
 
 
 # ── Automation Triggers ──────────────────────────────────────────────────────
@@ -165,11 +201,12 @@ async def create_workflow(
     description: str | None = None,
     created_by: int | None = None,
 ) -> Workflow:
+    normalized_steps = _validate_and_normalize_steps(steps_json)
     wf = Workflow(
         organization_id=organization_id,
         name=name,
         description=description,
-        steps_json=steps_json,
+        steps_json=normalized_steps,
         created_by=created_by,
     )
     db.add(wf)

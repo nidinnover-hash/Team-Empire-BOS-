@@ -6,12 +6,14 @@ from typing import TypedDict
 
 from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_access_token, oauth2_scheme
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
 from app.services import api_key as api_key_service
+from app.services import api_quota as api_quota_service
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +176,24 @@ async def get_current_api_user(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="API key does not have the required permissions for this operation",
             )
+        try:
+            allowed, used, limit = await api_quota_service.consume_api_request_quota(
+                db,
+                organization_id=int(db_user.organization_id),
+            )
+            if not allowed:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=(
+                        "API key daily request quota exceeded for this organization. "
+                        f"Used {used}/{limit} requests today."
+                    ),
+                )
+        except HTTPException:
+            raise
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as exc:
+            # Fail open: quota accounting errors should not block API traffic.
+            logger.warning("API quota check failed; continuing request: %s", type(exc).__name__)
         return {
             "id": int(db_user.id),
             "email": str(db_user.email),
@@ -305,5 +325,7 @@ def verify_csrf(
     csrf_cookie: str | None = Cookie(default=None, alias="pc_csrf"),
     csrf_header: str | None = Header(default=None, alias="X-CSRF-Token"),
 ) -> None:
-    if not csrf_cookie or not csrf_header or not hmac.compare_digest(csrf_cookie, csrf_header):
+    if csrf_cookie is None or csrf_header is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing CSRF token")
+    if not hmac.compare_digest(csrf_cookie, csrf_header):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")

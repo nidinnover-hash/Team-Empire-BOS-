@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hmac
 import logging
+import time
 from hashlib import sha256
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -54,8 +55,16 @@ async def handle_slack_command(
     signature = request.headers.get("X-Slack-Signature", "")
 
     signing_secret = getattr(settings, "SLACK_SIGNING_SECRET", None)
-    if signing_secret and not _verify_slack_signature(body, timestamp, signature):
-        raise HTTPException(status_code=401, detail="Invalid Slack signature")
+    if signing_secret:
+        # Reject replay attacks: timestamp must be within 5 minutes
+        try:
+            ts_int = int(timestamp)
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(status_code=401, detail="Invalid request timestamp") from exc
+        if abs(time.time() - ts_int) > 300:
+            raise HTTPException(status_code=401, detail="Request timestamp too old")
+        if not _verify_slack_signature(body, timestamp, signature):
+            raise HTTPException(status_code=401, detail="Invalid Slack signature")
 
     form = await request.form()
     command_text = str(form.get("text", "")).strip().lower()

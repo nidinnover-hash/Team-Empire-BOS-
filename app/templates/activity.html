@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <title>Audit Log — Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/activity.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
 </head>
@@ -36,7 +37,7 @@
       <button class="btn-secondary" id="filter-reset" type="button">Reset</button>
     </div>
 
-    <div id="event-list" class="event-list"><div class="empty">Loading audit events...</div></div>
+    <div id="event-list" class="event-list"><div class="empty loading">Loading audit events...</div></div>
 
     <div class="pagination" id="pagination"></div>
   </div>

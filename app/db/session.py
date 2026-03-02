@@ -30,6 +30,10 @@ def _build_engine() -> AsyncEngine:
         "pool_pre_ping": True,  # drops stale connections automatically
     }
     if not is_sqlite:
+        connect_args: dict[str, Any] = {}
+        stmt_timeout = getattr(settings, "DB_STATEMENT_TIMEOUT_MS", 30000)
+        if stmt_timeout and "postgresql" in db_url:
+            connect_args["options"] = f"-c statement_timeout={int(stmt_timeout)}"
         engine_kwargs.update(
             {
                 "pool_size": settings.DB_POOL_SIZE,
@@ -38,6 +42,8 @@ def _build_engine() -> AsyncEngine:
                 "pool_timeout": settings.DB_POOL_TIMEOUT,
             }
         )
+        if connect_args:
+            engine_kwargs["connect_args"] = connect_args
     try:
         engine = create_async_engine(db_url, **engine_kwargs)
     except (SQLAlchemyError, TypeError, ValueError) as exc:

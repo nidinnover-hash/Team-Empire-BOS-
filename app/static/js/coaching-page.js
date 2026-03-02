@@ -10,6 +10,14 @@
   var headers = function () {
     return { Authorization: "Bearer " + token, "Content-Type": "application/json" };
   };
+  var askInput = async function (title, message, defaultValue) {
+    if (window.PCUI && window.PCUI.promptText) return window.PCUI.promptText(title, message, defaultValue);
+    return window.prompt(message || "", defaultValue || "");
+  };
+  var showAlert = async function (message, title) {
+    if (window.PCUI && window.PCUI.alertInfo) return window.PCUI.alertInfo(message, title);
+    window.alert(message);
+  };
 
   try {
     var reportsResponse = await fetch("/api/v1/performance/coaching?limit=20", { headers: headers() });
@@ -40,7 +48,7 @@
   var generateButton = document.getElementById("generate-btn");
   if (generateButton) {
     generateButton.onclick = async function () {
-      var employeeId = prompt("Employee ID to coach:");
+      var employeeId = await askInput("Generate Coaching", "Employee ID to coach:", "");
       if (!employeeId) return;
       try {
         var generateResponse = await fetch("/api/v1/performance/coaching/generate?employee_id=" + encodeURIComponent(employeeId), {
@@ -48,14 +56,14 @@
           headers: headers(),
         });
         if (generateResponse.ok) {
-          alert("Coaching report generated.");
+          await showAlert("Coaching report generated.", "Success");
           location.reload();
           return;
         }
         var errorPayload = await generateResponse.json().catch(function () { return {}; });
-        alert(errorPayload.detail || "Error generating report");
+        await showAlert(errorPayload.detail || "Error generating report", "Error");
       } catch (error) {
-        alert("Error: " + (error && error.message ? error.message : "unknown"));
+        await showAlert("Error: " + (error && error.message ? error.message : "unknown"), "Error");
       }
     };
   }

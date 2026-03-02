@@ -88,6 +88,7 @@ async def get_team_dashboard(db: AsyncSession, org_id: int) -> TeamDashboardResu
             TeamMember.is_active.is_(True),
         )
         .order_by(TeamMember.team, TeamMember.name)
+        .limit(500)
     )
     members = list(members_result.scalars().all())
 
@@ -96,7 +97,7 @@ async def get_team_dashboard(db: AsyncSession, org_id: int) -> TeamDashboardResu
         select(DailyTaskPlan).where(
             DailyTaskPlan.organization_id == org_id,
             DailyTaskPlan.date == today,
-        )
+        ).limit(500)
     )
     plans_by_member: dict[int, DailyTaskPlan] = {
         p.team_member_id: p for p in plans_result.scalars().all()

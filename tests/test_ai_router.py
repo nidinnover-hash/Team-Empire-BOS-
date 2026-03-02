@@ -252,3 +252,54 @@ async def test_call_provider_does_not_retry_non_transient(monkeypatch):
     assert result.startswith("Error:")
     assert is_transient is False
     assert calls["count"] == 1
+
+
+def test_circuit_opens_after_repeated_transient_failures():
+    ai_router._provider_circuit_state.clear()
+    provider = "groq"
+    org_id = 1
+
+    ai_router._record_provider_transient_failure(provider, org_id)
+    assert ai_router._is_provider_circuit_open(provider, org_id) is False
+
+    ai_router._record_provider_transient_failure(provider, org_id)
+    assert ai_router._is_provider_circuit_open(provider, org_id) is False
+
+    ai_router._record_provider_transient_failure(provider, org_id)
+    assert ai_router._is_provider_circuit_open(provider, org_id) is True
+
+    ai_router._provider_circuit_state.clear()
+
+
+def test_rank_provider_candidates_skips_open_circuit():
+    ai_router._provider_circuit_state.clear()
+    provider = "groq"
+    org_id = 1
+    ai_router._provider_circuit_state[(provider, org_id)] = (3, ai_router.time.time() + 60.0)
+
+    ranked = ai_router._rank_provider_candidates("groq", ["groq", "openai"], org_id=org_id)
+    assert ranked[0] == "openai"
+    assert "groq" not in ranked
+
+    ai_router._provider_circuit_state.clear()
+
+
+async def test_call_ai_skips_open_primary_circuit(monkeypatch):
+    calls = []
+    ai_router._provider_circuit_state.clear()
+    ai_router._provider_circuit_state[("groq", 1)] = (3, ai_router.time.time() + 60.0)
+
+    async def _fake_call(provider, system, user, max_tokens, history, org_id=1):
+        calls.append(provider)
+        if provider == "openai":
+            return "Recovered via openai", False
+        return "Error: should not be called", True
+
+    monkeypatch.setattr(ai_router, "_call_provider", _fake_call)
+    monkeypatch.setattr(ai_router, "_configured_providers", lambda org_id=1: ["groq", "openai"])
+
+    result = await ai_router.call_ai(system_prompt="sys", user_message="msg", provider="groq")
+    assert result == "Recovered via openai"
+    assert calls == ["openai"]
+
+    ai_router._provider_circuit_state.clear()

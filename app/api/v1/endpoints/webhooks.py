@@ -70,7 +70,8 @@ async def create_webhook(
             event_types=data.event_types,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("Webhook validation rejected: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid webhook URL or configuration") from exc
     await record_action(
         db,
         event_type="security_webhook_endpoint_created",
@@ -153,7 +154,8 @@ async def update_webhook(
             db, endpoint_id, int(actor["org_id"]), **kwargs
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("Webhook validation rejected: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid webhook URL or configuration") from exc
     if endpoint is None:
         raise HTTPException(status_code=404, detail="Webhook endpoint not found")
     await record_action(

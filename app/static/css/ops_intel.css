@@ -52,64 +52,8 @@ h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); margin-bottom: 1.2
   border-radius: var(--radius-sm);
   padding: .3rem .45rem;
 }
-.mini-trend {
-  width: 100%;
-  margin-bottom: .35rem;
-  padding: .45rem .5rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line-soft);
-  background: var(--surface-alt);
-}
-.mini-trend__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: .5rem;
-  font-size: .63rem;
-  color: var(--text-faint);
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  margin-bottom: .28rem;
-}
-.mini-trend__subhead {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: .5rem;
-  font-size: .68rem;
-  color: var(--text-muted);
-  margin-bottom: .28rem;
-}
-.trend-controls { display: inline-flex; gap: .25rem; }
-.trend-btn {
-  border: 1px solid var(--line-soft);
-  background: var(--surface);
-  color: var(--text-faint);
-  border-radius: 999px;
-  font-size: .62rem;
-  padding: .08rem .38rem;
-  cursor: pointer;
-}
-.trend-btn.active { color: var(--brand); border-color: var(--brand); }
-.mini-trend__svg {
-  width: 100%;
-  height: 56px;
-  display: block;
-}
-.mini-trend__line {
-  fill: none;
-  stroke: var(--brand);
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.mini-trend__line.ok { stroke: var(--ok); }
-.mini-trend__line.warn { stroke: var(--warn); }
-.mini-trend__line.danger { stroke: var(--danger); }
-.mini-trend__empty {
-  font-size: .7rem;
-  color: var(--text-faint);
-}
+/* mini-trend styles in shared.css */
+.mini-trend { width: 100%; margin-bottom: .35rem; }
 
 .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: .8rem; margin-bottom: 1.4rem; }
 .kpi {

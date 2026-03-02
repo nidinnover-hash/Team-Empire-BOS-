@@ -55,7 +55,7 @@ async def stripe_sync(
     try:
         result = await stripe_service.sync_stripe_data(db, org_id=int(actor["org_id"]))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail="Stripe sync configuration error") from exc
     except (httpx.HTTPError, RuntimeError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
         raise HTTPException(status_code=502, detail="Stripe sync failed due to upstream error. Retry shortly.") from exc
 

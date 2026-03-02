@@ -54,7 +54,7 @@ async def hubspot_sync(
     try:
         result = await hubspot_service.sync_hubspot_data(db, org_id=int(actor["org_id"]))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail="HubSpot sync configuration error") from exc
     except (httpx.HTTPError, RuntimeError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
         raise HTTPException(status_code=502, detail="HubSpot sync failed due to upstream error. Retry shortly.") from exc
     normalized = normalize_sync_result(

@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <title>Automations — Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/automations.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
 </head>
@@ -31,24 +32,24 @@
 
     <!-- Tabs -->
     <div class="tab-bar">
-      <button class="tab active" data-tab="triggers" type="button">Triggers</button>
-      <button class="tab" data-tab="workflows" type="button">Workflows</button>
+      <button class="tab active" data-tab="triggers" type="button" aria-label="Show triggers">Triggers</button>
+      <button class="tab" data-tab="workflows" type="button" aria-label="Show workflows">Workflows</button>
     </div>
 
     <!-- Triggers Panel -->
     <div id="panel-triggers" class="panel">
       <div class="panel-actions">
-        <button class="btn-primary" id="btn-new-trigger" type="button">New Trigger</button>
+        <button class="btn-primary" id="btn-new-trigger" type="button" aria-label="Create new trigger">New Trigger</button>
       </div>
-      <div id="trigger-list" class="item-list"><div class="empty">Loading triggers...</div></div>
+      <div id="trigger-list" class="item-list"><div class="empty loading">Loading triggers...</div></div>
     </div>
 
     <!-- Workflows Panel -->
     <div id="panel-workflows" class="panel" style="display:none">
       <div class="panel-actions">
-        <button class="btn-primary" id="btn-new-workflow" type="button">New Workflow</button>
+        <button class="btn-primary" id="btn-new-workflow" type="button" aria-label="Create new workflow">New Workflow</button>
       </div>
-      <div id="workflow-list" class="item-list"><div class="empty">Loading workflows...</div></div>
+      <div id="workflow-list" class="item-list"><div class="empty loading">Loading workflows...</div></div>
     </div>
 
     <!-- Trigger Create Modal -->
@@ -56,7 +57,7 @@
       <div class="modal">
         <div class="modal-header">
           <h2>New Trigger</h2>
-          <button class="modal-close" id="modal-trigger-close" type="button">&times;</button>
+          <button class="modal-close" id="modal-trigger-close" type="button" aria-label="Close">&times;</button>
         </div>
         <form id="form-trigger" class="modal-body">
           <label>Name <input type="text" name="name" required maxlength="100" /></label>
@@ -76,7 +77,7 @@
       <div class="modal">
         <div class="modal-header">
           <h2>New Workflow</h2>
-          <button class="modal-close" id="modal-workflow-close" type="button">&times;</button>
+          <button class="modal-close" id="modal-workflow-close" type="button" aria-label="Close">&times;</button>
         </div>
         <form id="form-workflow" class="modal-body">
           <label>Name <input type="text" name="name" required maxlength="100" /></label>

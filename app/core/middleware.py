@@ -100,11 +100,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             f"script-src 'self' 'nonce-{nonce}'; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            f"style-src 'self' 'nonce-{nonce}' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
-            "img-src 'self' data:; "
+            "img-src 'self' data: https://*.tile.openstreetmap.org; "
             "connect-src 'self'; "
-            "frame-ancestors 'none'"
+            "frame-ancestors 'none'; "
+            "form-action 'self'; "
+            "base-uri 'self'; "
+            "object-src 'none'"
         )
         # Strict-Transport-Security only when served over HTTPS
         if settings.COOKIE_SECURE:
@@ -438,6 +441,8 @@ def check_per_route_rate_limit(ip: str, route_key: str, max_requests: int, windo
     Returns True if the request is allowed, False if the limit is exceeded.
     Uses a separate in-memory bucket keyed by (route_key, ip).
     """
+    if not settings.RATE_LIMIT_ENABLED:
+        return True
     if _rate_backend() == "redis":
         redis_key = f"{(settings.RATE_LIMIT_REDIS_PREFIX or 'pc:ratelimit').strip()}:{route_key}:{ip}"
         count = _mark_and_count_redis(redis_key, window_seconds, add_event=True)

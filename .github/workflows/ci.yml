@@ -50,6 +50,9 @@ jobs:
       - name: Secret pattern guard
         run: python scripts/check_secret_patterns.py
 
+      - name: Migration revision integrity
+        run: python scripts/check_migration_revisions.py
+
       - name: Lint
         run: ruff check app tests
 
@@ -213,6 +216,19 @@ jobs:
         with:
           name: perf-baseline
           path: perf-baseline.txt
+
+      - name: CI Risk Report
+        if: always()
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: python scripts/ci_risk_report.py
+
+      - name: Upload CI Risk Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-risk-report
+          path: artifacts/ci-risk-report.*
 
   docker-build:
     runs-on: ubuntu-latest

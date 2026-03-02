@@ -31,6 +31,9 @@ class Employee(Base):
     hired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     offboarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    location_tracking_consent: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

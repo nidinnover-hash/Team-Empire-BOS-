@@ -6,6 +6,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -34,6 +35,7 @@ class Task(Base):
             "NOT is_done OR completed_at IS NOT NULL",
             name="ck_task_done_has_completed_at",
         ),
+        Index("ix_tasks_org_project", "organization_id", "project_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -62,7 +64,7 @@ class Task(Base):
         DateTime(timezone=True), nullable=True
     )
     depends_on_task_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

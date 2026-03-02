@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -5,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.employee import Employee
 from app.schemas.ops import EmployeeCreate, EmployeeUpdate
+
+logger = logging.getLogger(__name__)
 
 
 async def create_or_update_employee(
@@ -48,6 +51,7 @@ async def create_or_update_employee(
     db.add(emp)
     await db.commit()
     await db.refresh(emp)
+    logger.info("employee created id=%d org=%d", emp.id, org_id)
     return emp
 
 
@@ -101,6 +105,7 @@ async def update_employee(
     emp.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(emp)
+    logger.info("employee updated id=%d org=%d", employee_id, org_id)
     return emp
 
 
@@ -109,6 +114,8 @@ async def list_by_department(
     org_id: int,
     department_id: int,
     active_only: bool = True,
+    limit: int = 200,
+    offset: int = 0,
 ) -> list[Employee]:
     query = select(Employee).where(
         Employee.organization_id == org_id,
@@ -116,7 +123,7 @@ async def list_by_department(
     )
     if active_only:
         query = query.where(Employee.is_active == True)  # noqa: E712
-    query = query.order_by(Employee.name)
+    query = query.order_by(Employee.name).offset(offset).limit(limit)
     result = await db.execute(query)
     return list(result.scalars().all())
 
@@ -135,4 +142,5 @@ async def offboard_employee(
     emp.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(emp)
+    logger.info("employee offboarded id=%d org=%d", employee_id, org_id)
     return emp

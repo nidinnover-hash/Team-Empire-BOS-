@@ -99,6 +99,8 @@ class Settings(BaseSettings):
     RATE_LIMIT_BACKEND: RateLimitBackend = "auto"
     RATE_LIMIT_REDIS_URL: str | None = None
     RATE_LIMIT_REDIS_PREFIX: str = "pc:ratelimit"
+    API_KEY_QUOTA_ENABLED: bool = True
+    API_KEY_REQUESTS_PER_DAY: int = 10_000
     IDEMPOTENCY_BACKEND: IdempotencyBackend = "auto"
     IDEMPOTENCY_REDIS_URL: str | None = None
     IDEMPOTENCY_REDIS_PREFIX: str = "pc:idempotency"
@@ -428,6 +430,10 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("RATE_LIMIT_MAX_REQUESTS must be >= 1")
     if s.RATE_LIMIT_MAX_REQUESTS > 10_000:
         issues.append("RATE_LIMIT_MAX_REQUESTS must be <= 10000")
+    if s.API_KEY_REQUESTS_PER_DAY < 100:
+        issues.append("API_KEY_REQUESTS_PER_DAY must be >= 100")
+    if s.API_KEY_REQUESTS_PER_DAY > 5_000_000:
+        issues.append("API_KEY_REQUESTS_PER_DAY must be <= 5000000")
 
     def _check_provider_key(provider: str, source_name: str) -> None:
         if provider == "openai":

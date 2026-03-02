@@ -1,0 +1,141 @@
+name: SDK Release
+
+on:
+  push:
+    tags:
+      - "sdk-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+      TZ: "UTC"
+      DEBUG: "true"
+      SECRET_KEY: "ci-sdk-release-0123456789abcdef0123456789abcdef"
+      ADMIN_PASSWORD: "CiSdkReleasePass123!"
+      TOKEN_ENCRYPTION_KEY: "ci-sdk-release-abcdef0123456789abcdef0123456789"
+      OAUTH_STATE_KEY: "ci-sdk-release-oauth-abcdef0123456789abcdef01"
+      DATABASE_URL: "sqlite:///./sdk-release-ci.db"
+      APP_MODE: "NIDIN_AI"
+      COOKIE_SECURE: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+          python -m pip install build twine
+
+      - name: Validate release versions/changelog
+        run: python scripts/check_sdk_release_ready.py
+
+      - name: Export OpenAPI and generate SDK models
+        run: |
+          python scripts/export_openapi_schema.py
+          python scripts/generate_sdk_models.py
+
+      - name: Verify generated files committed
+        run: |
+          git diff --exit-code -- \
+            sdk/openapi/openapi.json \
+            sdk/python/nidin_bos_sdk/models.py \
+            sdk/typescript/src/types.ts
+
+      - name: Build Python SDK
+        run: python -m build sdk/python
+
+      - name: Python package integrity check
+        run: python -m twine check sdk/python/dist/*
+
+      - name: Build TypeScript SDK
+        run: |
+          cd sdk/typescript
+          npm install
+          npm run typecheck
+          npm run build
+          npm pack --dry-run
+
+      - name: Create release artifact checksums
+        run: |
+          python - <<'PY'
+          import json
+          import hashlib
+          import subprocess
+          from pathlib import Path
+
+          roots = [Path("sdk/python/dist"), Path("sdk/typescript")]
+          lines = []
+          for root in roots:
+            if not root.exists():
+              continue
+            for path in sorted(root.glob("*")):
+              if not path.is_file():
+                continue
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              lines.append(f"{digest}  {path.as_posix()}")
+          Path("sdk/artifact-sha256.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          openapi_path = Path("sdk/openapi/openapi.json")
+          openapi_sha = hashlib.sha256(openapi_path.read_bytes()).hexdigest()
+          pyproject = Path("sdk/python/pyproject.toml").read_text(encoding="utf-8")
+          pkg = json.loads(Path("sdk/typescript/package.json").read_text(encoding="utf-8"))
+          py_version = [line for line in pyproject.splitlines() if line.strip().startswith("version =")][0].split("=", 1)[1].strip().strip('"')
+          git_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          provenance = {
+              "git_sha": git_sha,
+              "openapi_sha256": openapi_sha,
+              "python_sdk_version": py_version,
+              "typescript_sdk_version": str(pkg.get("version", "")),
+          }
+          Path("sdk/release-provenance.json").write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
+          print("Wrote sdk/artifact-sha256.txt")
+          print("Wrote sdk/release-provenance.json")
+          PY
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-release-artifacts
+          path: |
+            sdk/python/dist/*
+            sdk/typescript/*.tgz
+            sdk/artifact-sha256.txt
+            sdk/release-provenance.json
+
+      - name: Publish Python SDK to PyPI
+        if: ${{ secrets.PYPI_API_TOKEN != '' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: sdk/python/dist/
+
+      - name: Publish TypeScript SDK to npm
+        if: ${{ secrets.NPM_TOKEN != '' }}
+        run: |
+          cd sdk/typescript
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <title>API Keys - Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/api-keys.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
 </head>
@@ -28,14 +29,14 @@
       <div class="kpi"><div class="label">Revoked</div><div class="val" id="k-revoked">0</div></div>
     </div>
 
-    <div id="key-list" class="key-list"><div class="empty">Loading API keys...</div></div>
+    <div id="key-list" class="key-list"><div class="empty loading">Loading API keys...</div></div>
   </div>
 
   <div class="modal-overlay" id="create-modal" style="display:none">
     <div class="modal-card">
       <div class="modal-header">
         <h2>Create API Key</h2>
-        <button class="modal-close" id="create-modal-close" type="button">&times;</button>
+        <button class="modal-close" id="create-modal-close" type="button" aria-label="Close">&times;</button>
       </div>
       <form id="create-form">
         <label for="key-name">Name</label>
@@ -57,7 +58,7 @@
     <div class="modal-card modal-narrow">
       <div class="modal-header">
         <h2>Your API Key</h2>
-        <button class="modal-close" id="secret-modal-close" type="button">&times;</button>
+        <button class="modal-close" id="secret-modal-close" type="button" aria-label="Close">&times;</button>
       </div>
       <p class="hint">Copy this key now. It will not be shown again.</p>
       <code class="secret-display" id="secret-value"></code>

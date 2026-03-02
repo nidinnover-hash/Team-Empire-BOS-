@@ -1,55 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Automations — Triggers & Workflows
+   Automations — Triggers & Workflows (page-specific overrides)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-.main-wrap { margin-left: var(--sb-width); padding: 1.5rem 2rem; max-width: 1000px; }
-h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
-
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-
-/* ── KPI Row ───────────────────────────────────────────────────────────── */
-.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: .8rem; margin-bottom: 1.2rem; }
-.kpi {
-  background: var(--surface); border: none; border-radius: var(--radius);
-  padding: .65rem .85rem; box-shadow: var(--shadow-sm);
-}
-.kpi .label { font-size: .62rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint); }
-.kpi .val { font-size: 1.2rem; font-weight: 700; color: var(--text); margin-top: .15rem; font-feature-settings: 'tnum' 1; }
-
-/* ── Tab Bar ──────────────────────────────────────────────────────────── */
-.tab-bar { display: flex; gap: .4rem; margin-bottom: 1rem; border-bottom: 1px solid var(--line); }
-.tab {
-  padding: .45rem .9rem; font-size: .78rem; font-weight: 600; cursor: pointer;
-  background: none; border: none; color: var(--text-muted);
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
-}
-.tab:hover { color: var(--text); }
-.tab.active { color: var(--brand); border-bottom-color: var(--brand); }
-
-/* ── Panel ────────────────────────────────────────────────────────────── */
-.panel-actions { margin-bottom: .8rem; }
-
-.btn-primary {
-  background: var(--brand); color: #fff; border: none; border-radius: var(--radius);
-  padding: .4rem .9rem; font-size: .75rem; font-weight: 600; cursor: pointer;
-}
-.btn-primary:hover { opacity: .9; }
-
-.btn-secondary {
-  background: var(--surface); color: var(--text-muted); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: .3rem .6rem; font-size: .68rem; cursor: pointer;
-}
-.btn-secondary:hover { border-color: var(--text-faint); }
-
-.btn-danger {
-  background: var(--danger, #e53e3e); color: #fff; border: none; border-radius: var(--radius);
-  padding: .3rem .6rem; font-size: .68rem; cursor: pointer;
-}
-.btn-danger:hover { opacity: .85; }
-
-/* ── Item List ────────────────────────────────────────────────────────── */
-.item-list { display: flex; flex-direction: column; gap: 6px; }
-
+/* ── Card ────────────────────────────────────────────────────────────────── */
 .auto-card {
   background: var(--surface); border-radius: var(--radius); padding: .7rem 1rem;
   box-shadow: var(--shadow-sm); display: flex; gap: .8rem; align-items: flex-start;
@@ -67,47 +20,3 @@ h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
 .auto-card-desc { font-size: .72rem; color: var(--text-muted); margin-top: .15rem; }
 .auto-card-meta { font-size: .65rem; color: var(--text-faint); margin-top: .2rem; display: flex; gap: .8rem; flex-wrap: wrap; }
 .auto-card-actions { display: flex; gap: .4rem; flex-shrink: 0; align-items: flex-start; }
-
-.pill {
-  font-size: .6rem; padding: .12rem .4rem; border-radius: 4px;
-  background: var(--bg); color: var(--text-muted); display: inline-block;
-  font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
-}
-.pill.active { background: #c6f6d5; color: #276749; }
-.pill.inactive { background: var(--bg); color: var(--text-faint); }
-
-.empty { font-size: .78rem; color: var(--text-faint); padding: 1.5rem 0; text-align: center; }
-
-/* ── Modal ────────────────────────────────────────────────────────────── */
-.modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 100;
-  display: flex; align-items: center; justify-content: center;
-}
-.modal {
-  background: var(--surface); border-radius: var(--radius); width: 420px;
-  max-width: 94vw; box-shadow: 0 8px 30px rgba(0,0,0,.18);
-}
-.modal-header {
-  padding: .8rem 1rem; display: flex; justify-content: space-between; align-items: center;
-  border-bottom: 1px solid var(--line);
-}
-.modal-header h2 { font-size: .9rem; font-weight: 700; color: var(--text); margin: 0; }
-.modal-close { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-muted); }
-
-.modal-body { padding: 1rem; }
-.modal-body label {
-  display: block; font-size: .72rem; font-weight: 600; color: var(--text-muted);
-  margin-bottom: .6rem;
-}
-.modal-body input[type="text"],
-.modal-body textarea {
-  display: block; width: 100%; margin-top: .2rem; padding: .35rem .5rem;
-  font-size: .78rem; border: 1px solid var(--line); border-radius: var(--radius);
-  background: var(--bg); color: var(--text); font-family: inherit;
-}
-.modal-body textarea { resize: vertical; }
-.modal-body input:focus, .modal-body textarea:focus { outline: none; border-color: var(--brand); }
-.checkbox-label { display: flex !important; align-items: center; gap: .4rem; }
-.checkbox-label input[type="checkbox"] { width: auto; margin: 0; }
-
-.modal-footer { padding-top: .6rem; display: flex; justify-content: flex-end; }

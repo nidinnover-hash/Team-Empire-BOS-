@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import time
 from datetime import UTC, datetime, timedelta
@@ -15,8 +14,11 @@ from app.models.approval import Approval
 from app.models.email import Email
 from app.models.event import Event
 from app.models.governance import GovernanceViolation
-from app.models.organization import Organization
+from app.models.integration import Integration
+from app.models.notification import Notification
 from app.models.trend_telemetry_counter import TrendTelemetryCounter
+from app.models.webhook import WebhookDelivery
+from app.services import feature_flags
 from app.services import governance as gov_service
 from app.services.token_health import get_rotation_report, get_security_center
 
@@ -194,6 +196,7 @@ def _to_int(value: object) -> int:
 
 
 async def compute_incident_snapshot(db: AsyncSession, org_id: int) -> dict[str, Any]:
+    recent_cutoff = datetime.now(UTC) - timedelta(hours=24)
     pending_approvals = int(
         (
             await db.execute(
@@ -224,6 +227,38 @@ async def compute_incident_snapshot(db: AsyncSession, org_id: int) -> dict[str, 
             )
         ).scalar_one() or 0
     )
+    unread_high_alerts = int(
+        (
+            await db.execute(
+                select(func.count(Notification.id)).where(
+                    Notification.organization_id == org_id,
+                    Notification.is_read.is_(False),
+                    Notification.severity.in_(["high", "error", "critical"]),
+                )
+            )
+        ).scalar_one() or 0
+    )
+    sync_error_integrations = int(
+        (
+            await db.execute(
+                select(func.count(Integration.id)).where(
+                    Integration.organization_id == org_id,
+                    Integration.sync_error_count > 0,
+                )
+            )
+        ).scalar_one() or 0
+    )
+    webhook_failures_24h = int(
+        (
+            await db.execute(
+                select(func.count(WebhookDelivery.id)).where(
+                    WebhookDelivery.organization_id == org_id,
+                    WebhookDelivery.created_at >= recent_cutoff,
+                    WebhookDelivery.status.in_(["failed", "dead_letter"]),
+                )
+            )
+        ).scalar_one() or 0
+    )
     token = await get_rotation_report(db, org_id)
     critical_tokens = _to_int(token.get("critical"))
     warning_tokens = _to_int(token.get("warnings"))
@@ -241,6 +276,12 @@ async def compute_incident_snapshot(db: AsyncSession, org_id: int) -> dict[str, 
         score += 1
     if unread_emails >= 50:
         score += 1
+    if unread_high_alerts > 0:
+        score += 2 if unread_high_alerts >= 5 else 1
+    if sync_error_integrations > 0:
+        score += 2 if sync_error_integrations >= 3 else 1
+    if webhook_failures_24h > 0:
+        score += 2 if webhook_failures_24h >= 10 else 1
 
     level = "green"
     if score >= 4:
@@ -255,6 +296,12 @@ async def compute_incident_snapshot(db: AsyncSession, org_id: int) -> dict[str, 
         actions.append("Rotate or refresh warning-state tokens within 24 hours.")
     if open_violations > 0:
         actions.append("Triages governance violations and assign owner by severity.")
+    if unread_high_alerts > 0:
+        actions.append("Acknowledge unread high-severity alerts and assign incident owners.")
+    if sync_error_integrations > 0:
+        actions.append("Repair integration sync failures and verify token health.")
+    if webhook_failures_24h > 0:
+        actions.append("Replay failed webhooks and inspect endpoint reliability/errors.")
     if pending_approvals > 0:
         actions.append("Clear approval queue to reduce execution latency.")
     if unread_emails > 0:
@@ -272,6 +319,9 @@ async def compute_incident_snapshot(db: AsyncSession, org_id: int) -> dict[str, 
             "open_governance_violations": open_violations,
             "critical_tokens": critical_tokens,
             "warning_tokens": warning_tokens,
+            "unread_high_alerts": unread_high_alerts,
+            "sync_error_integrations": sync_error_integrations,
+            "webhook_failures_24h": webhook_failures_24h,
         },
         "top_actions": actions[:5],
         "status": "active_monitoring" if score > 0 else "stable",
@@ -425,28 +475,11 @@ async def read_trend_events(
 
 
 async def trend_snapshots_enabled(db: AsyncSession, org_id: int) -> bool:
-    row = (
-        (
-            await db.execute(
-                select(Organization.policy_json).where(Organization.id == org_id).limit(1)
-            )
-        )
-        .first()
+    return await feature_flags.is_feature_enabled(
+        db,
+        organization_id=org_id,
+        flag_name="trend_snapshots_enabled",
     )
-    if not row:
-        return True
-    raw = row[0]
-    try:
-        parsed = json.loads(raw) if isinstance(raw, str) and raw.strip() else {}
-    except (TypeError, ValueError, json.JSONDecodeError):
-        parsed = {}
-    if not isinstance(parsed, dict):
-        return True
-    feature_flags = parsed.get("feature_flags", {})
-    if not isinstance(feature_flags, dict):
-        return True
-    enabled = feature_flags.get("trend_snapshots_enabled", True)
-    return bool(enabled)
 
 
 async def snapshot_org_trends(db: AsyncSession, org_id: int) -> dict[str, int]:

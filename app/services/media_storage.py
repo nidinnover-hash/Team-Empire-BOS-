@@ -69,7 +69,10 @@ async def upload_file(
         raise ValueError(f"File too large: {len(file_bytes)} bytes (max {MAX_UPLOAD_MB}MB)")
 
     now = datetime.now(UTC)
-    unique_name = f"{uuid.uuid4().hex}_{file.filename or 'upload'}"
+    raw_name = os.path.basename(file.filename or "upload")
+    # Strip unsafe characters — keep only alphanumeric, dot, hyphen, underscore
+    safe_name = "".join(c for c in raw_name if c.isalnum() or c in ".-_")[:200] or "upload"
+    unique_name = f"{uuid.uuid4().hex}_{safe_name}"
     rel_path = f"{org_id}/{now.year}/{now.month:02d}/{unique_name}"
     abs_path = Path(UPLOAD_DIR) / rel_path
 

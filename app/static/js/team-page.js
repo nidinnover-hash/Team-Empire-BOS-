@@ -170,7 +170,39 @@
     }
   });
 
+  // ── Mini-map (location tracking) ───────────────────────────────
+  async function loadMiniMap() {
+    if (typeof L === "undefined") return; // Leaflet not loaded
+    try {
+      var token = await window.__bootPromise;
+      var res = await fetch("/api/v1/locations/active", {
+        headers: { Authorization: "Bearer " + token },
+      });
+      if (!res.ok) return; // silently skip if no access
+      var locs = await res.json();
+      if (!locs.length) return;
+
+      $("team-map-card").style.display = "";
+      var map = L.map("team-mini-map").setView([locs[0].latitude, locs[0].longitude], 10);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+        maxZoom: 19,
+      }).addTo(map);
+
+      var markers = [];
+      locs.forEach(function (loc) {
+        var m = L.marker([loc.latitude, loc.longitude]).addTo(map);
+        m.bindPopup('<strong>' + escHtml(loc.employee_name || "Employee #" + loc.employee_id) + '</strong>');
+        markers.push(m);
+      });
+      if (markers.length) map.fitBounds(L.featureGroup(markers).getBounds().pad(0.1));
+    } catch (_) {
+      // silently ignore — feature may not be enabled
+    }
+  }
+
   // ── Init ──────────────────────────────────────────────────────────
   loadMembers();
+  loadMiniMap();
   if (typeof lucide !== "undefined") lucide.createIcons();
 })();

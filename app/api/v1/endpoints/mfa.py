@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_api_user, get_db
+from app.core.middleware import check_per_route_rate_limit, get_client_ip
 from app.core.rbac import require_roles
 from app.schemas.mfa import (
     MFAConfirmRequest,
@@ -27,6 +28,9 @@ from app.services import user as user_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/mfa", tags=["MFA"])
+
+_MFA_RATE_LIMIT_MAX = 5
+_MFA_RATE_LIMIT_WINDOW = 60  # seconds
 
 
 @router.get("/status", response_model=MFAStatusResponse)
@@ -43,6 +47,7 @@ async def mfa_status(
 
 @router.post("/setup", response_model=MFASetupResponse)
 async def mfa_setup(
+    request: Request,
     current_user: dict = Depends(require_roles("CEO", "ADMIN")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -51,6 +56,10 @@ async def mfa_setup(
     The secret is NOT saved yet — call /mfa/confirm with a valid code to activate.
     Returns the provisioning URI and an optional inline QR code PNG (data: URI).
     """
+    if not check_per_route_rate_limit(
+        get_client_ip(request), "mfa_setup", _MFA_RATE_LIMIT_MAX, _MFA_RATE_LIMIT_WINDOW,
+    ):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many MFA setup attempts. Please wait.")
     user = await user_service.get_user_by_id(db, current_user["id"])
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -82,6 +91,7 @@ async def mfa_setup(
 
 @router.post("/confirm", status_code=status.HTTP_200_OK, response_model=MFAMutationResponse)
 async def mfa_confirm(
+    request: Request,
     body: MFAConfirmRequest,
     current_user: dict = Depends(require_roles("CEO", "ADMIN")),
     db: AsyncSession = Depends(get_db),
@@ -90,6 +100,10 @@ async def mfa_confirm(
     Confirm MFA setup by verifying the first code from the authenticator app.
     On success, sets mfa_enabled=True.
     """
+    if not check_per_route_rate_limit(
+        get_client_ip(request), "mfa_confirm", _MFA_RATE_LIMIT_MAX, _MFA_RATE_LIMIT_WINDOW,
+    ):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many MFA confirm attempts. Please wait.")
     from app.logs.audit import record_action
 
     user = await user_service.get_user_by_id(db, current_user["id"])
@@ -132,6 +146,7 @@ async def mfa_confirm(
 
 @router.post("/disable", status_code=status.HTTP_200_OK, response_model=MFAMutationResponse)
 async def mfa_disable(
+    request: Request,
     body: MFADisableRequest,
     current_user: dict = Depends(require_roles("CEO", "ADMIN")),
     db: AsyncSession = Depends(get_db),
@@ -140,6 +155,10 @@ async def mfa_disable(
     Disable MFA for the authenticated user after verifying current TOTP code.
     Requires a valid code to prevent accidental/malicious disabling.
     """
+    if not check_per_route_rate_limit(
+        get_client_ip(request), "mfa_disable", _MFA_RATE_LIMIT_MAX, _MFA_RATE_LIMIT_WINDOW,
+    ):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many MFA disable attempts. Please wait.")
     from app.logs.audit import record_action
 
     user = await user_service.get_user_by_id(db, current_user["id"])

@@ -9,7 +9,11 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <title>Team Management — Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/team.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin="" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
 </head>
 <body>
@@ -28,7 +32,13 @@
       <div class="kpi"><div class="label">Inactive</div><div class="val" id="k-inactive">0</div></div>
     </div>
 
-    <div id="member-list" class="member-list"><div class="empty">Loading team members...</div></div>
+    <!-- Mini-map: employee locations -->
+    <div class="card" id="team-map-card" style="display:none">
+      <div class="card-head"><span>Team Locations</span><a href="/web/maps" class="card-link">Full Map</a></div>
+      <div class="card-body"><div id="team-mini-map" style="width:100%;height:200px;border-radius:8px"></div></div>
+    </div>
+
+    <div id="member-list" class="member-list"><div class="empty loading">Loading team members...</div></div>
   </div>
 
   <!-- Invite Modal -->
@@ -36,7 +46,7 @@
     <div class="modal-card">
       <div class="modal-header">
         <h2>Invite Team Member</h2>
-        <button class="modal-close" id="invite-modal-close" type="button">&times;</button>
+        <button class="modal-close" id="invite-modal-close" type="button" aria-label="Close">&times;</button>
       </div>
       <form id="invite-form">
         <label for="inv-name">Name</label>
@@ -67,6 +77,9 @@
   <script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/team-page.js"></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
 </body>

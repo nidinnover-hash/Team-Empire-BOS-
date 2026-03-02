@@ -13,6 +13,7 @@ CHECKS: list[list[str]] = [
     [sys.executable, "scripts/check_secret_patterns.py"],
     [sys.executable, "-m", "ruff", "check", "app", "tests"],
     [sys.executable, "-m", "mypy"],
+    [sys.executable, "scripts/check_migration_revisions.py"],
     [sys.executable, "scripts/check_migration_heads.py"],
     [sys.executable, "scripts/check_endpoint_file_sizes.py"],
     [sys.executable, "scripts/check_endpoint_complexity.py"],

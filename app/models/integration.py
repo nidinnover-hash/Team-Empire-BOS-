@@ -1,6 +1,15 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -11,6 +20,7 @@ class Integration(Base):
     __table_args__ = (
         UniqueConstraint("organization_id", "type", name="uq_integrations_org_type"),
         Index("ix_integrations_org_status_last_sync_at", "organization_id", "status", "last_sync_at"),
+        CheckConstraint("sync_error_count >= 0", name="ck_integration_sync_error_count_gte0"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

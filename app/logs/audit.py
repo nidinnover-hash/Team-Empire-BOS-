@@ -61,8 +61,8 @@ async def record_action(
             event_type=event_type,
             event_payload=safe_payload,
         )
-    except Exception:
-        logger.debug("Automation trigger matching failed for %s", event_type, exc_info=True)
+    except (ImportError, RuntimeError, ValueError, TypeError, OSError, AttributeError) as exc:
+        logger.debug("Automation trigger matching failed for %s: %s", event_type, type(exc).__name__, exc_info=True)
 
     # Dispatch to registered webhook endpoints (best-effort).
     # Webhook HTTP delivery uses WEBHOOK_ASYNC_DISPATCH_ONLY for queue-based dispatch.
@@ -80,7 +80,7 @@ async def record_action(
                 **(safe_payload or {}),
             },
         )
-    except Exception:
-        logger.debug("Webhook dispatch failed for %s", event_type, exc_info=True)
+    except (ImportError, RuntimeError, ValueError, TypeError, OSError, AttributeError) as exc:
+        logger.debug("Webhook dispatch failed for %s: %s", event_type, type(exc).__name__, exc_info=True)
 
     return event

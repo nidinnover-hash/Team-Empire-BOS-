@@ -119,8 +119,8 @@ async def notification_stream(
             try:
                 async with AsyncSessionLocal() as db:
                     count = await notification_service.get_unread_count(db, org_id, user_id)
-            except Exception:
-                logger.debug("SSE unread-count probe failed, keeping last value")
+            except (OSError, RuntimeError, ValueError, TypeError) as exc:
+                logger.debug("SSE unread-count probe failed (%s), keeping last value", type(exc).__name__)
                 count = last_count  # keep last known value on transient DB errors
             if count != last_count:
                 data = json.dumps({"unread_count": count})

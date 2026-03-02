@@ -137,14 +137,17 @@ async def create_workflow(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> WorkflowRead:
-    wf = await automation_service.create_workflow(
-        db,
-        organization_id=int(actor["org_id"]),
-        name=data.name,
-        description=data.description,
-        steps_json=[s.model_dump() for s in data.steps],
-        created_by=int(actor["id"]),
-    )
+    try:
+        wf = await automation_service.create_workflow(
+            db,
+            organization_id=int(actor["org_id"]),
+            name=data.name,
+            description=data.description,
+            steps_json=[s.model_dump() for s in data.steps],
+            created_by=int(actor["id"]),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid workflow configuration") from exc
     await record_action(
         db,
         event_type="workflow_created",
