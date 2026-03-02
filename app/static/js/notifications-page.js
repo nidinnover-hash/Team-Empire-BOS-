@@ -139,7 +139,40 @@
   $("filter-severity").addEventListener("change", renderList);
   $("filter-unread").addEventListener("change", loadNotifications);
 
+  // ── SSE Real-Time Consumer ─────────────────────────────────────────
+  function startSSE() {
+    var evtSource;
+    window.__bootPromise.then(function (token) {
+      if (!token) return;
+      evtSource = new EventSource("/api/v1/notifications/stream?token=" + encodeURIComponent(token));
+      evtSource.onmessage = function (event) {
+        try {
+          var data = JSON.parse(event.data);
+          var newCount = data.unread_count;
+          if (newCount !== unreadCount) {
+            unreadCount = newCount;
+            $("k-unread").textContent = String(unreadCount);
+            // Reload full list when new notifications arrive
+            loadNotifications();
+          }
+        } catch (_e) { /* ignore parse errors */ }
+      };
+      evtSource.onerror = function () {
+        // Browser will auto-reconnect; just log it
+        if (evtSource.readyState === EventSource.CLOSED) {
+          // Retry after 10s if the connection closed permanently
+          setTimeout(startSSE, 10000);
+        }
+      };
+    });
+    // Clean up on page unload
+    window.addEventListener("beforeunload", function () {
+      if (evtSource) evtSource.close();
+    });
+  }
+
   // ── Init ────────────────────────────────────────────────────────────
   loadNotifications();
+  startSSE();
   if (typeof lucide !== "undefined") lucide.createIcons();
 })();

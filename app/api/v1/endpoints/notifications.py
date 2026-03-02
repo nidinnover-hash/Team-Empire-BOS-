@@ -38,11 +38,15 @@ def _ensure_notification_role(actor: dict) -> None:
 
 async def _get_notification_stream_actor(
     request: Request,
+    token: str | None = Query(None, alias="token"),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
+    # EventSource cannot set headers, so accept token as a query param too
     auth_header = (request.headers.get("Authorization") or "").strip()
     if auth_header.lower().startswith("bearer "):
-        token = auth_header.split(" ", 1)[1].strip()
+        bearer_token = auth_header.split(" ", 1)[1].strip()
+        return await get_current_api_user(request=request, token=bearer_token, db=db)
+    if token:
         return await get_current_api_user(request=request, token=token, db=db)
     session_token = request.cookies.get("pc_session")
     if session_token:

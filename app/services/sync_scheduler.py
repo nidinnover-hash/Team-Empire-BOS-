@@ -698,6 +698,15 @@ async def replay_job_for_org(db: AsyncSession, org_id: int, job_name: str) -> di
         elif job_name == "goal_deadline_check":
             await _check_goal_deadlines(db, org_id)
             result = {"ok": True}
+        elif job_name == "stale_task_check":
+            await _check_stale_tasks(db, org_id)
+            result = {"ok": True}
+        elif job_name == "contact_follow_up_check":
+            await _check_follow_up_contacts(db, org_id)
+            result = {"ok": True}
+        elif job_name == "daily_briefing_notification":
+            await _maybe_emit_daily_briefing_notification(db, org_id)
+            result = {"ok": True}
         elif job_name == "full_sync":
             await _run_integrations(db, org_id)
             result = {"ok": True}
@@ -1060,6 +1069,188 @@ async def _check_goal_deadlines(db: AsyncSession, org_id: int) -> None:
         await db.commit()
 
 
+async def _check_stale_tasks(db: AsyncSession, org_id: int) -> None:
+    """Emit notifications for tasks that are overdue or stale (no update in 7+ days)."""
+    from app.models.task import Task
+    from app.services.notification import create_notification
+
+    started = datetime.now(UTC)
+    try:
+        today = datetime.now(UTC)
+        stale_cutoff = today - timedelta(days=7)
+
+        # Overdue tasks: due_date in the past, not done
+        overdue_result = await db.execute(
+            select(Task).where(
+                Task.organization_id == org_id,
+                Task.is_done.is_(False),
+                Task.due_date.isnot(None),
+                Task.due_date < today,
+            ).limit(50)
+        )
+        overdue_tasks = list(overdue_result.scalars().all())
+
+        for task in overdue_tasks:
+            await create_notification(
+                db,
+                organization_id=org_id,
+                type="stale_task",
+                severity="warning",
+                title=f"Overdue task: {task.title}",
+                message=f"Due date was {task.due_date.date().isoformat() if task.due_date else 'unknown'}.",
+                source="scheduler",
+                entity_type="task",
+                entity_id=task.id,
+            )
+
+        # Stale tasks: open, not updated in 7+ days
+        stale_result = await db.execute(
+            select(Task).where(
+                Task.organization_id == org_id,
+                Task.is_done.is_(False),
+                Task.updated_at < stale_cutoff,
+            ).limit(50)
+        )
+        stale_tasks = list(stale_result.scalars().all())
+
+        for task in stale_tasks:
+            # Skip if already reported as overdue
+            if task.due_date and task.due_date < today:
+                continue
+            await create_notification(
+                db,
+                organization_id=org_id,
+                type="stale_task",
+                severity="info",
+                title=f"Stale task: {task.title}",
+                message="No updates in 7+ days. Consider closing or updating.",
+                source="scheduler",
+                entity_type="task",
+                entity_id=task.id,
+            )
+
+        total = len(overdue_tasks) + len(stale_tasks)
+        if total:
+            await db.commit()
+        await _record_job_run(
+            db, org_id=org_id, job_name="stale_task_check", status="ok",
+            started_at=started, finished_at=datetime.now(UTC),
+            details={"overdue": len(overdue_tasks), "stale": len(stale_tasks)},
+        )
+        await db.commit()
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning(
+            "Stale task check failed org=%d category=%s",
+            org_id, _scheduler_error_category(exc), exc_info=True,
+        )
+        await _record_job_run(
+            db, org_id=org_id, job_name="stale_task_check", status="error",
+            started_at=started, finished_at=datetime.now(UTC),
+            error=f"{type(exc).__name__}: {str(exc)[:200]}",
+        )
+        await db.commit()
+
+
+async def _maybe_emit_daily_briefing_notification(db: AsyncSession, org_id: int) -> None:
+    """Create a daily briefing notification with team summary (once per day per org)."""
+    from app.services.notification import create_notification
+
+    today_str = str(datetime.now(UTC).date())
+    if _last_ceo_summary_date_by_org.get(org_id) == today_str:
+        return  # Already ran today
+
+    started = datetime.now(UTC)
+    try:
+        from app.services.briefing import get_team_dashboard
+
+        dashboard = await get_team_dashboard(db, org_id)
+        summary = dashboard.get("summary", {})
+        msg_parts = [
+            f"Team: {summary.get('total_members', 0)} members",
+            f"Tasks today: {summary.get('total_tasks_today', 0)}",
+            f"Done: {summary.get('tasks_done', 0)}",
+            f"Pending approvals: {summary.get('pending_approvals', 0)}",
+            f"Unread emails: {summary.get('unread_emails', 0)}",
+        ]
+        no_plan = summary.get("members_without_plan", [])
+        if no_plan:
+            msg_parts.append(f"Missing plans: {', '.join(str(n) for n in no_plan[:5])}")
+
+        await create_notification(
+            db,
+            organization_id=org_id,
+            type="daily_briefing",
+            severity="info",
+            title=f"Daily Briefing — {today_str}",
+            message=". ".join(msg_parts) + ".",
+            source="scheduler",
+        )
+        await db.commit()
+        await _record_job_run(
+            db, org_id=org_id, job_name="daily_briefing_notification", status="ok",
+            started_at=started, finished_at=datetime.now(UTC),
+        )
+        await db.commit()
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning(
+            "Daily briefing notification failed org=%d category=%s",
+            org_id, _scheduler_error_category(exc), exc_info=True,
+        )
+        await _record_job_run(
+            db, org_id=org_id, job_name="daily_briefing_notification", status="error",
+            started_at=started, finished_at=datetime.now(UTC),
+            error=f"{type(exc).__name__}: {str(exc)[:200]}",
+        )
+        await db.commit()
+
+
+async def _check_follow_up_contacts(db: AsyncSession, org_id: int) -> None:
+    """Emit notifications for contacts whose follow-up date is due."""
+    from app.services.contact import get_follow_up_due
+    from app.services.notification import create_notification
+
+    started = datetime.now(UTC)
+    try:
+        due_contacts = await get_follow_up_due(db, org_id, limit=20)
+        for contact in due_contacts:
+            await create_notification(
+                db,
+                organization_id=org_id,
+                type="contact_follow_up",
+                severity="info",
+                title=f"Follow-up due: {contact.name}",
+                message=f"Pipeline: {contact.pipeline_stage}. Score: {contact.lead_score}.",
+                source="scheduler",
+                entity_type="contact",
+                entity_id=contact.id,
+            )
+        if due_contacts:
+            await db.commit()
+        await _record_job_run(
+            db, org_id=org_id, job_name="contact_follow_up_check", status="ok",
+            started_at=started, finished_at=datetime.now(UTC),
+            details={"due": len(due_contacts)},
+        )
+        await db.commit()
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning(
+            "Contact follow-up check failed org=%d category=%s",
+            org_id, _scheduler_error_category(exc), exc_info=True,
+        )
+        await _record_job_run(
+            db, org_id=org_id, job_name="contact_follow_up_check", status="error",
+            started_at=started, finished_at=datetime.now(UTC),
+            error=f"{type(exc).__name__}: {str(exc)[:200]}",
+        )
+        await db.commit()
+
+
 async def _check_token_health_job(db: AsyncSession, org_id: int) -> None:
     """Check integration token health and emit notifications for unhealthy tokens."""
     # Compatibility marker for legacy source-inspection tests:
@@ -1290,6 +1481,9 @@ async def _scheduler_loop(interval_minutes: int) -> None:
                         await _run_integrations(db, org.id)
                         await _check_token_health_job(db, org.id)
                         await _check_goal_deadlines(db, org.id)
+                        await _check_stale_tasks(db, org.id)
+                        await _check_follow_up_contacts(db, org.id)
+                        await _maybe_emit_daily_briefing_notification(db, org.id)
                         await _check_morning_briefing(db, org.id)
                         await _maybe_generate_daily_ceo_summary(db, org.id)
                         await _maybe_generate_daily_pending_digest(db, org.id)

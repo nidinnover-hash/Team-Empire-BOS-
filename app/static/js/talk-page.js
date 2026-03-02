@@ -89,10 +89,34 @@ function getCookie(name) {
       if (window.showToast) window.showToast(msg, "error");
       else alert(msg);
     }
-    function appendMessage(role, text) {
+    function appendMessage(role, text, meta) {
       var div = document.createElement("div");
       div.className = "msg " + (role === "user" ? "user" : "agent");
-      div.innerHTML = '<span class="tag">' + (role === "user" ? "You" : "Agent") + "</span>" + esc(text);
+      var html = '<span class="tag">' + (role === "user" ? "You" : "Agent") + "</span>" + esc(text);
+      if (meta) {
+        var badges = [];
+        if (meta.confidence_level) {
+          var cCls = meta.confidence_level === "high" ? "badge-ok" : meta.confidence_level === "low" ? "badge-warn" : "badge-info";
+          badges.push('<span class="chat-badge ' + cCls + '">Confidence: ' + esc(meta.confidence_score) + ' (' + esc(meta.confidence_level) + ')</span>');
+        }
+        if (meta.policy_score !== undefined) {
+          badges.push('<span class="chat-badge badge-info">Policy: ' + esc(meta.policy_score) + '</span>');
+        }
+        if (meta.blocked_by_policy) {
+          badges.push('<span class="chat-badge badge-warn">Blocked by policy</span>');
+        }
+        if (meta.needs_human_review) {
+          badges.push('<span class="chat-badge badge-warn">Needs review</span>');
+        }
+        if (meta.proposed_actions && meta.proposed_actions.length) {
+          var actionLabels = meta.proposed_actions.map(function (a) { return esc(a.action_type); }).join(", ");
+          badges.push('<span class="chat-badge badge-info">Actions: ' + actionLabels + '</span>');
+        }
+        if (badges.length) {
+          html += '<div class="chat-meta">' + badges.join(" ") + '</div>';
+        }
+      }
+      div.innerHTML = html;
       chatLog.appendChild(div);
       chatLog.scrollTop = chatLog.scrollHeight;
     }
@@ -244,8 +268,19 @@ function getCookie(name) {
         });
         var body = await r.json().catch(function () { return {}; });
         if (!r.ok) throw new Error(body.detail || "Chat request failed");
-        appendMessage("agent", body.response || "Done.");
-        setStatus(body.requires_approval ? "Reply generated. Some actions require approval." : "Reply ready.", "ok");
+        appendMessage("agent", body.response || "Done.", {
+          confidence_score: body.confidence_score,
+          confidence_level: body.confidence_level,
+          needs_human_review: body.needs_human_review,
+          policy_score: body.policy_score,
+          blocked_by_policy: body.blocked_by_policy,
+          proposed_actions: body.proposed_actions,
+        });
+        var statusMsg = "Reply ready.";
+        if (body.blocked_by_policy) statusMsg = "Response blocked by policy.";
+        else if (body.requires_approval) statusMsg = "Reply generated. Some actions require approval.";
+        else if (body.needs_human_review) statusMsg = "Reply generated. Human review recommended.";
+        setStatus(statusMsg, body.blocked_by_policy ? "err" : "ok");
       } catch (err) {
         appendMessage("agent", "I hit an error while processing that. Please try again.");
         setStatus(mapUiError(err), "err");
