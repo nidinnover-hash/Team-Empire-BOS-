@@ -56,13 +56,16 @@ jobs:
         run: |
           python scripts/export_openapi_schema.py
           python scripts/generate_sdk_models.py
+          python scripts/generate_sdk_clients.py
 
       - name: Verify generated files committed
         run: |
           git diff --exit-code -- \
             sdk/openapi/openapi.json \
             sdk/python/nidin_bos_sdk/models.py \
-            sdk/typescript/src/types.ts
+            sdk/typescript/src/types.ts \
+            sdk/python/nidin_bos_sdk/client.py \
+            sdk/typescript/src/client.ts
 
       - name: Build Python SDK
         run: python -m build sdk/python

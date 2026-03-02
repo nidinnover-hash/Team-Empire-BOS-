@@ -308,3 +308,57 @@ class WorkflowStepDef(TypedDict):
     requires_approval: NotRequired[bool]
 
 WebhookEndpointListResponse = list[WebhookEndpointRead]
+
+
+# ── Agent Chat Models ────────────────────────────────────────────────────────
+
+class AgentChatRequest(TypedDict):
+    message: str
+    force_role: NotRequired[str | None]
+    avatar_mode: NotRequired[str | None]
+    employee_id: NotRequired[int | None]
+
+
+class ProposedAction(TypedDict):
+    action_type: str
+    params: NotRequired[dict[str, Any]]
+
+
+class AgentChatResponse(TypedDict):
+    role: str
+    response: str
+    requires_approval: bool
+    proposed_actions: list[ProposedAction]
+    confidence_score: int
+    confidence_level: str
+    confidence_reasons: list[str]
+    needs_human_review: bool
+    memory_context_chars: int
+    memory_context_truncated: bool
+    memory_sources: list[str]
+    memory_source_counts: dict[str, int]
+    policy_score: int
+    blocked_by_policy: bool
+    policy_reasons: list[str]
+    policy_blocked_actions: list[str]
+    policy_matched_rule_ids: list[int]
+
+
+class StepResult(TypedDict):
+    step_number: int
+    description: str
+    role: str
+    response: str
+    requires_approval: bool
+    proposed_actions: list[ProposedAction]
+
+
+class MultiTurnResponse(TypedDict):
+    steps: list[StepResult]
+    final_summary: str
+    total_steps: int
+    steps_requiring_approval: int
+    all_proposed_actions: list[ProposedAction]
+    confidence_score: int
+    confidence_level: str
+    needs_human_review: bool

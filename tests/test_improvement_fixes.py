@@ -132,15 +132,15 @@ async def test_approval_timeline_pagination(client):
     assert "pending_count" in data
 
 
-# ── ARCH-2: ProposedAction extraction no longer called ────────────────────────
+# ── ARCH-2: ProposedAction extraction is now enabled ─────────────────────────
 
-def test_run_agent_does_not_call_extract_proposed_actions():
-    """run_agent should not fire the expensive extract_proposed_actions call."""
+def test_run_agent_calls_extract_proposed_actions():
+    """run_agent should call extract_proposed_actions for structured intent."""
     import inspect
 
     from app.agents import orchestrator
     source = inspect.getsource(orchestrator.run_agent)
-    assert "extract_proposed_actions" not in source
+    assert "extract_proposed_actions" in source
 
 
 # ── RELY-6: Memory context cache ─────────────────────────────────────────────

@@ -273,3 +273,578 @@ class NidinBOSClient:
             expected_status=200,
         )
         return cast(list[dict[str, Any]], data)
+
+    def agent_chat(self, payload: models.AgentChatRequest) -> models.AgentChatResponse:
+        data = self._request_json(
+            method="POST",
+            path="/api/v1/agents/chat",
+            json_body=cast(dict[str, Any], payload),
+            expected_status=200,
+        )
+        return cast(models.AgentChatResponse, data)
+
+    def agent_multi_turn(self, payload: models.AgentChatRequest) -> models.MultiTurnResponse:
+        data = self._request_json(
+            method="POST",
+            path="/api/v1/agents/multi-turn",
+            json_body=cast(dict[str, Any], payload),
+            expected_status=200,
+        )
+        return cast(models.MultiTurnResponse, data)
+
+    # BEGIN GENERATED OPERATIONS
+    def delete_api_v1_api_keys_key_id(self, key_id: Any) -> Any:
+        path = f"/api/v1/api-keys/{key_id}"
+        params = None
+        return self._request_json(
+            method="DELETE",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=204,
+        )
+
+    def delete_api_v1_approvals_approval_patterns_pattern_id(self, pattern_id: Any) -> Any:
+        path = f"/api/v1/approvals/approval-patterns/{pattern_id}"
+        params = None
+        return self._request_json(
+            method="DELETE",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=204,
+        )
+
+    def delete_api_v1_automations_triggers_trigger_id(self, trigger_id: Any) -> Any:
+        path = f"/api/v1/automations/triggers/{trigger_id}"
+        params = None
+        return self._request_json(
+            method="DELETE",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=204,
+        )
+
+    def delete_api_v1_tasks_task_id(self, task_id: Any) -> Any:
+        path = f"/api/v1/tasks/{task_id}"
+        params = None
+        return self._request_json(
+            method="DELETE",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=204,
+        )
+
+    def delete_api_v1_webhooks_endpoint_id(self, endpoint_id: Any) -> Any:
+        path = f"/api/v1/webhooks/{endpoint_id}"
+        params = None
+        return self._request_json(
+            method="DELETE",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=204,
+        )
+
+    def get_api_v1_api_keys(self) -> Any:
+        path = "/api/v1/api-keys"
+        params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_approvals(self, status: Any | None = None, limit: Any | None = None, offset: Any | None = None) -> Any:
+        path = "/api/v1/approvals"
+        params = {
+            "status": status,
+            "limit": limit,
+            "offset": offset,
+        }
+        params = {k: v for k, v in params.items() if v is not None}
+        if not params:
+            params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_approvals_approval_patterns(self) -> Any:
+        path = "/api/v1/approvals/approval-patterns"
+        params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_approvals_timeline(self, limit: Any | None = None, offset: Any | None = None) -> Any:
+        path = "/api/v1/approvals/timeline"
+        params = {
+            "limit": limit,
+            "offset": offset,
+        }
+        params = {k: v for k, v in params.items() if v is not None}
+        if not params:
+            params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_auth_me(self) -> Any:
+        path = "/api/v1/auth/me"
+        params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_automations_triggers(self, active_only: Any | None = None, limit: Any | None = None) -> Any:
+        path = "/api/v1/automations/triggers"
+        params = {
+            "active_only": active_only,
+            "limit": limit,
+        }
+        params = {k: v for k, v in params.items() if v is not None}
+        if not params:
+            params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_automations_triggers_trigger_id(self, trigger_id: Any) -> Any:
+        path = f"/api/v1/automations/triggers/{trigger_id}"
+        params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_automations_workflows(self, status: Any | None = None, limit: Any | None = None) -> Any:
+        path = "/api/v1/automations/workflows"
+        params = {
+            "status": status,
+            "limit": limit,
+        }
+        params = {k: v for k, v in params.items() if v is not None}
+        if not params:
+            params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_automations_workflows_workflow_id(self, workflow_id: Any) -> Any:
+        path = f"/api/v1/automations/workflows/{workflow_id}"
+        params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_orgs(self) -> Any:
+        path = "/api/v1/orgs"
+        params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_orgs_org_id_feature_flags(self, org_id: Any) -> Any:
+        path = f"/api/v1/orgs/{org_id}/feature-flags"
+        params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_orgs_org_id_members(self, org_id: Any) -> Any:
+        path = f"/api/v1/orgs/{org_id}/members"
+        params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_tasks(self, project_id: Any | None = None, category: Any | None = None, is_done: Any | None = None, limit: Any | None = None, offset: Any | None = None) -> Any:
+        path = "/api/v1/tasks"
+        params = {
+            "project_id": project_id,
+            "category": category,
+            "is_done": is_done,
+            "limit": limit,
+            "offset": offset,
+        }
+        params = {k: v for k, v in params.items() if v is not None}
+        if not params:
+            params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_webhooks(self, limit: Any | None = None, offset: Any | None = None) -> Any:
+        path = "/api/v1/webhooks"
+        params = {
+            "limit": limit,
+            "offset": offset,
+        }
+        params = {k: v for k, v in params.items() if v is not None}
+        if not params:
+            params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_webhooks_deliveries_all(self, event: Any | None = None, status: Any | None = None, limit: Any | None = None, offset: Any | None = None) -> Any:
+        path = "/api/v1/webhooks/deliveries/all"
+        params = {
+            "event": event,
+            "status": status,
+            "limit": limit,
+            "offset": offset,
+        }
+        params = {k: v for k, v in params.items() if v is not None}
+        if not params:
+            params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_webhooks_deliveries_dead_letter(self, limit: Any | None = None, offset: Any | None = None) -> Any:
+        path = "/api/v1/webhooks/deliveries/dead-letter"
+        params = {
+            "limit": limit,
+            "offset": offset,
+        }
+        params = {k: v for k, v in params.items() if v is not None}
+        if not params:
+            params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_webhooks_endpoint_id(self, endpoint_id: Any) -> Any:
+        path = f"/api/v1/webhooks/{endpoint_id}"
+        params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def get_api_v1_webhooks_endpoint_id_deliveries(self, endpoint_id: Any, limit: Any | None = None, offset: Any | None = None) -> Any:
+        path = f"/api/v1/webhooks/{endpoint_id}/deliveries"
+        params = {
+            "limit": limit,
+            "offset": offset,
+        }
+        params = {k: v for k, v in params.items() if v is not None}
+        if not params:
+            params = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def patch_api_v1_approvals_approval_patterns_pattern_id(self, pattern_id: Any, payload: dict[str, Any] | None = None) -> Any:
+        path = f"/api/v1/approvals/approval-patterns/{pattern_id}"
+        params = None
+        return self._request_json(
+            method="PATCH",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=200,
+        )
+
+    def patch_api_v1_automations_triggers_trigger_id(self, trigger_id: Any, payload: dict[str, Any] | None = None) -> Any:
+        path = f"/api/v1/automations/triggers/{trigger_id}"
+        params = None
+        return self._request_json(
+            method="PATCH",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=200,
+        )
+
+    def patch_api_v1_orgs_org_id(self, org_id: Any, payload: dict[str, Any] | None = None) -> Any:
+        path = f"/api/v1/orgs/{org_id}"
+        params = None
+        return self._request_json(
+            method="PATCH",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=200,
+        )
+
+    def patch_api_v1_orgs_org_id_feature_flags(self, org_id: Any, payload: dict[str, Any] | None = None) -> Any:
+        path = f"/api/v1/orgs/{org_id}/feature-flags"
+        params = None
+        return self._request_json(
+            method="PATCH",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=200,
+        )
+
+    def patch_api_v1_tasks_task_id(self, task_id: Any, payload: dict[str, Any] | None = None) -> Any:
+        path = f"/api/v1/tasks/{task_id}"
+        params = None
+        return self._request_json(
+            method="PATCH",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=200,
+        )
+
+    def patch_api_v1_webhooks_endpoint_id(self, endpoint_id: Any, payload: dict[str, Any] | None = None) -> Any:
+        path = f"/api/v1/webhooks/{endpoint_id}"
+        params = None
+        return self._request_json(
+            method="PATCH",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=200,
+        )
+
+    def post_api_v1_api_keys(self, payload: dict[str, Any] | None = None) -> Any:
+        path = "/api/v1/api-keys"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=201,
+        )
+
+    def post_api_v1_approvals_approval_id_approve(self, approval_id: Any, payload: dict[str, Any] | None = None) -> Any:
+        path = f"/api/v1/approvals/{approval_id}/approve"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=200,
+        )
+
+    def post_api_v1_approvals_approval_id_reject(self, approval_id: Any, payload: dict[str, Any] | None = None) -> Any:
+        path = f"/api/v1/approvals/{approval_id}/reject"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=200,
+        )
+
+    def post_api_v1_approvals_request(self, payload: dict[str, Any] | None = None) -> Any:
+        path = "/api/v1/approvals/request"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=201,
+        )
+
+    def post_api_v1_auth_login(self) -> Any:
+        path = "/api/v1/auth/login"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def post_api_v1_automations_triggers(self, payload: dict[str, Any] | None = None) -> Any:
+        path = "/api/v1/automations/triggers"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=201,
+        )
+
+    def post_api_v1_automations_workflows(self, payload: dict[str, Any] | None = None) -> Any:
+        path = "/api/v1/automations/workflows"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=201,
+        )
+
+    def post_api_v1_automations_workflows_workflow_id_advance(self, workflow_id: Any, payload: dict[str, Any] | None = None) -> Any:
+        path = f"/api/v1/automations/workflows/{workflow_id}/advance"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=200,
+        )
+
+    def post_api_v1_automations_workflows_workflow_id_run(self, workflow_id: Any) -> Any:
+        path = f"/api/v1/automations/workflows/{workflow_id}/run"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def post_api_v1_automations_workflows_workflow_id_start(self, workflow_id: Any) -> Any:
+        path = f"/api/v1/automations/workflows/{workflow_id}/start"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def post_api_v1_orgs(self, payload: dict[str, Any] | None = None) -> Any:
+        path = "/api/v1/orgs"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=201,
+        )
+
+    def post_api_v1_orgs_org_id_members(self, org_id: Any, payload: dict[str, Any] | None = None) -> Any:
+        path = f"/api/v1/orgs/{org_id}/members"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=201,
+        )
+
+    def post_api_v1_tasks(self, payload: dict[str, Any] | None = None) -> Any:
+        path = "/api/v1/tasks"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=201,
+        )
+
+    def post_api_v1_webhooks(self, payload: dict[str, Any] | None = None) -> Any:
+        path = "/api/v1/webhooks"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=payload,
+            params=params,
+            expected_status=201,
+        )
+
+    def post_api_v1_webhooks_deliveries_delivery_id_replay(self, delivery_id: Any) -> Any:
+        path = f"/api/v1/webhooks/deliveries/{delivery_id}/replay"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+
+    def post_api_v1_webhooks_endpoint_id_test(self, endpoint_id: Any) -> Any:
+        path = f"/api/v1/webhooks/{endpoint_id}/test"
+        params = None
+        return self._request_json(
+            method="POST",
+            path=path,
+            json_body=None,
+            params=params,
+            expected_status=200,
+        )
+    # END GENERATED OPERATIONS

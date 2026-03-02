@@ -4,7 +4,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.action_types import CANONICAL_AGENT_ACTIONS, normalize_action_type
-from app.agents.orchestrator import AgentChatRequest, AgentChatResponse, run_agent
+from app.agents.orchestrator import (
+    AgentChatRequest,
+    AgentChatResponse,
+    MultiTurnResponse,
+    run_agent,
+    run_agent_multi_turn,
+)
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
@@ -244,6 +250,82 @@ async def agent_chat(
             "policy_score": result.policy_score,
             "blocked_by_policy": result.blocked_by_policy,
             "policy_blocked_actions": result.policy_blocked_actions,
+        },
+        organization_id=org_id,
+    )
+
+    return result
+
+
+@router.post("/multi-turn", response_model=MultiTurnResponse)
+async def agent_multi_turn(
+    data: AgentChatRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> MultiTurnResponse:
+    """
+    Execute a complex multi-step request.
+
+    The orchestrator decomposes the message into sequential steps,
+    runs each through the appropriate clone role, and returns all
+    results with aggregated actions and approval requirements.
+    """
+    if data.force_role and current_user["role"] not in {"CEO", "ADMIN"}:
+        data.force_role = None
+    if data.employee_id and current_user["role"] not in {"CEO", "ADMIN", "MANAGER"}:
+        data.employee_id = None
+
+    org_id = int(current_user["org_id"])
+    brain_context = await build_brain_context(
+        db,
+        organization_id=org_id,
+        actor_user_id=int(current_user["id"]),
+        actor_role=str(current_user["role"]),
+        request_purpose=str(current_user.get("purpose") or "professional"),
+        employee_id=data.employee_id,
+    )
+    memory_context = await build_memory_context(db, organization_id=org_id)
+
+    result = await run_agent_multi_turn(
+        request=data,
+        memory_context=memory_context,
+        organization_id=org_id,
+        brain_context=brain_context,
+    )
+
+    # Apply policy evaluation to aggregated actions
+    for action in result.all_proposed_actions:
+        normalized = normalize_action_type(action.action_type)
+        if normalized not in CANONICAL_AGENT_ACTIONS:
+            action.action_type = "NONE"
+        else:
+            action.action_type = normalized
+
+    policy_eval = await evaluate_agent_policy(
+        db,
+        organization_id=org_id,
+        message=data.message,
+        proposed_actions=[a.action_type for a in result.all_proposed_actions],
+    )
+    blocked = set(policy_eval["blocked_actions"])
+    if blocked:
+        result.all_proposed_actions = [
+            a for a in result.all_proposed_actions if a.action_type not in blocked
+        ]
+
+    await record_action(
+        db=db,
+        event_type="agent_multi_turn",
+        actor_user_id=int(current_user["id"]),
+        entity_type="agent",
+        entity_id=None,
+        payload_json={
+            "message": data.message,
+            "total_steps": result.total_steps,
+            "steps_requiring_approval": result.steps_requiring_approval,
+            "proposed_actions_count": len(result.all_proposed_actions),
+            "policy_score": policy_eval["policy_score"],
+            "blocked_by_policy": policy_eval["blocked_by_policy"],
         },
         organization_id=org_id,
     )

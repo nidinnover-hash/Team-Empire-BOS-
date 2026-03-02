@@ -343,3 +343,57 @@ export interface WorkflowStepDef {
 }
 
 export type WebhookEndpointListResponse = WebhookEndpointRead[];
+
+// ── Agent Chat Models ────────────────────────────────────────────────────────
+
+export interface AgentChatRequest {
+  message: string;
+  force_role?: string | null;
+  avatar_mode?: string | null;
+  employee_id?: number | null;
+}
+
+export interface ProposedAction {
+  action_type: string;
+  params?: Record<string, unknown>;
+}
+
+export interface AgentChatResponse {
+  role: string;
+  response: string;
+  requires_approval: boolean;
+  proposed_actions: ProposedAction[];
+  confidence_score: number;
+  confidence_level: string;
+  confidence_reasons: string[];
+  needs_human_review: boolean;
+  memory_context_chars: number;
+  memory_context_truncated: boolean;
+  memory_sources: string[];
+  memory_source_counts: Record<string, number>;
+  policy_score: number;
+  blocked_by_policy: boolean;
+  policy_reasons: string[];
+  policy_blocked_actions: string[];
+  policy_matched_rule_ids: number[];
+}
+
+export interface StepResult {
+  step_number: number;
+  description: string;
+  role: string;
+  response: string;
+  requires_approval: boolean;
+  proposed_actions: ProposedAction[];
+}
+
+export interface MultiTurnResponse {
+  steps: StepResult[];
+  final_summary: string;
+  total_steps: number;
+  steps_requiring_approval: number;
+  all_proposed_actions: ProposedAction[];
+  confidence_score: number;
+  confidence_level: string;
+  needs_human_review: boolean;
+}

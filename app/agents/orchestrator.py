@@ -6,15 +6,23 @@ Roles:
   Ops Manager Clone → daily tasks, team management, blockers
   Sales Lead Clone  → leads, follow-ups, conversion actions
   Tech PM Clone     → developer tasks, sprint planning, technical decisions
+
+Multi-turn execution:
+  run_agent_multi_turn() decomposes a complex request into a sequence of steps,
+  executing each one through run_agent() and accumulating results.  Risky steps
+  produce approval-required flags so the caller (API endpoint) can gate execution.
 """
 
 import json
+import logging
 
 from pydantic import BaseModel, Field
 
 from app.schemas.brain_context import BrainContext
 from app.services.ai_router import call_ai
 from app.services.confidence import assess_agent_confidence
+
+logger = logging.getLogger(__name__)
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -28,6 +36,26 @@ class AgentChatRequest(BaseModel):
 class ProposedAction(BaseModel):
     action_type: str  # EMAIL_DRAFT | MEMORY_WRITE | TASK_CREATE | NONE
     params: dict = {}
+
+
+class StepResult(BaseModel):
+    step_number: int
+    description: str
+    role: str
+    response: str
+    requires_approval: bool
+    proposed_actions: list[ProposedAction] = []
+
+
+class MultiTurnResponse(BaseModel):
+    steps: list[StepResult] = []
+    final_summary: str = ""
+    total_steps: int = 0
+    steps_requiring_approval: int = 0
+    all_proposed_actions: list[ProposedAction] = []
+    confidence_score: int = 0
+    confidence_level: str = "low"
+    needs_human_review: bool = True
 
 
 class AgentChatResponse(BaseModel):
@@ -213,8 +241,14 @@ async def run_agent(
 
     requires_approval = any(t in request.message.lower() for t in _RISKY_TOKENS)
 
-    # Keep the main chat path single-call for latency and cost stability.
-    actions: list[ProposedAction] = []
+    # Extract structured actions from the user message via a cheap second AI call.
+    actions = await extract_proposed_actions(
+        message=request.message,
+        organization_id=organization_id,
+        brain_context=brain_context,
+    )
+    # Filter out NONE actions — they carry no value downstream.
+    actions = [a for a in actions if a.action_type != "NONE"]
 
     confidence = assess_agent_confidence(
         user_message=request.message,
@@ -232,5 +266,151 @@ async def run_agent(
         confidence_score=confidence.score,
         confidence_level=confidence.level,
         confidence_reasons=confidence.reasons,
+        needs_human_review=confidence.needs_human_review,
+    )
+
+
+# ── Plan Decomposition ───────────────────────────────────────────────────────
+
+_PLAN_SYSTEM = (
+    "You are a task planner. Given a complex user request, break it into sequential steps.\n"
+    "Return a JSON array where each element is:\n"
+    '  {"step": <int>, "description": "<what to do>", "force_role": "<role or null>"}\n'
+    "Valid roles: CEO Clone, Ops Manager Clone, Sales Lead Clone, Tech PM Clone\n"
+    "If the request is simple (single action), return a single-step array.\n"
+    "Maximum 5 steps. Return ONLY the JSON array, nothing else."
+)
+
+
+async def _decompose_plan(
+    message: str,
+    organization_id: int | None = None,
+    brain_context: BrainContext | None = None,
+) -> list[dict]:
+    """Break a complex message into sequential steps via a planning AI call."""
+    raw = await call_ai(
+        system_prompt=_PLAN_SYSTEM,
+        user_message=message[:2000],
+        organization_id=organization_id,
+        brain_context=brain_context,
+    )
+    try:
+        items = json.loads(raw or "[]")
+        if not isinstance(items, list):
+            return [{"step": 1, "description": message, "force_role": None}]
+        return items[:5]
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return [{"step": 1, "description": message, "force_role": None}]
+
+
+async def run_agent_multi_turn(
+    request: AgentChatRequest,
+    memory_context: str = "",
+    conversation_history: list[dict] | None = None,
+    organization_id: int | None = None,
+    brain_context: BrainContext | None = None,
+) -> MultiTurnResponse:
+    """
+    Decompose a complex request into multiple steps, execute each through run_agent().
+
+    Each step builds on prior step outputs as conversation context.
+    Returns a MultiTurnResponse with all step results and aggregated actions.
+    """
+    plan = await _decompose_plan(
+        message=request.message,
+        organization_id=organization_id,
+        brain_context=brain_context,
+    )
+
+    if len(plan) <= 1:
+        # Simple request — run single turn and wrap into multi-turn format.
+        result = await run_agent(
+            request=request,
+            memory_context=memory_context,
+            conversation_history=conversation_history,
+            organization_id=organization_id,
+            brain_context=brain_context,
+        )
+        step = StepResult(
+            step_number=1,
+            description=request.message,
+            role=result.role,
+            response=result.response,
+            requires_approval=result.requires_approval,
+            proposed_actions=result.proposed_actions,
+        )
+        return MultiTurnResponse(
+            steps=[step],
+            final_summary=result.response,
+            total_steps=1,
+            steps_requiring_approval=int(result.requires_approval),
+            all_proposed_actions=result.proposed_actions,
+            confidence_score=result.confidence_score,
+            confidence_level=result.confidence_level,
+            needs_human_review=result.needs_human_review,
+        )
+
+    steps: list[StepResult] = []
+    all_actions: list[ProposedAction] = []
+    approval_count = 0
+    # Build running conversation from step outputs
+    running_history = list(conversation_history or [])
+
+    for item in plan:
+        step_num = int(item.get("step", len(steps) + 1))
+        description = str(item.get("description", ""))
+        force_role = item.get("force_role")
+
+        step_request = AgentChatRequest(
+            message=description,
+            force_role=force_role if force_role in ROLE_PROMPTS else None,
+            avatar_mode=request.avatar_mode,
+            employee_id=request.employee_id,
+        )
+
+        result = await run_agent(
+            request=step_request,
+            memory_context=memory_context,
+            conversation_history=running_history or None,
+            organization_id=organization_id,
+            brain_context=brain_context,
+        )
+
+        step = StepResult(
+            step_number=step_num,
+            description=description,
+            role=result.role,
+            response=result.response,
+            requires_approval=result.requires_approval,
+            proposed_actions=result.proposed_actions,
+        )
+        steps.append(step)
+        all_actions.extend(result.proposed_actions)
+        if result.requires_approval:
+            approval_count += 1
+
+        # Add step output to running context for next step
+        running_history.append({"role": "user", "content": description})
+        running_history.append({"role": "assistant", "content": result.response})
+
+    # Generate a final summary
+    final = steps[-1].response if steps else ""
+
+    confidence = assess_agent_confidence(
+        user_message=request.message,
+        ai_response=final,
+        requires_approval=approval_count > 0,
+        memory_context=memory_context,
+        proposed_actions_count=len(all_actions),
+    )
+
+    return MultiTurnResponse(
+        steps=steps,
+        final_summary=final,
+        total_steps=len(steps),
+        steps_requiring_approval=approval_count,
+        all_proposed_actions=all_actions,
+        confidence_score=confidence.score,
+        confidence_level=confidence.level,
         needs_human_review=confidence.needs_human_review,
     )
