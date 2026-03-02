@@ -87,6 +87,57 @@ class ApprovalTimelineResponse(TypedDict):
     rejected_count: int
     items: list[ApprovalTimelineItem]
 
+class ContactCreate(TypedDict):
+    name: str
+    email: NotRequired[str | None]
+    phone: NotRequired[str | None]
+    company: NotRequired[str | None]
+    role: NotRequired[str | None]
+    relationship: NotRequired[Literal['personal', 'business', 'family', 'mentor', 'other']]
+    notes: NotRequired[str | None]
+    pipeline_stage: NotRequired[Literal['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost']]
+    lead_score: NotRequired[int]
+    lead_source: NotRequired[Literal['manual', 'social_media', 'referral', 'website', 'email', 'event', 'other'] | None]
+    deal_value: NotRequired[float | None]
+    expected_close_date: NotRequired[str | None]
+    tags: NotRequired[str | None]
+
+class ContactRead(TypedDict):
+    id: int
+    name: str
+    email: str | None
+    phone: str | None
+    company: str | None
+    role: str | None
+    relationship: str
+    notes: str | None
+    pipeline_stage: str
+    lead_score: int
+    lead_source: str | None
+    deal_value: float | None
+    expected_close_date: str | None
+    last_contacted_at: str | None
+    next_follow_up_at: str | None
+    tags: str | None
+    created_at: str
+
+class ContactUpdate(TypedDict):
+    name: NotRequired[str | None]
+    email: NotRequired[str | None]
+    phone: NotRequired[str | None]
+    company: NotRequired[str | None]
+    role: NotRequired[str | None]
+    relationship: NotRequired[Literal['personal', 'business', 'family', 'mentor', 'other'] | None]
+    notes: NotRequired[str | None]
+    pipeline_stage: NotRequired[Literal['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost'] | None]
+    lead_score: NotRequired[int | None]
+    lead_source: NotRequired[Literal['manual', 'social_media', 'referral', 'website', 'email', 'event', 'other'] | None]
+    deal_value: NotRequired[float | None]
+    expected_close_date: NotRequired[str | None]
+    last_contacted_at: NotRequired[str | None]
+    next_follow_up_at: NotRequired[str | None]
+    tags: NotRequired[str | None]
+
 class FeatureFlagValue(TypedDict):
     enabled: NotRequired[bool]
     rollout_percentage: NotRequired[int]
@@ -140,6 +191,11 @@ class OrganizationUpdate(TypedDict):
     country_code: NotRequired[str | None]
     branch_label: NotRequired[str | None]
     expected_config_version: NotRequired[int | None]
+
+class PipelineSummary(TypedDict):
+    stage: str
+    count: int
+    total_deal_value: float
 
 class TaskCreate(TypedDict):
     title: str
@@ -308,57 +364,3 @@ class WorkflowStepDef(TypedDict):
     requires_approval: NotRequired[bool]
 
 WebhookEndpointListResponse = list[WebhookEndpointRead]
-
-
-# ── Agent Chat Models ────────────────────────────────────────────────────────
-
-class AgentChatRequest(TypedDict):
-    message: str
-    force_role: NotRequired[str | None]
-    avatar_mode: NotRequired[str | None]
-    employee_id: NotRequired[int | None]
-
-
-class ProposedAction(TypedDict):
-    action_type: str
-    params: NotRequired[dict[str, Any]]
-
-
-class AgentChatResponse(TypedDict):
-    role: str
-    response: str
-    requires_approval: bool
-    proposed_actions: list[ProposedAction]
-    confidence_score: int
-    confidence_level: str
-    confidence_reasons: list[str]
-    needs_human_review: bool
-    memory_context_chars: int
-    memory_context_truncated: bool
-    memory_sources: list[str]
-    memory_source_counts: dict[str, int]
-    policy_score: int
-    blocked_by_policy: bool
-    policy_reasons: list[str]
-    policy_blocked_actions: list[str]
-    policy_matched_rule_ids: list[int]
-
-
-class StepResult(TypedDict):
-    step_number: int
-    description: str
-    role: str
-    response: str
-    requires_approval: bool
-    proposed_actions: list[ProposedAction]
-
-
-class MultiTurnResponse(TypedDict):
-    steps: list[StepResult]
-    final_summary: str
-    total_steps: int
-    steps_requiring_approval: int
-    all_proposed_actions: list[ProposedAction]
-    confidence_score: int
-    confidence_level: str
-    needs_human_review: bool

@@ -390,24 +390,61 @@
   <div class="section-label">Network & Finance</div>
   <div class="grid-2">
 
-    <!-- Contacts -->
+    <!-- Contacts & CRM Pipeline -->
     <div class="card">
-      <div class="card-head"><span class="card-title">Contacts</span><span class="card-count">{{ contacts|length }}</span></div>
+      <div class="card-head">
+        <span class="card-title">CRM Pipeline</span>
+        <span class="card-count">{{ contacts|length }} contacts</span>
+      </div>
+      <div id="pipeline-funnel-dash" style="display:flex;gap:0;margin:.6rem 1rem .4rem">
+        <div style="flex:1;text-align:center;padding:.3rem 0;font-size:.65rem;color:var(--text-muted)">
+          <div style="font-weight:700;font-size:.9rem" id="dash-pf-new">-</div>New
+        </div>
+        <div style="flex:1;text-align:center;padding:.3rem 0;font-size:.65rem;color:var(--text-muted)">
+          <div style="font-weight:700;font-size:.9rem" id="dash-pf-contacted">-</div>Contacted
+        </div>
+        <div style="flex:1;text-align:center;padding:.3rem 0;font-size:.65rem;color:var(--text-muted)">
+          <div style="font-weight:700;font-size:.9rem" id="dash-pf-qualified">-</div>Qualified
+        </div>
+        <div style="flex:1;text-align:center;padding:.3rem 0;font-size:.65rem;color:var(--text-muted)">
+          <div style="font-weight:700;font-size:.9rem" id="dash-pf-proposal">-</div>Proposal
+        </div>
+        <div style="flex:1;text-align:center;padding:.3rem 0;font-size:.65rem;color:var(--text-muted)">
+          <div style="font-weight:700;font-size:.9rem" id="dash-pf-negotiation">-</div>Negotiation
+        </div>
+        <div style="flex:1;text-align:center;padding:.3rem 0;font-size:.65rem;color:var(--text-muted)">
+          <div style="font-weight:700;font-size:.9rem;color:var(--success)" id="dash-pf-won">-</div>Won
+        </div>
+        <div style="flex:1;text-align:center;padding:.3rem 0;font-size:.65rem;color:var(--text-muted)">
+          <div style="font-weight:700;font-size:.9rem;color:var(--text-faint)" id="dash-pf-lost">-</div>Lost
+        </div>
+      </div>
+      <div class="fin-row">
+        <span class="fin-label">Total Pipeline Value</span>
+        <span class="fin-val fin-green" id="dash-pipeline-val">$0</span>
+      </div>
+      <div class="fin-row">
+        <span class="fin-label">Follow-ups Due</span>
+        <span class="fin-val" id="dash-followup-count">0</span>
+      </div>
       {% if contacts %}
-        {% for c in contacts %}
+        {% for c in contacts[:5] %}
         <div class="item">
           <div class="task-row">
             <div>
               <div class="item-text">{{ c.name }}</div>
               {% if c.company %}<div class="item-meta">{{ c.company }}{% if c.role %} - {{ c.role }}{% endif %}</div>{% endif %}
             </div>
-            <span class="badge b-{{ c.relationship }}">{{ c.relationship }}</span>
+            <span class="badge b-{{ c.pipeline_stage or c.relationship }}">{{ c.pipeline_stage or c.relationship }}</span>
           </div>
-          {% if c.email %}<div class="item-meta">{{ c.email }}</div>{% endif %}
+          {% if c.deal_value %}<div class="item-meta">${{ c.deal_value | round(0) }} deal value</div>{% endif %}
         </div>
         {% endfor %}
+        {% if contacts|length > 5 %}
+        <div class="item"><a href="/web/contacts" class="link-muted">View all {{ contacts|length }} contacts -></a></div>
+        {% endif %}
       {% else %}
-        <div class="empty">No contacts yet.<code>POST /api/v1/contacts</code></div>
+        <div class="empty">No contacts yet. <a href="/web/contacts" class="link-muted">Add contacts -></a></div>
       {% endif %}
     </div>
 

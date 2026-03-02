@@ -14,49 +14,132 @@
     if (window.PCUI && window.PCUI.promptText) return window.PCUI.promptText(title, message, defaultValue);
     return window.prompt(message || "", defaultValue || "");
   };
+  var $ = function (id) { return document.getElementById(id); };
+  var debounceTimer = null;
 
+  function formatCurrency(val) {
+    if (val == null) return "--";
+    return "$" + Number(val).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+
+  function formatDate(iso) {
+    if (!iso) return "--";
+    var d = new Date(iso);
+    var now = new Date();
+    var diff = (now - d) / 86400000;
+    if (diff > 0 && diff < 1) return "Today";
+    if (diff >= 1 && diff < 2) return "Yesterday";
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
+  function scoreBadge(score) {
+    var cls = score >= 70 ? "badge-ok" : score >= 40 ? "badge-info" : "badge-muted";
+    return '<span class="badge ' + cls + '">' + esc(score) + '</span>';
+  }
+
+  function stageBadge(stage) {
+    var colors = { new: "badge-info", contacted: "badge-info", qualified: "badge-ok", proposal: "badge-ok", negotiation: "badge-warn", won: "badge-ok", lost: "badge-muted" };
+    var cls = colors[stage] || "badge-muted";
+    return '<span class="badge ' + cls + '">' + esc(stage) + '</span>';
+  }
+
+  // ── Pipeline Summary ──────────────────────────────────────────────
+  async function loadPipelineSummary() {
+    try {
+      var resp = await fetch("/api/v1/contacts/pipeline-summary", { headers: headers() });
+      if (!resp.ok) return;
+      var data = await resp.json();
+      var totalValue = 0;
+      data.forEach(function (s) {
+        var el = $("pf-" + s.stage);
+        if (el) el.textContent = String(s.count);
+        totalValue += s.total_deal_value || 0;
+      });
+      $("k-pipeline-val").textContent = formatCurrency(totalValue);
+    } catch (_e) { /* ignore */ }
+  }
+
+  // ── Follow-up Due Count ───────────────────────────────────────────
+  async function loadFollowUpCount() {
+    try {
+      var resp = await fetch("/api/v1/contacts/follow-up-due?limit=200", { headers: headers() });
+      if (!resp.ok) return;
+      var data = await resp.json();
+      $("k-followup").textContent = String(data.length);
+    } catch (_e) { /* ignore */ }
+  }
+
+  // ── Contact List ──────────────────────────────────────────────────
   async function loadContacts() {
-    var response = await fetch("/api/v1/contacts?limit=200", { headers: headers() });
+    var params = "?limit=200";
+    var stage = $("filter-stage").value;
+    var rel = $("filter-relationship").value;
+    var search = ($("filter-search").value || "").trim();
+    if (stage) params += "&pipeline_stage=" + encodeURIComponent(stage);
+    if (rel) params += "&relationship=" + encodeURIComponent(rel);
+    if (search) params += "&search=" + encodeURIComponent(search);
+
+    var response = await fetch("/api/v1/contacts" + params, { headers: headers() });
     if (!response.ok) return;
     var items = await response.json();
-    document.getElementById("k-total").textContent = String(items.length);
-    document.getElementById("k-biz").textContent = String(items.filter(function (item) { return item.relationship === "business"; }).length);
-    document.getElementById("k-per").textContent = String(items.filter(function (item) { return item.relationship === "personal"; }).length);
 
-    var body = document.getElementById("tbody");
+    $("k-total").textContent = String(items.length);
+    $("k-biz").textContent = String(items.filter(function (c) { return c.relationship === "business"; }).length);
+    $("k-per").textContent = String(items.filter(function (c) { return c.relationship === "personal"; }).length);
+
+    var body = $("tbody");
     if (!items.length) {
-      body.innerHTML = '<tr><td colspan="5" style="text-align:center;opacity:.5">No contacts yet</td></tr>';
+      body.innerHTML = '<tr><td colspan="7" style="text-align:center;opacity:.5">No contacts found</td></tr>';
       return;
     }
 
-    body.innerHTML = items.map(function (item) {
-      var name = esc(item.name || "--");
-      var email = esc(item.email || "--");
-      var company = esc(item.company || "--");
-      var phone = esc(item.phone || "--");
-      var relationship = esc(item.relationship || "unknown");
-      return "<tr><td>" + name + "</td><td>" + email + "</td><td>" + company + "</td><td><span class=\"badge\">" + relationship + "</span></td><td>" + phone + "</td></tr>";
+    body.innerHTML = items.map(function (c) {
+      var nameCell = '<td><strong>' + esc(c.name) + '</strong>' +
+        (c.email ? '<div style="font-size:.75rem;color:var(--text-muted)">' + esc(c.email) + '</div>' : '') +
+        '</td>';
+      var companyCell = '<td>' + esc(c.company || "--") +
+        (c.role ? '<div style="font-size:.75rem;color:var(--text-muted)">' + esc(c.role) + '</div>' : '') +
+        '</td>';
+      var stageCell = '<td>' + stageBadge(c.pipeline_stage || "new") + '</td>';
+      var scoreCell = '<td>' + scoreBadge(c.lead_score || 0) + '</td>';
+      var dealCell = '<td>' + (c.deal_value ? formatCurrency(c.deal_value) : '--') + '</td>';
+      var relCell = '<td><span class="badge">' + esc(c.relationship || "unknown") + '</span></td>';
+      var followUp = '<td>' + formatDate(c.next_follow_up_at) + '</td>';
+      return '<tr>' + nameCell + companyCell + stageCell + scoreCell + dealCell + relCell + followUp + '</tr>';
     }).join("");
   }
 
-  var addButton = document.getElementById("add-btn");
+  // ── Filter Events ─────────────────────────────────────────────────
+  $("filter-stage").addEventListener("change", loadContacts);
+  $("filter-relationship").addEventListener("change", loadContacts);
+  $("filter-search").addEventListener("input", function () {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(loadContacts, 300);
+  });
+
+  // ── Add Contact ───────────────────────────────────────────────────
+  var addButton = $("add-btn");
   if (addButton) {
     addButton.onclick = async function () {
       var name = await askInput("New Contact", "Contact name:", "");
       if (!name) return;
       var email = await askInput("New Contact", "Email (optional):", "");
       email = email || undefined;
+      var company = await askInput("New Contact", "Company (optional):", "");
+      company = company || undefined;
+      var stage = await askInput("New Contact", "Pipeline stage (new/contacted/qualified/proposal/negotiation/won/lost):", "new");
+      stage = stage || "new";
       await fetch("/api/v1/contacts", {
         method: "POST",
         headers: headers(),
-        body: JSON.stringify({ name: name, email: email }),
+        body: JSON.stringify({ name: name, email: email, company: company, pipeline_stage: stage }),
       });
       await loadContacts();
+      await loadPipelineSummary();
     };
   }
 
-  await loadContacts();
-  if (typeof lucide !== "undefined") {
-    lucide.createIcons();
-  }
+  // ── Init ──────────────────────────────────────────────────────────
+  await Promise.all([loadContacts(), loadPipelineSummary(), loadFollowUpCount()]);
+  if (typeof lucide !== "undefined") lucide.createIcons();
 })();

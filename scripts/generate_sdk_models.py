@@ -19,6 +19,7 @@ _ROOT_COMPONENTS = [
 _ROOT_OPERATION_PATH_PREFIXES = [
     "/api/v1/auth/me",
     "/api/v1/api-keys",
+    "/api/v1/contacts",
     "/api/v1/webhooks",
     "/api/v1/tasks",
     "/api/v1/approvals",

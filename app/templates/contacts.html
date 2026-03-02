@@ -22,11 +22,55 @@
       <div class="kpi"><div class="label">Total</div><div class="val" id="k-total">0</div></div>
       <div class="kpi"><div class="label">Business</div><div class="val" id="k-biz">0</div></div>
       <div class="kpi"><div class="label">Personal</div><div class="val" id="k-per">0</div></div>
+      <div class="kpi"><div class="label">Pipeline Value</div><div class="val" id="k-pipeline-val">$0</div></div>
+      <div class="kpi"><div class="label">Follow-ups Due</div><div class="val" id="k-followup">0</div></div>
     </div>
-    <div class="card" style="margin-top:1.5rem">
+
+    <div class="section-label" style="margin-top:1.2rem">Pipeline Funnel</div>
+    <div class="kpi-row" id="pipeline-funnel" style="flex-wrap:wrap;gap:.5rem">
+      <div class="kpi" style="flex:1;min-width:80px"><div class="label">New</div><div class="val" id="pf-new">0</div></div>
+      <div class="kpi" style="flex:1;min-width:80px"><div class="label">Contacted</div><div class="val" id="pf-contacted">0</div></div>
+      <div class="kpi" style="flex:1;min-width:80px"><div class="label">Qualified</div><div class="val" id="pf-qualified">0</div></div>
+      <div class="kpi" style="flex:1;min-width:80px"><div class="label">Proposal</div><div class="val" id="pf-proposal">0</div></div>
+      <div class="kpi" style="flex:1;min-width:80px"><div class="label">Negotiation</div><div class="val" id="pf-negotiation">0</div></div>
+      <div class="kpi" style="flex:1;min-width:80px"><div class="label">Won</div><div class="val" id="pf-won">0</div></div>
+      <div class="kpi" style="flex:1;min-width:80px"><div class="label">Lost</div><div class="val" id="pf-lost">0</div></div>
+    </div>
+
+    <div class="filter-bar" style="margin-top:1rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+      <select id="filter-stage">
+        <option value="">All stages</option>
+        <option value="new">New</option>
+        <option value="contacted">Contacted</option>
+        <option value="qualified">Qualified</option>
+        <option value="proposal">Proposal</option>
+        <option value="negotiation">Negotiation</option>
+        <option value="won">Won</option>
+        <option value="lost">Lost</option>
+      </select>
+      <select id="filter-relationship">
+        <option value="">All types</option>
+        <option value="personal">Personal</option>
+        <option value="business">Business</option>
+        <option value="family">Family</option>
+        <option value="mentor">Mentor</option>
+        <option value="other">Other</option>
+      </select>
+      <input id="filter-search" type="text" placeholder="Search name, email, company..." style="flex:1;min-width:160px;padding:.4rem .6rem;border:1px solid var(--line);border-radius:6px;background:var(--bg-card);color:var(--text)" />
+    </div>
+
+    <div class="card" style="margin-top:1rem">
       <table class="data-table">
-        <thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Type</th><th>Phone</th></tr></thead>
-        <tbody id="tbody"><tr><td colspan="5" style="text-align:center;opacity:.5">Loading...</td></tr></tbody>
+        <thead><tr>
+          <th>Name</th>
+          <th>Company</th>
+          <th>Stage</th>
+          <th>Score</th>
+          <th>Deal Value</th>
+          <th>Type</th>
+          <th>Follow-up</th>
+        </tr></thead>
+        <tbody id="tbody"><tr><td colspan="7" style="text-align:center;opacity:.5">Loading...</td></tr></tbody>
       </table>
     </div>
   </div>
