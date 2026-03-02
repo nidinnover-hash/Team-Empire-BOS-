@@ -33,7 +33,7 @@ async def create_goal(
 @router.get("", response_model=list[GoalRead])
 async def list_goals(
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=10_000),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> list[GoalRead]:
@@ -67,3 +67,30 @@ async def update_status(
     if goal is None:
         raise HTTPException(status_code=404, detail="Goal not found")
     return goal
+
+
+@router.get("/{goal_id}", response_model=GoalRead)
+async def get_goal(
+    goal_id: int,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+) -> GoalRead:
+    goal = await goal_service.get_goal(db, goal_id, organization_id=actor["org_id"])
+    if goal is None:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    return goal
+
+
+@router.delete("/{goal_id}", status_code=204)
+async def delete_goal(
+    goal_id: int,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> None:
+    deleted = await goal_service.delete_goal(db, goal_id, organization_id=actor["org_id"])
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    await record_action(
+        db, event_type="goal_deleted", actor_user_id=actor["id"],
+        organization_id=actor["org_id"], entity_type="goal", entity_id=goal_id,
+    )

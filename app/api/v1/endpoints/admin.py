@@ -553,7 +553,7 @@ async def org_whatsapp_webhook_failures(
 @router.get("/users", response_model=list[AdminUserRead])
 async def list_all_users(
     limit: int = Query(default=100, ge=1, le=1000),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=10_000),
     db: AsyncSession = Depends(get_db),
     _actor: dict = Depends(require_super_admin),
 ) -> list[AdminUserRead]:

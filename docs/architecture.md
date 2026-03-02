@@ -9,8 +9,10 @@
 
 ## Current Implementation Baseline
 - Existing personal APIs remain available.
-- New protected ops API at `/api/v1/ops/*`.
-- Every ops write route records an event in `events`.
+- Protected ops APIs are active at `/api/v1/ops/*`.
+- Ops writes are audited in `events`.
+- Multi-org RBAC, approvals, webhook delivery logs, and API key management are live.
+- Integration tokens are encrypted at rest.
 
 ## Target Modules
 - `app/agents`: task planning and execution orchestration.
@@ -19,6 +21,6 @@
 - `app/logs`: audit trail and compliance helpers.
 
 ## Next Build Milestones
-1. Add `users` table and persistent role model.
-2. Introduce approvals workflow table/endpoints.
-3. Move from SQLite to Postgres with Alembic migrations.
+1. Complete API-key scope matrix across all endpoints (beyond read/write baseline).
+2. Move webhook delivery into a durable worker queue for higher throughput.
+3. Add end-to-end integration contract tests against provider sandboxes.

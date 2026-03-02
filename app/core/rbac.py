@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from typing import Literal
 
 from fastapi import Depends, HTTPException, status
@@ -21,10 +22,10 @@ Role = Literal[
 ]
 
 
-def require_roles(*allowed_roles: Role):
+def require_roles(*allowed_roles: Role) -> Callable[..., Awaitable[dict[str, object]]]:
     allowed = set(allowed_roles)
 
-    async def dependency(user: dict = Depends(get_current_api_user)) -> dict:
+    async def dependency(user: dict[str, object] = Depends(get_current_api_user)) -> dict[str, object]:
         role = user.get("role", "STAFF")
         if role not in allowed:
             raise HTTPException(
@@ -37,10 +38,15 @@ def require_roles(*allowed_roles: Role):
 
 
 async def require_super_admin(
-    user: dict = Depends(get_current_api_user),
+    user: dict[str, object] = Depends(get_current_api_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
-    result = await db.execute(select(User).where(User.id == int(user["id"])))
+) -> dict[str, object]:
+    raw_user_id = user.get("id")
+    if isinstance(raw_user_id, bool):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
+    if not isinstance(raw_user_id, int):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
+    result = await db.execute(select(User).where(User.id == raw_user_id))
     db_user = result.scalar_one_or_none()
     if db_user is None or not bool(getattr(db_user, "is_super_admin", False)):
         raise HTTPException(

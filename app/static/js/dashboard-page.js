@@ -1306,5 +1306,39 @@ window.showToast = function(msg, type) {
       setTimeout(function() { el.remove(); }, 250);
     }, 4000);
   };
+  // ── KPI Auto-Refresh (polls every 60s) ──────────────────────────────────
+  (function () {
+    var KPI_POLL_INTERVAL = 60000;
+    var paused = false;
+
+    async function refreshKPIs() {
+      if (paused) return;
+      try {
+        var token = await window.__bootPromise;
+        if (!token) return;
+        var data = await fetch("/api/v1/dashboard/kpis", {
+          headers: { "Authorization": "Bearer " + token },
+        }).then(function (r) { return r.ok ? r.json() : null; });
+        if (!data) return;
+
+        Object.keys(data).forEach(function (key) {
+          var el = document.querySelector("[data-kpi=\"" + key + "\"]");
+          if (el && String(el.textContent) !== String(data[key])) {
+            el.textContent = data[key];
+            el.classList.add("kpi-pulse");
+            setTimeout(function () { el.classList.remove("kpi-pulse"); }, 1500);
+          }
+        });
+      } catch (_e) { /* silent */ }
+    }
+
+    setInterval(refreshKPIs, KPI_POLL_INTERVAL);
+
+    // Pause when tab hidden, resume when visible
+    document.addEventListener("visibilitychange", function () {
+      paused = document.hidden;
+    });
+  })();
+
   // Init Lucide icons
   if (typeof lucide !== "undefined") lucide.createIcons();

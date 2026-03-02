@@ -13,6 +13,7 @@ from app.services import email_service
 from app.services import memory as memory_service
 from app.services import task as task_service
 from app.services.agent_policy import evaluate_agent_policy
+from app.services.context_builder import build_brain_context
 from app.services.memory import build_memory_context
 
 router = APIRouter(prefix="/agents", tags=["Agents"])
@@ -64,15 +65,26 @@ async def agent_chat(
     # Only CEO/ADMIN may force a specific role; other roles get keyword routing
     if data.force_role and current_user["role"] not in {"CEO", "ADMIN"}:
         data.force_role = None
+    if data.employee_id and current_user["role"] not in {"CEO", "ADMIN", "MANAGER"}:
+        data.employee_id = None
 
     # Build memory context from profile, team, and today's priorities
     org_id = int(current_user["org_id"])
+    brain_context = await build_brain_context(
+        db,
+        organization_id=org_id,
+        actor_user_id=int(current_user["id"]),
+        actor_role=str(current_user["role"]),
+        request_purpose=str(current_user.get("purpose") or "professional"),
+        employee_id=data.employee_id,
+    )
     memory_context = await build_memory_context(db, organization_id=org_id)
 
     result = await run_agent(
         request=data,
         memory_context=memory_context,
         organization_id=org_id,
+        brain_context=brain_context,
     )
     unknown_actions: list[str] = []
     for action in result.proposed_actions:

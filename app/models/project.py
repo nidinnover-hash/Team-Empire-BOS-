@@ -30,7 +30,7 @@ class Project(Base):
     category: Mapped[str] = mapped_column(String(50), default="personal")
     # active | completed | paused | archived
     status: Mapped[str] = mapped_column(String(50), default="active")
-    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

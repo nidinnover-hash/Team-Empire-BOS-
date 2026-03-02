@@ -1,0 +1,62 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Governance Dashboard (page-specific overrides)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.kpi-row { grid-template-columns: repeat(5, 1fr); }
+
+/* ── Policy Card ─────────────────────────────────────────────────────────── */
+.policy-card {
+  background: var(--surface); border-radius: var(--radius); padding: .7rem 1rem;
+  box-shadow: var(--shadow-sm); display: flex; gap: .8rem; align-items: flex-start;
+  border-left: 3px solid var(--brand);
+}
+.policy-card.inactive { border-left-color: var(--text-faint); opacity: .7; }
+.policy-card-body { flex: 1; min-width: 0; }
+.policy-card-name { font-size: .82rem; font-weight: 600; color: var(--text); }
+.policy-card-desc { font-size: .72rem; color: var(--text-muted); margin-top: .15rem; }
+.policy-card-meta { font-size: .65rem; color: var(--text-faint); margin-top: .2rem; display: flex; gap: .8rem; }
+
+/* ── Violation Card ──────────────────────────────────────────────────────── */
+.violation-card {
+  background: var(--surface); border-radius: var(--radius); padding: .7rem 1rem;
+  box-shadow: var(--shadow-sm); border-left: 3px solid var(--danger, #e53e3e);
+  display: flex; gap: .8rem; align-items: flex-start;
+}
+.violation-card.resolved { border-left-color: var(--ok, #38a169); opacity: .7; }
+.violation-card-body { flex: 1; min-width: 0; }
+.violation-card-type { font-size: .82rem; font-weight: 600; color: var(--text); }
+.violation-card-details { font-size: .72rem; color: var(--text-muted); margin-top: .15rem; }
+.violation-card-actions { flex-shrink: 0; }
+
+/* ── Automation Panel ────────────────────────────────────────────────────── */
+.auto-meter {
+  background: var(--surface); border-radius: var(--radius); padding: 1.2rem;
+  box-shadow: var(--shadow-sm); margin-bottom: 1rem;
+}
+.auto-meter-bar {
+  height: 24px; border-radius: 12px; background: var(--bg);
+  overflow: hidden; margin: .6rem 0;
+}
+.auto-meter-fill {
+  height: 100%; border-radius: 12px; background: var(--brand);
+  transition: width .5s ease;
+}
+.auto-meter-labels { display: flex; justify-content: space-between; font-size: .68rem; color: var(--text-muted); }
+.auto-meta { font-size: .72rem; color: var(--text-muted); margin-top: .5rem; line-height: 1.5; }
+.drift-list { display: flex; flex-direction: column; gap: .45rem; }
+.drift-item {
+  background: var(--surface-alt);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: .55rem .65rem;
+}
+.drift-item-head {
+  display: flex; align-items: center; gap: .45rem;
+  font-size: .72rem; color: var(--text);
+}
+.drift-item-head strong { font-weight: 700; }
+.drift-item-meta { font-size: .67rem; color: var(--text-muted); margin-top: .2rem; line-height: 1.35; }
+.drift-empty { font-size: .72rem; color: var(--text-faint); }
+
+/* ── Modal width override ────────────────────────────────────────────────── */
+.modal { width: 440px; }

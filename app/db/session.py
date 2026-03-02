@@ -1,5 +1,8 @@
+import logging
+import time
 from typing import Any
 
+from sqlalchemy import event
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -10,6 +13,7 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
@@ -26,6 +30,10 @@ def _build_engine() -> AsyncEngine:
         "pool_pre_ping": True,  # drops stale connections automatically
     }
     if not is_sqlite:
+        connect_args: dict[str, Any] = {}
+        stmt_timeout = getattr(settings, "DB_STATEMENT_TIMEOUT_MS", 30000)
+        if stmt_timeout and "postgresql" in db_url:
+            connect_args["options"] = f"-c statement_timeout={int(stmt_timeout)}"
         engine_kwargs.update(
             {
                 "pool_size": settings.DB_POOL_SIZE,
@@ -34,10 +42,30 @@ def _build_engine() -> AsyncEngine:
                 "pool_timeout": settings.DB_POOL_TIMEOUT,
             }
         )
+        if connect_args:
+            engine_kwargs["connect_args"] = connect_args
     try:
-        return create_async_engine(db_url, **engine_kwargs)
+        engine = create_async_engine(db_url, **engine_kwargs)
     except (SQLAlchemyError, TypeError, ValueError) as exc:
         raise RuntimeError(f"Invalid DATABASE_URL configuration: {db_url!r}") from exc
+    threshold_ms = max(1, int(settings.DB_SLOW_QUERY_MS))
+
+    @event.listens_for(engine.sync_engine, "before_cursor_execute")
+    def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        conn.info.setdefault("_query_start_time", []).append(time.perf_counter())
+
+    @event.listens_for(engine.sync_engine, "after_cursor_execute")
+    def _after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        stack = conn.info.get("_query_start_time", [])
+        start = stack.pop(-1) if stack else time.perf_counter()
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        if elapsed_ms >= threshold_ms:
+            logger.warning(
+                "Slow query detected (%dms): %s",
+                elapsed_ms,
+                str(statement).splitlines()[0][:220],
+            )
+    return engine
 
 
 def get_engine() -> AsyncEngine:

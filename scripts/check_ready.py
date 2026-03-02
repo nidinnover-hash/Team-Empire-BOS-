@@ -7,11 +7,18 @@ import sys
 
 
 CHECKS: list[list[str]] = [
+    [sys.executable, "scripts/preflight_python.py"],
     [sys.executable, "scripts/check_ops_readiness.py"],
+    [sys.executable, "scripts/check_env_schema.py"],
+    [sys.executable, "scripts/check_secret_patterns.py"],
     [sys.executable, "-m", "ruff", "check", "app", "tests"],
     [sys.executable, "-m", "mypy"],
+    [sys.executable, "scripts/check_migration_revisions.py"],
     [sys.executable, "scripts/check_migration_heads.py"],
-    [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"],
+    [sys.executable, "scripts/check_endpoint_file_sizes.py"],
+    [sys.executable, "scripts/check_endpoint_complexity.py"],
+    [sys.executable, "scripts/check_critical_indexes.py"],
+    [sys.executable, "-m", "pytest", "-q", "-m", "not flaky", "-p", "no:cacheprovider"],
     [sys.executable, "-m", "pip", "check"],
     [sys.executable, "-m", "pip_audit", "-r", "requirements.txt"],
     [sys.executable, "-m", "bandit", "-r", "app", "-ll", "-q"],
@@ -40,7 +47,23 @@ def _require_module(module_name: str, package_name: str) -> int:
         return 1
 
 
+def _require_python_312() -> int:
+    major = sys.version_info.major
+    minor = sys.version_info.minor
+    if (major, minor) == (3, 12):
+        return 0
+    print(
+        "Python 3.12 is required for release checks. "
+        f"Detected {major}.{minor}. "
+        "Run with: py -3.12 scripts/check_ready.py (Windows) or python3.12 scripts/check_ready.py (Linux/macOS)."
+    )
+    return 1
+
+
 def main() -> int:
+    rc = _require_python_312()
+    if rc != 0:
+        return rc
     for module_name, package_name in (("pip_audit", "pip-audit"), ("bandit", "bandit")):
         rc = _require_module(module_name, package_name)
         if rc != 0:

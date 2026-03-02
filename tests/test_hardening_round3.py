@@ -34,10 +34,10 @@ async def test_gcal_oauth_get_callback_rejects_replay(client, monkeypatch):
     async def fake_exchange(*a, **kw):
         return {"access_token": "test", "refresh_token": "rt", "token_type": "Bearer"}
 
-    monkeypatch.setattr("app.api.v1.endpoints.integrations.exchange_code_for_tokens", fake_exchange)
-    monkeypatch.setattr("app.api.v1.endpoints.integrations.settings.GOOGLE_CLIENT_ID", "test-id")
-    monkeypatch.setattr("app.api.v1.endpoints.integrations.settings.GOOGLE_CLIENT_SECRET", "test-secret")
-    monkeypatch.setattr("app.api.v1.endpoints.integrations.settings.GOOGLE_CALENDAR_REDIRECT_URI", "http://localhost/api/v1/integrations/google-calendar/oauth/callback")
+    monkeypatch.setattr("app.api.v1.endpoints.integrations_google_calendar.exchange_code_for_tokens", fake_exchange)
+    monkeypatch.setattr("app.api.v1.endpoints.integrations_google_calendar.settings.GOOGLE_CLIENT_ID", "test-id")
+    monkeypatch.setattr("app.api.v1.endpoints.integrations_google_calendar.settings.GOOGLE_CLIENT_SECRET", "test-secret")
+    monkeypatch.setattr("app.api.v1.endpoints.integrations_google_calendar.settings.GOOGLE_CALENDAR_REDIRECT_URI", "http://localhost/api/v1/integrations/google-calendar/oauth/callback")
 
     async def fake_connect(*a, **kw):
         class FakeIntegration:
@@ -52,8 +52,8 @@ async def test_gcal_oauth_get_callback_rejects_replay(client, monkeypatch):
             updated_at = datetime.now(UTC)
         return FakeIntegration()
 
-    monkeypatch.setattr("app.api.v1.endpoints.integrations.integration_service.connect_integration", fake_connect)
-    monkeypatch.setattr("app.api.v1.endpoints.integrations.integration_service.get_integration_by_type", AsyncMock(return_value=None))
+    monkeypatch.setattr("app.api.v1.endpoints.integrations_google_calendar.integration_service.connect_integration", fake_connect)
+    monkeypatch.setattr("app.api.v1.endpoints.integrations_google_calendar.integration_service.get_integration_by_type", AsyncMock(return_value=None))
 
     # First call should succeed
     r1 = await client.get(

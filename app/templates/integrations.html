@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <title>Integrations — Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/integrations.css" />
   
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
@@ -42,6 +43,10 @@
         <div id="integrations-health-summary" class="integration-health-summary" aria-live="polite">
           <div class="integration-health-summary__title">Integration Health Summary</div>
           <div class="small">Loading integration health diagnostics...</div>
+        </div>
+        <div id="security-center-summary" class="security-center-summary" aria-live="polite">
+          <div class="integration-health-summary__title">Security Center</div>
+          <div class="small">Loading token security diagnostics...</div>
         </div>
         <div id="integrations-list">
           <div class="empty">Loading integrations...</div>
@@ -297,4 +302,3 @@
 <script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
 </body>
 </html>
-

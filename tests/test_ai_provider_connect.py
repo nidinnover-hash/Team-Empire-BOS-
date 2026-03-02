@@ -170,7 +170,9 @@ async def test_ai_connect_key_too_short_returns_422(client):
 
 async def test_set_and_clear_ai_key_cache():
     ai_router.set_ai_key_cache("test_provider", "test_key", org_id=1)
-    assert ai_router._ai_key_cache[("test_provider", 1)] == "test_key"
+    cached_key, cached_expiry = ai_router._ai_key_cache[("test_provider", 1)]
+    assert cached_key == "test_key"
+    assert isinstance(cached_expiry, float)
 
     ai_router.clear_ai_key_cache("test_provider", org_id=1)
     assert ("test_provider", 1) not in ai_router._ai_key_cache

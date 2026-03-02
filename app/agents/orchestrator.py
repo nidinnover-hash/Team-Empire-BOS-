@@ -12,6 +12,7 @@ import json
 
 from pydantic import BaseModel, Field
 
+from app.schemas.brain_context import BrainContext
 from app.services.ai_router import call_ai
 from app.services.confidence import assess_agent_confidence
 
@@ -21,6 +22,7 @@ class AgentChatRequest(BaseModel):
     message: str = Field(..., max_length=10_000)
     force_role: str | None = Field(None, max_length=50)
     avatar_mode: str | None = Field(None, max_length=30)
+    employee_id: int | None = Field(None, ge=1)
 
 
 class ProposedAction(BaseModel):
@@ -149,6 +151,7 @@ _INTENT_SYSTEM = (
 async def extract_proposed_actions(
     message: str,
     organization_id: int | None = None,
+    brain_context: BrainContext | None = None,
 ) -> list[ProposedAction]:
     """
     Second cheap AI call to extract structured intent from the user message.
@@ -158,6 +161,7 @@ async def extract_proposed_actions(
         system_prompt=_INTENT_SYSTEM,
         user_message=message[:1000],  # cap to keep the call cheap
         organization_id=organization_id,
+        brain_context=brain_context,
     )
     try:
         items = json.loads(raw or "[]")
@@ -179,6 +183,7 @@ async def run_agent(
     memory_context: str = "",
     conversation_history: list[dict] | None = None,
     organization_id: int | None = None,
+    brain_context: BrainContext | None = None,
 ) -> AgentChatResponse:
     """
     Route the message to the right role and get a real AI response.
@@ -203,22 +208,27 @@ async def run_agent(
         memory_context=memory_context,
         conversation_history=conversation_history,
         organization_id=organization_id,
+        brain_context=brain_context,
     )
 
     requires_approval = any(t in request.message.lower() for t in _RISKY_TOKENS)
+
+    # Keep the main chat path single-call for latency and cost stability.
+    actions: list[ProposedAction] = []
+
     confidence = assess_agent_confidence(
         user_message=request.message,
         ai_response=response_text,
         requires_approval=requires_approval,
         memory_context=memory_context,
-        proposed_actions_count=0,
+        proposed_actions_count=len(actions),
     )
 
     return AgentChatResponse(
         role=role,
         response=response_text,
         requires_approval=requires_approval,
-        proposed_actions=[],
+        proposed_actions=actions,
         confidence_score=confidence.score,
         confidence_level=confidence.level,
         confidence_reasons=confidence.reasons,

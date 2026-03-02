@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 VALID_WEBHOOK_EVENTS: set[str] = {
+    # Dot-separated (legacy / manual dispatch)
     "approval.created",
     "approval.approved",
     "approval.rejected",
@@ -13,6 +14,38 @@ VALID_WEBHOOK_EVENTS: set[str] = {
     "coaching_report.created",
     "coaching_report.approved",
     "coaching_report.rejected",
+    # Underscore-separated (audit event bus)
+    "task_created",
+    "task_updated",
+    "task_deleted",
+    "approval_requested",
+    "approval_approved",
+    "approval_rejected",
+    "approval_executed",
+    "integration_connected",
+    "integration_disconnected",
+    "integration_tested",
+    "execution_started",
+    "execution_succeeded",
+    "execution_failed",
+    "trigger_created",
+    "trigger_updated",
+    "trigger_deleted",
+    "workflow_created",
+    "workflow_started",
+    "workflow_advanced",
+    "security_user_created",
+    "security_user_role_changed",
+    "security_user_active_toggled",
+    "security_webhook_endpoint_created",
+    "security_webhook_endpoint_updated",
+    "security_webhook_endpoint_deleted",
+    "security_webhook_dead_letter_replayed",
+    "security_mfa_enabled",
+    "security_mfa_disabled",
+    "security_organization_created",
+    "security_organization_updated",
+    "security_feature_flags_updated",
 }
 
 
@@ -68,6 +101,7 @@ class WebhookDeliveryRead(BaseModel):
     status: str
     response_status_code: int | None
     error_message: str | None
+    error_category: str | None = None
     duration_ms: int | None
     attempt_count: int
     max_retries: int = 5
@@ -80,3 +114,9 @@ class WebhookDeliveryRead(BaseModel):
 class WebhookDeliveryListResponse(BaseModel):
     count: int
     items: list[WebhookDeliveryRead]
+
+
+class WebhookReplayResponse(BaseModel):
+    ok: bool
+    replayed_delivery_id: int | None = None
+    error: str | None = None

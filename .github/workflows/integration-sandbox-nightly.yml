@@ -1,0 +1,36 @@
+name: Integration Sandbox Nightly
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  sandbox-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+      PYTHONHASHSEED: "0"
+      TZ: "UTC"
+      SANDBOX_CONTRACT_TESTS_ENABLED: "true"
+      SANDBOX_GITHUB_TOKEN: ${{ secrets.SANDBOX_GITHUB_TOKEN }}
+      SANDBOX_SLACK_BOT_TOKEN: ${{ secrets.SANDBOX_SLACK_BOT_TOKEN }}
+      SANDBOX_NOTION_TOKEN: ${{ secrets.SANDBOX_NOTION_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run sandbox contract tests
+        run: python -m pytest -q tests/test_integration_sandbox_contracts.py -p no:cacheprovider

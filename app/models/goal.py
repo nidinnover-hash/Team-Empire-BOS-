@@ -31,10 +31,15 @@ class Goal(Base):
     category: Mapped[str] = mapped_column(String(50), default="personal")
     target_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     # active | completed | paused | abandoned
-    status: Mapped[str] = mapped_column(String(50), default="active")
+    status: Mapped[str] = mapped_column(String(50), default="active", index=True)
     progress: Mapped[int] = mapped_column(Integer, default=0)  # 0-100
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 

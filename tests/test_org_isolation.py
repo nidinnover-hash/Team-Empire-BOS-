@@ -29,6 +29,48 @@ async def test_orgs_create_and_list(client):
     assert "org-two" not in slugs
 
 
+async def test_org_update_idempotency_replay(client):
+    ceo_headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
+    payload = {"branch_label": "HQ-1"}
+    headers = {**ceo_headers, "Idempotency-Key": "org-update-1"}
+    first = await client.patch("/api/v1/orgs/1", json=payload, headers=headers)
+    assert first.status_code == 200
+    second = await client.patch("/api/v1/orgs/1", json=payload, headers=headers)
+    assert second.status_code == 200
+    assert first.json()["config_version"] == second.json()["config_version"]
+
+
+async def test_org_feature_flags_concurrency_conflict(client):
+    ceo_headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
+    current = await client.get("/api/v1/orgs/1/feature-flags", headers=ceo_headers)
+    assert current.status_code == 200
+    v1 = int(current.json()["config_version"])
+
+    ok = await client.patch(
+        "/api/v1/orgs/1/feature-flags",
+        json={
+            "expected_config_version": v1,
+            "flags": {
+                "trend_snapshots_enabled": {"enabled": True, "rollout_percentage": 100},
+            },
+        },
+        headers=ceo_headers,
+    )
+    assert ok.status_code == 200
+
+    conflict = await client.patch(
+        "/api/v1/orgs/1/feature-flags",
+        json={
+            "expected_config_version": v1,
+            "flags": {
+                "trend_snapshots_enabled": {"enabled": False, "rollout_percentage": 0},
+            },
+        },
+        headers=ceo_headers,
+    )
+    assert conflict.status_code == 409
+
+
 async def test_cross_org_project_update_is_denied(client):
     ceo_org1 = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     await _create_second_org(client, ceo_org1)

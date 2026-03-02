@@ -1,0 +1,22 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Automations — Triggers & Workflows (page-specific overrides)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Card ────────────────────────────────────────────────────────────────── */
+.auto-card {
+  background: var(--surface); border-radius: var(--radius); padding: .7rem 1rem;
+  box-shadow: var(--shadow-sm); display: flex; gap: .8rem; align-items: flex-start;
+  border-left: 3px solid var(--ok, #38a169);
+}
+.auto-card.inactive { border-left-color: var(--text-faint); opacity: .7; }
+.auto-card.status-draft { border-left-color: var(--text-faint); }
+.auto-card.status-running { border-left-color: var(--brand, #3182ce); }
+.auto-card.status-completed { border-left-color: var(--ok, #38a169); }
+.auto-card.status-failed { border-left-color: var(--danger, #e53e3e); }
+.auto-card.status-paused { border-left-color: #ecc94b; }
+
+.auto-card-body { flex: 1; min-width: 0; }
+.auto-card-name { font-size: .82rem; font-weight: 600; color: var(--text); }
+.auto-card-desc { font-size: .72rem; color: var(--text-muted); margin-top: .15rem; }
+.auto-card-meta { font-size: .65rem; color: var(--text-faint); margin-top: .2rem; display: flex; gap: .8rem; flex-wrap: wrap; }
+.auto-card-actions { display: flex; gap: .4rem; flex-shrink: 0; align-items: flex-start; }

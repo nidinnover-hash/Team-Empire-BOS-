@@ -6,6 +6,67 @@ window.__bootPromise = fetch('/web/api-token')
       if (window.showToast) window.showToast(msg, type || "info");
       else window.alert(msg);
     }
+    let incidentTrendDays = 14;
+    function normalizeTrendPoints(raw) {
+      if (!Array.isArray(raw)) return [];
+      return raw.map(point => {
+        if (!point || typeof point !== 'object') return null;
+        const value = Number(point.score);
+        if (!Number.isFinite(value)) return null;
+        return { value, timestamp: point.timestamp || null };
+      }).filter(v => v !== null);
+    }
+
+    function renderTrendCard(points, options) {
+      const opts = options || {};
+      const title = opts.title || 'Trend';
+      const valueLabel = opts.valueLabel || '';
+      const lineClass = opts.lineClass || '';
+      const panel = opts.panel || '';
+      const days = Number(opts.days || 14);
+      const controls = (
+        '<span class="trend-controls">' +
+        [7, 14, 30].map(d => (
+          '<button type="button" class="trend-btn ' + (d === days ? "active" : "") + '" data-trend-panel="' + esc(panel) + '" data-trend-days="' + d + '">' + d + 'd</button>'
+        )).join('') +
+        '</span>'
+      );
+      if (!Array.isArray(points) || points.length < 2) {
+        return (
+          '<div class="mini-trend">' +
+            '<div class="mini-trend__head"><span>' + esc(title) + '</span><span>' + controls + '</span></div>' +
+            '<div class="mini-trend__subhead"><span>' + esc(valueLabel) + '</span><span>No snapshots in selected window.</span></div>' +
+            '<div class="mini-trend__empty">Wait for scheduler snapshots or refresh later.</div>' +
+          '</div>'
+        );
+      }
+      const values = points.map(p => Number(p.value || 0));
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const range = (max - min) || 1;
+      const width = 260;
+      const height = 56;
+      const step = values.length > 1 ? (width / (values.length - 1)) : width;
+      const coords = values.map((v, idx) => {
+        const x = Math.round(idx * step * 100) / 100;
+        const y = Math.round((height - ((v - min) / range) * height) * 100) / 100;
+        return x + ',' + y;
+      }).join(' ');
+      const last = points[points.length - 1];
+      const lastTs = last && last.timestamp ? new Date(last.timestamp) : null;
+      const updated = lastTs && !isNaN(lastTs.getTime())
+        ? ('Updated ' + lastTs.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }))
+        : 'Updated --';
+      return (
+        '<div class="mini-trend">' +
+          '<div class="mini-trend__head"><span>' + esc(title) + '</span><span>' + controls + '</span></div>' +
+          '<div class="mini-trend__subhead"><span>' + esc(valueLabel) + '</span><span>' + esc(updated) + '</span></div>' +
+          '<svg class="mini-trend__svg" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" role="img" aria-label="' + esc(title) + '">' +
+            '<polyline class="mini-trend__line ' + esc(lineClass) + '" points="' + coords + '"></polyline>' +
+          '</svg>' +
+        '</div>'
+      );
+    }
 
     // Tab switching
     document.querySelectorAll('.tab').forEach(tab => {
@@ -26,6 +87,43 @@ window.__bootPromise = fetch('/web/api-token')
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.detail || `Request failed (${r.status})`);
       return d;
+    }
+
+    async function loadIncidentCommandMode() {
+      try {
+        const data = await api('GET', '/api/v1/ops/incident/command-mode');
+        const trendResp = await api('GET', '/api/v1/ops/incident/command-mode/trend?limit=' + encodeURIComponent(String(incidentTrendDays)));
+        const meta = document.getElementById('incident-meta');
+        const actions = document.getElementById('incident-actions');
+        if (!meta || !actions) return;
+        const level = String(data.incident_level || 'green').toLowerCase();
+        const safeLevel = ['green', 'amber', 'red'].includes(level) ? level : 'green';
+        const trigger = data.triggers || {};
+        const score = Number(data.score || 0);
+        const trend = normalizeTrendPoints(trendResp && trendResp.points);
+        meta.innerHTML =
+          '<span class="incident-badge ' + safeLevel + '">' + esc(safeLevel) + '</span> ' +
+          'Score ' + esc(String(score)) +
+          ' | approvals ' + esc(String(trigger.pending_approvals || 0)) +
+          ' | violations ' + esc(String(trigger.open_governance_violations || 0)) +
+          ' | critical tokens ' + esc(String(trigger.critical_tokens || 0));
+        const topActions = Array.isArray(data.top_actions) ? data.top_actions : [];
+        const trendTone = safeLevel === 'red' ? 'danger' : (safeLevel === 'amber' ? 'warn' : 'ok');
+        actions.innerHTML =
+          renderTrendCard(trend, {
+            title: 'Incident Score Trend (Org Shared)',
+            valueLabel: 'Now ' + Math.round(score),
+            lineClass: trendTone,
+            panel: 'incident',
+            days: incidentTrendDays
+          }) +
+          (topActions.length
+            ? topActions.slice(0, 5).map(a => '<div class="incident-action">' + esc(a) + '</div>').join('')
+            : '<div class="incident-action">No active incident actions.</div>');
+      } catch (e) {
+        const meta = document.getElementById('incident-meta');
+        if (meta) meta.textContent = 'Failed to load incident command status.';
+      }
     }
 
     async function loadEmployees() {
@@ -239,7 +337,7 @@ window.__bootPromise = fetch('/web/api-token')
     async function boot() {
       TOKEN = await window.__bootPromise;
       try {
-        await Promise.all([loadEmployees(), loadDecisions(), loadPolicies()]);
+        await Promise.all([loadEmployees(), loadDecisions(), loadPolicies(), loadIncidentCommandMode()]);
         document.getElementById('loading').style.display = 'none';
         document.getElementById('content').style.display = 'block';
       } catch(e) {
@@ -247,6 +345,32 @@ window.__bootPromise = fetch('/web/api-token')
       }
     }
     boot();
+
+    const refreshIncidentBtn = document.getElementById('btn-refresh-incident');
+    if (refreshIncidentBtn) {
+      refreshIncidentBtn.addEventListener('click', async () => {
+        refreshIncidentBtn.disabled = true;
+        try {
+          await loadIncidentCommandMode();
+          notify('Incident status refreshed.', 'success');
+        } catch (_e) {
+          notify('Failed to refresh incident status.', 'error');
+        } finally {
+          refreshIncidentBtn.disabled = false;
+        }
+      });
+    }
+    const incidentStrip = document.getElementById('incident-strip');
+    if (incidentStrip) {
+      incidentStrip.addEventListener('click', e => {
+        const btn = e.target.closest("[data-trend-panel='incident'][data-trend-days]");
+        if (!btn) return;
+        const nextDays = Number(btn.getAttribute("data-trend-days"));
+        if (!Number.isFinite(nextDays) || nextDays <= 0 || nextDays === incidentTrendDays) return;
+        incidentTrendDays = nextDays;
+        loadIncidentCommandMode().catch(() => {});
+      });
+    }
 
     // Logout
     const logoutBtn = document.getElementById('logout-btn');

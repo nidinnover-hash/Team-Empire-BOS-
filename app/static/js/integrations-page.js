@@ -3,6 +3,9 @@
   var integrations = [];
   var gmailHealth = null;
   var integrationHealth = null;
+  var securityCenter = null;
+  var securityCenterTrend = [];
+  var securityTrendDays = 14;
   var autoRefreshTimer = null;
   var autoRefreshEnabled = false;
   var AUTO_REFRESH_MS = 60000;
@@ -122,6 +125,7 @@
   async function refreshIntegrationPanels() {
     await fetchIntegrations();
     await fetchIntegrationHealth();
+    await fetchSecurityCenter();
     await fetchGmailHealth();
     setLastUpdatedNow();
   }
@@ -291,6 +295,118 @@
       (topItems ? ('<ul class="integration-health-summary__top">' + topItems + '</ul>') : "") +
       actionHtml
     );
+  }
+  function renderSecurityCenterSummary() {
+    var host = byId("security-center-summary");
+    if (!host) return;
+    if (!securityCenter) {
+      host.innerHTML = (
+        '<div class="integration-health-summary__title">Security Center</div>' +
+        '<div class="small">Token security diagnostics are temporarily unavailable.</div>'
+      );
+      return;
+    }
+    var summary = securityCenter.summary || {};
+    var level = String(securityCenter.risk_level || "low").toLowerCase();
+    if (["low", "medium", "high"].indexOf(level) === -1) level = "low";
+    var actions = Array.isArray(securityCenter.next_actions) ? securityCenter.next_actions : [];
+    var riskBase = level === "high" ? 70 : (level === "medium" ? 40 : 15);
+    var riskScore = Math.min(
+      100,
+      riskBase +
+      Number(summary.rotation_overdue || 0) * 6 +
+      Number(summary.rotation_due_soon || 0) * 2 +
+      Number(summary.manual_required || 0) * 8
+    );
+    var trend = Array.isArray(securityCenterTrend) ? securityCenterTrend : [];
+    host.innerHTML = (
+      '<div class="integration-health-summary__title">Security Center</div>' +
+      '<div style="margin-bottom:.35rem">' +
+        '<span class="risk-pill ' + level + '">' + esc(level) + ' risk</span>' +
+        '<span class="small">Overdue: ' + esc(String(summary.rotation_overdue || 0)) + ' | ' +
+        'Due soon: ' + esc(String(summary.rotation_due_soon || 0)) + ' | ' +
+        'Manual OAuth fix: ' + esc(String(summary.manual_required || 0)) + '</span>' +
+      '</div>' +
+      renderTrendCard(trend, {
+        title: "Risk Trend (Org Shared)",
+        valueLabel: "Score " + String(Math.round(riskScore)),
+        lineClass: level === "high" ? "danger" : (level === "medium" ? "warn" : "ok"),
+        panel: "security",
+        days: securityTrendDays
+      }) +
+      (actions.length
+        ? ('<ul class="integration-health-summary__actions">' + actions.slice(0, 3).map(function(a){ return '<li>' + esc(a) + '</li>'; }).join("") + '</ul>')
+        : '<div class="small">No urgent token actions required.</div>')
+    );
+  }
+  function normalizeTrendPoints(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw.map(function(point) {
+      if (!point || typeof point !== "object") return null;
+      var v = Number(point.risk_score);
+      if (!isFinite(v)) return null;
+      return { value: v, timestamp: point.timestamp || null };
+    }).filter(function(v) { return v !== null; });
+  }
+  function renderTrendCard(points, opts) {
+    var title = (opts && opts.title) || "Trend";
+    var valueLabel = (opts && opts.valueLabel) || "";
+    var lineClass = (opts && opts.lineClass) || "";
+    var panel = (opts && opts.panel) || "";
+    var days = Number((opts && opts.days) || 14);
+    var controls = (
+      '<span class="trend-controls">' +
+      [7, 14, 30].map(function(d) {
+        return '<button type="button" class="trend-btn ' + (d === days ? "active" : "") + '" data-trend-panel="' + esc(panel) + '" data-trend-days="' + d + '">' + d + "d</button>";
+      }).join("") +
+      '</span>'
+    );
+    if (!Array.isArray(points) || points.length < 2) {
+      return (
+        '<div class="mini-trend">' +
+          '<div class="mini-trend__head"><span>' + esc(title) + '</span><span>' + controls + "</span></div>" +
+          '<div class="mini-trend__subhead"><span>' + esc(valueLabel) + '</span><span>No snapshots in selected window.</span></div>' +
+          '<div class="mini-trend__empty">Wait for scheduler snapshots or refresh later.</div>' +
+        '</div>'
+      );
+    }
+    var values = points.map(function(p) { return Number(p.value || 0); });
+    var min = Math.min.apply(null, values);
+    var max = Math.max.apply(null, values);
+    var range = (max - min) || 1;
+    var w = 260;
+    var h = 56;
+    var step = values.length > 1 ? (w / (values.length - 1)) : w;
+    var coords = values.map(function(v, idx) {
+      var x = Math.round(idx * step * 100) / 100;
+      var y = Math.round((h - ((v - min) / range) * h) * 100) / 100;
+      return x + "," + y;
+    }).join(" ");
+    var lastPoint = points[points.length - 1] || {};
+    var lastTs = lastPoint.timestamp ? new Date(lastPoint.timestamp) : null;
+    var lastLabel = lastTs && !isNaN(lastTs.getTime())
+      ? ("Updated " + lastTs.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }))
+      : "Updated --";
+    return (
+      '<div class="mini-trend">' +
+        '<div class="mini-trend__head"><span>' + esc(title) + '</span><span>' + controls + "</span></div>" +
+        '<div class="mini-trend__subhead"><span>' + esc(valueLabel) + '</span><span>' + esc(lastLabel) + '</span></div>' +
+        '<svg class="mini-trend__svg" viewBox="0 0 ' + w + " " + h + '" preserveAspectRatio="none" role="img" aria-label="' + esc(title) + '">' +
+          '<polyline class="mini-trend__line ' + esc(lineClass) + '" points="' + coords + '"></polyline>' +
+        '</svg>' +
+      '</div>'
+    );
+  }
+  async function fetchSecurityCenter() {
+    try {
+      securityCenter = await apiJson("/api/v1/integrations/security-center");
+      var trendBody = await apiJson("/api/v1/integrations/security-center/trend?limit=" + encodeURIComponent(String(securityTrendDays)));
+      securityCenterTrend = normalizeTrendPoints(trendBody && trendBody.points);
+    } catch (_err) {
+      securityCenter = null;
+      securityCenterTrend = [];
+    }
+    renderSecurityCenterSummary();
   }
   async function fetchIntegrationHealth() {
     try {
@@ -945,6 +1061,17 @@
   bindClick("refresh-integrations-btn", async function() {
     await refreshIntegrationPanels();
   });
+  var securityHost = byId("security-center-summary");
+  if (securityHost) {
+    securityHost.addEventListener("click", function(e) {
+      var btn = e.target.closest("[data-trend-panel='security'][data-trend-days]");
+      if (!btn) return;
+      var nextDays = Number(btn.getAttribute("data-trend-days"));
+      if (!Number.isFinite(nextDays) || nextDays <= 0 || nextDays === securityTrendDays) return;
+      securityTrendDays = nextDays;
+      fetchSecurityCenter().catch(function() {});
+    });
+  }
   var autoRefreshToggle = byId("auto-refresh-toggle");
   if (autoRefreshToggle) {
     autoRefreshToggle.addEventListener("change", function() {

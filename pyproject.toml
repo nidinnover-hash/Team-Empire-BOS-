@@ -1,5 +1,5 @@
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 extend-exclude = [".venv", "alembic/versions"]
 
@@ -27,7 +27,7 @@ ignore = [
 known-first-party = ["app", "tests"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 pretty = true
 show_error_codes = true
 warn_return_any = true
@@ -72,6 +72,17 @@ module = [
   "app.services.policy_service",
   "app.services.report_service",
   "app.services.signal_ingestion",
+]
+disallow_untyped_defs = true
+disallow_any_generics = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = [
+  "app.core.security",
+  "app.core.idempotency",
+  "app.core.deps",
+  "app.core.rbac",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true

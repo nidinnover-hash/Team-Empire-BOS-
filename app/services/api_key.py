@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -12,6 +13,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.api_key import ApiKey
 
 _PREFIX = "nbos_"
+_RESOURCE_SCOPE_RE = re.compile(r"^[a-z0-9_]+:(read|write|\*)$")
+
+
+def _normalize_scopes(scopes: str) -> str:
+    parts = [part.strip().lower() for part in scopes.split(",") if part.strip()]
+    if not parts:
+        raise ValueError("At least one scope is required")
+    allowed = {"*", "read", "write"}
+    for part in parts:
+        if part in allowed:
+            continue
+        normalized = part.replace("-", "_")
+        if not _RESOURCE_SCOPE_RE.match(normalized):
+            raise ValueError(f"Unknown scope: {part}")
+    if "*" in parts and len(parts) > 1:
+        raise ValueError("'*' scope cannot be combined with other scopes")
+    normalized_parts = [part.replace("-", "_") for part in parts]
+    return ",".join(dict.fromkeys(normalized_parts))
 
 
 def _generate_key() -> tuple[str, str, str]:
@@ -29,10 +48,11 @@ async def create_api_key(
     organization_id: int,
     user_id: int,
     name: str,
-    scopes: str = "*",
+    scopes: str = "read,write",
     expires_in_days: int | None = None,
 ) -> tuple[ApiKey, str]:
     """Create a new API key. Returns (ApiKey, full_key_plaintext)."""
+    scopes = _normalize_scopes(scopes)
     full_key, prefix, key_hash = _generate_key()
     expires_at = (
         datetime.now(UTC) + timedelta(days=expires_in_days)

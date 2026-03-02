@@ -54,7 +54,7 @@ async def notion_sync(
     try:
         result = await notion_service.sync_pages_to_notes(db, org_id=int(actor["org_id"]))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail="Notion sync configuration error") from exc
     except (httpx.HTTPError, RuntimeError, TypeError, TimeoutError, ConnectionError, OSError) as exc:
         raise HTTPException(status_code=502, detail="Notion sync failed due to upstream error. Retry shortly.") from exc
     normalized = normalize_sync_result(

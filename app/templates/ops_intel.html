@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <title>Ops Intelligence — Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/ops_intel.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
   
@@ -21,6 +22,16 @@
     <h1>Operations Intelligence</h1>
     <div id="loading">Loading ops data...</div>
     <div id="content" style="display:none">
+      <div class="incident-strip" id="incident-strip">
+        <div class="incident-head">
+          <div>
+            <div class="incident-title">Incident Command Mode</div>
+            <div class="incident-meta" id="incident-meta">Loading incident status...</div>
+          </div>
+          <button class="btn" id="btn-refresh-incident">Refresh</button>
+        </div>
+        <div class="incident-actions" id="incident-actions"></div>
+      </div>
 
       <div class="kpi-row">
         <div class="kpi"><div class="label">Employees</div><div class="val" id="k-emp">0</div><div class="sub">mapped</div></div>
@@ -172,4 +183,3 @@
 <script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
 </body>
 </html>
-

@@ -6,7 +6,6 @@ Route modules:
   - Web pages (dashboard, talk): app.web.pages
   - Web chat (agent, history): app.web.chat
 """
-# ruff: noqa: E402
 
 import asyncio
 import hashlib
@@ -21,10 +20,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, ORJSONResponse
+from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from alembic.config import Config as AlembicConfig
+from alembic.script import ScriptDirectory
 from app.api.v1.router import api_router
 from app.core.config import format_startup_issues, settings, validate_startup_settings
 from app.core.contracts import error_envelope
@@ -39,6 +41,7 @@ from app.core.middleware import (
 )
 from app.db.base import Base
 from app.db.session import engine
+from app.models.registry import load_all_models
 from app.schemas.auth import TokenResponse, UserMeRead
 from app.services import organization as organization_service
 from app.services import user as user_service
@@ -56,50 +59,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Register every model with Base.metadata so create_all sees them
 # ---------------------------------------------------------------------------
-from app.models import ai_call_log as _model_ai_call_log  # noqa: F401
-from app.models import approval as _model_approval  # noqa: F401
-from app.models import approval_pattern as _model_approval_pattern  # noqa: F401
-from app.models import autonomy_policy as _model_autonomy_policy  # noqa: F401
-from app.models import ceo_control as _model_ceo_control  # noqa: F401
-from app.models import chat_message as _model_chat_message  # noqa: F401
-from app.models import clone_control as _model_clone_control  # noqa: F401
-from app.models import clone_performance as _model_clone_performance  # noqa: F401
-from app.models import clone_persona as _model_clone_persona  # noqa: F401
-from app.models import coaching_report as _model_coaching_report  # noqa: F401
-from app.models import command as _model_command  # noqa: F401
-from app.models import contact as _model_contact  # noqa: F401
-from app.models import conversation as _model_conversation  # noqa: F401
-from app.models import daily_plan as _model_daily_plan  # noqa: F401
-from app.models import daily_run as _model_daily_run  # noqa: F401
-from app.models import decision_log as _model_decision_log  # noqa: F401
-from app.models import decision_trace as _model_decision_trace  # noqa: F401
-from app.models import email as _model_email  # noqa: F401
-from app.models import employee as _model_employee  # noqa: F401
-from app.models import event as _model_event  # noqa: F401
-from app.models import execution as _model_execution  # noqa: F401
-from app.models import finance as _model_finance  # noqa: F401
-from app.models import github as _model_github  # noqa: F401
-from app.models import goal as _model_goal  # noqa: F401
-from app.models import integration as _model_integration  # noqa: F401
-from app.models import integration_signal as _model_integration_signal  # noqa: F401
-from app.models import invite_token as _model_invite_token  # noqa: F401
-from app.models import media_project as _model_media_project  # noqa: F401
-from app.models import memory as _model_memory  # noqa: F401
-from app.models import note as _model_note  # noqa: F401
-from app.models import notification as _model_notification  # noqa: F401
-from app.models import ops_metrics as _model_ops_metrics  # noqa: F401
-from app.models import org_membership as _model_org_membership  # noqa: F401
-from app.models import organization as _model_organization  # noqa: F401
-from app.models import policy_rule as _model_policy_rule  # noqa: F401
-from app.models import project as _model_project  # noqa: F401
-from app.models import self_learning_run as _model_self_learning_run  # noqa: F401
-from app.models import social as _model_social  # noqa: F401
-from app.models import task as _model_task  # noqa: F401
-from app.models import threat_signal as _model_threat_signal  # noqa: F401
-from app.models import user as _model_user  # noqa: F401
-from app.models import webhook as _model_webhook  # noqa: F401
-from app.models import weekly_report as _model_weekly_report  # noqa: F401
-from app.models import whatsapp_message as _model_whatsapp_message  # noqa: F401
+load_all_models()
 
 # ---------------------------------------------------------------------------
 # Startup safety guards
@@ -163,6 +123,37 @@ _verify_static_asset_integrity(
 _server_start_time: float | None = None
 
 
+def _expected_alembic_heads() -> set[str]:
+    cfg = AlembicConfig(str(_APP_DIR.parent / "alembic.ini"))
+    script = ScriptDirectory.from_config(cfg)
+    return {str(head) for head in script.get_heads() if head}
+
+
+async def _current_db_heads() -> set[str]:
+    from sqlalchemy import inspect, text
+
+    def _read_heads(sync_conn) -> set[str]:
+        inspector = inspect(sync_conn)
+        if "alembic_version" not in inspector.get_table_names():
+            return set()
+        rows = sync_conn.execute(text("SELECT version_num FROM alembic_version")).fetchall()
+        return {str(row[0]) for row in rows if row and row[0]}
+
+    async with engine.connect() as conn:
+        return await conn.run_sync(_read_heads)
+
+
+async def _enforce_schema_head() -> None:
+    expected = _expected_alembic_heads()
+    current = await _current_db_heads()
+    if current != expected:
+        raise RuntimeError(
+            "Database schema is not at migration head. "
+            f"Current heads={sorted(current)}, expected={sorted(expected)}. "
+            "Run `alembic upgrade head` before starting the app."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.core.logging_config import configure_logging
@@ -176,6 +167,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from sqlalchemy import text
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
+    if settings.DB_SCHEMA_ENFORCE_HEAD and not settings.DEBUG:
+        await _enforce_schema_head()
 
     if settings.AUTO_CREATE_SCHEMA:
         async with engine.begin() as conn:
@@ -185,10 +178,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             org = await organization_service.ensure_default_organization(db)
             await user_service.ensure_default_user(db, organization_id=org.id)
 
-    # Warn if session cookies are not secure (acceptable in dev, dangerous in prod)
+    # Fail fast when secure cookies are disabled outside debug mode.
     if not settings.COOKIE_SECURE and not settings.DEBUG:
-        logger.warning(
-            "COOKIE_SECURE=false in non-debug mode. Session cookies will be sent over HTTP. "
+        raise RuntimeError(
+            "COOKIE_SECURE=false in non-debug mode is not allowed. "
             "Set COOKIE_SECURE=true when running behind HTTPS."
         )
 
@@ -244,10 +237,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # ---------------------------------------------------------------------------
 # App creation and middleware
 # ---------------------------------------------------------------------------
+def _stable_operation_id(route: APIRoute) -> str:
+    method = sorted(route.methods or {"GET"})[0].lower()
+    normalized_path = (
+        route.path_format.strip("/")
+        .replace("/", "_")
+        .replace("{", "")
+        .replace("}", "")
+        .replace("-", "_")
+    )
+    if not normalized_path:
+        normalized_path = "root"
+    return f"{method}_{normalized_path}"
+
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     lifespan=lifespan,
+    generate_unique_id_function=_stable_operation_id,
     default_response_class=ORJSONResponse,
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,

@@ -7,6 +7,11 @@ jobs:
   readiness:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+      PYTHONHASHSEED: "0"
+      TZ: "UTC"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -14,7 +19,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
@@ -23,6 +28,9 @@ jobs:
 
       - name: Check migration heads
         run: python scripts/check_migration_heads.py
+
+      - name: Endpoint size guard
+        run: python scripts/check_endpoint_file_sizes.py
 
       - name: Production config smoke
         env:
@@ -35,7 +43,7 @@ jobs:
           ADMIN_EMAIL: "owner@example.com"
           ADMIN_PASSWORD: "StrongPassword123!"
           TOKEN_ENCRYPTION_KEY: "abcdef0123456789abcdef0123456789"
-          OPENAI_API_KEY: "sk-live-valid-key-value"
+          OPENAI_API_KEY: "openai-ci-only-not-a-real-key"
           DEFAULT_AI_PROVIDER: "openai"
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/nidin_bos
           PURPOSE_PERSONAL_EMAILS: "nidinnover@gmail.com"
@@ -52,7 +60,7 @@ jobs:
           ADMIN_EMAIL: "owner@example.com"
           ADMIN_PASSWORD: "StrongPassword123!"
           TOKEN_ENCRYPTION_KEY: "abcdef0123456789abcdef0123456789"
-          OPENAI_API_KEY: "sk-live-valid-key-value"
+          OPENAI_API_KEY: "openai-ci-only-not-a-real-key"
           DEFAULT_AI_PROVIDER: "openai"
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/nidin_bos
           PURPOSE_PERSONAL_EMAILS: "nidinnover@gmail.com"

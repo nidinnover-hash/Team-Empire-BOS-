@@ -30,6 +30,26 @@ class DailyRunResponse(BaseModel):
     confidence_reasoning: list[str] | None = None
 
 
+class IncidentCommandRead(BaseModel):
+    generated_at: datetime
+    incident_level: Literal["green", "amber", "red"]
+    score: int
+    triggers: dict[str, int]
+    top_actions: list[str]
+    status: str
+
+
+class IncidentCommandTrendPointRead(BaseModel):
+    timestamp: datetime
+    score: int
+    incident_level: Literal["green", "amber", "red"]
+
+
+class IncidentCommandTrendRead(BaseModel):
+    points: list[IncidentCommandTrendPointRead]
+    next_cursor: str | None = None
+
+
 # ---- Weekly Metrics Response ----
 
 class WeeklyMetricsResponse(BaseModel):
@@ -62,8 +82,10 @@ class EmployeeCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     role: str | None = Field(None, max_length=100)
     email: str = Field(..., min_length=3, max_length=320)
+    department_id: int | None = None
     github_username: str | None = Field(None, max_length=100)
     clickup_user_id: str | None = Field(None, max_length=100)
+    employment_status: str = Field("active", max_length=20)
     is_active: bool = True
 
 
@@ -71,19 +93,23 @@ class EmployeeUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
     role: str | None = Field(None, max_length=100)
     email: str | None = Field(None, min_length=3, max_length=320)
+    department_id: int | None = None
     github_username: str | None = None
     clickup_user_id: str | None = None
+    employment_status: str | None = Field(None, max_length=20)
     is_active: bool | None = None
 
 
 class EmployeeRead(BaseModel):
     id: int
     organization_id: int
+    department_id: int | None = None
     name: str
     role: str | None
     email: str
     github_username: str | None
     clickup_user_id: str | None
+    employment_status: str = "active"
     is_active: bool
     created_at: datetime
     updated_at: datetime

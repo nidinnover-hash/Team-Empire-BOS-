@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <title>AI Agent Factory — Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/dashboard.css" />
   
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
@@ -19,11 +20,11 @@
 {% include "partials/sidebar.html" %}
 
 <div class="stats">
-  <div class="stat"><span>Commands</span><strong>{{ commands|length }}</strong></div>
-  <div class="stat"><span>Open Tasks</span><strong>{{ tasks|length }}</strong></div>
-  <div class="stat"><span>Projects</span><strong>{{ projects|length }}</strong></div>
-  <div class="stat"><span>Goals</span><strong>{{ goals|length }}</strong></div>
-  <div class="stat"><span>Contacts</span><strong>{{ contacts|length }}</strong></div>
+  <div class="stat"><span>Commands</span><strong data-kpi="commands">{{ commands|length }}</strong></div>
+  <div class="stat"><span>Open Tasks</span><strong data-kpi="tasks_pending">{{ tasks|length }}</strong></div>
+  <div class="stat"><span>Projects</span><strong data-kpi="projects">{{ projects|length }}</strong></div>
+  <div class="stat"><span>Goals</span><strong data-kpi="goals">{{ goals|length }}</strong></div>
+  <div class="stat"><span>Contacts</span><strong data-kpi="contacts">{{ contacts|length }}</strong></div>
   <div class="stat">
     <span>Balance</span>
     <strong class="{% if finance.balance >= 0 %}balance-pos{% else %}balance-neg{% endif %}">

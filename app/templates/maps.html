@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Maps &amp; Location Tracking — Nidin BOS" />
+  <meta name="theme-color" content="#f5f5f7" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Maps — Nidin BOS</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
+  <link rel="stylesheet" href="/static/css/maps.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin="" />
+  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+</head>
+<body>
+{% set active_page = "maps" %}
+{% include "partials/sidebar.html" %}
+
+<div class="main-wrap">
+  <div class="page-head">
+    <h1>Maps &amp; Location Tracking</h1>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="label">Tracked Users</div><div class="val" id="k-tracked">0</div></div>
+    <div class="kpi"><div class="label">Active Now</div><div class="val" id="k-active">0</div></div>
+    <div class="kpi"><div class="label">Check-ins Today</div><div class="val" id="k-checkins">0</div></div>
+    <div class="kpi"><div class="label">Avg Accuracy</div><div class="val" id="k-accuracy">—</div></div>
+  </div>
+
+  <div class="tab-bar" role="tablist" aria-label="Map sections">
+    <button class="tab active" data-tab="live-map" role="tab" aria-selected="true" type="button">Live Map</button>
+    <button class="tab" data-tab="checkins" role="tab" aria-selected="false" type="button">Check-ins</button>
+    <button class="tab" data-tab="history" role="tab" aria-selected="false" type="button">History</button>
+    <button class="tab" data-tab="settings" role="tab" aria-selected="false" type="button">Settings</button>
+  </div>
+
+  <!-- Live Map -->
+  <div class="tab-panel active" id="panel-live-map" role="tabpanel">
+    <div class="card">
+      <div class="card-head">
+        <span>Employee Locations</span>
+        <div class="card-actions">
+          <button class="btn sm" id="refresh-map-btn" type="button" aria-label="Refresh map locations">Refresh</button>
+          <button class="btn sm primary" id="start-tracking-btn" type="button" aria-label="Start GPS tracking">Start GPS</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="map-container"></div>
+        <div id="map-loading" class="loading" style="display:none">Loading map data...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Check-ins -->
+  <div class="tab-panel" id="panel-checkins" role="tabpanel">
+    <div class="card">
+      <div class="card-head">
+        <span>Manual Check-in</span>
+      </div>
+      <div class="card-body">
+        <div class="checkin-form">
+          <div class="row">
+            <div>
+              <label class="label" for="checkin-type">Type</label>
+              <select id="checkin-type" class="select">
+                <option value="arrival">Arrival</option>
+                <option value="departure">Departure</option>
+                <option value="meeting">Meeting</option>
+                <option value="site_visit">Site Visit</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label class="label" for="checkin-place">Place Name</label>
+              <input id="checkin-place" class="input" placeholder="Office, Client Site..." />
+            </div>
+          </div>
+          <div>
+            <label class="label" for="checkin-notes">Notes</label>
+            <input id="checkin-notes" class="input" placeholder="Optional notes..." />
+          </div>
+          <div class="actions">
+            <button class="btn primary" id="checkin-btn" type="button">Check In (use GPS)</button>
+          </div>
+          <div id="checkin-status" class="status"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span>Recent Check-ins</span></div>
+      <div class="card-body" style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Type</th>
+              <th>Place</th>
+              <th>Notes</th>
+              <th>Time</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="checkins-body">
+            <tr><td colspan="6" class="empty loading">Loading check-ins...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="tab-panel" id="panel-history" role="tabpanel">
+    <div class="card">
+      <div class="card-head"><span>Location History</span></div>
+      <div class="card-body">
+        <div class="filter-row">
+          <div>
+            <label class="label" for="hist-employee">Employee ID</label>
+            <input id="hist-employee" class="input" type="number" placeholder="All" />
+          </div>
+          <div>
+            <label class="label" for="hist-source">Source</label>
+            <select id="hist-source" class="select">
+              <option value="">All</option>
+              <option value="gps">GPS</option>
+              <option value="ip_geolocation">IP Geolocation</option>
+              <option value="manual_checkin">Manual Check-in</option>
+              <option value="google_maps">Google Maps</option>
+            </select>
+          </div>
+          <div>
+            <label class="label" for="hist-from">From</label>
+            <input id="hist-from" class="input" type="date" />
+          </div>
+          <div>
+            <label class="label" for="hist-to">To</label>
+            <input id="hist-to" class="input" type="date" />
+          </div>
+          <div style="align-self:end">
+            <button class="btn" id="hist-search-btn" type="button">Search</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;margin-top:.75rem">
+          <table>
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>Latitude</th>
+                <th>Longitude</th>
+                <th>Source</th>
+                <th>Accuracy</th>
+                <th>Address</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody id="history-body">
+              <tr><td colspan="7" class="empty loading">Loading history...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <button class="btn sm" id="hist-prev-btn" type="button" disabled>Prev</button>
+          <span id="hist-page-info">Page 1</span>
+          <button class="btn sm" id="hist-next-btn" type="button">Next</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="tab-panel" id="panel-settings" role="tabpanel">
+    <div class="card">
+      <div class="card-head"><span>My Location Consent</span></div>
+      <div class="card-body">
+        <p class="hint">Control whether your location is tracked and visible to managers.</p>
+        <div class="consent-toggle">
+          <label class="toggle-label">
+            <input type="checkbox" id="consent-toggle" />
+            <span>Allow location tracking</span>
+          </label>
+          <div id="consent-status" class="status"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span>All Employee Consent Status</span></div>
+      <div class="card-body" style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Employee ID</th>
+              <th>Name</th>
+              <th>Consent</th>
+            </tr>
+          </thead>
+          <tbody id="consent-body">
+            <tr><td colspan="3" class="empty loading">Loading consent data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/maps-page.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
+</body>
+</html>

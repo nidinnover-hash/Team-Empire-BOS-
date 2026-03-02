@@ -1,6 +1,6 @@
 ﻿from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -10,6 +10,12 @@ class Contact(Base):
     """A person in your network - personal or business."""
 
     __tablename__ = "contacts"
+    __table_args__ = (
+        CheckConstraint(
+            "relationship IN ('personal', 'business', 'family', 'mentor', 'other')",
+            name="ck_contact_relationship",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     organization_id: Mapped[int] = mapped_column(
@@ -30,5 +36,10 @@ class Contact(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 

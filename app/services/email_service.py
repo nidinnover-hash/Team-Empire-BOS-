@@ -20,8 +20,10 @@ from app.logs.audit import record_action
 from app.models.approval import Approval
 from app.models.email import Email
 from app.schemas.approval import ApprovalRequestCreate
+from app.schemas.brain_context import BrainContext
 from app.services.ai_router import call_ai
 from app.services.approval import request_approval
+from app.services.context_builder import build_brain_context
 from app.services.integration import connect_integration, get_integration_by_type, mark_sync_time
 from app.tools import gmail as gmail_tool
 
@@ -107,6 +109,21 @@ def _build_fallback_reply(subject: str | None, instruction: str) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+async def _build_email_brain_context(
+    db: AsyncSession,
+    *,
+    org_id: int,
+    actor_user_id: int,
+) -> BrainContext:
+    return await build_brain_context(
+        db,
+        organization_id=org_id,
+        actor_user_id=actor_user_id,
+        actor_role=None,
+        request_purpose="professional",
+    )
 
 
 async def _persist_refreshed_tokens(
@@ -366,6 +383,11 @@ async def summarize_email(
     email = await get_email(db, email_id, org_id)
     if not email or not email.body_text:
         return None
+    brain_context = await _build_email_brain_context(
+        db,
+        org_id=org_id,
+        actor_user_id=actor_user_id,
+    )
 
     summary = await call_ai(
         system_prompt=(
@@ -379,6 +401,7 @@ async def summarize_email(
         ),
         provider=settings.EMAIL_AI_PROVIDER or settings.DEFAULT_AI_PROVIDER,
         organization_id=org_id,
+        brain_context=brain_context,
     )
 
     email.ai_summary = summary
@@ -446,6 +469,11 @@ async def draft_reply(
     )
     if instruction:
         user_prompt += f"\n\nInstruction for reply: {instruction}"
+    brain_context = await _build_email_brain_context(
+        db,
+        org_id=org_id,
+        actor_user_id=actor_user_id,
+    )
 
     draft = await call_ai(
         system_prompt=(
@@ -457,6 +485,7 @@ async def draft_reply(
         provider=settings.EMAIL_AI_PROVIDER or settings.DEFAULT_AI_PROVIDER,
         max_tokens=600,
         organization_id=org_id,
+        brain_context=brain_context,
     )
 
     # Degrade gracefully during provider outage/rate-limit by creating a
@@ -542,6 +571,11 @@ async def strategize_email(
         raise ValueError("Email not found")
     if not email.body_text:
         raise ValueError("Email has no body to analyze")
+    brain_context = await _build_email_brain_context(
+        db,
+        org_id=org_id,
+        actor_user_id=actor_user_id,
+    )
 
     analysis = await call_ai(
         system_prompt=(
@@ -561,6 +595,7 @@ async def strategize_email(
         provider=settings.EMAIL_AI_PROVIDER or settings.DEFAULT_AI_PROVIDER,
         max_tokens=700,
         organization_id=org_id,
+        brain_context=brain_context,
     )
 
     if _is_ai_error(analysis):
@@ -593,6 +628,11 @@ async def compose_email(
     Creates a Gmail draft + approval request. Nothing sends without approval.
     Returns the draft text, or None on failure.
     """
+    brain_context = await _build_email_brain_context(
+        db,
+        org_id=org_id,
+        actor_user_id=actor_user_id,
+    )
     draft = await call_ai(
         system_prompt=(
             "You are Nidin's email assistant. Write a complete, professional email from Nidin. "
@@ -607,6 +647,7 @@ async def compose_email(
         provider=settings.EMAIL_AI_PROVIDER or settings.DEFAULT_AI_PROVIDER,
         max_tokens=600,
         organization_id=org_id,
+        brain_context=brain_context,
     )
 
     if _is_ai_error(draft):
@@ -631,7 +672,7 @@ async def compose_email(
                 timeout=_GMAIL_THREAD_TIMEOUT,
             )
         except (RuntimeError, ValueError, TypeError, TimeoutError) as exc:
-            logger.warning("Gmail draft creation failed for compose to %s: %s", to, type(exc).__name__)
+            logger.warning("Gmail draft creation failed for compose: %s", type(exc).__name__)
 
     # Require approval before anything can be sent
     approval = await request_approval(

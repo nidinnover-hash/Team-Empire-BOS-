@@ -29,10 +29,115 @@
     if (button.dataset.baseText) button.textContent = button.dataset.baseText;
   }
 
+  function _ensureDialogRoot() {
+    var existing = document.getElementById("pcui-dialog-root");
+    if (existing) return existing;
+    var root = document.createElement("div");
+    root.id = "pcui-dialog-root";
+    root.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.46);z-index:12000;display:none;align-items:center;justify-content:center;padding:16px;";
+    root.innerHTML =
+      '<div role="dialog" aria-modal="true" style="width:100%;max-width:420px;background:#fff;color:#1f2937;border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.35);padding:16px;">' +
+      '<h3 id="pcui-dialog-title" style="margin:0 0 8px;font-size:16px;font-weight:700;"></h3>' +
+      '<p id="pcui-dialog-message" style="margin:0 0 12px;font-size:13px;line-height:1.45;color:#4b5563;white-space:pre-wrap;"></p>' +
+      '<div id="pcui-dialog-input-wrap" style="display:none;margin-bottom:12px;">' +
+      '<input id="pcui-dialog-input" type="text" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;" />' +
+      "</div>" +
+      '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
+      '<button id="pcui-dialog-cancel" type="button" style="border:1px solid #d1d5db;background:#fff;color:#374151;border-radius:8px;padding:8px 12px;cursor:pointer;">Cancel</button>' +
+      '<button id="pcui-dialog-ok" type="button" style="border:none;background:#2563eb;color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer;">OK</button>' +
+      "</div>" +
+      "</div>";
+    document.body.appendChild(root);
+    return root;
+  }
+
+  function _runDialog(options) {
+    return new Promise(function (resolve) {
+      var root = _ensureDialogRoot();
+      var titleEl = document.getElementById("pcui-dialog-title");
+      var msgEl = document.getElementById("pcui-dialog-message");
+      var inputWrap = document.getElementById("pcui-dialog-input-wrap");
+      var inputEl = document.getElementById("pcui-dialog-input");
+      var okBtn = document.getElementById("pcui-dialog-ok");
+      var cancelBtn = document.getElementById("pcui-dialog-cancel");
+
+      titleEl.textContent = options.title || "Confirm";
+      msgEl.textContent = options.message || "";
+      okBtn.textContent = options.okLabel || "OK";
+      cancelBtn.textContent = options.cancelLabel || "Cancel";
+      cancelBtn.style.display = options.cancelLabel === "" ? "none" : "";
+
+      var expectInput = options.mode === "prompt";
+      inputWrap.style.display = expectInput ? "" : "none";
+      inputEl.value = expectInput ? (options.defaultValue || "") : "";
+
+      function cleanup() {
+        root.style.display = "none";
+        root.removeEventListener("click", onBackdropClick);
+        okBtn.removeEventListener("click", onOk);
+        cancelBtn.removeEventListener("click", onCancel);
+      }
+      function onBackdropClick(evt) {
+        if (evt.target === root) {
+          cleanup();
+          resolve(expectInput ? null : false);
+        }
+      }
+      function onOk() {
+        cleanup();
+        resolve(expectInput ? inputEl.value : true);
+      }
+      function onCancel() {
+        cleanup();
+        resolve(expectInput ? null : false);
+      }
+
+      root.addEventListener("click", onBackdropClick);
+      okBtn.addEventListener("click", onOk);
+      cancelBtn.addEventListener("click", onCancel);
+      root.style.display = "flex";
+      if (expectInput) inputEl.focus();
+      else okBtn.focus();
+    });
+  }
+
   async function confirmDanger(message, detail) {
     var text = message || "Are you sure?";
     if (detail) text += "\n" + detail;
-    return window.confirm(text);
+    try {
+      return await _runDialog({ mode: "confirm", title: "Please Confirm", message: text, okLabel: "Confirm" });
+    } catch (_err) {
+      return window.confirm(text);
+    }
+  }
+
+  async function promptText(title, message, defaultValue) {
+    try {
+      return await _runDialog({
+        mode: "prompt",
+        title: title || "Input Required",
+        message: message || "",
+        defaultValue: defaultValue || "",
+        okLabel: "Submit",
+      });
+    } catch (_err) {
+      return window.prompt(message || "", defaultValue || "");
+    }
+  }
+
+  async function alertInfo(message, title) {
+    try {
+      await _runDialog({
+        mode: "confirm",
+        title: title || "Notice",
+        message: message || "",
+        okLabel: "OK",
+        cancelLabel: "",
+      });
+      return;
+    } catch (_err) {
+      window.alert(message || "");
+    }
   }
 
   async function requestJson(path, options) {
@@ -167,6 +272,24 @@
       .replace(/"/g, "&quot;");
   }
 
+  function setSectionState(el, state, message) {
+    if (!el) return;
+    var safeState = String(state || "loading").toLowerCase();
+    var msg = String(message || "");
+    if (safeState === "loading") {
+      el.innerHTML = '<div class="empty" style="opacity:.6">Loading...</div>';
+      return;
+    }
+    if (safeState === "error") {
+      el.innerHTML = '<div class="empty" style="color:#b91c1c">' + escapeHtml(msg || "Failed to load.") + "</div>";
+      return;
+    }
+    if (safeState === "empty") {
+      el.innerHTML = '<div class="empty">' + escapeHtml(msg || "No data available.") + "</div>";
+      return;
+    }
+  }
+
   function getCsrfToken() {
     var pair = document.cookie.split("; ").find(function (c) { return c.startsWith("pc_csrf="); });
     return pair ? decodeURIComponent(pair.split("=").slice(1).join("=") || "") : "";
@@ -189,13 +312,55 @@
     }
   });
 
+  var _retryToastTimer = null;
+  function showRetryToast(seconds) {
+    if (_retryToastTimer) { clearInterval(_retryToastTimer); _retryToastTimer = null; }
+    var remaining = Math.max(1, seconds);
+    var toastEl = document.getElementById("retry-toast");
+    if (!toastEl) {
+      toastEl = document.createElement("div");
+      toastEl.id = "retry-toast";
+      toastEl.style.cssText = "position:fixed;top:16px;right:16px;z-index:10000;background:#2d3748;color:#fff;padding:12px 18px;border-radius:8px;font-size:.82rem;box-shadow:0 4px 16px rgba(0,0,0,.3);display:flex;align-items:center;gap:10px;";
+      var msgSpan = document.createElement("span");
+      msgSpan.id = "retry-toast-msg";
+      toastEl.appendChild(msgSpan);
+      var closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.textContent = "Dismiss";
+      closeBtn.style.cssText = "background:none;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:4px;padding:2px 8px;font-size:.7rem;cursor:pointer;";
+      closeBtn.addEventListener("click", function () {
+        if (_retryToastTimer) { clearInterval(_retryToastTimer); _retryToastTimer = null; }
+        toastEl.style.display = "none";
+      });
+      toastEl.appendChild(closeBtn);
+      document.body.appendChild(toastEl);
+    }
+    toastEl.style.display = "flex";
+    var msgEl = document.getElementById("retry-toast-msg");
+    function update() {
+      if (remaining <= 0) {
+        toastEl.style.display = "none";
+        if (_retryToastTimer) { clearInterval(_retryToastTimer); _retryToastTimer = null; }
+        return;
+      }
+      msgEl.textContent = "Rate limited. Retry in " + remaining + "s...";
+      remaining--;
+    }
+    update();
+    _retryToastTimer = setInterval(update, 1000);
+  }
+
   window.PCUI = {
     mapApiError: mapApiError,
     setButtonLoading: setButtonLoading,
     confirmDanger: confirmDanger,
+    promptText: promptText,
+    alertInfo: alertInfo,
     requestJson: requestJson,
     escapeHtml: escapeHtml,
+    setSectionState: setSectionState,
     getCsrfToken: getCsrfToken,
+    showRetryToast: showRetryToast,
   };
 
   if (document.readyState === "loading") {

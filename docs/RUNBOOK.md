@@ -16,7 +16,9 @@ python scripts/preflight_deploy.py --skip-db
 2. Reproduce locally:
    - `python -m mypy`
    - `ruff check app tests`
-   - `python -m pytest -q -p no:cacheprovider`
+   - `python3.12 -m pytest -q -p no:cacheprovider`
+   - `python3.12 scripts/check_secret_patterns.py`
+   - `python3.12 scripts/check_endpoint_complexity.py`
    - `python scripts/check_frontend_guards.py`
 3. Fix and push only minimal scoped changes.
 4. Re-run workflow.

@@ -1,0 +1,83 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Integration Health Dashboard
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.main-wrap { margin-left: var(--sb-width); padding: 1.5rem 2rem; max-width: 1000px; }
+h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+
+.section-title { font-size: .85rem; font-weight: 700; color: var(--text); margin: 1.2rem 0 .6rem; }
+
+/* ── KPI Row ───────────────────────────────────────────────────────────── */
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: .8rem; margin-bottom: 1.2rem; }
+.kpi {
+  background: var(--surface); border: none; border-radius: var(--radius);
+  padding: .65rem .85rem; box-shadow: var(--shadow-sm);
+}
+.kpi .label { font-size: .62rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint); }
+.kpi .val { font-size: 1.2rem; font-weight: 700; color: var(--text); margin-top: .15rem; font-feature-settings: 'tnum' 1; }
+.kpi .val.ok { color: var(--ok, #38a169); }
+.kpi .val.warn { color: #ecc94b; }
+.kpi .val.danger { color: var(--danger, #e53e3e); }
+
+/* ── Health Cards ─────────────────────────────────────────────────────── */
+.health-list { display: flex; flex-direction: column; gap: 6px; }
+
+.health-card {
+  background: var(--surface); border-radius: var(--radius); padding: .7rem 1rem;
+  box-shadow: var(--shadow-sm); display: flex; align-items: center; gap: .8rem;
+  border-left: 3px solid transparent;
+}
+.health-card.status-healthy { border-left-color: var(--ok, #38a169); }
+.health-card.status-degraded { border-left-color: #ecc94b; }
+.health-card.status-stale { border-left-color: #ed8936; }
+.health-card.status-down { border-left-color: var(--danger, #e53e3e); }
+
+.health-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.health-dot.healthy { background: var(--ok, #38a169); }
+.health-dot.degraded { background: #ecc94b; }
+.health-dot.stale { background: #ed8936; }
+.health-dot.down { background: var(--danger, #e53e3e); }
+.health-dot.ok { background: var(--ok, #38a169); }
+.health-dot.warning { background: #ecc94b; }
+.health-dot.error { background: var(--danger, #e53e3e); }
+
+.health-name { font-size: .82rem; font-weight: 600; color: var(--text); flex: 1; min-width: 0; }
+.health-meta { font-size: .68rem; color: var(--text-faint); text-align: right; }
+
+.health-badge {
+  font-size: .6rem; font-weight: 700; text-transform: uppercase; padding: .12rem .4rem;
+  border-radius: 4px; letter-spacing: .04em;
+}
+.health-badge.healthy { background: #c6f6d5; color: #276749; }
+.health-badge.degraded { background: #fefcbf; color: #975a16; }
+.health-badge.stale { background: #feebc8; color: #9c4221; }
+.health-badge.down { background: #fed7d7; color: #9b2c2c; }
+.health-badge.ok { background: #c6f6d5; color: #276749; }
+.health-badge.warning { background: #fefcbf; color: #975a16; }
+.health-badge.error { background: #fed7d7; color: #9b2c2c; }
+
+.rotate-btn {
+  background: var(--surface); border: 1px solid var(--line); color: var(--text-muted);
+  border-radius: 6px; padding: .2rem .5rem; font-size: .65rem; cursor: pointer;
+}
+.rotate-btn:hover { border-color: var(--brand); color: var(--brand); }
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+.btn-secondary {
+  background: var(--surface); color: var(--text-muted); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: .35rem .7rem; font-size: .72rem; cursor: pointer;
+}
+.btn-secondary:hover { border-color: var(--text-faint); }
+
+.empty { color: var(--text-faint); text-align: center; padding: 3rem; font-size: .82rem; }
+
+/* ── Responsive ───────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .main-wrap { padding: 1rem; padding-top: 3.5rem; }
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .health-card { flex-wrap: wrap; }
+}

@@ -18,6 +18,7 @@ from app.models.email import Email
 from app.models.memory import TeamMember
 from app.services.ai_router import call_ai
 from app.services.calendar_service import get_calendar_events_from_context
+from app.services.context_builder import build_brain_context
 from app.services.memory import build_memory_context, get_daily_context
 
 _AI_LEVEL_LABELS = [
@@ -87,6 +88,7 @@ async def get_team_dashboard(db: AsyncSession, org_id: int) -> TeamDashboardResu
             TeamMember.is_active.is_(True),
         )
         .order_by(TeamMember.team, TeamMember.name)
+        .limit(500)
     )
     members = list(members_result.scalars().all())
 
@@ -95,7 +97,7 @@ async def get_team_dashboard(db: AsyncSession, org_id: int) -> TeamDashboardResu
         select(DailyTaskPlan).where(
             DailyTaskPlan.organization_id == org_id,
             DailyTaskPlan.date == today,
-        )
+        ).limit(500)
     )
     plans_by_member: dict[int, DailyTaskPlan] = {
         p.team_member_id: p for p in plans_result.scalars().all()
@@ -175,6 +177,7 @@ async def get_daily_briefing(
     db: AsyncSession,
     org_id: int,
     actor_user_id: int,
+    actor_role: str | None = None,
 ) -> DailyBriefingResult:
     """
     AI-generated morning briefing for Nidin.
@@ -187,6 +190,13 @@ async def get_daily_briefing(
     today_context = await get_daily_context(db, organization_id=org_id, for_date=today)
     calendar_events = await get_calendar_events_from_context(db, organization_id=org_id, for_date=today)
     memory_context = await build_memory_context(db, organization_id=org_id)
+    brain_context = await build_brain_context(
+        db,
+        organization_id=org_id,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+        request_purpose="professional",
+    )
 
     # Build a data summary to feed the AI
     context_items = "\n".join(
@@ -237,6 +247,7 @@ Write a sharp, direct morning briefing. Structure it as:
         user_message=user_message,
         memory_context=memory_context,
         organization_id=org_id,
+        brain_context=brain_context,
     )
 
     return {

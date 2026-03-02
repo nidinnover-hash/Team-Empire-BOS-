@@ -1,0 +1,178 @@
+name: SDK CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sdk-drift-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+      TZ: "UTC"
+      DEBUG: "true"
+      SECRET_KEY: "ci-sdk-only-0123456789abcdef0123456789abcdef"
+      ADMIN_PASSWORD: "CiSdkOnlyPassword123!"
+      TOKEN_ENCRYPTION_KEY: "ci-sdk-only-abcdef0123456789abcdef0123456789"
+      OAUTH_STATE_KEY: "ci-sdk-only-oauth-abcdef0123456789abcdef012345"
+      DATABASE_URL: "sqlite:///./sdk-drift-ci.db"
+      APP_MODE: "NIDIN_AI"
+      COOKIE_SECURE: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Export OpenAPI schema
+        run: python scripts/export_openapi_schema.py
+
+      - name: Generate SDK models
+        run: python scripts/generate_sdk_models.py
+
+      - name: Verify SDK generated files are up to date
+        run: |
+          git diff --exit-code -- \
+            sdk/openapi/openapi.json \
+            sdk/python/nidin_bos_sdk/models.py \
+            sdk/typescript/src/types.ts
+
+      - name: Enforce SDK version bump on PRs
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: python scripts/check_sdk_version_bump.py
+
+      - name: OpenAPI breaking change check on PRs
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: python scripts/check_openapi_breaking.py
+
+      - name: OpenAPI semver tier report on PRs
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: python scripts/check_openapi_change_tier.py
+
+  python-sdk-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python SDK packaging smoke
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e sdk/python
+          python -c "from nidin_bos_sdk import NidinBOSClient, models; c = NidinBOSClient(base_url='http://localhost', api_key='nbos_test'); c.close(); print(bool(models))"
+
+  typescript-sdk-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: TypeScript SDK build smoke
+        run: |
+          cd sdk/typescript
+          npm install
+          npm run typecheck
+          npm run build
+
+  sdk-contract-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [python-sdk-smoke, typescript-sdk-smoke, sdk-drift-check]
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+      TZ: "UTC"
+      DEBUG: "true"
+      ENFORCE_STARTUP_VALIDATION: "false"
+      AUTO_CREATE_SCHEMA: "true"
+      AUTO_SEED_DEFAULTS: "true"
+      SECRET_KEY: "ci-sdk-contract-0123456789abcdef0123456789abcdef"
+      TOKEN_ENCRYPTION_KEY: "ci-sdk-contract-abcdef0123456789abcdef0123456789"
+      OAUTH_STATE_KEY: "ci-sdk-contract-oauth-abcdef0123456789abcdef01"
+      COOKIE_SECURE: "false"
+      ADMIN_EMAIL: "demo@ai.com"
+      ADMIN_PASSWORD: "DemoPass123!"
+      APP_MODE: "NIDIN_AI"
+      DATABASE_URL: "sqlite:///./sdk-contract-ci.db"
+      SDK_BASE_URL: "http://127.0.0.1:8000"
+      ACCOUNT_MFA_REQUIRED: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+          python -m pip install -e sdk/python
+
+      - name: Build TypeScript SDK
+        run: |
+          cd sdk/typescript
+          npm install
+          npm run build
+
+      - name: Start app for live SDK contract tests
+        run: |
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > sdk-uvicorn.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8000/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "App did not start in time"
+          cat sdk-uvicorn.log
+          exit 1
+
+      - name: Python SDK live contract smoke
+        run: python scripts/sdk_contract_live_smoke.py
+
+      - name: TypeScript SDK live contract smoke
+        run: node scripts/sdk_contract_live_smoke.mjs

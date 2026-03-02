@@ -9,6 +9,12 @@ class NoteCreate(BaseModel):
     tags: str | None = Field(None, max_length=500)  # comma-separated: "work,idea,urgent"
 
 
+class NoteUpdate(BaseModel):
+    title: str | None = Field(None, max_length=255)
+    content: str | None = Field(None, min_length=1, max_length=10000)
+    tags: str | None = Field(None, max_length=500)
+
+
 class NoteRead(BaseModel):
     id: int
     title: str | None

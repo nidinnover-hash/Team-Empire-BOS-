@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 from app.core.config import PLACEHOLDER_AI_KEYS, settings
 from app.core.request_context import get_current_request_id
+from app.schemas.brain_context import BrainContext
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +129,8 @@ _recent_calls: deque[dict] = deque(maxlen=200)
 # Maps (provider, org_id) to API key string. Scoped per organization to prevent
 # cross-tenant key leakage in multi-org deployments.
 # Updated when an AI provider connect endpoint is called. Checked first by _get_key().
-_ai_key_cache: dict[tuple[str, int], str] = {}
+_ai_key_cache: dict[tuple[str, int], tuple[str, float]] = {}  # (key, expiry_ts)
+_AI_KEY_CACHE_TTL = 3600.0  # refresh from DB hourly
 
 _AI_PROVIDER_TO_INTEGRATION_TYPE = {
     "openai": "ai_openai",
@@ -137,10 +139,19 @@ _AI_PROVIDER_TO_INTEGRATION_TYPE = {
     "gemini": "ai_gemini",
 }
 
+_CIRCUIT_FAILURE_THRESHOLD = 3
+_CIRCUIT_OPEN_SECONDS = 60.0
+_CIRCUIT_MIN_SAMPLES_FOR_HEALTH = 5
+_CIRCUIT_HEALTH_WINDOW_SECONDS = 15 * 60
+
+# Maps (provider, org_id) -> (transient_failures, opened_until_epoch_seconds)
+_provider_circuit_state: dict[tuple[str, int], tuple[int, float]] = {}
+
 
 def set_ai_key_cache(provider: str, api_key: str, org_id: int = 1) -> None:
     """Update the in-memory AI key cache (called from connect endpoint)."""
-    _ai_key_cache[(provider, org_id)] = api_key
+    import time
+    _ai_key_cache[(provider, org_id)] = (api_key, time.time() + _AI_KEY_CACHE_TTL)
 
 
 def clear_ai_key_cache(provider: str, org_id: int = 1) -> None:
@@ -172,9 +183,10 @@ async def load_ai_keys_from_db() -> None:
                 key = cfg.get("api_key") or cfg.get("access_token") or ""
                 if key and isinstance(key, str):
                     # Reverse lookup: integration type -> provider name
+                    import time
                     for prov, itype in _AI_PROVIDER_TO_INTEGRATION_TYPE.items():
                         if itype == row.type:
-                            _ai_key_cache[(prov, row.organization_id)] = key
+                            _ai_key_cache[(prov, row.organization_id)] = (key, time.time() + _AI_KEY_CACHE_TTL)
                             break
     except Exception as exc:
         logger.warning("Failed to load AI keys from DB: %s", type(exc).__name__)
@@ -288,6 +300,78 @@ def _fallback_order(primary: str) -> list[str]:
     return ordered
 
 
+def _record_provider_success(provider: str, org_id: int) -> None:
+    _provider_circuit_state.pop((provider, org_id), None)
+
+
+def _record_provider_transient_failure(provider: str, org_id: int) -> None:
+    key = (provider, org_id)
+    failures, opened_until = _provider_circuit_state.get(key, (0, 0.0))
+    now_ts = time.time()
+    if opened_until > now_ts:
+        return
+    failures += 1
+    if failures >= _CIRCUIT_FAILURE_THRESHOLD:
+        _provider_circuit_state[key] = (failures, now_ts + _CIRCUIT_OPEN_SECONDS)
+        logger.warning(
+            "AI circuit opened for provider=%s org_id=%s for %.0fs after %s transient failures",
+            provider,
+            org_id,
+            _CIRCUIT_OPEN_SECONDS,
+            failures,
+        )
+        return
+    _provider_circuit_state[key] = (failures, 0.0)
+
+
+def _is_provider_circuit_open(provider: str, org_id: int) -> bool:
+    state = _provider_circuit_state.get((provider, org_id))
+    if state is None:
+        return False
+    _failures, opened_until = state
+    if opened_until <= 0:
+        return False
+    if opened_until <= time.time():
+        _provider_circuit_state.pop((provider, org_id), None)
+        return False
+    return True
+
+
+def _provider_recent_health(provider: str, window_seconds: int) -> tuple[int, float, float]:
+    now_ts = time.time()
+    rows = [
+        row
+        for row in _recent_calls
+        if row.get("provider") == provider and (now_ts - float(row.get("ts", 0.0))) <= window_seconds
+    ]
+    total = len(rows)
+    if total == 0:
+        return 0, 0.0, 0.0
+    error_count = sum(1 for row in rows if bool(row.get("error_type")))
+    latency_values = [int(row.get("latency_ms") or 0) for row in rows]
+    avg_latency = sum(latency_values) / len(latency_values) if latency_values else 0.0
+    return total, (error_count / total), avg_latency
+
+
+def _rank_provider_candidates(primary: str, configured: list[str], org_id: int) -> list[str]:
+    ordered = [primary] + [p for p in _fallback_order(primary) if p in configured]
+    available = [p for p in ordered if not _is_provider_circuit_open(p, org_id)]
+    if not available:
+        return ordered
+
+    scored: list[tuple[int, float, float, int, str]] = []
+    for idx, candidate in enumerate(available):
+        samples, error_rate, avg_latency = _provider_recent_health(
+            candidate, _CIRCUIT_HEALTH_WINDOW_SECONDS
+        )
+        if samples < _CIRCUIT_MIN_SAMPLES_FOR_HEALTH:
+            scored.append((1, 0.0, 0.0, idx, candidate))
+        else:
+            scored.append((0, error_rate, avg_latency, idx, candidate))
+    scored.sort()
+    return [candidate for *_rest, candidate in scored]
+
+
 def _configured_providers(org_id: int = 1) -> list[str]:
     """Return configured providers in preferred order."""
     ordered = ["groq", "openai", "anthropic", "gemini"]
@@ -328,6 +412,7 @@ async def call_ai(
     max_tokens: int = 800,
     conversation_history: list[dict] | None = None,
     organization_id: int | None = None,
+    brain_context: BrainContext | None = None,
     request_id: str | None = None,
     db: "AsyncSession | None" = None,
 ) -> str:
@@ -345,7 +430,7 @@ async def call_ai(
     if requested not in {"openai", "anthropic", "groq", "gemini"}:
         requested = "groq"
 
-    org_id = organization_id or 1
+    org_id = organization_id or (brain_context.organization_id if brain_context else 1)
     configured = _configured_providers(org_id=org_id)
     if not configured:
         return (
@@ -355,10 +440,15 @@ async def call_ai(
 
     # If requested/default provider isn't configured, use first available.
     chosen = requested if requested in configured else configured[0]
+    attempt_order = _rank_provider_candidates(chosen, configured, org_id)
+    if not attempt_order:
+        attempt_order = [chosen]
 
     # Inject memory into system prompt if provided.
     # Sanitize user-controlled content to prevent prompt injection.
     full_system = system_prompt
+    if brain_context is not None:
+        full_system = _prepend_brain_context(system_prompt, brain_context)
     if memory_context:
         # Escape any tokens that could be interpreted as system-level instructions.
         # These originate from user-written memory entries, emails, and task titles —
@@ -376,68 +466,110 @@ async def call_ai(
 
     effective_request_id = request_id or get_current_request_id()
 
-    # Try primary provider
-    effective_org_id = organization_id or 1
-    t0 = time.monotonic()
-    primary_raw = await _call_provider(
-        chosen,
-        full_system,
-        user_message,
-        max_tokens,
-        conversation_history,
-        org_id=effective_org_id,
-    )
-    result, is_transient, in_tok, out_tok = _normalize_provider_result(primary_raw)
-    latency = int((time.monotonic() - t0) * 1000)
+    first_error: str | None = None
+    chosen_attempted = False
+    chosen_transient_failure = False
+    last_provider = chosen
+    last_latency = 0
 
-    if not result.startswith("Error:"):
-        await _log_ai_call(
-            provider=chosen,
-            model_name=_get_model(chosen),
-            latency_ms=latency,
-            input_tokens=in_tok,
-            output_tokens=out_tok,
-            organization_id=organization_id,
-            request_id=effective_request_id,
-            db=db,
+    for idx, candidate in enumerate(attempt_order):
+        if idx > 0:
+            logger.info("Trying fallback provider '%s' after '%s' failure", candidate, chosen)
+
+        t0 = time.monotonic()
+        raw = await _call_provider(
+            candidate,
+            full_system,
+            user_message,
+            max_tokens,
+            conversation_history,
+            org_id=org_id,
         )
-        return result
+        result, is_transient, in_tok, out_tok = _normalize_provider_result(raw)
+        latency = int((time.monotonic() - t0) * 1000)
 
-    # On transient failure, try other configured providers
-    if is_transient:
-        for fallback in _fallback_order(chosen):
-            if fallback not in configured:
-                continue
-            logger.info("Primary '%s' failed transiently, trying fallback '%s'", chosen, fallback)
-            t1 = time.monotonic()
-            fb_raw = await _call_provider(
-                fallback,
-                full_system,
-                user_message,
-                max_tokens,
-                conversation_history,
-                org_id=effective_org_id,
+        last_provider = candidate
+        last_latency = latency
+        if candidate == chosen:
+            chosen_attempted = True
+            chosen_transient_failure = is_transient and result.startswith("Error:")
+
+        if not result.startswith("Error:"):
+            _record_provider_success(candidate, org_id)
+            await _log_ai_call(
+                provider=candidate,
+                model_name=_get_model(candidate),
+                latency_ms=latency,
+                used_fallback=(candidate != chosen),
+                fallback_from=(chosen if candidate != chosen else None),
+                input_tokens=in_tok,
+                output_tokens=out_tok,
+                organization_id=organization_id,
+                request_id=effective_request_id,
+                db=db,
             )
-            fb_result, _, fb_in_tok, fb_out_tok = _normalize_provider_result(fb_raw)
-            fb_latency = int((time.monotonic() - t1) * 1000)
-            if not fb_result.startswith("Error:"):
-                await _log_ai_call(
-                    provider=fallback, model_name=_get_model(fallback),
-                    latency_ms=fb_latency, used_fallback=True, fallback_from=chosen,
-                    input_tokens=fb_in_tok, output_tokens=fb_out_tok,
-                    organization_id=organization_id, request_id=effective_request_id,
-                    db=db,
-                )
-                return fb_result
+            return result
 
-    # All providers failed — log the error
+        if first_error is None:
+            first_error = result
+        if is_transient:
+            _record_provider_transient_failure(candidate, org_id)
+
+        # Preserve original behavior: if the chosen provider failed with
+        # a non-transient error, stop without attempting fallback.
+        if candidate == chosen and not is_transient:
+            break
+
+        # Preserve original behavior: fallback is only justified after a
+        # transient failure on the chosen provider, unless chosen was skipped
+        # because its circuit is open.
+        if candidate != chosen and not chosen_transient_failure and chosen_attempted:
+            break
+
+    error_to_return = first_error or "Error: provider call failed"
     await _log_ai_call(
-        provider=chosen, model_name=_get_model(chosen),
-        latency_ms=latency, error_type=result[:80],
-        organization_id=organization_id, request_id=effective_request_id,
+        provider=last_provider,
+        model_name=_get_model(last_provider),
+        latency_ms=last_latency,
+        error_type=error_to_return[:80],
+        organization_id=organization_id,
+        request_id=effective_request_id,
         db=db,
     )
-    return result  # Return the original error if all fail
+    return error_to_return
+
+
+def _prepend_brain_context(system_prompt: str, brain_context: BrainContext) -> str:
+    policy = brain_context.org.policy if isinstance(brain_context.org.policy, dict) else {}
+    autonomy_policy_obj = policy.get("autonomy_policy")
+    autonomy_policy: dict[str, object] = (
+        autonomy_policy_obj if isinstance(autonomy_policy_obj, dict) else {}
+    )
+    policy_mode = (
+        str(autonomy_policy.get("current_mode") or "unknown")
+    )
+    lines = [
+        "[BRAIN CONTEXT - TENANT SCOPED]",
+        f"organization_id={brain_context.organization_id}",
+        f"organization_slug={brain_context.org.slug}",
+        f"organization_country={brain_context.org.country_code or 'NA'}",
+        f"organization_branch={brain_context.org.branch_label or 'NA'}",
+        f"policy_mode={policy_mode}",
+        f"actor_role={brain_context.actor_role or 'unknown'}",
+        f"request_purpose={brain_context.request_purpose}",
+        f"capabilities={','.join(brain_context.capabilities)}",
+    ]
+    if brain_context.employee is not None:
+        lines.extend(
+            [
+                f"employee_id={brain_context.employee.employee_id}",
+                f"employee_role={brain_context.employee.role or 'unknown'}",
+                f"employee_department_id={brain_context.employee.department_id or 0}",
+                f"employee_status={brain_context.employee.employment_status or 'unknown'}",
+            ]
+        )
+    lines.append("[END BRAIN CONTEXT]")
+    return "\n".join(lines) + "\n\n" + system_prompt
 
 
 def _get_model(provider: str) -> str:
@@ -454,9 +586,14 @@ def _get_model(provider: str) -> str:
 
 def _get_key(provider: str, org_id: int = 1) -> str | None:
     # Check in-memory cache first (dashboard-saved keys override env vars)
-    cached = _ai_key_cache.get((provider, org_id))
-    if cached and cached not in PLACEHOLDER_AI_KEYS:
-        return cached
+    import time
+    entry = _ai_key_cache.get((provider, org_id))
+    if entry is not None:
+        cached_key, expiry = entry
+        if time.time() < expiry and cached_key not in PLACEHOLDER_AI_KEYS:
+            return cached_key
+        # Expired — evict stale entry
+        _ai_key_cache.pop((provider, org_id), None)
     if provider == "openai":
         return settings.OPENAI_API_KEY
     if provider == "anthropic":

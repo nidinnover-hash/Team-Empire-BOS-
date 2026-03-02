@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.command import Command
+from app.schemas.brain_context import BrainContext
 from app.schemas.command import CommandCreate
+from app.services.context_builder import build_brain_context
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +69,10 @@ async def _call_ai(
     text: str,
     organization_id: int,
     require_clarification: bool,
+    *,
+    db: AsyncSession,
+    actor_user_id: int | None = None,
+    actor_role: str | None = None,
 ) -> tuple[str | None, str | None]:
     """
     Route through the central AI router (supports all providers + fallback).
@@ -78,6 +84,15 @@ async def _call_ai(
         return None, None
 
     try:
+        brain_context: BrainContext | None = None
+        if actor_user_id is not None:
+            brain_context = await build_brain_context(
+                db,
+                organization_id=organization_id,
+                actor_user_id=actor_user_id,
+                actor_role=actor_role,
+                request_purpose="professional",
+            )
         behavior_clause = (
             "Always ask one clarifying question before giving final actions."
             if require_clarification
@@ -94,6 +109,7 @@ async def _call_ai(
             user_message=text,
             max_tokens=600,
             organization_id=organization_id,
+            brain_context=brain_context,
         )
         if response and not response.startswith("Error:"):
             provider = settings.DEFAULT_AI_PROVIDER
@@ -105,7 +121,11 @@ async def _call_ai(
 
 
 async def create_command(
-    db: AsyncSession, data: CommandCreate, organization_id: int
+    db: AsyncSession,
+    data: CommandCreate,
+    organization_id: int,
+    actor_user_id: int | None = None,
+    actor_role: str | None = None,
 ) -> Command:
     ai_response = data.ai_response
     model_used = None
@@ -118,6 +138,9 @@ async def create_command(
             data.command_text,
             organization_id,
             require_clarification=require_clarification,
+            db=db,
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
         )
         pattern_note = await _pattern_hint(db, organization_id, data.command_text)
         additions: list[str] = []

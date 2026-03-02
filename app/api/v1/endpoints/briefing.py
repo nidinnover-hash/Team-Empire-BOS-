@@ -46,6 +46,7 @@ async def daily_briefing(
         db=db,
         org_id=org_id,
         actor_user_id=int(current_user["id"]),
+        actor_role=str(current_user["role"]),
     )
     return DailyBriefingResponse.model_validate(payload)
 
@@ -99,6 +100,7 @@ async def draft_plans(
         db=db,
         org_id=org_id,
         actor_user_id=int(current_user["id"]),
+        actor_role=str(current_user["role"]),
         team=team,
         plan_date=plan_date,
     )

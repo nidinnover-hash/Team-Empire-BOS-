@@ -17,3 +17,8 @@ class MFADisableRequest(BaseModel):
 
 class MFAStatusResponse(BaseModel):
     mfa_enabled: bool
+
+
+class MFAMutationResponse(BaseModel):
+    status: str
+    message: str

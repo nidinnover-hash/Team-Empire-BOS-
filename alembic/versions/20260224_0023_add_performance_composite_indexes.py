@@ -6,6 +6,7 @@ Create Date: 2026-02-24
 """
 
 from alembic import op
+from sqlalchemy import text
 
 revision = "0023"
 down_revision = "0022"
@@ -18,17 +19,13 @@ def _has_index(conn, index_name: str) -> bool:
     dialect = conn.dialect.name
     if dialect == "sqlite":
         rows = conn.execute(
-            __import__("sqlalchemy").text(
-                "SELECT name FROM sqlite_master WHERE type='index' AND name=:n"
-            ),
+            text("SELECT name FROM sqlite_master WHERE type='index' AND name=:n"),
             {"n": index_name},
         ).fetchall()
         return len(rows) > 0
     # PostgreSQL / others
     rows = conn.execute(
-        __import__("sqlalchemy").text(
-            "SELECT 1 FROM pg_indexes WHERE indexname = :n"
-        ),
+        text("SELECT 1 FROM pg_indexes WHERE indexname = :n"),
         {"n": index_name},
     ).fetchall()
     return len(rows) > 0

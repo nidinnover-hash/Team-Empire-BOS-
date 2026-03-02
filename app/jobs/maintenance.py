@@ -103,3 +103,28 @@ async def cleanup_old_job_runs_and_snapshots(db: AsyncSession, org_id: int) -> N
         await db.commit()
     except SQLAlchemyError as exc:
         logger.debug("Job run / snapshot cleanup failed for org=%d: %s", org_id, exc)
+
+
+async def cleanup_old_trend_events(db: AsyncSession, org_id: int) -> None:
+    """Delete trend telemetry events older than TREND_RETENTION_DAYS."""
+    from sqlalchemy import delete
+
+    from app.core.config import settings
+    from app.models.event import Event
+    from app.services.trend_telemetry import GOVERNANCE_EVENT, INCIDENT_EVENT, SECURITY_EVENT
+
+    cutoff = datetime.now(UTC) - timedelta(days=settings.TREND_RETENTION_DAYS)
+    trend_types = (SECURITY_EVENT, GOVERNANCE_EVENT, INCIDENT_EVENT)
+    try:
+        result = await db.execute(
+            delete(Event).where(
+                Event.organization_id == org_id,
+                Event.event_type.in_(trend_types),
+                Event.created_at < cutoff,
+            )
+        )
+        if result.rowcount:
+            logger.info("Cleaned up %d old trend events for org=%d", result.rowcount, org_id)
+            await db.commit()
+    except SQLAlchemyError as exc:
+        logger.debug("Trend event cleanup failed for org=%d: %s", org_id, exc)

@@ -3,12 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="AI Agent Factory — Nidin BOS" />
+  <meta name="description" content="AI Agent Factory - Nidin BOS" />
   <meta name="theme-color" content="#f5f5f7" />
   <link rel="manifest" href="/static/manifest.json" />
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <title>API Keys — Nidin BOS</title>
+  <title>API Keys - Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/api-keys.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
 </head>
@@ -28,22 +29,21 @@
       <div class="kpi"><div class="label">Revoked</div><div class="val" id="k-revoked">0</div></div>
     </div>
 
-    <div id="key-list" class="key-list"><div class="empty">Loading API keys...</div></div>
+    <div id="key-list" class="key-list"><div class="empty loading">Loading API keys...</div></div>
   </div>
 
-  <!-- Create Modal -->
   <div class="modal-overlay" id="create-modal" style="display:none">
     <div class="modal-card">
       <div class="modal-header">
         <h2>Create API Key</h2>
-        <button class="modal-close" id="create-modal-close" type="button">&times;</button>
+        <button class="modal-close" id="create-modal-close" type="button" aria-label="Close">&times;</button>
       </div>
       <form id="create-form">
         <label for="key-name">Name</label>
         <input id="key-name" name="name" type="text" placeholder="My integration key" required maxlength="100" />
         <label for="key-scopes">Scopes</label>
-        <input id="key-scopes" name="scopes" type="text" placeholder="*" value="*" maxlength="500" />
-        <p class="hint">Use * for full access. Comma-separated for specific scopes.</p>
+        <input id="key-scopes" name="scopes" type="text" placeholder="read,write" value="read,write" maxlength="500" />
+        <p class="hint">Recommended: use resource scopes (for example: webhooks:read, integrations:write). Use * only for break-glass keys.</p>
         <label for="key-expiry">Expires in (days, optional)</label>
         <input id="key-expiry" name="expires_in_days" type="number" min="1" max="365" placeholder="No expiry" />
         <div class="form-actions">
@@ -54,12 +54,11 @@
     </div>
   </div>
 
-  <!-- Secret Reveal Modal -->
   <div class="modal-overlay" id="secret-modal" style="display:none">
     <div class="modal-card modal-narrow">
       <div class="modal-header">
         <h2>Your API Key</h2>
-        <button class="modal-close" id="secret-modal-close" type="button">&times;</button>
+        <button class="modal-close" id="secret-modal-close" type="button" aria-label="Close">&times;</button>
       </div>
       <p class="hint">Copy this key now. It will not be shown again.</p>
       <code class="secret-display" id="secret-value"></code>

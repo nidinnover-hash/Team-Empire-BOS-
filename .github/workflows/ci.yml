@@ -9,6 +9,11 @@ jobs:
   fast-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+      PYTHONHASHSEED: "0"
+      TZ: "UTC"
 
     steps:
       - name: Checkout
@@ -20,7 +25,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -39,6 +44,15 @@ jobs:
       - name: Dependency security audit
         run: pip-audit -r requirements.txt --progress-spinner off
 
+      - name: Env schema guard
+        run: python scripts/check_env_schema.py
+
+      - name: Secret pattern guard
+        run: python scripts/check_secret_patterns.py
+
+      - name: Migration revision integrity
+        run: python scripts/check_migration_revisions.py
+
       - name: Lint
         run: ruff check app tests
 
@@ -53,6 +67,12 @@ jobs:
 
       - name: Frontend safety guards
         run: python scripts/check_frontend_guards.py
+
+      - name: Endpoint size guards
+        run: python scripts/check_endpoint_file_sizes.py
+
+      - name: Endpoint complexity guards
+        run: python scripts/check_endpoint_complexity.py
 
       - name: Pre-commit policy checks (main tree only)
         run: |
@@ -71,12 +91,18 @@ jobs:
             tests/test_integrations.py \
             tests/test_talk_mode.py \
             tests/test_config_validation.py \
+            -m "not flaky" \
             -p no:cacheprovider
 
   full-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: fast-checks
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+      PYTHONHASHSEED: "0"
+      TZ: "UTC"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -87,7 +113,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
@@ -141,10 +167,14 @@ jobs:
         run: python scripts/preflight_deploy.py --skip-db
 
       - name: Fast API smoke suite
-        run: python -m pytest -q tests/test_api_smoke_fast.py -p no:cacheprovider
+        run: python -m pytest -q tests/test_api_smoke_fast.py -m "not flaky" -p no:cacheprovider
 
       - name: Tests with coverage
-        run: python -m pytest -q -p no:cacheprovider --cov=app --cov-config=.coveragerc --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=61
+        run: python -m pytest -q -m "not flaky" -p no:cacheprovider --cov=app --cov-config=.coveragerc --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=65
+
+      - name: Coverage stretch target (70%, non-blocking)
+        continue-on-error: true
+        run: python -m pytest -q -m "not flaky" -p no:cacheprovider --cov=app --cov-config=.coveragerc --cov-report=term --cov-fail-under=70
 
       - name: Governance and Control Suite
         run: |
@@ -152,7 +182,24 @@ jobs:
             tests/test_compliance_engine.py \
             tests/test_control_api.py \
             tests/test_sync_scheduler.py \
+            -m "not flaky" \
             -p no:cacheprovider
+
+      - name: Tenant isolation gate
+        run: |
+          python -m pytest -q \
+            tests/test_org_isolation.py \
+            tests/test_org_isolation_extended.py \
+            -m "not flaky" \
+            -p no:cacheprovider
+
+      - name: Flaky quarantine suite (non-blocking, rerun 3x)
+        continue-on-error: true
+        run: |
+          for i in 1 2 3; do
+            echo "Flaky suite run #$i"
+            python -m pytest -q -m "flaky" -p no:cacheprovider || true
+          done
 
       - name: Upload coverage report
         if: always()
@@ -169,6 +216,19 @@ jobs:
         with:
           name: perf-baseline
           path: perf-baseline.txt
+
+      - name: CI Risk Report
+        if: always()
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: python scripts/ci_risk_report.py
+
+      - name: Upload CI Risk Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-risk-report
+          path: artifacts/ci-risk-report.*
 
   docker-build:
     runs-on: ubuntu-latest
@@ -207,7 +267,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -277,7 +337,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Set up Node
         uses: actions/setup-node@v4

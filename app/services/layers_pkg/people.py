@@ -1,11 +1,13 @@
 """People layers — training, employee performance, management, revenue, staff, AI routing, prosperity."""
 from __future__ import annotations
 
+import logging
 from datetime import date, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.employee import Employee
 from app.models.finance import FinanceEntry
 from app.models.memory import DailyContext, TeamMember
@@ -22,9 +24,20 @@ from app.schemas.layers import (
     StaffTrainingLayerReport,
     TrainingLayerReport,
 )
+from app.services.layers_pkg.helpers import (
+    PenaltyRule,
+    RiskRule,
+    apply_penalties,
+    apply_risk_rules,
+    avg_ai_level,
+    contains_any,
+    safe_query,
+)
 
 _TRAINING_KEYWORDS = ("train", "training", "learn", "learning", "course", "cert", "practice", "upskill", "ai")
 _RISK_NOTE_KEYWORDS = ("blocked", "struggling", "late", "delay", "help needed")
+logger = logging.getLogger(__name__)
+
 _AI_NICHE_MAP: dict[str, tuple[str, ...]] = {
     "automation_ops": ("automation", "ops", "workflow", "zapier", "integration"),
     "sales_growth_ai": ("sales", "lead", "outreach", "crm", "conversion"),
@@ -33,10 +46,163 @@ _AI_NICHE_MAP: dict[str, tuple[str, ...]] = {
     "analytics_strategy_ai": ("analytics", "data", "dashboard", "kpi", "metric"),
 }
 
+# ── Penalty rule sets ────────────────────────────────────────────────────────
 
-def _contains_any(text: str | None, keywords: tuple[str, ...]) -> bool:
-    t = (text or "").strip().lower()
-    return any(k in t for k in keywords)
+_TRAINING_LAYER_PENALTIES: list[PenaltyRule] = [
+    (
+        lambda ctx: ctx["active"] > 0 and ctx["avg_ai"] < settings.LAYER_MIN_AI_LEVEL,
+        25,
+        "Average AI skill maturity across the team is below target.",
+        "Run weekly hands-on AI workflow training by role.",
+    ),
+    (
+        lambda ctx: ctx["open_training"] < settings.LAYER_MIN_TRAINING_TASKS,
+        15,
+        "Training task pipeline is too small for continuous capability growth.",
+        "Create a recurring training backlog for every team.",
+    ),
+    (
+        lambda ctx: ctx["due_soon"] > settings.LAYER_MAX_DUE_SOON_TASKS,
+        15,
+        "Too many training tasks are due soon; completion risk is high.",
+        "Resequence training tasks into realistic weekly batches.",
+    ),
+    (
+        lambda ctx: ctx["recent_notes"] < 3,
+        10,
+        "Low recent training notes reduce visibility of team learning progress.",
+        "Log key learning outcomes daily in Data Hub.",
+    ),
+]
+
+_EMPLOYEE_PERF_PENALTIES: list[PenaltyRule] = [
+    (
+        lambda ctx: ctx["active"] == 0,
+        40,
+        "No active team members configured in memory.",
+        "Add your org structure in Memory > Team to unlock performance analytics.",
+    ),
+    (
+        lambda ctx: ctx["active"] > 0 and ctx["low_ai_ratio"] > 0.4,
+        20,
+        "Large share of team has low AI maturity.",
+        "Run role-based AI training for members at level 1-2.",
+    ),
+    (
+        lambda ctx: ctx["overdue"] > max(3, ctx["active"]),
+        20,
+        "Operational task backlog is aging past due dates.",
+        "Execute a 48-hour overdue-task recovery sprint with daily check-ins.",
+    ),
+    (
+        lambda ctx: ctx["blockers"] > max(2, ctx["active"] // 2),
+        15,
+        "Blocker event volume is high in the selected window.",
+        "Assign explicit blocker owners and enforce same-day resolution updates.",
+    ),
+]
+
+_EMPLOYEE_MGMT_PENALTIES: list[PenaltyRule] = [
+    (
+        lambda ctx: ctx["active"] == 0,
+        40,
+        "No active employees found in employee directory.",
+        "Add employee records and mark active team members.",
+    ),
+    (
+        lambda ctx: ctx["total"] > 0 and ctx["unmapped_ratio"] > settings.LAYER_UNMAPPED_THRESHOLD,
+        20,
+        "Large share of employees are not mapped to GitHub/ClickUp identities.",
+        "Map each employee to GitHub username and ClickUp user ID.",
+    ),
+    (
+        lambda ctx: ctx["active"] > 0 and ctx["overdue"] > ctx["active"],
+        20,
+        "Overdue task load exceeds active employee capacity.",
+        "Run manager triage to reassign or close stale work items.",
+    ),
+    (
+        lambda ctx: ctx["total"] > 0 and ctx["github_mapped"] < max(1, int(ctx["total"] * settings.LAYER_IDENTITY_COVERAGE)),
+        10,
+        "GitHub mapping coverage is low.",
+        "Enforce GitHub identity mapping for all technical roles.",
+    ),
+]
+
+_REVENUE_PENALTIES: list[PenaltyRule] = [
+    (
+        lambda ctx: ctx["income"] <= 0,
+        35,
+        "No income recorded in selected window.",
+        "Verify invoicing and revenue capture pipeline.",
+    ),
+    (
+        lambda ctx: ctx["net"] < 0,
+        30,
+        "Net revenue is negative for selected window.",
+        "Cut low-ROI spend and prioritize high-conversion channels.",
+    ),
+    (
+        lambda ctx: ctx["recurring_ratio"] > settings.LAYER_RECURRING_EXPENSE_CAP,
+        15,
+        "Recurring expense ratio is high.",
+        "Run SaaS/license audit and remove underused tools.",
+    ),
+    (
+        lambda ctx: ctx["income"] > 0 and ctx["expense"] > ctx["income"] * 0.8,
+        10,
+        "Expense-to-income ratio is approaching unhealthy range.",
+        "Set weekly budget guardrails per cost center.",
+    ),
+]
+
+_STAFF_TRAINING_PENALTIES: list[PenaltyRule] = [
+    (
+        lambda ctx: ctx["active"] == 0,
+        40,
+        "No active staff entries in team memory.",
+        "Add active staff to memory/team for training governance.",
+    ),
+    (
+        lambda ctx: ctx["active"] > 0 and ctx["avg_ai"] < settings.LAYER_MIN_AI_LEVEL,
+        25,
+        "Average AI maturity of staff is below target.",
+        "Run role-based weekly AI training sprint.",
+    ),
+    (
+        lambda ctx: ctx["open_training"] < max(3, ctx["active"]),
+        15,
+        "Training backlog is too small to sustain upskilling.",
+        "Create training backlog per staff role.",
+    ),
+    (
+        lambda ctx: ctx["due_soon"] > max(4, ctx["active"]),
+        10,
+        "Too many training tasks due soon can reduce completion quality.",
+        "Re-sequence due dates and assign staff owners clearly.",
+    ),
+]
+
+_PROSPERITY_RISKS: list[RiskRule] = [
+    (
+        lambda ctx: ctx["overdue"] > max(2, ctx["active"]),
+        "Overdue workload may reduce team happiness and autonomy.",
+        "Run a 48-hour workload reset and remove low-value tasks.",
+    ),
+    (
+        lambda ctx: ctx["net"] <= 0,
+        "Net financial performance is not supporting growth incentives.",
+        "Improve conversion and reduce non-essential spend immediately.",
+    ),
+    (
+        lambda ctx: ctx["avg_ai"] < settings.LAYER_MIN_AI_LEVEL and ctx["active"] > 0,
+        "AI maturity gap is limiting opportunity and freedom.",
+        "Launch role-based AI coaching for all teams this week.",
+    ),
+]
+
+
+# ── Domain helpers ───────────────────────────────────────────────────────────
 
 
 def _member_readiness(member: TeamMember) -> tuple[int, list[str]]:
@@ -53,12 +219,11 @@ def _member_readiness(member: TeamMember) -> tuple[int, list[str]]:
         risk_flags.append("Role definition missing")
     else:
         score += 5
-    if _contains_any(member.notes, _RISK_NOTE_KEYWORDS):
+    if contains_any(member.notes, _RISK_NOTE_KEYWORDS):
         risk_flags.append("Risk signal in notes")
         score -= 15
 
-    score = max(0, min(100, score))
-    return score, risk_flags
+    return max(0, min(100, score)), risk_flags
 
 
 def _detect_niche_for_member(member: TeamMember) -> tuple[str, list[str], float]:
@@ -71,7 +236,7 @@ def _detect_niche_for_member(member: TeamMember) -> tuple[str, list[str], float]
             (member.team or "").lower(),
         ]
     )
-    best_niche = "analytics_strategy_ai"
+    best_niche = "unclassified"
     best_hits: list[str] = []
     for niche, keywords in _AI_NICHE_MAP.items():
         hits = [k for k in keywords if k in text]
@@ -82,6 +247,37 @@ def _detect_niche_for_member(member: TeamMember) -> tuple[str, list[str], float]
     return best_niche, best_hits[:4], confidence
 
 
+# ── Active-members query (reused in multiple layers) ─────────────────────────
+
+async def _get_active_members(
+    db: AsyncSession, organization_id: int, label: str,
+) -> list:
+    return await safe_query(
+        db,
+        select(TeamMember).where(
+            TeamMember.organization_id == organization_id,
+            TeamMember.is_active.is_(True),
+        ).limit(settings.LAYER_QUERY_LIMIT),
+        label, organization_id,
+    )
+
+
+async def _get_open_tasks(
+    db: AsyncSession, organization_id: int, label: str,
+) -> list:
+    return await safe_query(
+        db,
+        select(Task).where(
+            Task.organization_id == organization_id,
+            Task.is_done.is_(False),
+        ).limit(settings.LAYER_QUERY_LIMIT),
+        label, organization_id,
+    )
+
+
+# ── Layer functions ──────────────────────────────────────────────────────────
+
+
 async def get_training_layer(
     db: AsyncSession,
     organization_id: int,
@@ -89,81 +285,51 @@ async def get_training_layer(
 ) -> TrainingLayerReport:
     today = date.today()
 
-    members_result = await db.execute(
-        select(TeamMember).where(
-            TeamMember.organization_id == organization_id,
-            TeamMember.is_active.is_(True),
-        ).limit(500)
-    )
-    members = list(members_result.scalars().all())
+    members = await _get_active_members(db, organization_id, "training:members")
     active_team_members = len(members)
-    avg_ai_level = round(
-        (sum(m.ai_level for m in members) / active_team_members) if active_team_members else 0.0,
-        2,
-    )
+    ai_avg = avg_ai_level(members)
 
-    tasks_result = await db.execute(
-        select(Task).where(
-            Task.organization_id == organization_id,
-            Task.is_done.is_(False),
-        ).limit(2000)
-    )
-    tasks = list(tasks_result.scalars().all())
+    tasks = await _get_open_tasks(db, organization_id, "training:tasks")
     open_training_tasks = [
         t for t in tasks
-        if _contains_any(t.title, _TRAINING_KEYWORDS)
-        or _contains_any(t.description, _TRAINING_KEYWORDS)
+        if contains_any(t.title, _TRAINING_KEYWORDS)
+        or contains_any(t.description, _TRAINING_KEYWORDS)
     ]
     due_soon_training_tasks = [
         t for t in open_training_tasks
         if t.due_date is not None and t.due_date <= (today + timedelta(days=14))
     ]
 
-    notes_result = await db.execute(
+    notes = await safe_query(
+        db,
         select(Note).where(Note.organization_id == organization_id)
-        .order_by(Note.created_at.desc()).limit(40)
+        .order_by(Note.created_at.desc()).limit(40),
+        "training:notes", organization_id,
     )
-    notes = list(notes_result.scalars().all())
-    recent_training_notes = [
-        n for n in notes
-        if _contains_any(n.content, _TRAINING_KEYWORDS)
-    ]
+    recent_training_notes = [n for n in notes if contains_any(n.content, _TRAINING_KEYWORDS)]
 
-    score = 100
-    blockers: list[str] = []
-    next_actions: list[str] = []
-
-    if active_team_members > 0 and avg_ai_level < 2.5:
-        score -= 25
-        blockers.append("Average AI skill maturity across the team is below target.")
-        next_actions.append("Run weekly hands-on AI workflow training by role.")
-    if len(open_training_tasks) < 3:
-        score -= 15
-        blockers.append("Training task pipeline is too small for continuous capability growth.")
-        next_actions.append("Create a recurring training backlog for every team.")
-    if len(due_soon_training_tasks) > 10:
-        score -= 15
-        blockers.append("Too many training tasks are due soon; completion risk is high.")
-        next_actions.append("Resequence training tasks into realistic weekly batches.")
-    if len(recent_training_notes) < 3:
-        score -= 10
-        blockers.append("Low recent training notes reduce visibility of team learning progress.")
-        next_actions.append("Log key learning outcomes daily in Data Hub.")
-
-    if not next_actions:
-        next_actions.append("Maintain current training cadence and track completion weekly.")
-    score = max(0, min(100, score))
+    penalty_ctx = {
+        "active": active_team_members,
+        "avg_ai": ai_avg,
+        "open_training": len(open_training_tasks),
+        "due_soon": len(due_soon_training_tasks),
+        "recent_notes": len(recent_training_notes),
+    }
+    score, blockers, next_actions = apply_penalties(
+        _TRAINING_LAYER_PENALTIES, penalty_ctx,
+        "Maintain current training cadence and track completion weekly.",
+    )
 
     return TrainingLayerReport(
         window_days=window_days,
         active_team_members=active_team_members,
-        avg_ai_level=avg_ai_level,
+        avg_ai_level=ai_avg,
         open_training_tasks=len(open_training_tasks),
         due_soon_training_tasks=len(due_soon_training_tasks),
         recent_training_notes=len(recent_training_notes),
         training_score=score,
         blockers=blockers,
-        next_actions=next_actions[:4],
+        next_actions=next_actions,
     )
 
 
@@ -175,50 +341,36 @@ async def get_employee_performance_layer(
     today = date.today()
     since = today - timedelta(days=max(window_days - 1, 0))
 
-    members_result = await db.execute(
-        select(TeamMember).where(
-            TeamMember.organization_id == organization_id,
-            TeamMember.is_active.is_(True),
-        ).limit(500)
-    )
-    members = list(members_result.scalars().all())
+    members = await _get_active_members(db, organization_id, "employee_perf:members")
     active_team_members = len(members)
-    avg_ai_level = round(
-        (sum(m.ai_level for m in members) / active_team_members) if active_team_members else 0.0,
-        2,
-    )
+    ai_avg = avg_ai_level(members)
     low_ai_members = len([m for m in members if (m.ai_level or 1) <= 2])
     high_ai_members = len([m for m in members if (m.ai_level or 1) >= 4])
 
-    tasks_result = await db.execute(
-        select(Task).where(
-            Task.organization_id == organization_id,
-            Task.is_done.is_(False),
-        ).limit(2000)
-    )
-    tasks = list(tasks_result.scalars().all())
+    tasks = await _get_open_tasks(db, organization_id, "employee_perf:tasks")
     open_operational_tasks = [
         t for t in tasks
-        if not _contains_any(t.title, _TRAINING_KEYWORDS)
-        and not _contains_any(t.description, _TRAINING_KEYWORDS)
+        if not contains_any(t.title, _TRAINING_KEYWORDS)
+        and not contains_any(t.description, _TRAINING_KEYWORDS)
     ]
     overdue_operational_tasks = [
         t for t in open_operational_tasks
         if t.due_date is not None and t.due_date < today
     ]
 
-    blockers_result = await db.execute(
+    blockers_rows = await safe_query(
+        db,
         select(DailyContext).where(
             DailyContext.organization_id == organization_id,
             DailyContext.context_type == "blocker",
             DailyContext.date >= since,
             DailyContext.date <= today,
-        )
+        ),
+        "employee_perf:blockers", organization_id,
     )
-    blockers = list(blockers_result.scalars().all())
 
     snapshots: list[EmployeePerformanceMember] = []
-    for member in sorted(members, key=lambda m: ((m.team or ""), m.name.lower())):
+    for member in sorted(members, key=lambda m: ((m.team or ""), (m.name or "").lower())):
         readiness_score, risk_flags = _member_readiness(member)
         snapshots.append(
             EmployeePerformanceMember(
@@ -231,43 +383,29 @@ async def get_employee_performance_layer(
             )
         )
 
-    score = 100
-    top_risks: list[str] = []
-    next_actions: list[str] = []
-
-    if active_team_members == 0:
-        score -= 40
-        top_risks.append("No active team members configured in memory.")
-        next_actions.append("Add your org structure in Memory > Team to unlock performance analytics.")
-    if active_team_members > 0 and (low_ai_members / active_team_members) > 0.4:
-        score -= 20
-        top_risks.append("Large share of team has low AI maturity.")
-        next_actions.append("Run role-based AI training for members at level 1-2.")
-    if len(overdue_operational_tasks) > max(3, active_team_members):
-        score -= 20
-        top_risks.append("Operational task backlog is aging past due dates.")
-        next_actions.append("Execute a 48-hour overdue-task recovery sprint with daily check-ins.")
-    if len(blockers) > max(2, active_team_members // 2):
-        score -= 15
-        top_risks.append("Blocker event volume is high in the selected window.")
-        next_actions.append("Assign explicit blocker owners and enforce same-day resolution updates.")
-
-    if not next_actions:
-        next_actions.append("Maintain current execution cadence and review employee score weekly.")
-    score = max(0, min(100, score))
+    penalty_ctx = {
+        "active": active_team_members,
+        "low_ai_ratio": low_ai_members / active_team_members if active_team_members else 0,
+        "overdue": len(overdue_operational_tasks),
+        "blockers": len(blockers_rows),
+    }
+    score, top_risks, next_actions = apply_penalties(
+        _EMPLOYEE_PERF_PENALTIES, penalty_ctx,
+        "Maintain current execution cadence and review employee score weekly.",
+    )
 
     return EmployeePerformanceLayerReport(
         window_days=window_days,
         active_team_members=active_team_members,
-        avg_ai_level=avg_ai_level,
+        avg_ai_level=ai_avg,
         low_ai_members=low_ai_members,
         high_ai_members=high_ai_members,
         open_operational_tasks=len(open_operational_tasks),
         overdue_operational_tasks=len(overdue_operational_tasks),
-        blocker_events_in_window=len(blockers),
+        blocker_events_in_window=len(blockers_rows),
         performance_score=score,
-        top_risks=top_risks[:4],
-        next_actions=next_actions[:4],
+        top_risks=top_risks,
+        next_actions=next_actions,
         members=snapshots[:20],
     )
 
@@ -277,10 +415,13 @@ async def get_employee_management_layer(
     organization_id: int,
     window_days: int = 30,
 ) -> EmployeeManagementLayerReport:
-    employees_result = await db.execute(
-        select(Employee).where(Employee.organization_id == organization_id).limit(500)
+    ql = settings.LAYER_QUERY_LIMIT
+
+    employees = await safe_query(
+        db,
+        select(Employee).where(Employee.organization_id == organization_id).limit(ql),
+        "emp_mgmt:employees", organization_id,
     )
-    employees = list(employees_result.scalars().all())
     total_employees = len(employees)
     active_employees = len([e for e in employees if bool(e.is_active)])
     inactive_employees = max(0, total_employees - active_employees)
@@ -290,45 +431,30 @@ async def get_employee_management_layer(
         [e for e in employees if not (e.github_username or "").strip() and not (e.clickup_user_id or "").strip()]
     )
 
-    tasks_result = await db.execute(
-        select(Task).where(
-            Task.organization_id == organization_id,
-            Task.is_done.is_(False),
-        ).limit(2000)
-    )
-    tasks = list(tasks_result.scalars().all())
+    tasks = await _get_open_tasks(db, organization_id, "emp_mgmt:tasks")
     today = date.today()
     open_tasks = len(tasks)
     overdue_tasks = len([t for t in tasks if t.due_date is not None and t.due_date < today])
 
-    score = 100
-    top_risks: list[str] = []
-    next_actions: list[str] = []
-
-    if active_employees == 0:
-        score -= 40
-        top_risks.append("No active employees found in employee directory.")
-        next_actions.append("Add employee records and mark active team members.")
-    if total_employees > 0 and (unmapped / max(total_employees, 1)) > 0.35:
-        score -= 20
-        top_risks.append("Large share of employees are not mapped to GitHub/ClickUp identities.")
-        next_actions.append("Map each employee to GitHub username and ClickUp user ID.")
-    if active_employees > 0 and overdue_tasks > active_employees:
-        score -= 20
-        top_risks.append("Overdue task load exceeds active employee capacity.")
-        next_actions.append("Run manager triage to reassign or close stale work items.")
-    if total_employees > 0 and github_mapped < max(1, int(total_employees * 0.6)):
-        score -= 10
-        top_risks.append("GitHub mapping coverage is low.")
-        next_actions.append("Enforce GitHub identity mapping for all technical roles.")
-    if total_employees > 0 and clickup_mapped < max(1, int(total_employees * 0.6)):
-        score -= 10
+    # ClickUp penalty is separate since it uses the same threshold but different message
+    penalty_ctx = {
+        "total": total_employees,
+        "active": active_employees,
+        "unmapped_ratio": unmapped / max(total_employees, 1),
+        "overdue": overdue_tasks,
+        "github_mapped": github_mapped,
+    }
+    score, top_risks, next_actions = apply_penalties(
+        _EMPLOYEE_MGMT_PENALTIES, penalty_ctx,
+        "Keep current employee management cadence and review weekly.",
+    )
+    # Additional ClickUp penalty (5th rule, beyond the 4-rule limit of the declarative list)
+    if total_employees > 0 and clickup_mapped < max(1, int(total_employees * settings.LAYER_IDENTITY_COVERAGE)):
+        score = max(0, score - 10)
         top_risks.append("ClickUp mapping coverage is low.")
         next_actions.append("Enforce ClickUp user mapping for operational visibility.")
-
-    if not next_actions:
-        next_actions.append("Keep current employee management cadence and review weekly.")
-    score = max(0, min(100, score))
+        top_risks = top_risks[:4]
+        next_actions = next_actions[:4]
 
     return EmployeeManagementLayerReport(
         window_days=window_days,
@@ -341,8 +467,8 @@ async def get_employee_management_layer(
         open_tasks=open_tasks,
         overdue_tasks=overdue_tasks,
         management_score=score,
-        top_risks=top_risks[:4],
-        next_actions=next_actions[:4],
+        top_risks=top_risks,
+        next_actions=next_actions,
     )
 
 
@@ -353,51 +479,41 @@ async def get_revenue_management_layer(
 ) -> RevenueManagementLayerReport:
     today = date.today()
     since = today - timedelta(days=max(window_days - 1, 0))
-    finance_result = await db.execute(
+
+    entries = await safe_query(
+        db,
         select(FinanceEntry).where(
             FinanceEntry.organization_id == organization_id,
             FinanceEntry.entry_date >= since,
             FinanceEntry.entry_date <= today,
-        )
+        ),
+        "revenue:finance", organization_id,
     )
-    entries = list(finance_result.scalars().all())
 
-    income = float(sum(e.amount for e in entries if e.type == "income"))
-    expense = float(sum(e.amount for e in entries if e.type == "expense"))
+    income = float(sum((e.amount or 0) for e in entries if e.type == "income"))
+    expense = float(sum((e.amount or 0) for e in entries if e.type == "expense"))
     net = income - expense
     recurring_keywords = ("subscription", "saas", "tool", "license", "retainer")
     recurring_expense = float(
         sum(
-            e.amount
+            (e.amount or 0)
             for e in entries
             if e.type == "expense"
-            and (_contains_any(e.category, recurring_keywords) or _contains_any(e.description, recurring_keywords))
+            and (contains_any(e.category, recurring_keywords) or contains_any(e.description, recurring_keywords))
         )
     )
     recurring_ratio = (recurring_expense / expense) if expense > 0 else 0.0
 
-    score = 100
-    top_risks: list[str] = []
-    next_actions: list[str] = []
-    if income <= 0:
-        score -= 35
-        top_risks.append("No income recorded in selected window.")
-        next_actions.append("Verify invoicing and revenue capture pipeline.")
-    if net < 0:
-        score -= 30
-        top_risks.append("Net revenue is negative for selected window.")
-        next_actions.append("Cut low-ROI spend and prioritize high-conversion channels.")
-    if recurring_ratio > 0.55:
-        score -= 15
-        top_risks.append("Recurring expense ratio is high.")
-        next_actions.append("Run SaaS/license audit and remove underused tools.")
-    if expense > income * 0.8 and income > 0:
-        score -= 10
-        top_risks.append("Expense-to-income ratio is approaching unhealthy range.")
-        next_actions.append("Set weekly budget guardrails per cost center.")
-    if not next_actions:
-        next_actions.append("Maintain current revenue discipline and monitor weekly cash flow.")
-    score = max(0, min(100, score))
+    penalty_ctx = {
+        "income": income,
+        "expense": expense,
+        "net": net,
+        "recurring_ratio": recurring_ratio,
+    }
+    score, top_risks, next_actions = apply_penalties(
+        _REVENUE_PENALTIES, penalty_ctx,
+        "Maintain current revenue discipline and monitor weekly cash flow.",
+    )
 
     return RevenueManagementLayerReport(
         window_days=window_days,
@@ -406,8 +522,8 @@ async def get_revenue_management_layer(
         net_in_window=net,
         recurring_expense_ratio=round(recurring_ratio, 4),
         revenue_health_score=score,
-        top_risks=top_risks[:4],
-        next_actions=next_actions[:4],
+        top_risks=top_risks,
+        next_actions=next_actions,
     )
 
 
@@ -417,70 +533,44 @@ async def get_staff_training_layer(
     window_days: int = 30,
 ) -> StaffTrainingLayerReport:
     today = date.today()
-    members_result = await db.execute(
-        select(TeamMember).where(
-            TeamMember.organization_id == organization_id,
-            TeamMember.is_active.is_(True),
-        ).limit(500)
-    )
-    members = list(members_result.scalars().all())
+
+    members = await _get_active_members(db, organization_id, "staff_training:members")
     active_staff = len(members)
-    avg_ai_level = round(
-        (sum(m.ai_level for m in members) / active_staff) if active_staff else 0.0,
-        2,
-    )
+    ai_avg = avg_ai_level(members)
     low_ai = len([m for m in members if (m.ai_level or 1) <= 2])
 
-    tasks_result = await db.execute(
-        select(Task).where(
-            Task.organization_id == organization_id,
-            Task.is_done.is_(False),
-        ).limit(2000)
-    )
-    tasks = list(tasks_result.scalars().all())
+    tasks = await _get_open_tasks(db, organization_id, "staff_training:tasks")
     open_training_tasks = [
         t for t in tasks
-        if _contains_any(t.title, _TRAINING_KEYWORDS)
-        or _contains_any(t.description, _TRAINING_KEYWORDS)
+        if contains_any(t.title, _TRAINING_KEYWORDS)
+        or contains_any(t.description, _TRAINING_KEYWORDS)
     ]
     due_soon_training_tasks = [
         t for t in open_training_tasks
         if t.due_date is not None and t.due_date <= (today + timedelta(days=14))
     ]
 
-    score = 100
-    top_risks: list[str] = []
-    next_actions: list[str] = []
-    if active_staff == 0:
-        score -= 40
-        top_risks.append("No active staff entries in team memory.")
-        next_actions.append("Add active staff to memory/team for training governance.")
-    if active_staff > 0 and avg_ai_level < 2.5:
-        score -= 25
-        top_risks.append("Average AI maturity of staff is below target.")
-        next_actions.append("Run role-based weekly AI training sprint.")
-    if len(open_training_tasks) < max(3, active_staff):
-        score -= 15
-        top_risks.append("Training backlog is too small to sustain upskilling.")
-        next_actions.append("Create training backlog per staff role.")
-    if len(due_soon_training_tasks) > max(4, active_staff):
-        score -= 10
-        top_risks.append("Too many training tasks due soon can reduce completion quality.")
-        next_actions.append("Re-sequence due dates and assign staff owners clearly.")
-    if not next_actions:
-        next_actions.append("Maintain training cadence and audit staff progress weekly.")
-    score = max(0, min(100, score))
+    penalty_ctx = {
+        "active": active_staff,
+        "avg_ai": ai_avg,
+        "open_training": len(open_training_tasks),
+        "due_soon": len(due_soon_training_tasks),
+    }
+    score, top_risks, next_actions = apply_penalties(
+        _STAFF_TRAINING_PENALTIES, penalty_ctx,
+        "Maintain training cadence and audit staff progress weekly.",
+    )
 
     return StaffTrainingLayerReport(
         window_days=window_days,
         active_staff=active_staff,
-        avg_ai_level=avg_ai_level,
+        avg_ai_level=ai_avg,
         low_ai_level_staff=low_ai,
         open_training_tasks=len(open_training_tasks),
         due_soon_training_tasks=len(due_soon_training_tasks),
         training_velocity_score=score,
-        top_risks=top_risks[:4],
-        next_actions=next_actions[:4],
+        top_risks=top_risks,
+        next_actions=next_actions,
     )
 
 
@@ -489,18 +579,9 @@ async def get_ai_skill_routing_layer(
     organization_id: int,
     window_days: int = 30,
 ) -> AISkillRoutingLayerReport:
-    members_result = await db.execute(
-        select(TeamMember).where(
-            TeamMember.organization_id == organization_id,
-            TeamMember.is_active.is_(True),
-        ).limit(500)
-    )
-    members = list(members_result.scalars().all())
+    members = await _get_active_members(db, organization_id, "ai_routing:members")
     active_staff = len(members)
-    avg_ai_level = round(
-        (sum(m.ai_level for m in members) / active_staff) if active_staff else 0.0,
-        2,
-    )
+    ai_avg = avg_ai_level(members)
 
     routed: list[AISkillRoutingMember] = []
     niche_counts: dict[str, int] = {}
@@ -526,7 +607,7 @@ async def get_ai_skill_routing_layer(
         f"Scale {niche.replace('_', ' ')} with {count} aligned team members."
         for niche, count in sorted(niche_counts.items(), key=lambda x: x[1], reverse=True)[:3]
     ]
-    routing_score = max(0, min(100, int(40 + (avg_ai_level * 12) + (len(top_opportunities) * 8))))
+    routing_score = max(0, min(100, int(40 + (ai_avg * 12) + (len(top_opportunities) * 8))))
     next_actions = [
         "Route each employee into one niche AI track and assign a weekly output target.",
         "Pair low-AI-level staff with high-readiness peers for hands-on mentorship.",
@@ -538,7 +619,7 @@ async def get_ai_skill_routing_layer(
     return AISkillRoutingLayerReport(
         window_days=window_days,
         active_staff=active_staff,
-        avg_ai_level=avg_ai_level,
+        avg_ai_level=ai_avg,
         routing_score=routing_score,
         top_opportunities=top_opportunities,
         members=routed[:30],
@@ -554,53 +635,39 @@ async def get_staff_prosperity_layer(
     today = date.today()
     since = today - timedelta(days=max(window_days - 1, 0))
 
-    members_result = await db.execute(
-        select(TeamMember).where(
-            TeamMember.organization_id == organization_id,
-            TeamMember.is_active.is_(True),
-        ).limit(500)
-    )
-    members = list(members_result.scalars().all())
+    members = await _get_active_members(db, organization_id, "prosperity:members")
     active_staff = len(members)
-    avg_ai_level = (sum(m.ai_level for m in members) / active_staff) if active_staff else 0.0
+    # avg_ai_level returns rounded; we need the raw float for index math
+    ai_avg_raw = (sum((m.ai_level or 0) for m in members) / active_staff) if active_staff else 0.0
 
-    tasks_result = await db.execute(
-        select(Task).where(Task.organization_id == organization_id, Task.is_done.is_(False)).limit(2000)
-    )
-    tasks = list(tasks_result.scalars().all())
+    tasks = await _get_open_tasks(db, organization_id, "prosperity:tasks")
     overdue = len([t for t in tasks if t.due_date is not None and t.due_date < today])
 
-    finance_result = await db.execute(
+    entries = await safe_query(
+        db,
         select(FinanceEntry).where(
             FinanceEntry.organization_id == organization_id,
             FinanceEntry.entry_date >= since,
             FinanceEntry.entry_date <= today,
-        )
+        ),
+        "prosperity:finance", organization_id,
     )
-    entries = list(finance_result.scalars().all())
-    income = float(sum(e.amount for e in entries if e.type == "income"))
-    expense = float(sum(e.amount for e in entries if e.type == "expense"))
+    income = float(sum((e.amount or 0) for e in entries if e.type == "income"))
+    expense = float(sum((e.amount or 0) for e in entries if e.type == "expense"))
     net = income - expense
 
-    opportunity_index = max(0, min(100, int(45 + avg_ai_level * 10 - overdue * 2)))
-    wealth_index = max(0, min(100, int(50 + (15 if net > 0 else -15))))
+    opportunity_index = max(0, min(100, int(45 + ai_avg_raw * 10 - overdue * 2)))
+    wealth_index = max(0, min(100, (50 + (15 if net > 0 else -15))))
     happiness_index = max(0, min(100, int(70 - overdue * 3)))
-    freedom_index = max(0, min(100, int(40 + avg_ai_level * 8 - overdue * 2)))
+    freedom_index = max(0, min(100, int(40 + ai_avg_raw * 8 - overdue * 2)))
     composite = int((opportunity_index + wealth_index + happiness_index + freedom_index) / 4)
 
-    top_risks: list[str] = []
-    next_actions: list[str] = []
-    if overdue > max(2, active_staff):
-        top_risks.append("Overdue workload may reduce team happiness and autonomy.")
-        next_actions.append("Run a 48-hour workload reset and remove low-value tasks.")
-    if net <= 0:
-        top_risks.append("Net financial performance is not supporting growth incentives.")
-        next_actions.append("Improve conversion and reduce non-essential spend immediately.")
-    if avg_ai_level < 2.5 and active_staff > 0:
-        top_risks.append("AI maturity gap is limiting opportunity and freedom.")
-        next_actions.append("Launch role-based AI coaching for all teams this week.")
-    if not next_actions:
-        next_actions.append("Maintain current growth rhythm and keep weekly reflection discipline.")
+    # Prosperity uses its own index-based scoring; risk rules generate risks/actions only
+    penalty_ctx = {"overdue": overdue, "net": net, "avg_ai": ai_avg_raw, "active": active_staff}
+    top_risks, next_actions = apply_risk_rules(
+        _PROSPERITY_RISKS, penalty_ctx,
+        "Maintain current growth rhythm and keep weekly reflection discipline.",
+    )
 
     ceo_message = (
         "Lead with love and clarity: grow people capability weekly, remove friction daily, "

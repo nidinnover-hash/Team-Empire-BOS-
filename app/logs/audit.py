@@ -1,9 +1,13 @@
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.privacy import sanitize_audit_payload
 from app.models.event import Event
 from app.schemas.event import EventCreate
 from app.services import event as event_service
+
+logger = logging.getLogger(__name__)
 
 _HIGH_RISK = {
     "execution_started", "send_message_sent", "integration_deleted",
@@ -34,7 +38,7 @@ async def record_action(
 ) -> Event:
     payload_with_risk = {**(payload_json or {}), "risk_level": _classify_risk(event_type)}
     safe_payload = sanitize_audit_payload(payload_with_risk)
-    return await event_service.log_event(
+    event = await event_service.log_event(
         db,
         EventCreate(
             organization_id=organization_id,
@@ -45,3 +49,38 @@ async def record_action(
             payload_json=safe_payload,
         ),
     )
+
+    # Fire matching automation triggers (best-effort, inline).
+    # The trigger query is now filtered by source_event in SQL for efficiency.
+    try:
+        from app.services.automation import fire_matching_triggers
+
+        await fire_matching_triggers(
+            db,
+            organization_id=organization_id,
+            event_type=event_type,
+            event_payload=safe_payload,
+        )
+    except (ImportError, RuntimeError, ValueError, TypeError, OSError, AttributeError) as exc:
+        logger.debug("Automation trigger matching failed for %s: %s", event_type, type(exc).__name__, exc_info=True)
+
+    # Dispatch to registered webhook endpoints (best-effort).
+    # Webhook HTTP delivery uses WEBHOOK_ASYNC_DISPATCH_ONLY for queue-based dispatch.
+    try:
+        from app.services.webhook import trigger_org_webhooks
+
+        await trigger_org_webhooks(
+            db,
+            organization_id=organization_id,
+            event=event_type,
+            payload={
+                "event": event_type,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                **(safe_payload or {}),
+            },
+        )
+    except (ImportError, RuntimeError, ValueError, TypeError, OSError, AttributeError) as exc:
+        logger.debug("Webhook dispatch failed for %s: %s", event_type, type(exc).__name__, exc_info=True)
+
+    return event

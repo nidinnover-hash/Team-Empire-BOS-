@@ -1,3 +1,4 @@
+import logging
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.goal import Goal
 from app.schemas.goal import GoalCreate, GoalProgressUpdate, GoalStatusUpdate
 from app.services.notification import create_notification
+
+logger = logging.getLogger(__name__)
 
 
 async def create_goal(
@@ -14,6 +17,7 @@ async def create_goal(
     db.add(goal)
     await db.commit()
     await db.refresh(goal)
+    logger.info("goal created id=%d org=%d", goal.id, organization_id)
     return goal
 
 
@@ -80,3 +84,24 @@ async def update_goal_status(
     await db.commit()
     await db.refresh(goal)
     return goal
+
+
+async def get_goal(
+    db: AsyncSession, goal_id: int, organization_id: int,
+) -> Goal | None:
+    result = await db.execute(
+        select(Goal).where(Goal.id == goal_id, Goal.organization_id == organization_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def delete_goal(
+    db: AsyncSession, goal_id: int, organization_id: int,
+) -> bool:
+    goal = await get_goal(db, goal_id, organization_id)
+    if goal is None:
+        return False
+    await db.delete(goal)
+    await db.commit()
+    logger.info("goal deleted id=%d org=%d", goal_id, organization_id)
+    return True

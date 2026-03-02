@@ -91,6 +91,7 @@ class Settings(BaseSettings):
     WEBHOOK_DELIVERY_MAX_ATTEMPTS: int = 3
     WEBHOOK_DELIVERY_BACKOFF_SECONDS: float = 1.0
     WEBHOOK_DELIVERY_MAX_BACKOFF_SECONDS: float = 8.0
+    WEBHOOK_ASYNC_DISPATCH_ONLY: bool = False
     CLONE_API_KEY: str | None = None
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_WINDOW_SECONDS: int = 60
@@ -98,6 +99,8 @@ class Settings(BaseSettings):
     RATE_LIMIT_BACKEND: RateLimitBackend = "auto"
     RATE_LIMIT_REDIS_URL: str | None = None
     RATE_LIMIT_REDIS_PREFIX: str = "pc:ratelimit"
+    API_KEY_QUOTA_ENABLED: bool = True
+    API_KEY_REQUESTS_PER_DAY: int = 10_000
     IDEMPOTENCY_BACKEND: IdempotencyBackend = "auto"
     IDEMPOTENCY_REDIS_URL: str | None = None
     IDEMPOTENCY_REDIS_PREFIX: str = "pc:idempotency"
@@ -112,6 +115,7 @@ class Settings(BaseSettings):
     ENFORCE_STARTUP_VALIDATION: bool = False
     AUTO_CREATE_SCHEMA: bool = False
     AUTO_SEED_DEFAULTS: bool = False
+    DB_SCHEMA_ENFORCE_HEAD: bool = True
     COOKIE_SECURE: bool = False  # Set True in production (requires HTTPS)
     SECRET_KEY: str = ""  # Must be set in .env (min 32 chars)
     ADMIN_EMAIL: str = "demo@ai.com"
@@ -156,6 +160,7 @@ class Settings(BaseSettings):
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
     DB_POOL_TIMEOUT: int = 30
+    DB_SLOW_QUERY_MS: int = 200
 
     # Compose rate limiting
     COMPOSE_MAX_PER_HOUR: int = 20
@@ -199,6 +204,19 @@ class Settings(BaseSettings):
     LOGIN_FAIL_WINDOW_SECONDS: int = 900   # sliding window for login failure tracking
     LOGIN_FAIL_MAX_ATTEMPTS: int = 10      # max failures before IP lockout
 
+    # Layer scoring thresholds (tunable without code changes)
+    LAYER_MIN_NEW_CONTACTS: int = 5            # marketing: min new contacts before bottleneck
+    LAYER_MAX_FOLLOWUP_TASKS: int = 12         # marketing: max follow-up before backlog alert
+    LAYER_SPEND_REVENUE_RATIO: float = 0.35    # marketing: max ad-spend / revenue ratio
+    LAYER_MIN_AI_LEVEL: float = 2.5            # training: minimum avg AI maturity target
+    LAYER_MIN_TRAINING_TASKS: int = 3          # training: min open training tasks
+    LAYER_MAX_DUE_SOON_TASKS: int = 10         # training: max due-soon before overload
+    LAYER_IDENTITY_COVERAGE: float = 0.6       # management: min GitHub/ClickUp mapping ratio
+    LAYER_UNMAPPED_THRESHOLD: float = 0.35     # management: max unmapped employee ratio
+    LAYER_RECURRING_EXPENSE_CAP: float = 0.55  # revenue: max recurring expense ratio
+    LAYER_QUERY_LIMIT: int = 2000              # max rows per layer service query
+    TREND_RETENTION_DAYS: int = 90             # trend events older than this are pruned
+
     # Optional OpenTelemetry tracing (set OTEL_EXPORTER_OTLP_ENDPOINT to activate)
     # Packages required: opentelemetry-api opentelemetry-sdk
     #   opentelemetry-instrumentation-fastapi opentelemetry-instrumentation-sqlalchemy
@@ -212,6 +230,10 @@ class Settings(BaseSettings):
     FEATURE_TALK_MODE: bool = True       # Voice/chat Talk Mode page
     FEATURE_OPS_INTEL: bool = True       # Ops Intelligence page
     FEATURE_DAILY_RUN: bool = True       # Daily run draft generation
+    FEATURE_ORG_CHART_INTEL: bool = True
+    FEATURE_WORKLOAD_BALANCER: bool = True
+    FEATURE_DEPARTMENT_OKR_AUTOPROGRESS: bool = True
+    FEATURE_SKILL_MATRIX: bool = True
     CLONE_REQUIRE_CLARIFYING_QUESTION: bool = True
     CLONE_PATTERN_AUTOMATION_ENABLED: bool = False
     CLONE_PATTERN_WINDOW: int = 50
@@ -257,6 +279,17 @@ class Settings(BaseSettings):
     def _normalize_log_level(cls, value: Any) -> Any:
         if isinstance(value, str):
             return value.strip().upper()
+        return value
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def _normalize_debug_flag(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "prod", "production"}:
+                return False
+            if normalized in {"debug", "dev", "development"}:
+                return True
         return value
 
     @property
@@ -338,6 +371,8 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("SYNC_INTERVAL_MINUTES must be >= 1")
     if s.SYNC_INTERVAL_MINUTES > 1_440:  # 24 hours
         issues.append("SYNC_INTERVAL_MINUTES must be <= 1440 (24 hours)")
+    if not s.DEBUG and not bool(s.DB_SCHEMA_ENFORCE_HEAD):
+        issues.append("DB_SCHEMA_ENFORCE_HEAD should be true when DEBUG=false")
     if s.SYNC_THROTTLE_MINUTES < 0:
         issues.append("SYNC_THROTTLE_MINUTES must be >= 0")
     if s.SYNC_STALE_HOURS < 1:
@@ -395,6 +430,10 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("RATE_LIMIT_MAX_REQUESTS must be >= 1")
     if s.RATE_LIMIT_MAX_REQUESTS > 10_000:
         issues.append("RATE_LIMIT_MAX_REQUESTS must be <= 10000")
+    if s.API_KEY_REQUESTS_PER_DAY < 100:
+        issues.append("API_KEY_REQUESTS_PER_DAY must be >= 100")
+    if s.API_KEY_REQUESTS_PER_DAY > 5_000_000:
+        issues.append("API_KEY_REQUESTS_PER_DAY must be <= 5000000")
 
     def _check_provider_key(provider: str, source_name: str) -> None:
         if provider == "openai":

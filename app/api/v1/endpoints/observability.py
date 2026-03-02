@@ -65,7 +65,7 @@ async def list_observability_events(
     limit: int = Query(default=100, ge=1, le=500),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
     db: AsyncSession = Depends(get_db),
-) -> list[dict]:
+) -> list[EventRead]:
     cutoff = datetime.now(UTC) - timedelta(days=days)
     query = (
         select(Event)
@@ -80,15 +80,15 @@ async def list_observability_events(
         query = query.where(Event.event_type == event_type)
     rows = (await db.execute(query)).scalars().all()
     return [
-        {
-            "id": row.id,
-            "organization_id": row.organization_id,
-            "event_type": row.event_type,
-            "actor_user_id": row.actor_user_id,
-            "entity_type": row.entity_type,
-            "entity_id": row.entity_id,
-            "payload": row.payload_json or {},
-            "created_at": row.created_at,
-        }
+        EventRead(
+            id=row.id,
+            organization_id=row.organization_id,
+            event_type=row.event_type,
+            actor_user_id=row.actor_user_id,
+            entity_type=row.entity_type,
+            entity_id=row.entity_id,
+            payload=row.payload_json or {},
+            created_at=row.created_at,
+        )
         for row in rows
     ]

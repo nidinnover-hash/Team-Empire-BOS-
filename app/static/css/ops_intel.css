@@ -4,6 +4,56 @@
 
 .main-wrap { margin-left: var(--sb-width); padding: 1.5rem 2rem; max-width: 1200px; }
 h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); margin-bottom: 1.2rem; }
+.incident-strip {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 1rem;
+  padding: .8rem .95rem;
+}
+.incident-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .7rem;
+}
+.incident-title {
+  font-size: .76rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-faint);
+}
+.incident-meta { font-size: .78rem; color: var(--text); margin-top: .15rem; }
+.incident-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  margin-top: .6rem;
+}
+.incident-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: .12rem .5rem;
+  font-size: .62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  border: 1px solid var(--line);
+}
+.incident-badge.green { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-border); }
+.incident-badge.amber { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-border); }
+.incident-badge.red { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-border); }
+.incident-action {
+  font-size: .7rem;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: .3rem .45rem;
+}
+/* mini-trend styles in shared.css */
+.mini-trend { width: 100%; margin-bottom: .35rem; }
 
 .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: .8rem; margin-bottom: 1.4rem; }
 .kpi {

@@ -46,6 +46,38 @@ async def list_users(
     return list(result.scalars().all())
 
 
+VALID_ROLES = {
+    "CEO", "ADMIN", "MANAGER", "STAFF", "OWNER",
+    "TECH_LEAD", "OPS_MANAGER", "DEVELOPER", "VIEWER",
+}
+
+
+async def update_user_role(
+    db: AsyncSession, user_id: int, organization_id: int, new_role: str,
+) -> User | None:
+    if new_role not in VALID_ROLES:
+        return None
+    user = await get_user_by_id(db, user_id)
+    if user is None or user.organization_id != organization_id:
+        return None
+    user.role = new_role
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+async def toggle_user_active(
+    db: AsyncSession, user_id: int, organization_id: int, is_active: bool,
+) -> User | None:
+    user = await get_user_by_id(db, user_id)
+    if user is None or user.organization_id != organization_id:
+        return None
+    user.is_active = is_active
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
 async def ensure_default_user(db: AsyncSession, organization_id: int) -> None:
     demo = await get_user_by_email(db, settings.ADMIN_EMAIL)
     if demo is not None:

@@ -537,6 +537,117 @@ async def build_memory_context(
         if remaining > 100:
             base_context = base_context + "\n\n" + trait_block[:remaining]
 
+    # ── HubSpot deals pipeline ──
+    try:
+        from app.models.note import Note as _Note
+        hs_result = await db.execute(
+            _select(_Note).where(
+                _Note.organization_id == organization_id,
+                _Note.source == "hubspot_deal",
+            ).order_by(_Note.created_at.desc()).limit(10)
+        )
+        hs_deals = list(hs_result.scalars().all())
+        if hs_deals:
+            deal_lines = ["[HUBSPOT CRM DEALS]"]
+            for d in hs_deals[:8]:
+                deal_lines.append(f"- {d.title or 'Unnamed'}: {(d.content or '')[:80]}")
+            deal_lines.append("[END HUBSPOT DEALS]")
+            deal_block = "\n".join(deal_lines)
+            remaining = char_limit - len(base_context)
+            if remaining > 100:
+                base_context = base_context + "\n\n" + deal_block[:remaining]
+    except (RuntimeError, ValueError, TypeError, TimeoutError, AttributeError) as exc:
+        logger.warning("Skipping HubSpot deals context org=%s: %s", organization_id, type(exc).__name__)
+
+    # ── Recent emails ──
+    try:
+        from app.models.email import Email as _Email
+        email_result = await db.execute(
+            _select(_Email).where(
+                _Email.organization_id == organization_id,
+            ).order_by(_Email.received_at.desc()).limit(8)
+        )
+        recent_emails = list(email_result.scalars().all())
+        if recent_emails:
+            email_lines = ["[RECENT EMAILS]"]
+            for em in recent_emails[:5]:
+                subj = getattr(em, "subject", "") or "No subject"
+                sender = getattr(em, "from_address", "") or ""
+                email_lines.append(f"- From: {sender[:40]} | {subj[:60]}")
+            email_lines.append("[END EMAILS]")
+            email_block = "\n".join(email_lines)
+            remaining = char_limit - len(base_context)
+            if remaining > 100:
+                base_context = base_context + "\n\n" + email_block[:remaining]
+    except (RuntimeError, ValueError, TypeError, TimeoutError, AttributeError) as exc:
+        logger.warning("Skipping email context org=%s: %s", organization_id, type(exc).__name__)
+
+    # ── Slack recent messages ──
+    try:
+        slack_result = await db.execute(
+            _select(DailyContext).where(
+                DailyContext.organization_id == organization_id,
+                DailyContext.context_type == "slack",
+            ).order_by(DailyContext.date.desc()).limit(8)
+        )
+        slack_msgs = list(slack_result.scalars().all())
+        if slack_msgs:
+            slack_lines = ["[SLACK RECENT]"]
+            for sm in slack_msgs[:5]:
+                channel = getattr(sm, "related_to", "") or ""
+                body = (getattr(sm, "content", "") or "")[:80]
+                slack_lines.append(f"- #{channel}: {body}")
+            slack_lines.append("[END SLACK]")
+            slack_block = "\n".join(slack_lines)
+            remaining = char_limit - len(base_context)
+            if remaining > 100:
+                base_context = base_context + "\n\n" + slack_block[:remaining]
+    except (RuntimeError, ValueError, TypeError, TimeoutError, AttributeError) as exc:
+        logger.warning("Skipping slack context org=%s: %s", organization_id, type(exc).__name__)
+
+    # ── WhatsApp conversations ──
+    try:
+        from app.models.whatsapp_message import WhatsAppMessage as _WaMsg
+        wa_result = await db.execute(
+            _select(_WaMsg).where(
+                _WaMsg.organization_id == organization_id,
+            ).order_by(_WaMsg.created_at.desc()).limit(8)
+        )
+        wa_msgs = list(wa_result.scalars().all())
+        if wa_msgs:
+            wa_lines = ["[WHATSAPP RECENT]"]
+            for wm in wa_msgs[:5]:
+                sender = getattr(wm, "from_number", "") or ""
+                body = (getattr(wm, "body_text", "") or "")[:60]
+                wa_lines.append(f"- {sender}: {body}")
+            wa_lines.append("[END WHATSAPP]")
+            wa_block = "\n".join(wa_lines)
+            remaining = char_limit - len(base_context)
+            if remaining > 100:
+                base_context = base_context + "\n\n" + wa_block[:remaining]
+    except (RuntimeError, ValueError, TypeError, TimeoutError, AttributeError) as exc:
+        logger.warning("Skipping WhatsApp context org=%s: %s", organization_id, type(exc).__name__)
+
+    # ── Google Analytics traffic ──
+    try:
+        from app.services.integration import get_integration_by_type as _get_ga_int
+        ga_int = await _get_ga_int(db, organization_id, "google_analytics")
+        if ga_int and ga_int.status == "connected":
+            ga_ctx = await db.execute(
+                _select(DailyContext).where(
+                    DailyContext.organization_id == organization_id,
+                    DailyContext.context_type == "google_analytics",
+                ).order_by(DailyContext.date.desc()).limit(1)
+            )
+            ga_entry = ga_ctx.scalar_one_or_none()
+            if ga_entry:
+                ga_block = f"[GOOGLE ANALYTICS]\n{(ga_entry.content or '')[:300]}\n[END ANALYTICS]"
+                remaining = char_limit - len(base_context)
+                if remaining > 100:
+                    base_context = base_context + "\n\n" + ga_block[:remaining]
+    except (RuntimeError, ValueError, TypeError, TimeoutError, AttributeError) as exc:
+        logger.warning("Skipping GA context org=%s: %s", organization_id, type(exc).__name__)
+
     # Cache the result for subsequent requests (skip if category-filtered or custom limit)
     if categories is None and char_limit == DEFAULT_CONTEXT_CHAR_LIMIT:
         now_ts = _time.time()

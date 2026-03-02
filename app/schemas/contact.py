@@ -16,6 +16,16 @@ class ContactCreate(BaseModel):
     notes: str | None = Field(None, max_length=2000)
 
 
+class ContactUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=200)
+    email: EmailStr | None = None
+    phone: str | None = Field(None, max_length=30)
+    company: str | None = Field(None, max_length=200)
+    role: str | None = Field(None, max_length=100)
+    relationship: ContactRelationship | None = None
+    notes: str | None = Field(None, max_length=2000)
+
+
 class ContactRead(BaseModel):
     id: int
     name: str

@@ -240,14 +240,40 @@ def test_health_returns_503_on_db_failure():
     assert "503" in source
 
 
-def test_dashboard_timeout_configured():
-    """Dashboard gather has asyncio.wait_for timeout."""
-    import inspect
+async def test_dashboard_timeout_configured(client, monkeypatch):
+    """Dashboard handles gather timeout path and still serves the page."""
+    session_token = create_access_token(
+        {
+            "id": 1,
+            "email": "ceo@org1.com",
+            "role": "CEO",
+            "org_id": 1,
+            "token_version": 1,
+        }
+    )
+    client.cookies.set("pc_session", session_token)
+    from app.web import pages
 
-    from app.web.pages import dashboard
-    source = inspect.getsource(dashboard)
-    assert "wait_for" in source
-    assert "timeout=" in source
+    called: dict[str, float] = {}
+
+    async def fake_wait_for(awaitable, timeout):
+        called["timeout"] = float(timeout)
+        close = getattr(awaitable, "close", None)
+        if callable(close):
+            close()
+        raise TimeoutError
+
+    from fastapi.responses import HTMLResponse
+
+    monkeypatch.setattr(pages.asyncio, "wait_for", fake_wait_for)
+    monkeypatch.setattr(
+        pages.templates,
+        "TemplateResponse",
+        lambda _request, _template_name, _context: HTMLResponse("ok", status_code=200),
+    )
+    resp = await client.get("/")
+    assert resp.status_code == 200
+    assert called["timeout"] == 15.0
 
 
 def test_shutdown_grace_seconds_configurable():

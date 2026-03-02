@@ -29,6 +29,7 @@
       endpoints = await reqJson("/api/v1/webhooks", { auth: true, token: token });
       updateKPIs();
       renderList();
+      await loadReliability();
     } catch (e) {
       container.innerHTML = '<div class="empty">' + escHtml(mapErr(e)) + "</div>";
     }
@@ -38,6 +39,76 @@
     $("k-total").textContent = endpoints.length;
     $("k-active").textContent = endpoints.filter(function (w) { return w.is_active; }).length;
     $("k-inactive").textContent = endpoints.filter(function (w) { return !w.is_active; }).length;
+  }
+
+  async function loadReliability() {
+    var rel = $("wh-reliability");
+    var dl = $("dead-letter-list");
+    if (!rel || !dl) return;
+    rel.style.display = "none";
+    dl.innerHTML = '<div class="empty">Loading dead-letter deliveries...</div>';
+    try {
+      var token = await window.__bootPromise;
+      var metrics = await reqJson("/api/v1/control/webhook/reliability", { auth: true, token: token });
+      $("wh-success-rate").textContent = metrics.total_deliveries > 0
+        ? Math.round((metrics.success_count / metrics.total_deliveries) * 100) + "%"
+        : "100%";
+      $("wh-dead-count").textContent = String(metrics.dead_letter_count || 0);
+      $("wh-replay-success").textContent = String(metrics.replay_success_count || 0);
+      rel.style.display = "";
+
+      var dead = await reqJson("/api/v1/webhooks/deliveries/dead-letter?limit=20", { auth: true, token: token });
+      var items = dead.items || [];
+      if (!items.length) {
+        dl.innerHTML = '<div class="empty">No dead-letter deliveries.</div>';
+        return;
+      }
+      dl.innerHTML = items.map(function (d) {
+        var category = escHtml(d.error_category || "unknown");
+        var message = escHtml((d.error_message || "").slice(0, 120) || "-");
+        return (
+          '<div class="dead-row" data-delivery-id="' + Number(d.id) + '">' +
+            '<div class="dead-top">' +
+              '<span class="dead-event">' + escHtml(d.event) + "</span>" +
+              '<span class="dead-category">' + category + "</span>" +
+              '<button type="button" class="dead-replay-btn">Replay</button>' +
+            "</div>" +
+            '<div class="dead-meta">' +
+              '<span>created: ' + fmtTime(d.created_at) + "</span>" +
+              '<span>attempt: ' + Number(d.attempt_count || 0) + "/" + Number(d.max_retries || 0) + "</span>" +
+              '<span>status: ' + escHtml(d.status || "dead_letter") + "</span>" +
+            "</div>" +
+            '<div class="dead-error">' + message + "</div>" +
+          "</div>"
+        );
+      }).join("");
+      dl.querySelectorAll(".dead-row").forEach(function (row) {
+        var deliveryId = Number(row.getAttribute("data-delivery-id"));
+        var replayBtn = row.querySelector(".dead-replay-btn");
+        replayBtn.addEventListener("click", async function () {
+          window.PCUI.setButtonLoading(replayBtn, true, "Replaying...");
+          try {
+            var replay = await reqJson("/api/v1/webhooks/deliveries/" + deliveryId + "/replay", {
+              method: "POST",
+              auth: true,
+              token: token,
+            });
+            if (replay.ok) {
+              if (window.showToast) window.showToast("Replay queued successfully.", "ok");
+              await loadReliability();
+              return;
+            }
+            throw new Error(replay.error || "Replay failed");
+          } catch (err) {
+            if (window.showToast) window.showToast(mapErr(err), "error");
+          } finally {
+            window.PCUI.setButtonLoading(replayBtn, false);
+          }
+        });
+      });
+    } catch (e) {
+      dl.innerHTML = '<div class="empty">' + escHtml(mapErr(e)) + "</div>";
+    }
   }
 
   function renderList() {
@@ -110,7 +181,8 @@
   }
 
   async function deleteEndpoint(id) {
-    if (!window.confirm("Delete this webhook endpoint? This cannot be undone.")) return;
+    var confirmed = await window.PCUI.confirmDanger("Delete this webhook endpoint?", "This action cannot be undone.");
+    if (!confirmed) return;
     try {
       var token = await window.__bootPromise;
       var res = await fetch("/api/v1/webhooks/" + id, {
@@ -173,10 +245,18 @@
         return;
       }
       container.innerHTML = items.map(function (d) {
+        var retryInfo = "";
+        if (d.attempt_count > 1 || d.max_retries) {
+          retryInfo = '<span class="dlv-retry">attempt ' + (d.attempt_count || 1) + '/' + (d.max_retries || 5) + '</span>';
+        }
+        if (d.next_retry_at && d.status === "failed") {
+          retryInfo += '<span class="dlv-next-retry">next retry: ' + fmtTime(d.next_retry_at) + '</span>';
+        }
         return '<div class="dlv-row">' +
           '<span class="dlv-event">' + escHtml(d.event) + "</span>" +
           '<span class="dlv-status ' + escHtml(d.status) + '">' + escHtml(d.status) + (d.response_status_code ? " (" + d.response_status_code + ")" : "") + "</span>" +
           '<span class="dlv-ms">' + (d.duration_ms != null ? d.duration_ms + "ms" : "-") + "</span>" +
+          retryInfo +
           '<span class="dlv-time">' + fmtTime(d.created_at) + "</span>" +
         "</div>";
       }).join("");

@@ -1,0 +1,90 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Activity / Audit Log
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.main-wrap { margin-left: var(--sb-width); padding: 1.5rem 2rem; max-width: 1000px; }
+h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+
+/* ── KPI Row ───────────────────────────────────────────────────────────── */
+.kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: .8rem; margin-bottom: 1.2rem; }
+.kpi {
+  background: var(--surface); border: none; border-radius: var(--radius);
+  padding: .65rem .85rem; box-shadow: var(--shadow-sm);
+}
+.kpi .label { font-size: .62rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint); }
+.kpi .val { font-size: 1.2rem; font-weight: 700; color: var(--text); margin-top: .15rem; font-feature-settings: 'tnum' 1; }
+
+/* ── Filter Bar ───────────────────────────────────────────────────────── */
+.filter-bar {
+  display: flex; gap: .5rem; align-items: center; margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.filter-bar select, .filter-bar input[type="date"] {
+  padding: .35rem .5rem; font-size: .78rem; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--surface); color: var(--text);
+}
+.filter-bar select:focus, .filter-bar input:focus { outline: none; border-color: var(--brand); }
+
+.btn-secondary {
+  background: var(--surface); color: var(--text-muted); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: .35rem .7rem; font-size: .72rem; cursor: pointer;
+}
+.btn-secondary:hover { border-color: var(--text-faint); }
+
+/* ── Event List ───────────────────────────────────────────────────────── */
+.event-list { display: flex; flex-direction: column; gap: 6px; }
+
+.evt-card {
+  background: var(--surface); border-radius: var(--radius); padding: .7rem 1rem;
+  box-shadow: var(--shadow-sm); display: flex; gap: .8rem; align-items: flex-start;
+  border-left: 3px solid transparent;
+}
+.evt-card.risk-high { border-left-color: var(--danger, #e53e3e); }
+.evt-card.risk-medium { border-left-color: #ecc94b; }
+.evt-card.risk-low { border-left-color: var(--ok, #38a169); }
+
+.evt-icon {
+  width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; flex-shrink: 0; font-size: .7rem; font-weight: 700;
+  background: var(--bg); color: var(--text-muted);
+}
+
+.evt-body { flex: 1; min-width: 0; }
+.evt-type {
+  font-size: .7rem; font-weight: 600; padding: .1rem .4rem; border-radius: 4px;
+  background: var(--bg); color: var(--text-muted); display: inline-block;
+}
+.evt-detail { font-size: .78rem; color: var(--text); margin-top: .2rem; }
+.evt-meta { font-size: .65rem; color: var(--text-faint); margin-top: .2rem; display: flex; gap: .8rem; }
+
+.risk-badge {
+  font-size: .58rem; font-weight: 700; text-transform: uppercase; padding: .1rem .35rem;
+  border-radius: 3px; letter-spacing: .04em;
+}
+.risk-badge.high { background: #fed7d7; color: #9b2c2c; }
+.risk-badge.medium { background: #fefcbf; color: #975a16; }
+.risk-badge.low { background: #c6f6d5; color: #276749; }
+
+/* ── Pagination ───────────────────────────────────────────────────────── */
+.pagination {
+  display: flex; justify-content: center; gap: .4rem; margin-top: 1.2rem;
+}
+.pagination button {
+  padding: .3rem .6rem; font-size: .72rem; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--surface); color: var(--text-muted);
+  cursor: pointer;
+}
+.pagination button:hover { border-color: var(--brand); color: var(--brand); }
+.pagination button:disabled { opacity: .4; cursor: default; }
+
+.empty { color: var(--text-faint); text-align: center; padding: 3rem; font-size: .82rem; }
+
+/* ── Responsive ───────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .main-wrap { padding: 1rem; padding-top: 3.5rem; }
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .filter-bar { flex-direction: column; align-items: stretch; }
+  .evt-card { flex-direction: column; gap: .4rem; }
+}

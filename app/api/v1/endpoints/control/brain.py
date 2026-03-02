@@ -30,6 +30,7 @@ from app.services import (
     signal_ingestion,
 )
 from app.services.ai_router import call_ai
+from app.services.context_builder import build_brain_context
 
 from ._shared import _append_limitation, _to_float, _to_int
 
@@ -272,6 +273,13 @@ async def brain_limitations_claude(
         "manager_sla": sla,
         "challenge": payload.challenge,
     }
+    brain_context = await build_brain_context(
+        db,
+        organization_id=org_id,
+        actor_user_id=int(actor["id"]),
+        actor_role=str(actor["role"]),
+        request_purpose=str(actor.get("purpose") or "professional"),
+    )
 
     claude_plan = await call_ai(
         system_prompt=(
@@ -292,6 +300,7 @@ async def brain_limitations_claude(
         provider="anthropic",
         max_tokens=900,
         organization_id=org_id,
+        brain_context=brain_context,
         request_id=get_current_request_id(),
         db=db,
     )

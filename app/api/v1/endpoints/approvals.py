@@ -158,7 +158,7 @@ async def request_approval(
             db, int(actor["org_id"]), data.approval_type, data.payload_json
         )
         approval.confidence_score = confidence if confidence > 0 else None
-        if should_auto:
+        if should_auto and data.approval_type not in RISKY_APPROVAL_TYPES:
             can_auto_approve, denial_reason = await autonomy_policy.can_auto_approve(db, org=org)
             if can_auto_approve:
                 from datetime import UTC, datetime

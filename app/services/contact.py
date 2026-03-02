@@ -1,8 +1,15 @@
+import logging
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact import Contact
-from app.schemas.contact import ContactCreate
+from app.schemas.contact import ContactCreate, ContactUpdate
+
+logger = logging.getLogger(__name__)
+
+
+_UPDATE_FIELDS = {"name", "email", "phone", "company", "role", "relationship", "notes"}
 
 
 async def create_contact(
@@ -12,6 +19,7 @@ async def create_contact(
     db.add(contact)
     await db.commit()
     await db.refresh(contact)
+    logger.info("contact created id=%d org=%d", contact.id, organization_id)
     return contact
 
 
@@ -26,3 +34,39 @@ async def list_contacts(
         .limit(limit)
     )
     return list(result.scalars().all())
+
+
+async def get_contact(
+    db: AsyncSession, contact_id: int, organization_id: int,
+) -> Contact | None:
+    result = await db.execute(
+        select(Contact).where(Contact.id == contact_id, Contact.organization_id == organization_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def update_contact(
+    db: AsyncSession, contact_id: int, data: ContactUpdate, organization_id: int,
+) -> Contact | None:
+    contact = await get_contact(db, contact_id, organization_id)
+    if contact is None:
+        return None
+    for field, value in data.model_dump(exclude_unset=True).items():
+        if field in _UPDATE_FIELDS:
+            setattr(contact, field, value)
+    await db.commit()
+    await db.refresh(contact)
+    logger.info("contact updated id=%d org=%d", contact_id, organization_id)
+    return contact
+
+
+async def delete_contact(
+    db: AsyncSession, contact_id: int, organization_id: int,
+) -> bool:
+    contact = await get_contact(db, contact_id, organization_id)
+    if contact is None:
+        return False
+    await db.delete(contact)
+    await db.commit()
+    logger.info("contact deleted id=%d org=%d", contact_id, organization_id)
+    return True

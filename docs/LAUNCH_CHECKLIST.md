@@ -1,10 +1,12 @@
 # Launch Checklist
 
 Use this checklist before each production release.
+For full canary/rollback procedure, also follow `docs/RELEASE_SAFETY_PLAYBOOK.md`.
 
 ## 1) Config and secrets
 - [ ] `DEBUG=false`
 - [ ] `ENFORCE_STARTUP_VALIDATION=true`
+- [ ] `DB_SCHEMA_ENFORCE_HEAD=true`
 - [ ] `COOKIE_SECURE=true`
 - [ ] `DATABASE_URL` points to PostgreSQL (not SQLite)
 - [ ] `SECRET_KEY` is 32+ chars random
@@ -15,7 +17,8 @@ Use this checklist before each production release.
 - [ ] Provider tokens/secrets are populated only for integrations in use
 
 ## 2) Quality gate
-- [ ] Run `python scripts/check_ready.py`
+- [ ] Run `python3.12 scripts/check_ready.py`
+- [ ] Run `python3.12 scripts/preflight_python.py`
 - [ ] Confirm zero startup validation issues
 - [ ] Confirm migration head check is clean
 - [ ] Confirm security scans pass (`pip-audit`, `bandit`)

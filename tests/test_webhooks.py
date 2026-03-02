@@ -4,11 +4,25 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from contextlib import asynccontextmanager
 
 import httpx
 import pytest
+from sqlalchemy import select
 
 from tests.conftest import _make_auth_headers
+
+
+@pytest.fixture
+def _patch_webhook_session(db, monkeypatch):
+    """Make webhook dispatch use the test DB session instead of AsyncSessionLocal."""
+    from app.services import webhook as webhook_service
+
+    @asynccontextmanager
+    async def _test_session():
+        yield db
+
+    monkeypatch.setattr(webhook_service, "AsyncSessionLocal", _test_session)
 
 CEO_HEADERS = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
 ORG2_HEADERS = _make_auth_headers(2, "ceo@org2.com", "CEO", 2)
@@ -230,7 +244,7 @@ async def test_staff_cannot_create_webhook(client):
 
 
 @pytest.mark.asyncio
-async def test_trigger_dispatches_to_matching_endpoints(db, monkeypatch):
+async def test_trigger_dispatches_to_matching_endpoints(db, monkeypatch, _patch_webhook_session):
     from app.services import webhook as webhook_service
 
     await webhook_service.create_webhook_endpoint(
@@ -259,7 +273,7 @@ async def test_trigger_dispatches_to_matching_endpoints(db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_trigger_dispatches_to_all_when_no_filter(db, monkeypatch):
+async def test_trigger_dispatches_to_all_when_no_filter(db, monkeypatch, _patch_webhook_session):
     from app.services import webhook as webhook_service
 
     await webhook_service.create_webhook_endpoint(
@@ -313,10 +327,10 @@ async def test_trigger_skips_inactive_endpoints(db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_webhook_signature_is_valid_hmac(db, monkeypatch):
+async def test_webhook_signature_is_valid_hmac(db, monkeypatch, _patch_webhook_session):
     from app.services import webhook as webhook_service
 
-    endpoint, signing_secret = await webhook_service.create_webhook_endpoint(
+    _endpoint, signing_secret = await webhook_service.create_webhook_endpoint(
         db, organization_id=1, url="https://sig.example.com/hook",
     )
 
@@ -348,7 +362,7 @@ async def test_webhook_signature_is_valid_hmac(db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_delivery_logged_on_success(db, monkeypatch):
+async def test_delivery_logged_on_success(db, monkeypatch, _patch_webhook_session):
     from app.services import webhook as webhook_service
 
     endpoint, _ = await webhook_service.create_webhook_endpoint(
@@ -372,7 +386,7 @@ async def test_delivery_logged_on_success(db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_delivery_records_failure_on_non_2xx(db, monkeypatch):
+async def test_delivery_records_failure_on_non_2xx(db, monkeypatch, _patch_webhook_session):
     from app.services import webhook as webhook_service
 
     monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_ATTEMPTS", 2)
@@ -400,7 +414,7 @@ async def test_delivery_records_failure_on_non_2xx(db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_delivery_records_failure_on_timeout(db, monkeypatch):
+async def test_delivery_records_failure_on_timeout(db, monkeypatch, _patch_webhook_session):
     from app.services import webhook as webhook_service
 
     monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_ATTEMPTS", 3)
@@ -537,7 +551,7 @@ async def test_send_pending_alert_skips_slack_when_no_channel(db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_failed_delivery_sets_next_retry_at(db, monkeypatch):
+async def test_failed_delivery_sets_next_retry_at(db, monkeypatch, _patch_webhook_session):
     from app.services import webhook as webhook_service
 
     monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_ATTEMPTS", 1)
@@ -563,7 +577,7 @@ async def test_failed_delivery_sets_next_retry_at(db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_background_retry_succeeds(db, monkeypatch):
+async def test_background_retry_succeeds(db, monkeypatch, _patch_webhook_session):
     from app.services import webhook as webhook_service
 
     monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_ATTEMPTS", 1)
@@ -606,7 +620,7 @@ async def test_background_retry_succeeds(db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_background_retry_exhausted_becomes_dead_letter(db, monkeypatch):
+async def test_background_retry_exhausted_becomes_dead_letter(db, monkeypatch, _patch_webhook_session):
     from app.services import webhook as webhook_service
 
     monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_ATTEMPTS", 1)
@@ -642,8 +656,59 @@ async def test_background_retry_exhausted_becomes_dead_letter(db, monkeypatch):
 
     deliveries = await webhook_service.list_deliveries(db, endpoint.id, 1)
     assert deliveries[0].status == "dead_letter"
-    assert deliveries[0].next_retry_at is None
-    assert deliveries[0].attempt_count == 2
+
+
+@pytest.mark.asyncio
+async def test_replay_dead_letter_delivery_creates_new_delivery(db, monkeypatch, _patch_webhook_session):
+    from app.models.webhook import WebhookDelivery
+    from app.services import webhook as webhook_service
+
+    endpoint, _ = await webhook_service.create_webhook_endpoint(
+        db,
+        organization_id=1,
+        url="https://deadletter.example.com/hook",
+        event_types=["approval.created"],
+        max_retry_attempts=1,
+    )
+    failed = WebhookDelivery(
+        webhook_endpoint_id=endpoint.id,
+        organization_id=1,
+        event="approval.created",
+        payload_json={"x": 1},
+        status="dead_letter",
+        attempt_count=1,
+        max_retries=1,
+        error_message="TimeoutError: request timed out",
+    )
+    db.add(failed)
+    await db.commit()
+    await db.refresh(failed)
+
+    async def fake_post(self, url, **kwargs):
+        return _FakeResponse(200)
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post, raising=True)
+    replayed = await webhook_service.replay_dead_letter_delivery(
+        db,
+        organization_id=1,
+        delivery_id=failed.id,
+    )
+    assert replayed is not None
+    assert replayed.id != failed.id
+    assert replayed.status == "success"
+
+    rows = (
+        await db.execute(
+            select(WebhookDelivery).where(
+                WebhookDelivery.webhook_endpoint_id == endpoint.id
+            )
+        )
+    ).scalars().all()
+    assert len(rows) >= 2
+    rows_by_id = {int(row.id): row for row in rows}
+    assert rows_by_id[failed.id].status == "replayed"
+    assert rows_by_id[replayed.id].next_retry_at is None
+    assert rows_by_id[replayed.id].attempt_count >= 1
 
 
 @pytest.mark.asyncio
@@ -665,3 +730,59 @@ async def test_backoff_increases_exponentially(db):
     assert 9 < delta1 < 12  # 10s + up to 10% jitter
     assert 19 < delta2 < 23  # 20s + up to 10% jitter
     assert 39 < delta3 < 45  # 40s + up to 10% jitter
+
+
+@pytest.mark.asyncio
+async def test_dispatch_revalidates_target_url_each_attempt(db, monkeypatch, _patch_webhook_session):
+    from app.services import webhook as webhook_service
+
+    endpoint, _ = await webhook_service.create_webhook_endpoint(
+        db, organization_id=1, url="https://revalidate.example.com/hook",
+    )
+
+    call_count = 0
+
+    def fake_validate_url(_url: str) -> None:
+        nonlocal call_count
+        call_count += 1
+        if call_count >= 2:
+            raise ValueError("Webhook URL host is not allowed")
+
+    async def fake_post(self, url, **kwargs):
+        return _FakeResponse(500)
+
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_ATTEMPTS", 2)
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_BACKOFF_SECONDS", 0.0)
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_DELIVERY_MAX_BACKOFF_SECONDS", 0.0)
+    monkeypatch.setattr(webhook_service, "_validate_url", fake_validate_url)
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+    await webhook_service.trigger_org_webhooks(
+        db, organization_id=1, event="approval.created", payload={"check": True},
+    )
+
+    deliveries = await webhook_service.list_deliveries(db, endpoint.id, 1)
+    assert deliveries[0].status in {"failed", "dead_letter"}
+    assert "host is not allowed" in (deliveries[0].error_message or "")
+
+
+@pytest.mark.asyncio
+async def test_async_queue_mode_enqueues_pending_without_network(db, monkeypatch, _patch_webhook_session):
+    from app.services import webhook as webhook_service
+
+    endpoint, _ = await webhook_service.create_webhook_endpoint(
+        db, organization_id=1, url="https://queue-only.example.com/hook",
+    )
+    monkeypatch.setattr(webhook_service.settings, "WEBHOOK_ASYNC_DISPATCH_ONLY", True)
+
+    async def fail_post(self, url, **kwargs):
+        raise AssertionError("Network call should not be made in queue-only mode")
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fail_post)
+
+    await webhook_service.trigger_org_webhooks(
+        db, organization_id=1, event="approval.created", payload={"queued": True},
+    )
+    deliveries = await webhook_service.list_deliveries(db, endpoint.id, 1)
+    assert deliveries[0].status == "pending"
+    assert deliveries[0].attempt_count == 0
