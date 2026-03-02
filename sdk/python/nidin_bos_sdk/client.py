@@ -716,17 +716,6 @@ class NidinBOSClient:
             expected_status=201,
         )
 
-    def post_api_v1_auth_login(self) -> Any:
-        path = "/api/v1/auth/login"
-        params = None
-        return self._request_json(
-            method="POST",
-            path=path,
-            json_body=None,
-            params=params,
-            expected_status=200,
-        )
-
     def post_api_v1_automations_triggers(self, payload: dict[str, Any] | None = None) -> Any:
         path = "/api/v1/automations/triggers"
         params = None

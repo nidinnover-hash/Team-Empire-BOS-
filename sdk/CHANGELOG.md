@@ -1,5 +1,13 @@
 # SDK Changelog
 
+## 0.7.0 - 2026-03-02
+
+- Added tested PR checklist rule engine (`scripts/pr_checklist_guard.py`) and wired PR workflow to use it.
+- Added SDK release notes validation (`scripts/check_sdk_release_notes.py`) to fail release on empty/placeholder notes.
+- Added mutating-operation allowlist in SDK client generator to reduce accidental surface expansion risk.
+- Expanded SDK generation coverage tests to include mutating operations.
+- Extended `dev_gate` with PR checklist guard tests.
+
 ## 0.6.0 - 2026-03-02
 
 - Added PR checklist guard workflow with conditional migration/SDK checklist enforcement.

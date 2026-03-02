@@ -12,6 +12,8 @@ py -3.12 scripts/export_openapi_schema.py
 py -3.12 scripts/generate_sdk_models.py
 py -3.12 scripts/generate_sdk_clients.py
 py -3.12 scripts/check_sdk_client_generation.py
+py -3.12 scripts/generate_sdk_release_notes.py sdk-v<version>
+py -3.12 scripts/check_sdk_release_notes.py
 ```
 
 Generated outputs:

@@ -12,8 +12,17 @@ PY_CLIENT = ROOT / "sdk" / "python" / "nidin_bos_sdk" / "client.py"
 TS_CLIENT = ROOT / "sdk" / "typescript" / "src" / "client.ts"
 
 _HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
+_READ_METHODS = {"get"}
 _SDK_PREFIXES = (
     "/api/v1/auth/",
+    "/api/v1/api-keys",
+    "/api/v1/webhooks",
+    "/api/v1/tasks",
+    "/api/v1/approvals",
+    "/api/v1/automations",
+    "/api/v1/orgs",
+)
+_MUTATING_ALLOWED_PREFIXES = (
     "/api/v1/api-keys",
     "/api/v1/webhooks",
     "/api/v1/tasks",
@@ -119,6 +128,10 @@ def _iter_operations(spec: dict[str, Any]) -> list[tuple[str, str, str, dict[str
             continue
         for method, op in path_item.items():
             if method not in _HTTP_METHODS or not isinstance(op, dict):
+                continue
+            if method not in _READ_METHODS and not any(
+                path.startswith(prefix) for prefix in _MUTATING_ALLOWED_PREFIXES
+            ):
                 continue
             operation_id = op.get("operationId")
             if not isinstance(operation_id, str) or not operation_id.strip():

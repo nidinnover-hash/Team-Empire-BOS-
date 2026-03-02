@@ -87,6 +87,9 @@ jobs:
       - name: Generate SDK release notes
         run: python scripts/generate_sdk_release_notes.py ${{ github.ref_name }}
 
+      - name: Validate SDK release notes
+        run: python scripts/check_sdk_release_notes.py
+
       - name: Create release artifact checksums
         run: |
           python - <<'PY'
