@@ -2000,6 +2000,53 @@
         ]
       }
     },
+    "/api/v1/agents/multi-turn": {
+      "post": {
+        "tags": [
+          "Agents"
+        ],
+        "summary": "Agent Multi Turn",
+        "description": "Execute a complex multi-step request.\n\nThe orchestrator decomposes the message into sequential steps,\nruns each through the appropriate clone role, and returns all\nresults with aggregated actions and approval requirements.",
+        "operationId": "post_api_v1_agents_multi_turn",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MultiTurnResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/memory/profile": {
       "get": {
         "tags": [
@@ -31246,6 +31293,58 @@
         ],
         "title": "MultiOrgCockpitRead"
       },
+      "MultiTurnResponse": {
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/StepResult"
+            },
+            "type": "array",
+            "title": "Steps",
+            "default": []
+          },
+          "final_summary": {
+            "type": "string",
+            "title": "Final Summary",
+            "default": ""
+          },
+          "total_steps": {
+            "type": "integer",
+            "title": "Total Steps",
+            "default": 0
+          },
+          "steps_requiring_approval": {
+            "type": "integer",
+            "title": "Steps Requiring Approval",
+            "default": 0
+          },
+          "all_proposed_actions": {
+            "items": {
+              "$ref": "#/components/schemas/ProposedAction"
+            },
+            "type": "array",
+            "title": "All Proposed Actions",
+            "default": []
+          },
+          "confidence_score": {
+            "type": "integer",
+            "title": "Confidence Score",
+            "default": 0
+          },
+          "confidence_level": {
+            "type": "string",
+            "title": "Confidence Level",
+            "default": "low"
+          },
+          "needs_human_review": {
+            "type": "boolean",
+            "title": "Needs Human Review",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "MultiTurnResponse"
+      },
       "NewsDigestItem": {
         "properties": {
           "title": {
@@ -34786,6 +34885,47 @@
           "next_actions"
         ],
         "title": "StaffTrainingLayerReport"
+      },
+      "StepResult": {
+        "properties": {
+          "step_number": {
+            "type": "integer",
+            "title": "Step Number"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "response": {
+            "type": "string",
+            "title": "Response"
+          },
+          "requires_approval": {
+            "type": "boolean",
+            "title": "Requires Approval"
+          },
+          "proposed_actions": {
+            "items": {
+              "$ref": "#/components/schemas/ProposedAction"
+            },
+            "type": "array",
+            "title": "Proposed Actions",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "step_number",
+          "description",
+          "role",
+          "response",
+          "requires_approval"
+        ],
+        "title": "StepResult"
       },
       "StorageMetricsRead": {
         "properties": {
