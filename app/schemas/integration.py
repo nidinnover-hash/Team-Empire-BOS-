@@ -100,6 +100,37 @@ class AIProviderConnectResult(BaseModel):
     message: str
 
 
+class AIChatRequest(BaseModel):
+    """Direct AI chat request with provider and model selection."""
+    message: str = Field(..., min_length=1, max_length=20_000)
+    system_prompt: str = Field(
+        default="You are a helpful AI assistant.",
+        max_length=10_000,
+    )
+    provider: AIProviderName | None = None
+    model: str | None = Field(default=None, max_length=80)
+    max_tokens: int = Field(default=2048, ge=1, le=16_384)
+    conversation_history: list[dict] | None = None
+    stream: bool = Field(default=False)
+
+
+class AIChatResponse(BaseModel):
+    """Non-streaming AI chat response."""
+    provider: str
+    model: str
+    response: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
+class AIModelsResponse(BaseModel):
+    """Available models per provider."""
+    provider: str
+    configured: bool
+    models: list[str]
+    default_model: str
+
+
 class CodingProjectDiscoveryRead(BaseModel):
     provider_options: list[str]
     questions: list[str]

@@ -119,6 +119,33 @@ main {
   50% { box-shadow: 0 0 0 6px rgba(0, 122, 255, 0); }
 }
 
+/* ── AI Provider Bar ──────────────────────────────────────────────────── */
+.ai-provider-bar {
+  display: flex;
+  gap: .5rem;
+  align-items: center;
+  padding: .4rem .6rem;
+  border-top: 1px solid var(--line);
+  font-size: .8rem;
+}
+.ai-provider-bar label { color: var(--text-muted); }
+.ai-provider-bar select {
+  padding: .25rem .4rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: .8rem;
+}
+.ai-provider-bar #model-select { max-width: 220px; }
+.ai-provider-bar .stream-label {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  cursor: pointer;
+}
+
 /* ── Composer ──────────────────────────────────────────────────────────── */
 .composer {
   border-top: 1px solid var(--line-soft);

@@ -9530,6 +9530,84 @@
         }
       }
     },
+    "/api/v1/integrations/ai/models": {
+      "get": {
+        "tags": [
+          "Integrations",
+          "Integrations"
+        ],
+        "summary": "Ai Available Models",
+        "description": "Return available models per provider with configuration status.",
+        "operationId": "get_api_v1_integrations_ai_models",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AIModelsResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Get Api V1 Integrations Ai Models"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/integrations/ai/chat": {
+      "post": {
+        "tags": [
+          "Integrations",
+          "Integrations"
+        ],
+        "summary": "Ai Chat",
+        "description": "Direct AI chat endpoint with optional streaming.\n\n- ``stream=false`` (default): returns JSON ``AIChatResponse``\n- ``stream=true``: returns ``text/event-stream`` SSE with text delta chunks",
+        "operationId": "post_api_v1_integrations_ai_chat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/integrations/ai/coding-discovery": {
       "get": {
         "tags": [
@@ -20665,6 +20743,116 @@
           "used_fallback"
         ],
         "title": "AICallLogRead"
+      },
+      "AIChatRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Message"
+          },
+          "system_prompt": {
+            "type": "string",
+            "maxLength": 10000,
+            "title": "System Prompt",
+            "default": "You are a helpful AI assistant."
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "openai",
+                  "anthropic",
+                  "groq",
+                  "gemini"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "max_tokens": {
+            "type": "integer",
+            "maximum": 16384.0,
+            "minimum": 1.0,
+            "title": "Max Tokens",
+            "default": 2048
+          },
+          "conversation_history": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation History"
+          },
+          "stream": {
+            "type": "boolean",
+            "title": "Stream",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "AIChatRequest",
+        "description": "Direct AI chat request with provider and model selection."
+      },
+      "AIModelsResponse": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Models"
+          },
+          "default_model": {
+            "type": "string",
+            "title": "Default Model"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "configured",
+          "models",
+          "default_model"
+        ],
+        "title": "AIModelsResponse",
+        "description": "Available models per provider."
       },
       "AIProviderConnectRequest": {
         "properties": {
