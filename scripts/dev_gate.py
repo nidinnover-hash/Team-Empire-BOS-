@@ -19,7 +19,17 @@ CHECKS: list[list[str]] = [
         "scripts/check_migration_revisions.py",
     ],
     [sys.executable, "-m", "mypy", "app/services/webhook.py", "app/logs/audit.py"],
-    [sys.executable, "-m", "pytest", "-q", "tests/test_openapi_contracts.py", "tests/test_sdk_clients.py"],
+    [sys.executable, "scripts/check_sdk_client_generation.py"],
+    [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_openapi_contracts.py",
+        "tests/test_sdk_clients.py",
+        "tests/test_sdk_generation_deterministic.py",
+        "tests/test_sdk_generation_coverage.py",
+    ],
 ]
 
 

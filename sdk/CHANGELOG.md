@@ -1,5 +1,15 @@
 # SDK Changelog
 
+## 0.6.0 - 2026-03-02
+
+- Added PR checklist guard workflow with conditional migration/SDK checklist enforcement.
+- Added `dev-gate` CI lane and made full CI depend on it.
+- Added deterministic SDK generation test coverage.
+- Added GET-operation generation coverage tests for Python/TypeScript SDK clients.
+- Added explicit SDK client generation parity check script and CI wiring.
+- Added automated SDK release notes generation (`sdk/release-notes.md`) in release workflow.
+- Added branch protection audit workflow and updated required-check documentation.
+
 ## 0.5.0 - 2026-03-02
 
 - Added OpenAPI operationId-driven SDK client method generation via `scripts/generate_sdk_clients.py`.

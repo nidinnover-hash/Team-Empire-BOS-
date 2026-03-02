@@ -50,6 +50,9 @@ jobs:
       - name: Generate SDK clients
         run: python scripts/generate_sdk_clients.py
 
+      - name: Check SDK client generation parity
+        run: python scripts/check_sdk_client_generation.py
+
       - name: Verify SDK generated files are up to date
         run: |
           git diff --exit-code -- \

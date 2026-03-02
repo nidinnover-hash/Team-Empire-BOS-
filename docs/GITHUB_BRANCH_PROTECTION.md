@@ -11,8 +11,12 @@ Apply this once per repository (`main` branch):
    - Dismiss stale pull request approvals when new commits are pushed
    - Require status checks to pass before merging
 4. Required status checks:
-   - `fast-checks`
-   - `secret-scan`
+   - `PR Checklist Guard / validate-pr-checklist`
+   - `ClickUp ID Guard / validate-clickup-ids`
+   - `CI / dev-gate`
+   - `CI / fast-checks`
+   - `SDK CI / sdk-drift-check`
+   - `CI / secret-scan`
 5. Enable:
    - Require branches to be up to date before merging
    - Do not allow force pushes

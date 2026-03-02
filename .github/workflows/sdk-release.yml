@@ -58,6 +58,9 @@ jobs:
           python scripts/generate_sdk_models.py
           python scripts/generate_sdk_clients.py
 
+      - name: Check SDK client generation parity
+        run: python scripts/check_sdk_client_generation.py
+
       - name: Verify generated files committed
         run: |
           git diff --exit-code -- \
@@ -80,6 +83,9 @@ jobs:
           npm run typecheck
           npm run build
           npm pack --dry-run
+
+      - name: Generate SDK release notes
+        run: python scripts/generate_sdk_release_notes.py ${{ github.ref_name }}
 
       - name: Create release artifact checksums
         run: |
@@ -126,6 +132,7 @@ jobs:
             sdk/typescript/*.tgz
             sdk/artifact-sha256.txt
             sdk/release-provenance.json
+            sdk/release-notes.md
 
       - name: Publish Python SDK to PyPI
         if: ${{ secrets.PYPI_API_TOKEN != '' }}

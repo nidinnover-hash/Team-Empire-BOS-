@@ -1,0 +1,50 @@
+name: Branch Protection Audit
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 3 * * 1"
+
+jobs:
+  audit-main-branch-protection:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Validate required status checks on main
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const required = new Set([
+              "PR Checklist Guard / validate-pr-checklist",
+              "ClickUp ID Guard / validate-clickup-ids",
+              "CI / dev-gate",
+              "CI / fast-checks",
+              "SDK CI / sdk-drift-check",
+              "CI / secret-scan",
+            ]);
+            let protection;
+            try {
+              protection = await github.rest.repos.getBranchProtection({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                branch: "main",
+              });
+            } catch (err) {
+              core.setFailed(
+                "Unable to read branch protection for main. Ensure the repo has branch protection enabled and workflow token has access."
+              );
+              return;
+            }
+
+            const contexts =
+              protection.data.required_status_checks?.checks?.map((c) => c.context) ??
+              protection.data.required_status_checks?.contexts ??
+              [];
+            const current = new Set(contexts);
+            const missing = [...required].filter((ctx) => !current.has(ctx));
+            if (missing.length) {
+              core.setFailed(
+                "Missing required branch protection checks on main:\n- " + missing.join("\n- ")
+              );
+            }
