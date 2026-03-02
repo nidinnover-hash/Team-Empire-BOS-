@@ -1,10 +1,13 @@
 import { APIError, QuotaExceededError, RateLimitError } from "./errors";
 import type {
+  AgentChatRequest,
+  AgentChatResponse,
   ApprovalDecision,
   ApprovalRead,
   ApiKeyCreate,
   ApiKeyCreateResponse,
   ApiKeyListResponse,
+  MultiTurnResponse,
   TaskCreate,
   TaskRead,
   TaskUpdate,
@@ -245,4 +248,401 @@ export class NidinBOSClient {
   listAutomationWorkflows(): Promise<Record<string, unknown>[]> {
     return this.request<Record<string, unknown>[]>("GET", "/api/v1/automations/workflows");
   }
+
+  agentChat(payload: AgentChatRequest): Promise<AgentChatResponse> {
+    return this.request<AgentChatResponse>("POST", "/api/v1/agents/chat", {
+      body: payload,
+    });
+  }
+
+  agentMultiTurn(payload: AgentChatRequest): Promise<MultiTurnResponse> {
+    return this.request<MultiTurnResponse>("POST", "/api/v1/agents/multi-turn", {
+      body: payload,
+    });
+  }
+
+  // BEGIN GENERATED OPERATIONS
+  deleteApiV1ApiKeysKeyId(key_id: string | number): Promise<unknown> {
+    let path = `/api/v1/api-keys/${String(key_id)}`;
+    return this.request<unknown>("DELETE", path, {
+      expectedStatus: [204],
+    });
+  }
+
+  deleteApiV1ApprovalsApprovalPatternsPatternId(pattern_id: string | number): Promise<unknown> {
+    let path = `/api/v1/approvals/approval-patterns/${String(pattern_id)}`;
+    return this.request<unknown>("DELETE", path, {
+      expectedStatus: [204],
+    });
+  }
+
+  deleteApiV1AutomationsTriggersTriggerId(trigger_id: string | number): Promise<unknown> {
+    let path = `/api/v1/automations/triggers/${String(trigger_id)}`;
+    return this.request<unknown>("DELETE", path, {
+      expectedStatus: [204],
+    });
+  }
+
+  deleteApiV1TasksTaskId(task_id: string | number): Promise<unknown> {
+    let path = `/api/v1/tasks/${String(task_id)}`;
+    return this.request<unknown>("DELETE", path, {
+      expectedStatus: [204],
+    });
+  }
+
+  deleteApiV1WebhooksEndpointId(endpoint_id: string | number): Promise<unknown> {
+    let path = `/api/v1/webhooks/${String(endpoint_id)}`;
+    return this.request<unknown>("DELETE", path, {
+      expectedStatus: [204],
+    });
+  }
+
+  getApiV1ApiKeys(): Promise<unknown> {
+    let path = `/api/v1/api-keys`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1Approvals(status?: string | number | boolean, limit?: string | number | boolean, offset?: string | number | boolean): Promise<unknown> {
+    let path = `/api/v1/approvals`;
+    const query = new URLSearchParams();
+    if (status !== undefined) query.set("status", String(status));
+    if (limit !== undefined) query.set("limit", String(limit));
+    if (offset !== undefined) query.set("offset", String(offset));
+    const qs = query.toString();
+    if (qs) path = `${path}?${qs}`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1ApprovalsApprovalPatterns(): Promise<unknown> {
+    let path = `/api/v1/approvals/approval-patterns`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1ApprovalsTimeline(limit?: string | number | boolean, offset?: string | number | boolean): Promise<unknown> {
+    let path = `/api/v1/approvals/timeline`;
+    const query = new URLSearchParams();
+    if (limit !== undefined) query.set("limit", String(limit));
+    if (offset !== undefined) query.set("offset", String(offset));
+    const qs = query.toString();
+    if (qs) path = `${path}?${qs}`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1AuthMe(): Promise<unknown> {
+    let path = `/api/v1/auth/me`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1AutomationsTriggers(active_only?: string | number | boolean, limit?: string | number | boolean): Promise<unknown> {
+    let path = `/api/v1/automations/triggers`;
+    const query = new URLSearchParams();
+    if (active_only !== undefined) query.set("active_only", String(active_only));
+    if (limit !== undefined) query.set("limit", String(limit));
+    const qs = query.toString();
+    if (qs) path = `${path}?${qs}`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1AutomationsTriggersTriggerId(trigger_id: string | number): Promise<unknown> {
+    let path = `/api/v1/automations/triggers/${String(trigger_id)}`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1AutomationsWorkflows(status?: string | number | boolean, limit?: string | number | boolean): Promise<unknown> {
+    let path = `/api/v1/automations/workflows`;
+    const query = new URLSearchParams();
+    if (status !== undefined) query.set("status", String(status));
+    if (limit !== undefined) query.set("limit", String(limit));
+    const qs = query.toString();
+    if (qs) path = `${path}?${qs}`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1AutomationsWorkflowsWorkflowId(workflow_id: string | number): Promise<unknown> {
+    let path = `/api/v1/automations/workflows/${String(workflow_id)}`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1Orgs(): Promise<unknown> {
+    let path = `/api/v1/orgs`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1OrgsOrgIdFeatureFlags(org_id: string | number): Promise<unknown> {
+    let path = `/api/v1/orgs/${String(org_id)}/feature-flags`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1OrgsOrgIdMembers(org_id: string | number): Promise<unknown> {
+    let path = `/api/v1/orgs/${String(org_id)}/members`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1Tasks(project_id?: string | number | boolean, category?: string | number | boolean, is_done?: string | number | boolean, limit?: string | number | boolean, offset?: string | number | boolean): Promise<unknown> {
+    let path = `/api/v1/tasks`;
+    const query = new URLSearchParams();
+    if (project_id !== undefined) query.set("project_id", String(project_id));
+    if (category !== undefined) query.set("category", String(category));
+    if (is_done !== undefined) query.set("is_done", String(is_done));
+    if (limit !== undefined) query.set("limit", String(limit));
+    if (offset !== undefined) query.set("offset", String(offset));
+    const qs = query.toString();
+    if (qs) path = `${path}?${qs}`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1Webhooks(limit?: string | number | boolean, offset?: string | number | boolean): Promise<unknown> {
+    let path = `/api/v1/webhooks`;
+    const query = new URLSearchParams();
+    if (limit !== undefined) query.set("limit", String(limit));
+    if (offset !== undefined) query.set("offset", String(offset));
+    const qs = query.toString();
+    if (qs) path = `${path}?${qs}`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1WebhooksDeliveriesAll(event?: string | number | boolean, status?: string | number | boolean, limit?: string | number | boolean, offset?: string | number | boolean): Promise<unknown> {
+    let path = `/api/v1/webhooks/deliveries/all`;
+    const query = new URLSearchParams();
+    if (event !== undefined) query.set("event", String(event));
+    if (status !== undefined) query.set("status", String(status));
+    if (limit !== undefined) query.set("limit", String(limit));
+    if (offset !== undefined) query.set("offset", String(offset));
+    const qs = query.toString();
+    if (qs) path = `${path}?${qs}`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1WebhooksDeliveriesDeadLetter(limit?: string | number | boolean, offset?: string | number | boolean): Promise<unknown> {
+    let path = `/api/v1/webhooks/deliveries/dead-letter`;
+    const query = new URLSearchParams();
+    if (limit !== undefined) query.set("limit", String(limit));
+    if (offset !== undefined) query.set("offset", String(offset));
+    const qs = query.toString();
+    if (qs) path = `${path}?${qs}`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1WebhooksEndpointId(endpoint_id: string | number): Promise<unknown> {
+    let path = `/api/v1/webhooks/${String(endpoint_id)}`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  getApiV1WebhooksEndpointIdDeliveries(endpoint_id: string | number, limit?: string | number | boolean, offset?: string | number | boolean): Promise<unknown> {
+    let path = `/api/v1/webhooks/${String(endpoint_id)}/deliveries`;
+    const query = new URLSearchParams();
+    if (limit !== undefined) query.set("limit", String(limit));
+    if (offset !== undefined) query.set("offset", String(offset));
+    const qs = query.toString();
+    if (qs) path = `${path}?${qs}`;
+    return this.request<unknown>("GET", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  patchApiV1ApprovalsApprovalPatternsPatternId(pattern_id: string | number, payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/approvals/approval-patterns/${String(pattern_id)}`;
+    return this.request<unknown>("PATCH", path, {
+      body: payload,
+      expectedStatus: [200],
+    });
+  }
+
+  patchApiV1AutomationsTriggersTriggerId(trigger_id: string | number, payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/automations/triggers/${String(trigger_id)}`;
+    return this.request<unknown>("PATCH", path, {
+      body: payload,
+      expectedStatus: [200],
+    });
+  }
+
+  patchApiV1OrgsOrgId(org_id: string | number, payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/orgs/${String(org_id)}`;
+    return this.request<unknown>("PATCH", path, {
+      body: payload,
+      expectedStatus: [200],
+    });
+  }
+
+  patchApiV1OrgsOrgIdFeatureFlags(org_id: string | number, payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/orgs/${String(org_id)}/feature-flags`;
+    return this.request<unknown>("PATCH", path, {
+      body: payload,
+      expectedStatus: [200],
+    });
+  }
+
+  patchApiV1TasksTaskId(task_id: string | number, payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/tasks/${String(task_id)}`;
+    return this.request<unknown>("PATCH", path, {
+      body: payload,
+      expectedStatus: [200],
+    });
+  }
+
+  patchApiV1WebhooksEndpointId(endpoint_id: string | number, payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/webhooks/${String(endpoint_id)}`;
+    return this.request<unknown>("PATCH", path, {
+      body: payload,
+      expectedStatus: [200],
+    });
+  }
+
+  postApiV1ApiKeys(payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/api-keys`;
+    return this.request<unknown>("POST", path, {
+      body: payload,
+      expectedStatus: [201],
+    });
+  }
+
+  postApiV1ApprovalsApprovalIdApprove(approval_id: string | number, payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/approvals/${String(approval_id)}/approve`;
+    return this.request<unknown>("POST", path, {
+      body: payload,
+      expectedStatus: [200],
+    });
+  }
+
+  postApiV1ApprovalsApprovalIdReject(approval_id: string | number, payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/approvals/${String(approval_id)}/reject`;
+    return this.request<unknown>("POST", path, {
+      body: payload,
+      expectedStatus: [200],
+    });
+  }
+
+  postApiV1ApprovalsRequest(payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/approvals/request`;
+    return this.request<unknown>("POST", path, {
+      body: payload,
+      expectedStatus: [201],
+    });
+  }
+
+  postApiV1AuthLogin(): Promise<unknown> {
+    let path = `/api/v1/auth/login`;
+    return this.request<unknown>("POST", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  postApiV1AutomationsTriggers(payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/automations/triggers`;
+    return this.request<unknown>("POST", path, {
+      body: payload,
+      expectedStatus: [201],
+    });
+  }
+
+  postApiV1AutomationsWorkflows(payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/automations/workflows`;
+    return this.request<unknown>("POST", path, {
+      body: payload,
+      expectedStatus: [201],
+    });
+  }
+
+  postApiV1AutomationsWorkflowsWorkflowIdAdvance(workflow_id: string | number, payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/automations/workflows/${String(workflow_id)}/advance`;
+    return this.request<unknown>("POST", path, {
+      body: payload,
+      expectedStatus: [200],
+    });
+  }
+
+  postApiV1AutomationsWorkflowsWorkflowIdRun(workflow_id: string | number): Promise<unknown> {
+    let path = `/api/v1/automations/workflows/${String(workflow_id)}/run`;
+    return this.request<unknown>("POST", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  postApiV1AutomationsWorkflowsWorkflowIdStart(workflow_id: string | number): Promise<unknown> {
+    let path = `/api/v1/automations/workflows/${String(workflow_id)}/start`;
+    return this.request<unknown>("POST", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  postApiV1Orgs(payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/orgs`;
+    return this.request<unknown>("POST", path, {
+      body: payload,
+      expectedStatus: [201],
+    });
+  }
+
+  postApiV1OrgsOrgIdMembers(org_id: string | number, payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/orgs/${String(org_id)}/members`;
+    return this.request<unknown>("POST", path, {
+      body: payload,
+      expectedStatus: [201],
+    });
+  }
+
+  postApiV1Tasks(payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/tasks`;
+    return this.request<unknown>("POST", path, {
+      body: payload,
+      expectedStatus: [201],
+    });
+  }
+
+  postApiV1Webhooks(payload?: Record<string, unknown>): Promise<unknown> {
+    let path = `/api/v1/webhooks`;
+    return this.request<unknown>("POST", path, {
+      body: payload,
+      expectedStatus: [201],
+    });
+  }
+
+  postApiV1WebhooksDeliveriesDeliveryIdReplay(delivery_id: string | number): Promise<unknown> {
+    let path = `/api/v1/webhooks/deliveries/${String(delivery_id)}/replay`;
+    return this.request<unknown>("POST", path, {
+      expectedStatus: [200],
+    });
+  }
+
+  postApiV1WebhooksEndpointIdTest(endpoint_id: string | number): Promise<unknown> {
+    let path = `/api/v1/webhooks/${String(endpoint_id)}/test`;
+    return this.request<unknown>("POST", path, {
+      expectedStatus: [200],
+    });
+  }
+  // END GENERATED OPERATIONS
 }

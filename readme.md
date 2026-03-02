@@ -45,6 +45,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8002
 pytest tests/ -q          # 1052+ tests
 ruff check app tests      # lint
 npm run lint:frontend     # JS lint
+py -3.12 scripts/dev_gate.py  # fast local quality gate
 ```
 
 ## Docs

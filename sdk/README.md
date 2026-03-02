@@ -10,12 +10,15 @@ This folder contains generated types plus hand-written API clients for:
 ```bash
 py -3.12 scripts/export_openapi_schema.py
 py -3.12 scripts/generate_sdk_models.py
+py -3.12 scripts/generate_sdk_clients.py
 ```
 
 Generated outputs:
 
 - `sdk/python/nidin_bos_sdk/models.py`
 - `sdk/typescript/src/types.ts`
+- `sdk/python/nidin_bos_sdk/client.py` (generated operationId methods section)
+- `sdk/typescript/src/client.ts` (generated operationId methods section)
 
 ## Examples
 

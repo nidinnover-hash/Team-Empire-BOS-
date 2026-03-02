@@ -47,12 +47,17 @@ jobs:
       - name: Generate SDK models
         run: python scripts/generate_sdk_models.py
 
+      - name: Generate SDK clients
+        run: python scripts/generate_sdk_clients.py
+
       - name: Verify SDK generated files are up to date
         run: |
           git diff --exit-code -- \
             sdk/openapi/openapi.json \
             sdk/python/nidin_bos_sdk/models.py \
-            sdk/typescript/src/types.ts
+            sdk/typescript/src/types.ts \
+            sdk/python/nidin_bos_sdk/client.py \
+            sdk/typescript/src/client.ts
 
       - name: Enforce SDK version bump on PRs
         if: github.event_name == 'pull_request'

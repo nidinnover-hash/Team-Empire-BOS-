@@ -1,5 +1,11 @@
 # SDK Changelog
 
+## 0.5.0 - 2026-03-02
+
+- Added OpenAPI operationId-driven SDK client method generation via `scripts/generate_sdk_clients.py`.
+- Integrated generated client drift checks into SDK CI and SDK release workflows.
+- Added fast local developer gate command `scripts/dev_gate.py`.
+
 ## 0.4.0 - 2026-03-02
 
 - Added migration revision guardrails (`check_migration_revisions.py`) and integrated them into readiness/CI.
