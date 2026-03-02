@@ -94,6 +94,60 @@ export interface ApprovalTimelineResponse {
   items: ApprovalTimelineItem[];
 }
 
+export interface ContactCreate {
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  company?: string | null;
+  role?: string | null;
+  relationship?: "personal" | "business" | "family" | "mentor" | "other";
+  notes?: string | null;
+  pipeline_stage?: "new" | "contacted" | "qualified" | "proposal" | "negotiation" | "won" | "lost";
+  lead_score?: number;
+  lead_source?: "manual" | "social_media" | "referral" | "website" | "email" | "event" | "other" | null;
+  deal_value?: number | null;
+  expected_close_date?: string | null;
+  tags?: string | null;
+}
+
+export interface ContactRead {
+  id: number;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  company: string | null;
+  role: string | null;
+  relationship: string;
+  notes: string | null;
+  pipeline_stage: string;
+  lead_score: number;
+  lead_source: string | null;
+  deal_value: number | null;
+  expected_close_date: string | null;
+  last_contacted_at: string | null;
+  next_follow_up_at: string | null;
+  tags: string | null;
+  created_at: string;
+}
+
+export interface ContactUpdate {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  company?: string | null;
+  role?: string | null;
+  relationship?: "personal" | "business" | "family" | "mentor" | "other" | null;
+  notes?: string | null;
+  pipeline_stage?: "new" | "contacted" | "qualified" | "proposal" | "negotiation" | "won" | "lost" | null;
+  lead_score?: number | null;
+  lead_source?: "manual" | "social_media" | "referral" | "website" | "email" | "event" | "other" | null;
+  deal_value?: number | null;
+  expected_close_date?: string | null;
+  last_contacted_at?: string | null;
+  next_follow_up_at?: string | null;
+  tags?: string | null;
+}
+
 export interface FeatureFlagValue {
   enabled?: boolean;
   rollout_percentage?: number;
@@ -155,6 +209,12 @@ export interface OrganizationUpdate {
   country_code?: string | null;
   branch_label?: string | null;
   expected_config_version?: number | null;
+}
+
+export interface PipelineSummary {
+  stage: string;
+  count: number;
+  total_deal_value: number;
 }
 
 export interface TaskCreate {
@@ -343,57 +403,3 @@ export interface WorkflowStepDef {
 }
 
 export type WebhookEndpointListResponse = WebhookEndpointRead[];
-
-// ── Agent Chat Models ────────────────────────────────────────────────────────
-
-export interface AgentChatRequest {
-  message: string;
-  force_role?: string | null;
-  avatar_mode?: string | null;
-  employee_id?: number | null;
-}
-
-export interface ProposedAction {
-  action_type: string;
-  params?: Record<string, unknown>;
-}
-
-export interface AgentChatResponse {
-  role: string;
-  response: string;
-  requires_approval: boolean;
-  proposed_actions: ProposedAction[];
-  confidence_score: number;
-  confidence_level: string;
-  confidence_reasons: string[];
-  needs_human_review: boolean;
-  memory_context_chars: number;
-  memory_context_truncated: boolean;
-  memory_sources: string[];
-  memory_source_counts: Record<string, number>;
-  policy_score: number;
-  blocked_by_policy: boolean;
-  policy_reasons: string[];
-  policy_blocked_actions: string[];
-  policy_matched_rule_ids: number[];
-}
-
-export interface StepResult {
-  step_number: number;
-  description: string;
-  role: string;
-  response: string;
-  requires_approval: boolean;
-  proposed_actions: ProposedAction[];
-}
-
-export interface MultiTurnResponse {
-  steps: StepResult[];
-  final_summary: string;
-  total_steps: number;
-  steps_requiring_approval: number;
-  all_proposed_actions: ProposedAction[];
-  confidence_score: number;
-  confidence_level: string;
-  needs_human_review: boolean;
-}

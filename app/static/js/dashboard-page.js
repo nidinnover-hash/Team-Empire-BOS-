@@ -1340,5 +1340,36 @@ window.showToast = function(msg, type) {
     });
   })();
 
+  // ── CRM Pipeline Funnel on Dashboard ──────────────────────────────
+  (async function () {
+    try {
+      var token = await window.__bootPromise;
+      if (!token) return;
+      var authHeaders = { Authorization: "Bearer " + token };
+
+      // Load pipeline summary
+      var pipeResp = await fetch("/api/v1/contacts/pipeline-summary", { headers: authHeaders });
+      if (pipeResp.ok) {
+        var stages = await pipeResp.json();
+        var totalVal = 0;
+        stages.forEach(function (s) {
+          var el = document.getElementById("dash-pf-" + s.stage);
+          if (el) el.textContent = String(s.count);
+          totalVal += s.total_deal_value || 0;
+        });
+        var valEl = document.getElementById("dash-pipeline-val");
+        if (valEl) valEl.textContent = "$" + totalVal.toLocaleString();
+      }
+
+      // Load follow-up due count
+      var fuResp = await fetch("/api/v1/contacts/follow-up-due?limit=200", { headers: authHeaders });
+      if (fuResp.ok) {
+        var duContacts = await fuResp.json();
+        var fuEl = document.getElementById("dash-followup-count");
+        if (fuEl) fuEl.textContent = String(duContacts.length);
+      }
+    } catch (_e) { /* silent */ }
+  })();
+
   // Init Lucide icons
   if (typeof lucide !== "undefined") lucide.createIcons();

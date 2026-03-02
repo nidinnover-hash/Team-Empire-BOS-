@@ -554,13 +554,6 @@ export class NidinBOSClient {
     });
   }
 
-  postApiV1AuthLogin(): Promise<unknown> {
-    let path = `/api/v1/auth/login`;
-    return this.request<unknown>("POST", path, {
-      expectedStatus: [200],
-    });
-  }
-
   postApiV1AutomationsTriggers(payload?: Record<string, unknown>): Promise<unknown> {
     let path = `/api/v1/automations/triggers`;
     return this.request<unknown>("POST", path, {

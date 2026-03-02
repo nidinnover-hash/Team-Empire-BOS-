@@ -8,13 +8,21 @@ jobs:
   validate-pr-checklist:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate PR checklist requirements
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Collect PR body and file list
         uses: actions/github-script@v7
         with:
           script: |
-            const body = (context.payload.pull_request.body || "").toLowerCase();
+            const fs = require("fs");
+            const body = context.payload.pull_request.body || "";
             const prNumber = context.payload.pull_request.number;
-
             const files = await github.paginate(
               github.rest.pulls.listFiles,
               {
@@ -25,32 +33,8 @@ jobs:
               }
             );
             const paths = files.map((f) => f.filename);
+            fs.writeFileSync("pr_body.txt", body, "utf8");
+            fs.writeFileSync("pr_paths.json", JSON.stringify(paths, null, 2), "utf8");
 
-            const hasChecked = (pattern) => pattern.test(body);
-
-            const devGateChecked = hasChecked(/-\s*\[[xX]\]\s*`?py\s*-?3\.12\s+scripts\/dev_gate\.py`?/i);
-            const readyChecked = hasChecked(/-\s*\[[xX]\]\s*`?py\s*-?3\.12\s+scripts\/check_ready\.py`?/i);
-            if (!devGateChecked && !readyChecked) {
-              core.setFailed("Checklist requires at least one of `scripts/dev_gate.py` or `scripts/check_ready.py` to be checked.");
-              return;
-            }
-
-            const migrationTouched = paths.some((p) =>
-              p.startsWith("alembic/versions/") || p.startsWith("app/models/")
-            );
-            const migrationReviewed = hasChecked(/-\s*\[[xX]\]\s*migration impact reviewed/i);
-            if (migrationTouched && !migrationReviewed) {
-              core.setFailed("Migration/model changes detected; check `Migration impact reviewed` in the PR checklist.");
-              return;
-            }
-
-            const contractTouched = paths.some((p) =>
-              p === "sdk/openapi/openapi.json" ||
-              p.startsWith("app/api/") ||
-              p.startsWith("app/schemas/")
-            );
-            const sdkChecklistChecked = hasChecked(/-\s*\[[xX]\]\s*sdk version \+\s*`?sdk\/changelog\.md`?\s*updated/i);
-            if (contractTouched && !sdkChecklistChecked) {
-              core.setFailed("API/OpenAPI contract changes detected; check `SDK version + sdk/CHANGELOG.md updated...` in PR checklist.");
-              return;
-            }
+      - name: Validate PR checklist requirements
+        run: python scripts/pr_checklist_guard.py pr_body.txt pr_paths.json

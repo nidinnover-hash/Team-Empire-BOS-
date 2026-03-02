@@ -5131,7 +5131,7 @@
           "Contacts"
         ],
         "summary": "List Contacts",
-        "description": "List all contacts, alphabetically by name.",
+        "description": "List contacts with optional CRM filters.",
         "operationId": "get_api_v1_contacts",
         "security": [
           {
@@ -5162,6 +5162,91 @@
               "default": 0,
               "title": "Offset"
             }
+          },
+          {
+            "name": "pipeline_stage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pipeline Stage"
+            }
+          },
+          {
+            "name": "lead_score_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 100,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lead Score Min"
+            }
+          },
+          {
+            "name": "lead_score_max",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 100,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lead Score Max"
+            }
+          },
+          {
+            "name": "relationship",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Relationship"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
           }
         ],
         "responses": {
@@ -5175,6 +5260,92 @@
                     "$ref": "#/components/schemas/ContactRead"
                   },
                   "title": "Response Get Api V1 Contacts"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/contacts/pipeline-summary": {
+      "get": {
+        "tags": [
+          "Contacts"
+        ],
+        "summary": "Pipeline Summary",
+        "description": "Aggregate count + deal value per pipeline stage.",
+        "operationId": "get_api_v1_contacts_pipeline_summary",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PipelineSummary"
+                  },
+                  "type": "array",
+                  "title": "Response Get Api V1 Contacts Pipeline Summary"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/contacts/follow-up-due": {
+      "get": {
+        "tags": [
+          "Contacts"
+        ],
+        "summary": "Follow Up Due",
+        "description": "Contacts whose next_follow_up_at is in the past or today.",
+        "operationId": "get_api_v1_contacts_follow_up_due",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ContactRead"
+                  },
+                  "title": "Response Get Api V1 Contacts Follow Up Due"
                 }
               }
             }
@@ -13548,12 +13719,40 @@
         "summary": "Notification Stream",
         "description": "SSE stream that pushes unread count every 5 seconds.\n\nUses fresh DB sessions per poll to avoid holding a stale request-scoped\nsession open for the lifetime of the SSE connection.",
         "operationId": "get_api_v1_notifications_stream",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -24259,6 +24458,83 @@
               }
             ],
             "title": "Notes"
+          },
+          "pipeline_stage": {
+            "type": "string",
+            "enum": [
+              "new",
+              "contacted",
+              "qualified",
+              "proposal",
+              "negotiation",
+              "won",
+              "lost"
+            ],
+            "title": "Pipeline Stage",
+            "default": "new"
+          },
+          "lead_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Lead Score",
+            "default": 0
+          },
+          "lead_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "manual",
+                  "social_media",
+                  "referral",
+                  "website",
+                  "email",
+                  "event",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source"
+          },
+          "deal_value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deal Value"
+          },
+          "expected_close_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Close Date"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
           }
         },
         "type": "object",
@@ -24336,6 +24612,83 @@
             ],
             "title": "Notes"
           },
+          "pipeline_stage": {
+            "type": "string",
+            "title": "Pipeline Stage"
+          },
+          "lead_score": {
+            "type": "integer",
+            "title": "Lead Score"
+          },
+          "lead_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source"
+          },
+          "deal_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deal Value"
+          },
+          "expected_close_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Close Date"
+          },
+          "last_contacted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Contacted At"
+          },
+          "next_follow_up_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Follow Up At"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -24352,6 +24705,14 @@
           "role",
           "relationship",
           "notes",
+          "pipeline_stage",
+          "lead_score",
+          "lead_source",
+          "deal_value",
+          "expected_close_date",
+          "last_contacted_at",
+          "next_follow_up_at",
+          "tags",
           "created_at"
         ],
         "title": "ContactRead"
@@ -24448,6 +24809,119 @@
               }
             ],
             "title": "Notes"
+          },
+          "pipeline_stage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "new",
+                  "contacted",
+                  "qualified",
+                  "proposal",
+                  "negotiation",
+                  "won",
+                  "lost"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipeline Stage"
+          },
+          "lead_score": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Score"
+          },
+          "lead_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "manual",
+                  "social_media",
+                  "referral",
+                  "website",
+                  "email",
+                  "event",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source"
+          },
+          "deal_value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deal Value"
+          },
+          "expected_close_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Close Date"
+          },
+          "last_contacted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Contacted At"
+          },
+          "next_follow_up_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Follow Up At"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
           }
         },
         "type": "object",
@@ -32898,6 +33372,29 @@
           "message"
         ],
         "title": "PhotoCharacterStudyResult"
+      },
+      "PipelineSummary": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "total_deal_value": {
+            "type": "number",
+            "title": "Total Deal Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "count",
+          "total_deal_value"
+        ],
+        "title": "PipelineSummary"
       },
       "PolicyDriftReportRead": {
         "properties": {
