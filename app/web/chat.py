@@ -116,6 +116,11 @@ async def web_agent_chat(
         "response": result.response,
         "requires_approval": result.requires_approval,
         "proposed_actions": [a.model_dump() for a in result.proposed_actions],
+        "confidence_score": result.confidence_score,
+        "confidence_level": result.confidence_level,
+        "needs_human_review": result.needs_human_review,
+        "policy_score": result.policy_score,
+        "blocked_by_policy": result.blocked_by_policy,
     })
 
 

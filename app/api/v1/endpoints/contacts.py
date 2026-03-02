@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
-from app.schemas.contact import ContactCreate, ContactRead, ContactUpdate
+from app.schemas.contact import ContactCreate, ContactRead, ContactUpdate, PipelineSummary
 from app.services import contact as contact_service
 
 router = APIRouter(prefix="/contacts", tags=["Contacts"])
@@ -30,15 +30,49 @@ async def create_contact(
     return contact
 
 
+@router.get("/pipeline-summary", response_model=list[PipelineSummary])
+async def pipeline_summary(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> list[PipelineSummary]:
+    """Aggregate count + deal value per pipeline stage."""
+    return await contact_service.get_pipeline_summary(db, organization_id=actor["org_id"])
+
+
+@router.get("/follow-up-due", response_model=list[ContactRead])
+async def follow_up_due(
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+) -> list[ContactRead]:
+    """Contacts whose next_follow_up_at is in the past or today."""
+    return await contact_service.get_follow_up_due(db, organization_id=actor["org_id"], limit=limit)
+
+
 @router.get("", response_model=list[ContactRead])
 async def list_contacts(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0, le=10_000),
+    pipeline_stage: str | None = Query(None),
+    lead_score_min: int | None = Query(None, ge=0, le=100),
+    lead_score_max: int | None = Query(None, ge=0, le=100),
+    relationship: str | None = Query(None),
+    search: str | None = Query(None, max_length=200),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> list[ContactRead]:
-    """List all contacts, alphabetically by name."""
-    return await contact_service.list_contacts(db, organization_id=actor["org_id"], limit=limit, offset=offset)
+    """List contacts with optional CRM filters."""
+    return await contact_service.list_contacts(
+        db,
+        organization_id=actor["org_id"],
+        limit=limit,
+        offset=offset,
+        pipeline_stage=pipeline_stage,
+        lead_score_min=lead_score_min,
+        lead_score_max=lead_score_max,
+        relationship=relationship,
+        search=search,
+    )
 
 
 @router.get("/{contact_id}", response_model=ContactRead)
