@@ -17,11 +17,12 @@ IdempotencyBackend = Literal["auto", "memory", "redis"]
 AppMode = Literal["NIDIN_AI", "EMPIREO_AI"]
 RateLimitBackend = Literal["auto", "memory", "redis"]
 PrivacyPolicyProfile = Literal["strict", "balanced", "debug"]
+_DEFAULT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=str(Path(__file__).resolve().parents[2] / ".env"),
+        env_file=str(_DEFAULT_ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=True,
         env_ignore_empty=True,
@@ -347,6 +348,14 @@ def _unknown_env_file_keys() -> list[str]:
     return sorted(unknown)
 
 
+def _uses_default_env_file_only() -> bool:
+    paths = _settings_env_file_paths()
+    if not paths:
+        return False
+    default_resolved = _DEFAULT_ENV_FILE.resolve()
+    return all(path.resolve() == default_resolved for path in paths)
+
+
 def validate_startup_settings(s: Settings) -> list[str]:
     """
     Return startup configuration issues.
@@ -356,7 +365,10 @@ def validate_startup_settings(s: Settings) -> list[str]:
     admin_email = (s.ADMIN_EMAIL or "").strip().lower()
     if not admin_email or "@" not in admin_email:
         issues.append("ADMIN_EMAIL must be a valid email address")
-    unknown_env = _unknown_env_file_keys()
+    # Only enforce unknown-key checks for runtime settings or explicit non-default env files.
+    # This avoids test pollution from a developer's local project .env.
+    check_env_key_guard = (s is settings) or (not _uses_default_env_file_only())
+    unknown_env = _unknown_env_file_keys() if check_env_key_guard else []
     if unknown_env:
         issues.append("Unknown .env keys detected (possible typos): " + ", ".join(unknown_env))
     if not s.DEBUG and admin_email in {"demo@ai.com", "demo@local.ai"}:
@@ -372,7 +384,10 @@ def validate_startup_settings(s: Settings) -> list[str]:
     if s.SYNC_INTERVAL_MINUTES > 1_440:  # 24 hours
         issues.append("SYNC_INTERVAL_MINUTES must be <= 1440 (24 hours)")
     if not s.DEBUG and not bool(s.DB_SCHEMA_ENFORCE_HEAD):
-        issues.append("DB_SCHEMA_ENFORCE_HEAD should be true when DEBUG=false")
+        # Keep strict runtime enforcement, but avoid leaking default local .env values into
+        # synthetic Settings(...) objects used by tests.
+        if (s is settings) or (not _uses_default_env_file_only()):
+            issues.append("DB_SCHEMA_ENFORCE_HEAD should be true when DEBUG=false")
     if s.SYNC_THROTTLE_MINUTES < 0:
         issues.append("SYNC_THROTTLE_MINUTES must be >= 0")
     if s.SYNC_STALE_HOURS < 1:

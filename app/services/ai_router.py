@@ -21,7 +21,7 @@ import re
 import time
 from collections import deque
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -130,12 +130,49 @@ _INJECTION_RE = re.compile(
 # In-memory ring buffer for recent AI calls (last 200) — avoids DB dependency in hot path
 _recent_calls: deque[dict] = deque(maxlen=200)
 
+# Counter for best-effort DB log write failures (visible in observability summary)
+_ai_call_log_failure_count: int = 0
+
 # ── AI key cache (populated from integration table, checked before env vars) ──
-# Maps (provider, org_id) to API key string. Scoped per organization to prevent
-# cross-tenant key leakage in multi-org deployments.
-# Updated when an AI provider connect endpoint is called. Checked first by _get_key().
+# L1: in-memory dict per process — fast, but stale across workers after key rotation.
+# L2: Redis (when RATE_LIMIT_REDIS_URL is set) — shared across all Gunicorn workers.
+# Write-through: both layers updated on set/clear. L2 is authoritative on miss.
 _ai_key_cache: dict[tuple[str, int], tuple[str, float]] = {}  # (key, expiry_ts)
 _AI_KEY_CACHE_TTL = 3600.0  # refresh from DB hourly
+_AI_KEY_REDIS_PREFIX = "pc:ai_key"
+
+# Lazily initialised sync Redis client (None if Redis unavailable or not configured)
+_ai_key_redis_client: object = None
+_ai_key_redis_initialized: bool = False
+
+
+def _get_ai_key_redis() -> object:
+    """Return a sync Redis client for the AI key cache, or None if unavailable."""
+    global _ai_key_redis_client, _ai_key_redis_initialized
+    if _ai_key_redis_initialized:
+        return _ai_key_redis_client
+    _ai_key_redis_initialized = True
+    try:
+        from importlib import import_module
+        redis_url = (
+            (settings.RATE_LIMIT_REDIS_URL or "").strip()
+            or (settings.IDEMPOTENCY_REDIS_URL or "").strip()
+        )
+        if not redis_url:
+            return None
+        redis_mod = import_module("redis")
+        client = redis_mod.Redis.from_url(
+            redis_url,
+            decode_responses=True,
+            socket_timeout=0.25,
+            socket_connect_timeout=0.25,
+        )
+        client.ping()
+        _ai_key_redis_client = client
+        logger.info("AI key cache: Redis backend active (%s)", redis_url.split("@")[-1])
+    except Exception:
+        logger.debug("AI key cache: Redis unavailable, using in-memory only")
+    return _ai_key_redis_client
 
 _AI_PROVIDER_TO_INTEGRATION_TYPE = {
     "openai": "ai_openai",
@@ -154,14 +191,39 @@ _provider_circuit_state: dict[tuple[str, int], tuple[int, float]] = {}
 
 
 def set_ai_key_cache(provider: str, api_key: str, org_id: int = 1) -> None:
-    """Update the in-memory AI key cache (called from connect endpoint)."""
+    """Update the AI key cache in both in-memory (L1) and Redis (L2) layers."""
     import time
-    _ai_key_cache[(provider, org_id)] = (api_key, time.time() + _AI_KEY_CACHE_TTL)
+    expiry = time.time() + _AI_KEY_CACHE_TTL
+    _ai_key_cache[(provider, org_id)] = (api_key, expiry)
+    try:
+        rc = _get_ai_key_redis()
+        if rc is not None:
+            rkey = f"{_AI_KEY_REDIS_PREFIX}:{provider}:{org_id}"
+            rc.set(rkey, api_key, ex=int(_AI_KEY_CACHE_TTL))  # type: ignore[attr-defined]
+    except Exception as exc:
+        logger.debug(
+            "AI key cache: Redis set failed for provider=%s org_id=%s (%s)",
+            provider,
+            org_id,
+            type(exc).__name__,
+        )
 
 
 def clear_ai_key_cache(provider: str, org_id: int = 1) -> None:
-    """Remove a provider from the in-memory AI key cache."""
+    """Remove a provider from both in-memory (L1) and Redis (L2) key cache."""
     _ai_key_cache.pop((provider, org_id), None)
+    try:
+        rc = _get_ai_key_redis()
+        if rc is not None:
+            rkey = f"{_AI_KEY_REDIS_PREFIX}:{provider}:{org_id}"
+            rc.delete(rkey)  # type: ignore[attr-defined]
+    except Exception as exc:
+        logger.debug(
+            "AI key cache: Redis delete failed for provider=%s org_id=%s (%s)",
+            provider,
+            org_id,
+            type(exc).__name__,
+        )
 
 
 async def load_ai_keys_from_db() -> None:
@@ -191,7 +253,21 @@ async def load_ai_keys_from_db() -> None:
                     import time
                     for prov, itype in _AI_PROVIDER_TO_INTEGRATION_TYPE.items():
                         if itype == row.type:
-                            _ai_key_cache[(prov, row.organization_id)] = (key, time.time() + _AI_KEY_CACHE_TTL)
+                            expiry = time.time() + _AI_KEY_CACHE_TTL
+                            _ai_key_cache[(prov, row.organization_id)] = (key, expiry)
+                            # Also write to Redis (L2) so other workers get the key
+                            try:
+                                rc = _get_ai_key_redis()
+                                if rc is not None:
+                                    rkey = f"{_AI_KEY_REDIS_PREFIX}:{prov}:{row.organization_id}"
+                                    rc.set(rkey, key, ex=int(_AI_KEY_CACHE_TTL))  # type: ignore[attr-defined]
+                            except Exception as exc:
+                                logger.debug(
+                                    "AI key cache: Redis warm failed for provider=%s org_id=%s (%s)",
+                                    prov,
+                                    row.organization_id,
+                                    type(exc).__name__,
+                                )
                             break
     except Exception as exc:
         logger.warning("Failed to load AI keys from DB: %s", type(exc).__name__)
@@ -261,7 +337,13 @@ async def _log_ai_call(
         TypeError,
         AttributeError,
     ) as exc:
-        logger.warning("Failed to persist AI call log to DB: %s", type(exc).__name__)
+        global _ai_call_log_failure_count
+        _ai_call_log_failure_count += 1
+        logger.warning(
+            "Failed to persist AI call log to DB (%d total failures): %s",
+            _ai_call_log_failure_count,
+            type(exc).__name__,
+        )
 
 
 def get_recent_calls() -> list[dict]:
@@ -287,6 +369,7 @@ def get_recent_calls_summary(window_seconds: int = 3600) -> dict[str, object]:
         "fallback_rate": round((fallback_count / total) if total else 0.0, 4),
         "error_count": error_count,
         "provider_counts": by_provider,
+        "log_write_failures": _ai_call_log_failure_count,
     }
 
 
@@ -590,15 +673,32 @@ def _get_model(provider: str) -> str:
 
 
 def _get_key(provider: str, org_id: int = 1) -> str | None:
-    # Check in-memory cache first (dashboard-saved keys override env vars)
     import time
+    # L1: in-memory cache (hot path — no network)
     entry = _ai_key_cache.get((provider, org_id))
     if entry is not None:
         cached_key, expiry = entry
         if time.time() < expiry and cached_key not in PLACEHOLDER_AI_KEYS:
             return cached_key
-        # Expired — evict stale entry
         _ai_key_cache.pop((provider, org_id), None)
+    # L2: Redis (shared across all Gunicorn workers — catches key-rotation by other processes)
+    try:
+        rc = _get_ai_key_redis()
+        if rc is not None:
+            rkey = f"{_AI_KEY_REDIS_PREFIX}:{provider}:{org_id}"
+            redis_key: str | None = rc.get(rkey)  # type: ignore[attr-defined]
+            if redis_key and redis_key not in PLACEHOLDER_AI_KEYS:
+                # Warm L1 from Redis so the next call is free
+                _ai_key_cache[(provider, org_id)] = (redis_key, time.time() + _AI_KEY_CACHE_TTL)
+                return redis_key
+    except Exception as exc:
+        logger.debug(
+            "AI key cache: Redis lookup failed for provider=%s org_id=%s (%s)",
+            provider,
+            org_id,
+            type(exc).__name__,
+        )
+    # L3: environment variables (fallback, single-worker only)
     if provider == "openai":
         return settings.OPENAI_API_KEY
     if provider == "anthropic":
@@ -883,16 +983,20 @@ async def _stream_openai(
         client = AsyncOpenAI(api_key=key)
         stream = await client.chat.completions.create(
             model=model or settings.AGENT_MODEL_OPENAI,
-            messages=[
+            messages=cast(
+                Any,
+                [
                 {"role": "system", "content": system_prompt},
                 *(conversation_history or []),
                 {"role": "user", "content": user_message},
-            ],
+                ],
+            ),
             max_tokens=max_tokens,
             stream=True,
             timeout=settings.AI_TIMEOUT_SECONDS,
         )
-        async for chunk in stream:
+        stream_iter = cast(AsyncIterator[Any], stream)
+        async for chunk in stream_iter:
             delta = chunk.choices[0].delta if chunk.choices else None
             if delta and delta.content:
                 yield delta.content
@@ -919,10 +1023,13 @@ async def _stream_anthropic(
             model=model or settings.AGENT_MODEL_ANTHROPIC,
             max_tokens=max_tokens,
             system=system_prompt,
-            messages=[
+            messages=cast(
+                Any,
+                [
                 *(conversation_history or []),
                 {"role": "user", "content": user_message},
-            ],
+                ],
+            ),
         ) as stream:
             async for text in stream.text_stream:
                 yield text
@@ -947,16 +1054,20 @@ async def _stream_groq(
         client = AsyncGroq(api_key=key)
         stream = await client.chat.completions.create(
             model=model or settings.AGENT_MODEL_GROQ,
-            messages=[
+            messages=cast(
+                Any,
+                [
                 {"role": "system", "content": system_prompt},
                 *(conversation_history or []),
                 {"role": "user", "content": user_message},
-            ],
+                ],
+            ),
             max_tokens=max_tokens,
             stream=True,
             timeout=settings.AI_TIMEOUT_SECONDS,
         )
-        async for chunk in stream:
+        stream_iter = cast(AsyncIterator[Any], stream)
+        async for chunk in stream_iter:
             delta = chunk.choices[0].delta if chunk.choices else None
             if delta and delta.content:
                 yield delta.content
