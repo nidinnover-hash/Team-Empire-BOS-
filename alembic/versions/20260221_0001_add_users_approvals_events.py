@@ -1,7 +1,7 @@
 ﻿"""add users approvals events tables
 
 Revision ID: 20260221_0001
-Revises: 
+Revises:
 Create Date: 2026-02-21
 """
 

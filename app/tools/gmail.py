@@ -399,4 +399,3 @@ def send_email(
             _safe_exc_summary(exc),
         )
         return False
-

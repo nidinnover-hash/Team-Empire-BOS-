@@ -217,5 +217,3 @@ async def get_storage_summary(db: AsyncSession, org_id: int) -> StorageSummary:
         "retention_days_chat": int(settings.CHAT_HISTORY_RETENTION_DAYS),
         "tables": stats,
     }
-
-

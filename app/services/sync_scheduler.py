@@ -56,10 +56,49 @@ _sync_failure_streak: dict[tuple[int, str], int] = {}
 # Circuit breaker: after N consecutive failures, pause sync for a cooldown period.
 _circuit_open_until: dict[tuple[int, str], datetime] = {}
 _CIRCUIT_BREAKER_COOLDOWN_MINUTES = 60
+# Lightweight retry/backoff telemetry for reliability monitoring.
+_scheduler_retry_telemetry: dict[str, object] = {
+    "operations_total": 0,
+    "operations_succeeded": 0,
+    "operations_failed": 0,
+    "retries_total": 0,
+    "backoff_seconds_total": 0.0,
+    "last_error_type": None,
+    "last_error_at": None,
+    "per_integration": {},
+}
 # Per-org daily dedup: prevents running the same daily job twice in one day.
 _last_ceo_summary_date_by_org: dict[int, str] = {}
 _last_pending_digest_date_by_org: dict[int, str] = {}
 _last_scheduler_slo_alert_key_by_org: dict[int, str] = {}
+
+
+def _coerce_int(value: object, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return default
+    return default
+
+
+def _coerce_float(value: object, default: float = 0.0) -> float:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return default
+    return default
 
 
 def _scheduler_error_category(exc: Exception) -> str:
@@ -81,6 +120,90 @@ def _scheduler_error_category(exc: Exception) -> str:
 def get_last_synced_for_org(org_id: int) -> datetime | None:
     """Return the last sync timestamp for an org, or None if never synced."""
     return _last_synced.get(org_id)
+
+
+def _estimated_backoff_seconds(retries: int) -> float:
+    if retries <= 0:
+        return 0.0
+    base = max(0.0, float(_SYNC_RETRY_POLICY.backoff_seconds))
+    return float(sum(base * (2**idx) for idx in range(retries)))
+
+
+def _record_retry_telemetry(
+    *,
+    org_id: int,
+    integration: str,
+    attempts: int,
+    ok: bool,
+    error_type: str | None = None,
+) -> None:
+    retries = max(0, attempts - 1)
+    backoff_seconds = _estimated_backoff_seconds(retries)
+    per_integration = _scheduler_retry_telemetry.setdefault("per_integration", {})
+    if not isinstance(per_integration, dict):
+        per_integration = {}
+        _scheduler_retry_telemetry["per_integration"] = per_integration
+
+    key = f"{org_id}:{integration}"
+    bucket = per_integration.get(key)
+    if not isinstance(bucket, dict):
+        bucket = {
+            "operations_total": 0,
+            "operations_succeeded": 0,
+            "operations_failed": 0,
+            "retries_total": 0,
+            "backoff_seconds_total": 0.0,
+            "last_error_type": None,
+            "last_error_at": None,
+        }
+        per_integration[key] = bucket
+
+    _scheduler_retry_telemetry["operations_total"] = (
+        _coerce_int(_scheduler_retry_telemetry.get("operations_total")) + 1
+    )
+    _scheduler_retry_telemetry["retries_total"] = (
+        _coerce_int(_scheduler_retry_telemetry.get("retries_total")) + retries
+    )
+    _scheduler_retry_telemetry["backoff_seconds_total"] = (
+        _coerce_float(_scheduler_retry_telemetry.get("backoff_seconds_total")) + backoff_seconds
+    )
+    bucket["operations_total"] = int(bucket["operations_total"]) + 1
+    bucket["retries_total"] = int(bucket["retries_total"]) + retries
+    bucket["backoff_seconds_total"] = float(bucket["backoff_seconds_total"]) + backoff_seconds
+
+    if ok:
+        _scheduler_retry_telemetry["operations_succeeded"] = (
+            _coerce_int(_scheduler_retry_telemetry.get("operations_succeeded")) + 1
+        )
+        bucket["operations_succeeded"] = int(bucket["operations_succeeded"]) + 1
+    else:
+        now_iso = datetime.now(UTC).isoformat()
+        _scheduler_retry_telemetry["operations_failed"] = (
+            _coerce_int(_scheduler_retry_telemetry.get("operations_failed")) + 1
+        )
+        _scheduler_retry_telemetry["last_error_type"] = error_type
+        _scheduler_retry_telemetry["last_error_at"] = now_iso
+        bucket["operations_failed"] = int(bucket["operations_failed"]) + 1
+        bucket["last_error_type"] = error_type
+        bucket["last_error_at"] = now_iso
+
+
+def get_scheduler_retry_telemetry() -> dict[str, object]:
+    """Expose scheduler retry/backoff counters for health dashboards."""
+    per_integration_raw = _scheduler_retry_telemetry.get("per_integration", {})
+    per_integration = per_integration_raw if isinstance(per_integration_raw, dict) else {}
+    return {
+        "operations_total": _coerce_int(_scheduler_retry_telemetry.get("operations_total")),
+        "operations_succeeded": _coerce_int(_scheduler_retry_telemetry.get("operations_succeeded")),
+        "operations_failed": _coerce_int(_scheduler_retry_telemetry.get("operations_failed")),
+        "retries_total": _coerce_int(_scheduler_retry_telemetry.get("retries_total")),
+        "backoff_seconds_total": _coerce_float(_scheduler_retry_telemetry.get("backoff_seconds_total")),
+        "last_error_type": _scheduler_retry_telemetry.get("last_error_type"),
+        "last_error_at": _scheduler_retry_telemetry.get("last_error_at"),
+        "per_integration": {
+            str(key): dict(value) for key, value in per_integration.items() if isinstance(value, dict)
+        },
+    }
 
 
 def _throttle_minutes() -> int:
@@ -377,8 +500,11 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             continue
 
         started = datetime.now(UTC)
+        attempts_made = 0
         try:
             async def _op(_name: str = name, _fn: Any = fn) -> dict[str, object]:
+                nonlocal attempts_made
+                attempts_made += 1
                 return await _run_sync_operation(_name, _fn)
 
             result = await run_with_retry(
@@ -391,6 +517,12 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             logger.debug("Sync %s org=%d -> %s", name, org_id, result)
             _sync_failure_streak[(org_id, name)] = 0
             _circuit_open_until.pop((org_id, name), None)  # close circuit breaker
+            _record_retry_telemetry(
+                org_id=org_id,
+                integration=name,
+                attempts=max(1, attempts_made),
+                ok=True,
+            )
             await _mark_status(name, "ok")
             await _record_job_run(
                 db,
@@ -418,6 +550,13 @@ async def _run_integrations(db: AsyncSession, org_id: int) -> None:
             key = (org_id, name)
             current = _sync_failure_streak.get(key, 0) + 1
             _sync_failure_streak[key] = current
+            _record_retry_telemetry(
+                org_id=org_id,
+                integration=name,
+                attempts=max(1, attempts_made),
+                ok=False,
+                error_type=type(exc).__name__,
+            )
             logger.warning("Background %s sync failed org=%d: %s: %s", name, org_id, type(exc).__name__, str(exc)[:LOG_DETAIL_MAX_CHARS])
             if current >= failure_alert_threshold:
                 cooldown = timedelta(minutes=_CIRCUIT_BREAKER_COOLDOWN_MINUTES)

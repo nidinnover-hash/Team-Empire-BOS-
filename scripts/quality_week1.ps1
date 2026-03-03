@@ -28,4 +28,3 @@ Write-Host "[5/5] Dependency integrity..." -ForegroundColor Yellow
 & $pythonExe -m pip check
 
 Write-Host "Week 1 quality sprint completed successfully." -ForegroundColor Green
-

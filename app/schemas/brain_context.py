@@ -31,4 +31,3 @@ class BrainContext(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     org: OrgContext
     employee: EmployeeContext | None = None
-

@@ -388,6 +388,3 @@ async def test_integration(
         status=status,  # type: ignore[arg-type]
         message=message,
     )
-
-
-

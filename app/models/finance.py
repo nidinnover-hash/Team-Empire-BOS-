@@ -33,4 +33,3 @@ class FinanceEntry(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
     )
-
