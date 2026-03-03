@@ -1,11 +1,32 @@
 exclude: ^strategy-pack/
 
 repos:
+  # Baseline-tracked secret detection — catches API keys, tokens, passwords
+  # Run `detect-secrets scan > .secrets.baseline` to initialise the baseline.
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: |
+          (?x)^(
+            \.secrets\.baseline|
+            tests/.*|
+            \.github/workflows/.*|
+            sdk/.*|
+            docs/.*|
+            .*\.example|
+            .*\.toml|
+            alembic/versions/.*
+          )$
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
       - id: detect-private-key
       - id: detect-aws-credentials
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
       - id: end-of-file-fixer
       - id: trailing-whitespace
 

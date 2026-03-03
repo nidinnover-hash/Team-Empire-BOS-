@@ -34,4 +34,3 @@ Use this checklist for every substantial change before merge/release.
 - [ ] `git status` reviewed (only intended files staged).
 - [ ] Commit message is specific and scoped.
 - [ ] Rollback path understood for this change.
-

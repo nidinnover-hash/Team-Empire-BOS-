@@ -280,6 +280,38 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Python (for detect-secrets)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: detect-secrets baseline scan
+        run: |
+          pip install detect-secrets==1.5.0 -q
+          # Generate baseline on first run; fail if new secrets are introduced vs baseline
+          if [ ! -f .secrets.baseline ]; then
+            detect-secrets scan --exclude-files 'tests/conftest\.py' \
+              --exclude-files '.*\.example' \
+              --exclude-files 'alembic/versions/.*' \
+              > .secrets.baseline
+            echo "Baseline generated — commit .secrets.baseline to track false-positives."
+          fi
+          detect-secrets audit --diff .secrets.baseline || true
+          detect-secrets scan --exclude-files 'tests/conftest\.py' \
+            --exclude-files '.*\.example' \
+            --exclude-files 'alembic/versions/.*' \
+            | python -c "
+          import json, sys
+          new = json.load(sys.stdin)
+          baseline = json.load(open('.secrets.baseline'))
+          new_keys = set(f\"{f}:{s['hashed_secret']}\" for f,sl in new.get('results',{}).items() for s in sl)
+          old_keys = set(f\"{f}:{s['hashed_secret']}\" for f,sl in baseline.get('results',{}).items() for s in sl)
+          added = new_keys - old_keys
+          if added:
+            print('New secrets detected (not in baseline):')
+            for k in added: print(' ', k)
+            sys.exit(1)
+          print('No new secrets detected.')
+          "
 
   frontend-visual:
     runs-on: ubuntu-latest

@@ -878,7 +878,21 @@ async def _maybe_generate_daily_ceo_summary(db: AsyncSession, org_id: int) -> No
     if local_now.hour < 9:
         return
     day_key = local_now.strftime("%Y-%m-%d")
+    # L1: in-memory dedup (fast path — same process, same restart)
     if _last_ceo_summary_date_by_org.get(org_id) == day_key:
+        return
+    # L2: DB dedup — catches post-restart duplicate runs (SchedulerJobRun is persistent)
+    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    existing = (await db.execute(
+        select(SchedulerJobRun).where(
+            SchedulerJobRun.organization_id == org_id,
+            SchedulerJobRun.job_name == "daily_ceo_summary",
+            SchedulerJobRun.status == "ok",
+            SchedulerJobRun.finished_at >= today_start,
+        ).limit(1)
+    )).scalar_one_or_none()
+    if existing is not None:
+        _last_ceo_summary_date_by_org[org_id] = day_key  # warm L1
         return
     started = datetime.now(UTC)
     report = await compliance_engine.latest_report(db, org_id)
@@ -937,6 +951,19 @@ async def _maybe_generate_daily_pending_digest(db: AsyncSession, org_id: int) ->
     day_key = local_now.strftime("%Y-%m-%d")
     if _last_pending_digest_date_by_org.get(org_id) == day_key:
         return
+    # DB dedup: survive restarts without resending the digest
+    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    existing_digest = (await db.execute(
+        select(SchedulerJobRun).where(
+            SchedulerJobRun.organization_id == org_id,
+            SchedulerJobRun.job_name == "daily_pending_digest",
+            SchedulerJobRun.status == "ok",
+            SchedulerJobRun.finished_at >= today_start,
+        ).limit(1)
+    )).scalar_one_or_none()
+    if existing_digest is not None:
+        _last_pending_digest_date_by_org[org_id] = day_key
+        return
     from app.models.user import User
     _adm = (await db.execute(
         select(User).where(
@@ -945,12 +972,22 @@ async def _maybe_generate_daily_pending_digest(db: AsyncSession, org_id: int) ->
             User.is_active.is_(True),
         ).order_by(User.id).limit(1)
     )).scalar_one_or_none()
+    started_digest = datetime.now(UTC)
     await email_control.draft_pending_actions_digest_email(
         db=db,
         org_id=org_id,
         actor_user_id=int(_adm.id) if _adm else None,  # type: ignore[arg-type]
     )
     _last_pending_digest_date_by_org[org_id] = day_key
+    await _record_job_run(
+        db,
+        org_id=org_id,
+        job_name="daily_pending_digest",
+        status="ok",
+        started_at=started_digest,
+        finished_at=datetime.now(UTC),
+    )
+    await db.commit()
 
 
 async def _publish_due_social_posts(db: AsyncSession, org_id: int) -> None:
@@ -1097,7 +1134,7 @@ async def _check_stale_tasks(db: AsyncSession, org_id: int) -> None:
                 type="stale_task",
                 severity="warning",
                 title=f"Overdue task: {task.title}",
-                message=f"Due date was {task.due_date.date().isoformat() if task.due_date else 'unknown'}.",
+                message=f"Due date was {task.due_date.isoformat() if task.due_date else 'unknown'}.",
                 source="scheduler",
                 entity_type="task",
                 entity_id=task.id,

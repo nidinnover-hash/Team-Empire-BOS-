@@ -5,50 +5,49 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from alembic import context
-
-from app.core.config import settings
-from app.db.base import Base
+import app.models.ai_call_log
+import app.models.approval
+import app.models.ceo_control
+import app.models.chat_message
+import app.models.clone_control
+import app.models.clone_performance
 
 # Register all models so Alembic can detect schema changes
-import app.models.command  # noqa: F401
-import app.models.task     # noqa: F401
-import app.models.note     # noqa: F401
-import app.models.project  # noqa: F401
-import app.models.goal     # noqa: F401
-import app.models.contact  # noqa: F401
-import app.models.finance  # noqa: F401
-import app.models.event    # noqa: F401
-import app.models.user     # noqa: F401
-import app.models.approval # noqa: F401
-import app.models.organization # noqa: F401
-import app.models.execution # noqa: F401
-import app.models.integration # noqa: F401
-import app.models.memory # noqa: F401
-import app.models.email # noqa: F401
-import app.models.daily_run # noqa: F401
-import app.models.employee # noqa: F401
-import app.models.integration_signal # noqa: F401
-import app.models.ops_metrics # noqa: F401
-import app.models.decision_log # noqa: F401
-import app.models.policy_rule # noqa: F401
-import app.models.weekly_report # noqa: F401
-import app.models.ai_call_log  # noqa: F401
-import app.models.chat_message  # noqa: F401
-import app.models.ceo_control  # noqa: F401
-import app.models.clone_control  # noqa: F401
-import app.models.clone_performance  # noqa: F401
-import app.models.conversation  # noqa: F401
-import app.models.daily_plan  # noqa: F401
-import app.models.decision_trace  # noqa: F401
-import app.models.github  # noqa: F401
-import app.models.media_project  # noqa: F401
-import app.models.org_membership  # noqa: F401
-import app.models.notification  # noqa: F401
-import app.models.social  # noqa: F401
-import app.models.threat_signal  # noqa: F401
+import app.models.command
+import app.models.contact
+import app.models.conversation
+import app.models.daily_plan
+import app.models.daily_run
+import app.models.decision_log
+import app.models.decision_trace
+import app.models.email
+import app.models.employee
+import app.models.event
+import app.models.execution
+import app.models.finance
+import app.models.github
+import app.models.goal
+import app.models.integration
+import app.models.integration_signal
+import app.models.media_project
+import app.models.memory
+import app.models.note
+import app.models.notification
+import app.models.ops_metrics
+import app.models.org_membership
+import app.models.organization
+import app.models.policy_rule
+import app.models.project
+import app.models.self_learning_run
+import app.models.social
+import app.models.task
+import app.models.threat_signal
+import app.models.user
+import app.models.weekly_report
 import app.models.whatsapp_message  # noqa: F401
-import app.models.self_learning_run  # noqa: F401
+from alembic import context
+from app.core.config import settings
+from app.db.base import Base
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

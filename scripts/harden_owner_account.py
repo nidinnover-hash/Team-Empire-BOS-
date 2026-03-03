@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 # ruff: noqa: E402
-
 import asyncio
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from sqlalchemy import select
 
