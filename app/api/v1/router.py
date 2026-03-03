@@ -2,12 +2,14 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     admin,
+    admin_purge,
     agents,
     api_keys,
     approvals,
     auth,
     automation,
     briefing,
+    coaching,
     commands,
     contacts,
     control,
@@ -38,6 +40,7 @@ from app.api.v1.endpoints import (
     ops_incident,
     orgs,
     performance,
+    personas,
     projects,
     search,
     slack_commands,
@@ -51,6 +54,7 @@ api_router = APIRouter()
 
 api_router.include_router(health.router)
 api_router.include_router(admin.router)
+api_router.include_router(admin_purge.router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
 api_router.include_router(approvals.router)
@@ -89,6 +93,8 @@ api_router.include_router(automation.router)
 api_router.include_router(slack_commands.router)
 api_router.include_router(departments.router)
 api_router.include_router(performance.router)
+api_router.include_router(personas.router)
+api_router.include_router(coaching.router)
 api_router.include_router(governance.router)
 api_router.include_router(media.router)
 api_router.include_router(locations.router)

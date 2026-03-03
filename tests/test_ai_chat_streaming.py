@@ -1,6 +1,5 @@
 """Tests for POST /api/v1/integrations/ai/chat and GET /ai/models endpoints."""
 import json
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -204,7 +203,7 @@ def test_available_models_structure():
     assert "anthropic" in ai_router.AVAILABLE_MODELS
     assert "groq" in ai_router.AVAILABLE_MODELS
     assert "gemini" in ai_router.AVAILABLE_MODELS
-    for provider, models in ai_router.AVAILABLE_MODELS.items():
+    for _provider, models in ai_router.AVAILABLE_MODELS.items():
         assert isinstance(models, list)
         assert len(models) > 0
         for m in models:

@@ -18,6 +18,7 @@ from app.agents.orchestrator import (
     StepResult,
     _decompose_plan,
     extract_proposed_actions,
+    route_role,
     run_agent,
     run_agent_multi_turn,
 )
@@ -167,6 +168,22 @@ async def test_decompose_plan_caps_at_5_steps(monkeypatch):
 
     plan = await _decompose_plan("very complex request")
     assert len(plan) == 5
+
+
+def test_route_role_keyword_routing():
+    # keywords should route to the appropriate clone roles
+    assert route_role("Please follow up with the lead") == "Sales Lead Clone"
+    assert route_role("We have a bug in the codebase") == "Tech PM Clone"
+    assert route_role("Prepare the daily plan for the team") == "Ops Manager Clone"
+    # default when nothing matches
+    assert route_role("This is a random question") == "CEO Clone"
+
+
+def test_route_role_force_override():
+    # explicit force_role should win when valid
+    assert route_role("ignore this", force_role="Tech PM Clone") == "Tech PM Clone"
+    # an unknown force_role simply falls back to keyword logic
+    assert route_role("talk about sales", force_role="Unknown Role") == "Sales Lead Clone"
 
 
 # ── run_agent_multi_turn ─────────────────────────────────────────────────────

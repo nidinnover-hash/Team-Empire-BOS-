@@ -383,11 +383,14 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("SYNC_INTERVAL_MINUTES must be >= 1")
     if s.SYNC_INTERVAL_MINUTES > 1_440:  # 24 hours
         issues.append("SYNC_INTERVAL_MINUTES must be <= 1440 (24 hours)")
-    if not s.DEBUG and not bool(s.DB_SCHEMA_ENFORCE_HEAD):
-        # Keep strict runtime enforcement, but avoid leaking default local .env values into
-        # synthetic Settings(...) objects used by tests.
-        if (s is settings) or (not _uses_default_env_file_only()):
-            issues.append("DB_SCHEMA_ENFORCE_HEAD should be true when DEBUG=false")
+    # Keep strict runtime enforcement, but avoid leaking default local .env values into
+    # synthetic Settings(...) objects used by tests.
+    if (
+        not s.DEBUG
+        and not bool(s.DB_SCHEMA_ENFORCE_HEAD)
+        and ((s is settings) or (not _uses_default_env_file_only()))
+    ):
+        issues.append("DB_SCHEMA_ENFORCE_HEAD should be true when DEBUG=false")
     if s.SYNC_THROTTLE_MINUTES < 0:
         issues.append("SYNC_THROTTLE_MINUTES must be >= 0")
     if s.SYNC_STALE_HOURS < 1:

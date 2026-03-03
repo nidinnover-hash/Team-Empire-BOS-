@@ -362,3 +362,77 @@ async def test_revoke_super_user_not_found(client):
         headers=_super_admin_headers(),
     )
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# DELETE /admin/orgs/{org_id}/purge  (GDPR tenant purge — Fix 8)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_purge_org_wrong_confirm_returns_400(client):
+    """Purge is rejected when the confirmation string is incorrect."""
+    resp = await client.delete(
+        "/api/v1/admin/orgs/2/purge?confirm=WRONG",
+        headers=_super_admin_headers(),
+    )
+    assert resp.status_code == 400
+    assert "YES PURGE ORG 2" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_purge_org_requires_super_admin(client):
+    """Non-super-admin is forbidden from purging org data."""
+    resp = await client.delete(
+        "/api/v1/admin/orgs/2/purge?confirm=YES+PURGE+ORG+2",
+        headers=_non_super_headers(),
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_purge_org_not_found_returns_404(client):
+    """Purging a nonexistent org returns 404."""
+    resp = await client.delete(
+        "/api/v1/admin/orgs/9999/purge?confirm=YES+PURGE+ORG+9999",
+        headers=_super_admin_headers(),
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_purge_org_success(client):
+    """Successful purge returns purged=True and rows_deleted counts."""
+    resp = await client.delete(
+        "/api/v1/admin/orgs/2/purge?confirm=YES+PURGE+ORG+2",
+        headers=_super_admin_headers(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["purged"] is True
+    assert data["org_id"] == 2
+    assert isinstance(data["rows_deleted"], dict)
+    # Users for org 2 should have been deleted (1 CEO was seeded)
+    assert data["rows_deleted"].get("User", 0) >= 1
+
+
+@pytest.mark.asyncio
+async def test_purge_org_idempotent(client):
+    """Purging an already-empty org succeeds; only the audit Event itself remains."""
+    # First purge removes all org-2 data
+    await client.delete(
+        "/api/v1/admin/orgs/2/purge?confirm=YES+PURGE+ORG+2",
+        headers=_super_admin_headers(),
+    )
+    # Second purge — the only row left is the audit Event created by *this* purge call
+    resp = await client.delete(
+        "/api/v1/admin/orgs/2/purge?confirm=YES+PURGE+ORG+2",
+        headers=_super_admin_headers(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["purged"] is True
+    deleted = data["rows_deleted"]
+    # Every table except Event should be empty; Event = 1 (the purge audit record itself)
+    non_event = {k: v for k, v in deleted.items() if k != "Event"}
+    assert all(v == 0 for v in non_event.values())
+    assert deleted.get("Event", 0) <= 1

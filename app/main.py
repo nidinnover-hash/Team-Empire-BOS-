@@ -192,6 +192,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.core.telemetry import setup as setup_telemetry
     setup_telemetry(app=app)
 
+    # Optional Prometheus metrics — exposes /metrics (safe no-op if not installed)
+    try:
+        from prometheus_fastapi_instrumentator import Instrumentator
+        Instrumentator(
+            should_group_status_codes=True,
+            should_ignore_untemplated=True,
+            excluded_handlers=["/health", "/metrics", "/static/.*"],
+        ).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+        logger.info("Prometheus metrics enabled at /metrics")
+    except ImportError:
+        logger.debug("prometheus-fastapi-instrumentator not installed; /metrics disabled")
+
     # Load dashboard-saved AI provider keys into in-memory cache
     from app.services.ai_router import load_ai_keys_from_db
     await load_ai_keys_from_db()
