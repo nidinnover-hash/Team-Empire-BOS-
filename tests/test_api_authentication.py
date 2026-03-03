@@ -22,7 +22,7 @@ from app.core.deps import get_db
 from app.core.security import create_access_token
 from app.main import app as fastapi_app
 
-pytestmark = pytest.mark.skip(reason="Temporarily skipped: pending auth test harness alignment")
+pytestmark = pytest.mark.asyncio
 
 # ── Token helpers ─────────────────────────────────────────────────────────
 
