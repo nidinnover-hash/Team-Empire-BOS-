@@ -12,4 +12,3 @@
 - Added mutating-operation allowlist in SDK client generator to reduce accidental surface expansion risk.
 - Expanded SDK generation coverage tests to include mutating operations.
 - Extended `dev_gate` with PR checklist guard tests.
-
