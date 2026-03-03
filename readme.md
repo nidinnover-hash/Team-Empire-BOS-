@@ -61,4 +61,4 @@ py -3.12 scripts/dev_gate.py  # fast local quality gate
 
 - Shared UI utilities in `app/static/js/ui-utils.js` (`PCUI.mapApiError`, `PCUI.setButtonLoading`, `PCUI.confirmDanger`)
 - Visual regression tests via Playwright (`tests/ui/*.visual.spec.ts`)
-- Release gate: `python scripts/check_ready.py`
+- Release gate: `py -3.12 scripts/check_ready.py` (Windows) / `python3.12 scripts/check_ready.py` (Linux/macOS)

@@ -26,4 +26,3 @@ def normalize_action_type(action_type: str | None) -> str:
         return "NONE"
     normalized = _ALIASES.get(raw, raw)
     return normalized
-

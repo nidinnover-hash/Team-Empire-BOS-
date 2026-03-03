@@ -17,6 +17,14 @@ from app.services import sync_scheduler
 def _reset_state():
     sync_scheduler._last_synced.clear()
     sync_scheduler._last_ceo_summary_date_by_org.clear()
+    sync_scheduler._scheduler_retry_telemetry["operations_total"] = 0
+    sync_scheduler._scheduler_retry_telemetry["operations_succeeded"] = 0
+    sync_scheduler._scheduler_retry_telemetry["operations_failed"] = 0
+    sync_scheduler._scheduler_retry_telemetry["retries_total"] = 0
+    sync_scheduler._scheduler_retry_telemetry["backoff_seconds_total"] = 0.0
+    sync_scheduler._scheduler_retry_telemetry["last_error_type"] = None
+    sync_scheduler._scheduler_retry_telemetry["last_error_at"] = None
+    sync_scheduler._scheduler_retry_telemetry["per_integration"] = {}
 
 
 # ── throttle logic ────────────────────────────────────────────────────────────
@@ -181,6 +189,30 @@ async def test_integration_retry_path_recovers_and_continues(monkeypatch):
     assert "clickup" in results
     assert "github" in results
     assert "slack" in results
+    telemetry = sync_scheduler.get_scheduler_retry_telemetry()
+    assert telemetry["retries_total"] >= 1
+    # Verify per-integration that the three mocked integrations all succeeded
+    per = telemetry["per_integration"]
+    assert per.get("1:clickup", {}).get("operations_succeeded", 0) >= 1
+    assert per.get("1:github", {}).get("operations_succeeded", 0) >= 1
+    assert per.get("1:slack", {}).get("operations_succeeded", 0) >= 1
+
+
+def test_scheduler_retry_telemetry_tracks_failures():
+    _reset_state()
+    sync_scheduler._record_retry_telemetry(
+        org_id=1,
+        integration="clickup",
+        attempts=2,
+        ok=False,
+        error_type="TimeoutError",
+    )
+    telemetry = sync_scheduler.get_scheduler_retry_telemetry()
+    assert telemetry["operations_total"] == 1
+    assert telemetry["operations_failed"] == 1
+    assert telemetry["retries_total"] == 1
+    assert telemetry["backoff_seconds_total"] >= 1.0
+    assert telemetry["last_error_type"] == "TimeoutError"
 
 
 # ── scheduler start/stop ──────────────────────────────────────────────────────

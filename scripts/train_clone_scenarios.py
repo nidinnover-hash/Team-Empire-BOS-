@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
 from datetime import date, timedelta
 from pathlib import Path
-import sys
 
 from sqlalchemy.exc import OperationalError
 
@@ -21,7 +21,8 @@ if __package__ in {None, ""}:
 
 from app.db.session import AsyncSessionLocal
 from app.schemas.data_collection import CloneProTrainingRequest, MeetingCoachingRequest
-from app.services import clone_brain, clone_control, data_collection, organization as organization_service
+from app.services import clone_brain, clone_control, data_collection
+from app.services import organization as organization_service
 
 
 def _default_week_start() -> date:

@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 from __future__ import annotations
 
 import sys
@@ -5,6 +6,10 @@ from pathlib import Path
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.models.approval import Approval
 from app.models.event import Event
@@ -37,11 +42,11 @@ def main() -> int:
         if not _has_prefix_index(table, cols):
             missing.append(f"{table.name} missing index prefix {cols} ({reason})")
     if missing:
-        print("Critical index guard failed:")
+        logger.error("Critical index guard failed:")
         for row in missing:
-            print(f"- {row}")
+            logger.error("- %s", row)
         return 1
-    print("Critical index guard passed.")
+    logger.info("Critical index guard passed.")
     return 0
 
 

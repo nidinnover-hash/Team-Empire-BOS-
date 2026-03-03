@@ -3,9 +3,9 @@ Seed memory data via the HTTP API.
 Run from project root: .venv/Scripts/python scripts/seed_memory.py
 Requires server running on port 8001.
 """
-import urllib.request
-import urllib.parse
 import json
+import urllib.parse
+import urllib.request
 
 BASE = "http://localhost:8001"
 

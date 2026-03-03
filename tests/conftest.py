@@ -65,6 +65,7 @@ def _reset_redis_module_state():
     from app.core import middleware as middleware_mod
     from app.core import oauth_nonce as nonce_mod
     from app.core.config import settings
+    from app.services import ai_router as ai_router_mod
 
     # --- 1. Blank Redis URL settings ---
     saved_settings = {
@@ -84,6 +85,8 @@ def _reset_redis_module_state():
         "mw_client": middleware_mod._redis_client,
         "email_init": email_mod._compose_redis_initialized,
         "email_client": email_mod._compose_redis_client,
+        "ai_key_init": ai_router_mod._ai_key_redis_initialized,
+        "ai_key_client": ai_router_mod._ai_key_redis_client,
     }
 
     nonce_mod._redis_initialized = False
@@ -94,6 +97,8 @@ def _reset_redis_module_state():
     middleware_mod._redis_client = None
     email_mod._compose_redis_initialized = False
     email_mod._compose_redis_client = None
+    ai_router_mod._ai_key_redis_initialized = False
+    ai_router_mod._ai_key_redis_client = None
 
     yield
 
@@ -109,6 +114,8 @@ def _reset_redis_module_state():
     middleware_mod._redis_client = saved_modules["mw_client"]
     email_mod._compose_redis_initialized = saved_modules["email_init"]
     email_mod._compose_redis_client = saved_modules["email_client"]
+    ai_router_mod._ai_key_redis_initialized = saved_modules["ai_key_init"]
+    ai_router_mod._ai_key_redis_client = saved_modules["ai_key_client"]
 
 
 @pytest.fixture(autouse=True)

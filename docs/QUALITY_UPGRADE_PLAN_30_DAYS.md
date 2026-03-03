@@ -61,4 +61,3 @@ Definition of done:
 2. Review high-churn files in GitLens.
 3. Rotate/revalidate integration token scopes.
 4. Update risk register with top 3 risks.
-

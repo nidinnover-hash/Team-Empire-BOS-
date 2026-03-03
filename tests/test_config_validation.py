@@ -1,6 +1,23 @@
+import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings, format_startup_issues, validate_startup_settings
+
+
+@pytest.fixture(autouse=True)
+def _restore_settings_env_file():
+    """Restore Settings.model_config['env_file'] between tests.
+
+    Tests that monkeypatch this value could otherwise leave it pointing at a
+    temporary file, causing subsequent Settings(**data) calls to miss env-file
+    values (e.g. ADMIN_EMAIL) and fall back to insecure defaults.
+    """
+    original = Settings.model_config.get("env_file")
+    yield
+    if original is None:
+        Settings.model_config.pop("env_file", None)
+    else:
+        Settings.model_config["env_file"] = original
 
 
 def _base_settings(**overrides) -> Settings:
@@ -10,6 +27,8 @@ def _base_settings(**overrides) -> Settings:
         "GOOGLE_CLIENT_ID": None,
         "GOOGLE_CLIENT_SECRET": None,
         "GOOGLE_REDIRECT_URI": None,
+        "ADMIN_EMAIL": "ci-admin@example.com",
+        "DB_SCHEMA_ENFORCE_HEAD": True,
         "DEBUG": False,
         "COOKIE_SECURE": True,
         "PRIVACY_POLICY_PROFILE": "strict",

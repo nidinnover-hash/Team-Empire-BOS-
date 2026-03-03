@@ -35,4 +35,3 @@ class Project(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
     )
-

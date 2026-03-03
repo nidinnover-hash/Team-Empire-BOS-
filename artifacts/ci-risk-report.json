@@ -1,16 +1,16 @@
 {
   "base_ref": "main",
-  "changed_files": 259,
+  "changed_files": 0,
   "risks": [
     {
       "area": "migration",
-      "score": 8,
-      "level": "high"
+      "score": 2,
+      "level": "low"
     },
     {
       "area": "api_contract",
-      "score": 7,
-      "level": "high"
+      "score": 2,
+      "level": "low"
     },
     {
       "area": "sdk_drift",
@@ -25,8 +25,8 @@
     },
     {
       "area": "dependencies",
-      "score": 6,
-      "level": "medium"
+      "score": 2,
+      "level": "low"
     }
   ]
 }

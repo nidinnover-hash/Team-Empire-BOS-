@@ -58,4 +58,3 @@ async def get_account(token: str) -> dict[str, Any]:
 
 async def get_balance(token: str) -> dict[str, Any]:
     return await _get("/customers/my/balance", token)
-

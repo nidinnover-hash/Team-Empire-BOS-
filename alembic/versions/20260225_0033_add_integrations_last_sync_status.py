@@ -33,4 +33,3 @@ def downgrade() -> None:
     columns = {col["name"] for col in inspector.get_columns("integrations")}
     if "last_sync_status" in columns:
         op.drop_column("integrations", "last_sync_status")
-

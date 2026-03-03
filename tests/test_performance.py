@@ -128,7 +128,7 @@ async def test_coaching_endpoint(client, monkeypatch):
     })
     emp_id = emp.json()["id"]
 
-    resp = await client.post(f"/api/v1/performance/employee/{emp_id}/coaching")
+    resp = await client.post(f"/api/v1/coaching/employee/{emp_id}")
     assert resp.status_code == 200
     data = resp.json()
     assert "report_id" in data
@@ -137,7 +137,7 @@ async def test_coaching_endpoint(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_org_improvement_plan_endpoint(client):
-    resp = await client.post("/api/v1/performance/org/improvement-plan")
+    resp = await client.post("/api/v1/coaching/org")
     assert resp.status_code == 200
     data = resp.json()
     assert "report_id" in data
@@ -146,7 +146,7 @@ async def test_org_improvement_plan_endpoint(client):
 
 @pytest.mark.asyncio
 async def test_learning_insights_endpoint(client):
-    resp = await client.get("/api/v1/performance/learning-insights?days=30")
+    resp = await client.get("/api/v1/coaching/insights?days=30")
     assert resp.status_code == 200
     data = resp.json()
     assert "total_reports" in data

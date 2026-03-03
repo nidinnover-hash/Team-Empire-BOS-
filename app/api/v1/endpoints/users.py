@@ -21,7 +21,7 @@ async def list_users(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0, le=10_000),
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+    _user: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> list[UserRead]:
     return await user_service.list_users(db, organization_id=_user["org_id"], limit=limit, offset=offset)
 

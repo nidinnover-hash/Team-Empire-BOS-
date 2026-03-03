@@ -48,4 +48,3 @@ async def test_generate_policy_drafts_is_deduplicated(client):
         assert titles.count("Auto-approve pattern (from approval history)") == 1
     finally:
         await agen.aclose()
-

@@ -254,7 +254,7 @@ async def ai_available_models(
     ]
 
 
-@router.post("/ai/chat")
+@router.post("/ai/chat", response_model=AIChatResponse)
 async def ai_chat(
     data: AIChatRequest,
     db: AsyncSession = Depends(get_db),

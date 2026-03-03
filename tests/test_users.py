@@ -21,9 +21,9 @@ async def test_list_users_returns_200_for_ceo(client):
     assert isinstance(response.json(), list)
 
 
-async def test_list_users_returns_200_for_manager(client):
+async def test_list_users_denied_for_manager(client):
     response = await client.get("/api/v1/users", headers=_auth("MANAGER"))
-    assert response.status_code == 200
+    assert response.status_code == 403
 
 
 async def test_list_users_denied_for_staff(client):

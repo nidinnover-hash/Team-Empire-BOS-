@@ -15,9 +15,8 @@ from sqlalchemy import select
 
 from app.core.token_crypto import decrypt_config, encrypt_config
 from app.db.session import AsyncSessionLocal
-from app.models.integration import Integration
 from app.models import organization as _model_organization  # noqa: F401
-
+from app.models.integration import Integration
 
 TOKEN_FIELDS = ("access_token", "refresh_token", "api_token")
 

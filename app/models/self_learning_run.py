@@ -37,4 +37,3 @@ class SelfLearningRun(Base):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
-

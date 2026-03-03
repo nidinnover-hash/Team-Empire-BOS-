@@ -547,4 +547,3 @@ window.showToast = function(msg, type) {
     }, 4000);
   };
   if (typeof lucide !== "undefined") lucide.createIcons();
-

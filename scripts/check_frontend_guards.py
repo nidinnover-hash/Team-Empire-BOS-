@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +19,8 @@ BASE_JS_GUARDS: list[tuple[str, str]] = [
 ]
 
 CHECKS: dict[str, list[tuple[str, str]]] = {
-    "app/static/js/dashboard-page.js": BASE_JS_GUARDS + [
+    "app/static/js/dashboard-page.js": [
+        *BASE_JS_GUARDS,
         (r"wrap\.innerHTML\s*=", "wrap.innerHTML usage found"),
         (r"events\.map\s*\(", "events.map renderer found; use DOM renderer"),
         (r"entries\.map\s*\(", "entries.map renderer found; use DOM renderer"),
@@ -47,12 +51,12 @@ def main() -> int:
                 failures.append(f"{rel_path}: {message} ({pattern})")
 
     if failures:
-        print("Frontend guard check failed:")
+        logger.error("Frontend guard check failed:")
         for failure in failures:
-            print(f" - {failure}")
+            logger.error(" - %s", failure)
         return 1
 
-    print("Frontend guard check passed.")
+    logger.info("Frontend guard check passed.")
     return 0
 
 

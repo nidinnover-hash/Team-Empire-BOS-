@@ -5,7 +5,6 @@ import os
 import subprocess
 import sys
 
-
 CHECKS: list[list[str]] = [
     [sys.executable, "scripts/preflight_python.py"],
     [sys.executable, "scripts/check_ops_readiness.py"],

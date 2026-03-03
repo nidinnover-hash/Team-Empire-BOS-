@@ -33,4 +33,3 @@ def downgrade() -> None:
     columns = {col["name"] for col in inspector.get_columns("profile_memory")}
     if "expires_at" in columns:
         op.drop_column("profile_memory", "expires_at")
-

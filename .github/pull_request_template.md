@@ -1,9 +1,9 @@
 ## Summary
-- 
+-
 
 ## ClickUp Task
 - Primary Task ID: CU-____
-- Related Task IDs (optional): 
+- Related Task IDs (optional):
 
 ## Type of Change
 - [ ] Feature
@@ -30,4 +30,4 @@
 - [ ] SDK version + `sdk/CHANGELOG.md` updated for API/OpenAPI contract changes
 
 ## Notes for Reviewers
-- 
+-
