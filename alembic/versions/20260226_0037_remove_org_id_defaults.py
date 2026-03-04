@@ -36,16 +36,20 @@ _TABLES = [
 
 
 def upgrade() -> None:
-    dialect = op.get_bind().dialect.name
+    bind = op.get_bind()
+    dialect = bind.dialect.name
     if dialect == "sqlite":
         # SQLite doesn't support ALTER COLUMN; the ORM-level change is enough.
         return
+    inspector = sa.inspect(bind)
+    tables = set(inspector.get_table_names())
     for table in _TABLES:
-        try:
-            op.alter_column(table, "organization_id", server_default=None)
-        except Exception:
-            # Column may not have a server_default — safe to skip.
-            pass
+        if table not in tables:
+            continue
+        cols = {c["name"] for c in inspector.get_columns(table)}
+        if "organization_id" not in cols:
+            continue
+        op.alter_column(table, "organization_id", server_default=None)
 
 
 def downgrade() -> None:

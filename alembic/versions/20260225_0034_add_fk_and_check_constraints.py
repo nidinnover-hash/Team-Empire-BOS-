@@ -63,10 +63,8 @@ def upgrade() -> None:
 
     # -- Task.is_done CHECK (fix boolean for PostgreSQL) ---------------------
     if "tasks" in tables and dialect != "sqlite":
-        try:
+        if _has_constraint(inspector, "tasks", "ck_task_done_has_completed_at"):
             op.drop_constraint("ck_task_done_has_completed_at", "tasks", type_="check")
-        except Exception:
-            pass  # constraint may not exist yet
         op.create_check_constraint(
             "ck_task_done_has_completed_at",
             "tasks",
