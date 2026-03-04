@@ -713,18 +713,62 @@ body { margin: 0; overflow: hidden; }
 .audit-detail { font-size: .68rem; color: var(--text-muted); margin-top: .12rem; line-height: 1.4; }
 .audit-time { font-size: .6rem; color: var(--text-faint); white-space: nowrap; flex-shrink: 0; }
 
+/* ═══ Suggested prompts (chat welcome) ═══════════════════════════════════ */
+
+.chat-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  justify-content: center;
+  margin-top: .75rem;
+  max-width: 360px;
+}
+.chat-suggestion {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: .35rem .7rem;
+  font-size: .72rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all .15s;
+  font-family: var(--font);
+  white-space: nowrap;
+}
+.chat-suggestion:hover {
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-color: rgba(0,122,255,.25);
+}
+
 /* ═══ Responsive ═════════════════════════════════════════════════════════ */
 
 @media (max-width: 1000px) {
-  .dash-body { grid-template-columns: 1fr; overflow-y: auto; }
+  .dash { height: auto; min-height: 100vh; overflow: auto; }
+  body { overflow: auto; }
+  .dash-body { grid-template-columns: 1fr; overflow: visible; }
+  .dash-panel-chat { min-height: 60vh; }
+  .dash-panel-side { min-height: auto; }
+  .panel-card-half { min-height: 300px; }
   .dash-header { flex-direction: column; align-items: flex-start; gap: .5rem; }
   .dash-metrics { flex-wrap: wrap; }
 }
 @media (max-width: 768px) {
   .dash { margin-left: 0 !important; }
   .dash-header { padding: 3.5rem 1rem .6rem; }
+  .dash-header-right { width: 100%; justify-content: space-between; }
   .dash-body { padding: .5rem; gap: .5rem; }
-  .notif-dropdown { width: 280px; }
+  .chat-role-row { display: none; }
+  .chat-welcome { padding: 1.5rem .75rem; }
+  .chat-welcome p { font-size: .85rem; }
+  .chat-suggestions { gap: .3rem; }
+  .chat-suggestion { font-size: .66rem; padding: .3rem .55rem; }
+  .chat-input { font-size: .88rem; padding: .6rem .85rem; }
+  .chat-send-btn { width: 36px; height: 36px; }
+  .notif-dropdown { width: calc(100vw - 2rem); right: -1rem; }
+  .panel-head { padding: .5rem .7rem; }
+  .compose-grid { grid-template-columns: 1fr; }
 }
 
 /* ═══ Touch ══════════════════════════════════════════════════════════════ */
@@ -734,4 +778,6 @@ body { margin: 0; overflow: hidden; }
   .btn-ghost-sm { width: 36px; height: 36px; }
   .seg-btn { padding: .3rem .6rem; min-height: 36px; }
   .task-item { padding: .6rem .85rem; }
+  .chat-suggestion { min-height: 36px; display: flex; align-items: center; }
+  .role-btn { min-height: 36px; padding: .3rem .65rem; }
 }

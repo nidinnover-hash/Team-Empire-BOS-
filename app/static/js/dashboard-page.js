@@ -302,7 +302,15 @@
 
     sendBtn.addEventListener("click", send);
     input.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send();
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+    });
+
+    // Suggestion chips — click to auto-send
+    document.querySelectorAll(".chat-suggestion").forEach(function (chip) {
+      chip.addEventListener("click", function () {
+        input.value = chip.textContent;
+        send();
+      });
     });
 
     // Load persistent chat history on boot (with localStorage cache, 5-min TTL)
