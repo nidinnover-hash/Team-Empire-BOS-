@@ -150,7 +150,7 @@ if [[ "$DB_URL" == sqlite* ]]; then
 else
     if command -v pg_dump >/dev/null 2>&1; then
         DB_BACKUP_FILE="$BACKUP_DIR/postgres_predeploy_${BACKUP_TS}.sql"
-        PG_DUMP_URL=$(echo "$DB_URL" | sed -E 's#^postgresql\+asyncpg://#postgresql://#; s#^postgresql\+psycopg://#postgresql://#')
+        PG_DUMP_URL=$(echo "$DB_URL" | sed -E 's#^postgresql\+asyncpg://#postgresql://#; s#^postgresql\+psycopg://#postgresql://#; s#\?.*$##')
         pg_dump --dbname "$PG_DUMP_URL" --file "$DB_BACKUP_FILE"
     elif $REQUIRE_BACKUP; then
         echo "ERROR: pg_dump not found and --require-backup is set."
