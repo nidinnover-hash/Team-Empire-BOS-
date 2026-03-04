@@ -33,7 +33,10 @@ def _build_engine() -> AsyncEngine:
         connect_args: dict[str, Any] = {}
         stmt_timeout = getattr(settings, "DB_STATEMENT_TIMEOUT_MS", 30000)
         if stmt_timeout and "postgresql" in db_url:
-            connect_args["options"] = f"-c statement_timeout={int(stmt_timeout)}"
+            if "asyncpg" in db_url:
+                connect_args["server_settings"] = {"statement_timeout": str(int(stmt_timeout))}
+            else:
+                connect_args["options"] = f"-c statement_timeout={int(stmt_timeout)}"
         engine_kwargs.update(
             {
                 "pool_size": settings.DB_POOL_SIZE,
