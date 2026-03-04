@@ -24,11 +24,31 @@
 
     function switchTab(viewName) {
       Object.keys(views).forEach(function (k) {
-        if (views[k]) views[k].style.display = k === viewName ? "" : "none";
+        var view = views[k];
+        if (!view) return;
+        if (k === viewName) {
+          view.classList.remove("is-hidden");
+          requestAnimationFrame(function() {
+            view.classList.add("is-active");
+          });
+          return;
+        }
+        view.classList.remove("is-active");
+        setTimeout(function() {
+          if (!view.classList.contains("is-active")) {
+            view.classList.add("is-hidden");
+          }
+        }, 170);
       });
       tabs.forEach(function (t) {
-        t.classList.toggle("active", t.dataset.view === viewName);
+        var isActive = t.dataset.view === viewName;
+        t.classList.toggle("active", isActive);
+        t.setAttribute("aria-selected", isActive ? "true" : "false");
       });
+      window.__nnActiveDashboardTab = viewName;
+      if (viewName === "chat" && typeof window.__loadInboxForDashboard === "function") {
+        window.__loadInboxForDashboard();
+      }
       try { localStorage.setItem(STORAGE_KEY, viewName); } catch(e) {}
     }
 
@@ -43,6 +63,18 @@
       var saved = localStorage.getItem(STORAGE_KEY);
       if (saved && views[saved]) switchTab(saved);
     } catch(e) {}
+  })();
+
+  // Animate health ring after first paint.
+  (function () {
+    var ring = document.querySelector(".health-progress");
+    if (!ring) return;
+    var target = Number(ring.getAttribute("data-target-offset") || "50");
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        ring.setAttribute("stroke-dashoffset", String(target));
+      });
+    });
   })();
 
   (function () {
@@ -73,12 +105,12 @@
           return;
         }
 
-        const csrfToken = (document.cookie.split("; ").find((c) => c.startsWith("pc_csrf=")) || "").split("=").slice(1).join("=");
+        const csrfToken = window.PCUI && window.PCUI.getCsrfToken ? window.PCUI.getCsrfToken() : "";
         if (!csrfToken) throw new Error("Missing CSRF token");
 
         const res = await fetch("/web/ops/daily-run?draft_email_limit=3", {
           method: "POST",
-          headers: { "X-CSRF-Token": decodeURIComponent(csrfToken) }
+          headers: { "X-CSRF-Token": csrfToken }
         });
         const data = await res.json();
         if (!res.ok) {
@@ -106,10 +138,10 @@
       logoutBtn.addEventListener("click", async function (e) {
         e.preventDefault();
         try {
-          const csrfToken = (document.cookie.split("; ").find((c) => c.startsWith("pc_csrf=")) || "").split("=").slice(1).join("=");
+          const csrfToken = window.PCUI && window.PCUI.getCsrfToken ? window.PCUI.getCsrfToken() : "";
           const res = await fetch("/web/logout", {
             method: "POST",
-            headers: csrfToken ? { "X-CSRF-Token": decodeURIComponent(csrfToken) } : {}
+            headers: csrfToken ? { "X-CSRF-Token": csrfToken } : {}
           });
           if (!res.ok) throw new Error("Logout failed");
           window.location.reload();
@@ -136,6 +168,7 @@
     const placeholder = document.getElementById("chat-placeholder");
     const roleDisplay = document.getElementById("chat-role-display");
     const roleBtns   = document.querySelectorAll(".role-btn");
+    const roleSelectMobile = document.getElementById("chat-role-select-mobile");
 
     // Full chat view elements
     const inputFull  = document.getElementById("chat-input-full");
@@ -146,14 +179,30 @@
 
     let selectedRole = "CEO Agent";
 
+    function syncRoleUI(role) {
+      selectedRole = role || "";
+      roleBtns.forEach(function (btn) {
+        btn.classList.toggle("active", (btn.dataset.role || "") === selectedRole);
+      });
+      if (roleSelectMobile) {
+        roleSelectMobile.value = selectedRole;
+      }
+      roleDisplay.textContent = selectedRole || "Auto";
+    }
+
     roleBtns.forEach(function (btn) {
       btn.addEventListener("click", function () {
-        roleBtns.forEach(function (b) { b.classList.remove("active"); });
-        btn.classList.add("active");
-        selectedRole = btn.dataset.role || "";
-        roleDisplay.textContent = selectedRole || "Auto";
+        syncRoleUI(btn.dataset.role || "");
       });
     });
+
+    if (roleSelectMobile) {
+      roleSelectMobile.addEventListener("change", function () {
+        syncRoleUI(roleSelectMobile.value || "");
+      });
+    }
+
+    syncRoleUI(selectedRole);
 
     var esc = window.PCUI.escapeHtml;
     var getCsrf = window.PCUI.getCsrfToken;
@@ -505,14 +554,11 @@
     const cancelBtn    = document.getElementById("compose-cancel-btn");
     const draftBtn     = document.getElementById("compose-send-btn");
     const composeStatus = document.getElementById("compose-status");
-
-    function getCsrf() {
-      const pair = document.cookie.split("; ").find(function(c){ return c.startsWith("pc_csrf="); });
-      return pair ? decodeURIComponent(pair.split("=").slice(1).join("=")) : "";
-    }
+    let inboxHasLoaded = false;
 
     function apiHeaders() {
-      return { "Content-Type": "application/json", "X-CSRF-Token": getCsrf() };
+      var csrf = window.PCUI && window.PCUI.getCsrfToken ? window.PCUI.getCsrfToken() : "";
+      return { "Content-Type": "application/json", "X-CSRF-Token": csrf };
     }
 
     function fmt(iso) {
@@ -576,8 +622,13 @@
       return item;
     }
 
-    async function loadInbox() {
-      setInboxEmpty("Loading...");
+    async function loadInboxWithOptions(opts) {
+      var options = opts || {};
+      var force = !!options.force;
+      var showLoading = !!options.showLoading;
+      if (!list) return;
+      if (inboxHasLoaded && !force) return;
+      if (showLoading) setInboxEmpty("Loading...");
       try {
         const r = await fetch("/api/v1/email/inbox?limit=15&unread_only=false", {
           headers: { "Authorization": "Bearer " + window.__apiToken }
@@ -589,9 +640,14 @@
         emails.forEach(function(e) {
           list.appendChild(renderInboxItem(e));
         });
+        inboxHasLoaded = true;
       } catch(err) {
         setInboxEmpty("Error loading inbox.");
       }
+    }
+
+    async function loadInbox() {
+      await loadInboxWithOptions({ showLoading: false });
     }
 
     // Event delegation for inbox action buttons (CSP-safe)
@@ -661,14 +717,19 @@
           const d = await r.json().catch(function(){ return {}; });
           throw new Error(d.detail || "Gmail sync failed");
         }
-        await loadInbox();
+        await loadInboxWithOptions({ force: true, showLoading: true });
       } catch (e) {
         if (window.showToast) window.showToast((e && e.message) ? e.message : "Gmail sync failed", "error");
       } finally { syncBtn.disabled = false; syncBtn.textContent = "Sync Gmail"; }
     });
 
     // Compose
-    composeBtn && composeBtn.addEventListener("click", function() { composeForm.style.display = "block"; });
+    composeBtn && composeBtn.addEventListener("click", function() {
+      composeForm.style.display = "block";
+      composeForm.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      var toInput = document.getElementById("compose-to");
+      if (toInput) toInput.focus();
+    });
     cancelBtn  && cancelBtn.addEventListener("click",  function() { composeForm.style.display = "none"; composeStatus.textContent = ""; });
     draftBtn   && draftBtn.addEventListener("click", async function() {
       const to      = document.getElementById("compose-to").value.trim();
@@ -701,8 +762,14 @@
       var token = await window.__bootPromise;
       if (!token) return;
       window.__apiToken = token;
-      await loadInbox();
+      if (window.__nnActiveDashboardTab === "chat") {
+        await loadInbox();
+      }
     })();
+
+    window.__loadInboxForDashboard = function() {
+      return loadInbox();
+    };
   })();
 
   // ── Pending Approvals Panel ─────────────────────────────────────────────────

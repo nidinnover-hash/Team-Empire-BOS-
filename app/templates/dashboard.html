@@ -24,12 +24,14 @@
     <div class="topnav-left">
       <span class="topnav-brand">Nidin BOS</span>
     </div>
-    <nav class="topnav-tabs">
-      <button class="topnav-tab active" data-view="dashboard" type="button">Dashboard</button>
-      <button class="topnav-tab" data-view="chat" type="button">Agent Chat</button>
+    <div class="topnav-tabs">
+      <div role="tablist" aria-label="Dashboard views">
+        <button class="topnav-tab active" data-view="dashboard" type="button" role="tab" aria-selected="true" aria-controls="view-dashboard" id="tab-dashboard">Dashboard</button>
+        <button class="topnav-tab" data-view="chat" type="button" role="tab" aria-selected="false" aria-controls="view-chat" id="tab-chat">Agent Chat</button>
+      </div>
       <a href="/web/tasks" class="topnav-tab">Tasks</a>
       <a href="/web/finance" class="topnav-tab">Finance</a>
-    </nav>
+    </div>
     <div class="topnav-right">
       <div class="topnav-search">
         <i data-lucide="search" class="topnav-search-icon"></i>
@@ -56,7 +58,7 @@
   <!-- ══════════════════════════════════════════════════════════════════ -->
   <!-- VIEW 1: Dashboard (Revenue + Health + Compact Chat + Tasks)      -->
   <!-- ══════════════════════════════════════════════════════════════════ -->
-  <div id="view-dashboard" class="dash-view">
+  <div id="view-dashboard" class="dash-view is-active" role="tabpanel" aria-labelledby="tab-dashboard">
     <div class="dash-grid">
 
       <!-- LEFT COLUMN -->
@@ -79,10 +81,22 @@
           <div class="stat-card stat-card-health">
             <div class="stat-label">BUSINESS HEALTH</div>
             <div class="health-ring">
-              <svg viewBox="0 0 120 120">
+              <svg viewBox="0 0 120 120" role="img" aria-label="Business health score">
                 <circle cx="60" cy="60" r="50" fill="none" stroke="var(--line-soft)" stroke-width="8"/>
-                <circle cx="60" cy="60" r="50" fill="none" stroke="#34c759" stroke-width="8" stroke-linecap="round"
-                  stroke-dasharray="314" stroke-dashoffset="50" transform="rotate(-90 60 60)"/>
+                <circle
+                  class="health-progress"
+                  cx="60"
+                  cy="60"
+                  r="50"
+                  fill="none"
+                  stroke="var(--ok, #34c759)"
+                  stroke-width="8"
+                  stroke-linecap="round"
+                  stroke-dasharray="314"
+                  stroke-dashoffset="314"
+                  data-target-offset="50"
+                  transform="rotate(-90 60 60)"
+                />
               </svg>
               <div class="health-val">84</div>
             </div>
@@ -176,7 +190,7 @@
   <!-- ══════════════════════════════════════════════════════════════════ -->
   <!-- VIEW 2: Agent Chat (Full chat + Inbox + Agenda)                  -->
   <!-- ══════════════════════════════════════════════════════════════════ -->
-  <div id="view-chat" class="dash-view" style="display:none">
+  <div id="view-chat" class="dash-view is-hidden" role="tabpanel" aria-labelledby="tab-chat">
     <div class="dash-grid">
 
       <!-- CENTER: Full Chat -->
@@ -197,6 +211,12 @@
                 <button class="role-btn" data-role="Sales Lead Agent" type="button">Sales</button>
                 <button class="role-btn" data-role="" type="button">Auto</button>
               </div>
+              <select id="chat-role-select-mobile" class="chat-role-select-mobile" aria-label="Select chat role">
+                <option value="CEO Agent" selected>CEO</option>
+                <option value="Ops Manager Agent">Ops</option>
+                <option value="Sales Lead Agent">Sales</option>
+                <option value="">Auto</option>
+              </select>
               <span class="card-count" id="chat-role-display">CEO Agent</span>
             </div>
           </div>

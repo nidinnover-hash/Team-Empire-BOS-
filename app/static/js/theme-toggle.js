@@ -29,8 +29,10 @@
   function apply(theme) {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem(KEY, theme);
+    var newIcon = theme === 'dark' ? 'sun' : 'moon';
     var icons = document.querySelectorAll('.theme-icon');
-    icons.forEach(function (el) { el.textContent = theme === 'dark' ? 'sun' : 'moon'; });
+    icons.forEach(function (el) { el.setAttribute('data-lucide', newIcon); });
+    if (typeof lucide !== 'undefined') lucide.createIcons();
   }
 
   // Apply immediately to prevent flash
@@ -42,12 +44,9 @@
     btns.forEach(function (btn) {
       btn.addEventListener('click', function () {
         apply(getPreferred() === 'dark' ? 'light' : 'dark');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
       });
     });
     // Update icons after lucide renders
-    var cur = getPreferred();
-    var icons = document.querySelectorAll('.theme-icon');
-    icons.forEach(function (el) { el.textContent = cur === 'dark' ? 'sun' : 'moon'; });
+    apply(getPreferred());
   });
 })();

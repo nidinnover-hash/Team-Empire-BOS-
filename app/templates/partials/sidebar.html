@@ -1,4 +1,4 @@
-<nav class="sidebar">
+<nav class="sidebar" aria-label="Main navigation">
   <div class="sb-brand">
     <div class="sb-brand-icon">N</div>
   </div>
@@ -20,7 +20,7 @@
       <i data-lucide="moon" class="theme-icon"></i>
     </button>
     {% if session_user is defined and session_user %}
-    <div class="sb-user-avatar" title="{{ session_user.email }}">{{ session_user.email[0]|upper }}</div>
+    <button class="sb-user-avatar" type="button" aria-label="{{ session_user.email }}" data-tooltip="{{ session_user.email }}">{{ session_user.email[0]|upper }}</button>
     <button class="sb-item" id="logout-btn" type="button" data-tooltip="Sign out" aria-label="Sign out">
       <i data-lucide="log-out"></i>
     </button>

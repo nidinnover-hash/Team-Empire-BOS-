@@ -93,7 +93,7 @@
     if (document.visibilityState === "hidden") return;
     if (_sseRetryMs >= _sseMaxRetryMs && !_sseFailNotified) {
       _sseFailNotified = true;
-      if (window.showToast) window.showToast("Live updates unavailable. Using polling fallback.", "warning");
+      if (window.showToast) window.showToast("Live updates unavailable. Using polling fallback.", "warn");
     }
     _sseTimer = setTimeout(function () {
       _sseTimer = null;
