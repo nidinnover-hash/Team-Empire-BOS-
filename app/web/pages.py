@@ -1,6 +1,7 @@
 """Web page routes: dashboard, talk bootstrap, static authenticated pages."""
 
 import asyncio
+from datetime import datetime, timezone
 import logging
 import time as _time
 from typing import Any
@@ -282,8 +283,19 @@ async def dashboard(
 
     ceo_action = _extract_ceo_action(compliance_report)
 
+    hour = datetime.now(timezone.utc).hour + 5  # IST offset (UTC+5:30 approx)
+    if hour >= 24:
+        hour -= 24
+    if hour < 12:
+        greeting = "Good morning"
+    elif hour < 17:
+        greeting = "Good afternoon"
+    else:
+        greeting = "Good evening"
+
     ctx = {
         "request": request,
+        "greeting": greeting,
         "commands": commands,
         "tasks": tasks,
         "notes": notes,

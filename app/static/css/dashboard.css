@@ -91,7 +91,7 @@ body { margin: 0; overflow: hidden; }
 .dash-body {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1.8fr 1fr;
   gap: .85rem;
   padding: .85rem 1.25rem;
   min-height: 0;

@@ -227,6 +227,50 @@ html {
   display: flex; flex-direction: column; gap: 2px;
 }
 
+.sb-group {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  margin-bottom: 2px;
+}
+
+.sb-group[open] {
+  background: rgba(0, 0, 0, 0.015);
+}
+
+.sb-group-title {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  font-size: .62rem;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--text-faint);
+  padding: .55rem .7rem .45rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sb-group-title::-webkit-details-marker { display: none; }
+
+.sb-group-title::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform .16s ease;
+  opacity: .7;
+  margin-right: 2px;
+}
+
+.sb-group[open] .sb-group-title::after {
+  transform: rotate(-135deg);
+}
+
 .sb-section {
   font-size: .6rem; text-transform: uppercase; letter-spacing: .1em;
   color: var(--text-faint); padding: .9rem .7rem .35rem;
@@ -256,6 +300,16 @@ html {
 .sb-item.active svg, .sb-item.active i { opacity: 1; color: var(--sb-active-text); }
 
 .sb-divider { height: 1px; background: var(--sb-line); margin: .4rem .7rem; }
+
+/* ── Collapsible More section ─────────────────────────────────────────── */
+.sb-more { margin: 0; }
+.sb-more > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+.sb-more > summary::-webkit-details-marker { display: none; }
+.sb-more > summary::marker { display: none; content: ''; }
+.sb-section-toggle { -webkit-user-select: none; user-select: none; }
+.sb-chevron { width: 12px; height: 12px; opacity: .4; transition: transform .2s; }
+.sb-more[open] > summary .sb-chevron { transform: rotate(180deg); }
+.sb-more > .sb-item { padding-left: 1rem; }
 
 .sb-footer {
   padding: .6rem; border-top: 1px solid var(--sb-line);
@@ -695,6 +749,8 @@ textarea.input-error {
   .sidebar.mobile-open { transform: translateX(0); }
   .main-wrap { margin-left: 0 !important; padding: 1rem !important; padding-top: 3.5rem !important; }
   .sb-item { min-height: 44px !important; padding: .65rem .85rem !important; font-size: .85rem !important; }
+  .sb-group { margin-bottom: .3rem; }
+  .sb-group-title { font-size: .64rem; padding: .65rem .8rem .55rem; }
   .kpi-row { grid-template-columns: repeat(2, 1fr) !important; }
 }
 
