@@ -13,6 +13,12 @@
   var defaultTheme = getCookie("pc_theme_default") || "";
   var KEY = "pc_theme:" + scope;
 
+  // v2: force light reset — clear any old stored 'dark' preference
+  if (!localStorage.getItem("pc_theme_v2_reset")) {
+    localStorage.removeItem(KEY);
+    localStorage.setItem("pc_theme_v2_reset", "1");
+  }
+
   function getPreferred() {
     var stored = localStorage.getItem(KEY);
     if (stored === 'dark' || stored === 'light') return stored;
