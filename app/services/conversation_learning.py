@@ -80,13 +80,19 @@ def extract_learning_signals(message: str) -> list[LearnedSignal]:
         if style and not _looks_sensitive(style):
             signals.append(LearnedSignal(key="work.style", value=style))
 
-    # If message asks to remember something explicit, keep the statement.
-    if "remember" in lowered:
-        m_remember = re.search(r"\bremember(?: that)?\s+(.+?)(?:[.?!]|$)", msg, flags=re.IGNORECASE)
+    # If message asks to remember/learn/train something explicit, keep the statement.
+    for trigger in ("remember", "learn", "train", "note that", "know that"):
+        if trigger not in lowered:
+            continue
+        m_remember = re.search(
+            r"\b(?:remember|learn|train|note that|know that)(?: that)?\s+(.+?)(?:[.?!]|$)",
+            msg, flags=re.IGNORECASE,
+        )
         if m_remember:
             fact = _clean_text(m_remember.group(1))[:_MAX_VALUE_LEN]
             if fact and not _looks_sensitive(fact):
                 signals.append(LearnedSignal(key="memory.explicit_fact", value=fact))
+            break
 
     # Keep last value when same key appears multiple times.
     dedup: dict[str, LearnedSignal] = {s.key: s for s in signals}
