@@ -1,98 +1,156 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Dashboard — Apple-Inspired Layout
+   Dashboard — Apple-Inspired Single-Viewport Layout
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
   --accent-dim: rgba(0, 122, 255, 0.04);
   --focus-shadow: rgba(0, 122, 255, 0.08);
 }
-[data-theme="dark"] { --focus-shadow: rgba(10, 132, 255, 0.12); }
 
-body { min-height: 100vh; }
+body { margin: 0; overflow: hidden; }
 
-/* ── Stats Bar ─────────────────────────────────────────────────────────── */
-.stats {
-  background: var(--surface);
-  border-bottom: 1px solid var(--line-soft);
-  padding: 0.7rem 2rem 0.85rem;
+/* ═══ NEW: Single-viewport dashboard ═══════════════════════════════════════ */
+
+.dash-main {
   margin-left: var(--sb-width);
-  display: grid;
-  grid-template-columns: repeat(6, minmax(120px, 1fr)) auto;
-  gap: 0.6rem;
-  position: sticky; top: 0; z-index: 40;
-  backdrop-filter: blur(16px) saturate(1.8);
-  -webkit-backdrop-filter: blur(16px) saturate(1.8);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
 }
-.stat {
-  background: var(--surface);
-  border: none;
-  border-radius: var(--radius);
-  padding: .55rem .65rem;
-  display: flex; flex-direction: column; gap: .12rem;
-  min-height: 56px;
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow .2s ease;
-}
-.stat:hover { box-shadow: var(--shadow-md); }
-.stat span { font-size: .6rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint); font-weight: 600; }
-.stat strong { color: var(--text); font-size: 1.15rem; font-weight: 700; line-height: 1.1; font-feature-settings: 'tnum' 1; font-variant-numeric: tabular-nums; }
-.balance-pos { color: var(--ok) !important; }
-.balance-neg { color: var(--danger) !important; }
 
-/* ── KPI Auto-Refresh Pulse ───────────────────────────────────────────── */
+/* ── Top bar ──────────────────────────────────────────────────────────── */
+.dash-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: .65rem 1.5rem;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.dash-greeting {
+  display: flex;
+  align-items: baseline;
+  gap: .6rem;
+}
+.dash-greeting h1 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -.02em;
+}
+.dash-date {
+  font-size: .72rem;
+  color: var(--text-faint);
+  font-weight: 500;
+}
+.dash-kpis {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+.dash-kpi {
+  font-size: .7rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.dash-kpi span {
+  font-weight: 700;
+  color: var(--text);
+  font-size: .82rem;
+  font-feature-settings: 'tnum' 1;
+  font-variant-numeric: tabular-nums;
+  margin-right: .15rem;
+}
+
+/* ── Two-column grid ─────────────────────────────────────────────────── */
+.dash-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .75rem;
+  padding: .75rem 1.25rem;
+  min-height: 0;
+  overflow: hidden;
+}
+.dash-col {
+  display: flex;
+  flex-direction: column;
+  gap: .65rem;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Dashboard cards ─────────────────────────────────────────────────── */
+.dash-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.dash-card .card-head {
+  flex-shrink: 0;
+}
+
+/* ── Chat layout ─────────────────────────────────────────────────────── */
+.dash-chat-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: .6rem .85rem;
+  gap: .45rem;
+}
+.dash-chat-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.dash-chat-input {
+  flex-shrink: 0;
+  display: flex;
+  gap: .5rem;
+  align-items: flex-end;
+}
+.dash-chat-input .chat-textarea {
+  flex: 1;
+  min-height: unset;
+  resize: none;
+  padding: .5rem .7rem;
+  font-size: .8rem;
+  border-radius: var(--radius-sm);
+}
+.dash-chat-input .chat-send {
+  padding: .45rem .9rem;
+  font-size: .72rem;
+  flex-shrink: 0;
+}
+
+/* ── Scrollable panels inside cards ──────────────────────────────────── */
+.dash-scroll-sm {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* ── Hide old layout elements ────────────────────────────────────────── */
+.stats { display: none; }
+.hero { display: none; }
+.section-label { display: none; }
+.grid-3 { display: none; }
+.grid-2 { display: none; }
+
+/* ═══ END single-viewport ═══════════════════════════════════════════════ */
+
+/* ── KPI Auto-Refresh Pulse (kept for JS compat) ─────────────────────── */
 @keyframes kpiPulse {
   0% { transform: scale(1); }
   50% { transform: scale(1.15); color: var(--brand); }
   100% { transform: scale(1); }
 }
 .kpi-pulse { animation: kpiPulse .6s ease-out; }
-
-/* ── Main ──────────────────────────────────────────────────────────────── */
-main { padding: 1.5rem 2rem 2rem; max-width: 1280px; margin-left: var(--sb-width); }
-
-/* ── Hero ──────────────────────────────────────────────────────────────── */
-.hero {
-  background: var(--surface);
-  border: none;
-  border-radius: var(--radius-lg);
-  padding: 1.1rem 1.25rem;
-  box-shadow: var(--shadow);
-  display: grid;
-  grid-template-columns: 1.1fr .9fr;
-  gap: 1rem;
-  align-items: center;
-}
-.hero h1 {
-  font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em;
-  color: var(--text); margin-bottom: .25rem;
-}
-.hero p {
-  font-size: .82rem; color: var(--text-muted);
-  max-width: 72ch; line-height: 1.45;
-}
-.hero-chips { display: flex; flex-wrap: wrap; gap: .4rem; justify-content: flex-end; }
-.hero-chip {
-  background: var(--brand-soft);
-  color: var(--brand);
-  border: none;
-  border-radius: 999px;
-  padding: .22rem .55rem; font-size: .62rem; font-weight: 600;
-  letter-spacing: .05em; text-transform: uppercase;
-}
-
-/* ── Section Labels ───────────────────────────────────────────────────── */
-.section-label {
-  font-size: 0.62rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .12em;
-  color: var(--text-faint);
-  margin: 1.4rem 0 0.7rem;
-  display: flex; align-items: center; gap: .6rem;
-}
-.section-label::after { content: ""; flex: 1; height: 1px; background: var(--line-soft); }
-
-/* ── Grid ──────────────────────────────────────────────────────────────── */
-.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.18rem; }
-.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.18rem; }
 
 /* ── Cards ─────────────────────────────────────────────────────────────── */
 .card {
@@ -439,14 +497,15 @@ main { padding: 1.5rem 2rem 2rem; max-width: 1280px; margin-left: var(--sb-width
 .notif-empty { padding: 2rem .9rem; text-align: center; color: var(--text-faint); font-size: .78rem; }
 
 /* ── Responsive ───────────────────────────────────────────────────────── */
-@media (max-width: 1180px) { .stats { grid-template-columns: repeat(3, minmax(120px, 1fr)); } }
-@media (max-width: 1000px) { .grid-3 { grid-template-columns: 1fr 1fr; } .chat-panel { grid-template-columns: 1fr; } .hero { grid-template-columns: 1fr; } .hero-chips { justify-content: flex-start; } }
+@media (max-width: 1000px) {
+  .dash-grid { grid-template-columns: 1fr; overflow-y: auto; }
+  .dash-topbar { flex-direction: column; align-items: flex-start; gap: .4rem; }
+  .dash-kpis { flex-wrap: wrap; }
+}
 @media (max-width: 768px) {
-  .stats { margin-left: 0 !important; padding: 3.5rem 1rem .5rem; grid-template-columns: repeat(2, minmax(100px, 1fr)); }
-  main { margin-left: 0 !important; padding: 1rem; }
-  .grid-3, .grid-2 { grid-template-columns: 1fr; }
-  .hero { grid-template-columns: 1fr; }
-  .hero-chips { justify-content: flex-start; }
+  .dash-main { margin-left: 0 !important; }
+  .dash-topbar { padding: 3.5rem 1rem .5rem; }
+  .dash-grid { padding: .5rem; }
   .notif-dropdown { width: 300px; }
 }
 

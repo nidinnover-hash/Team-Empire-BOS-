@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,11 +7,10 @@
   <meta name="theme-color" content="#f5f5f7" />
   <link rel="manifest" href="/static/manifest.json" />
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <title>AI Agent Factory — Nidin BOS</title>
+  <title>Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
   <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/dashboard.css" />
-
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
 </head>
 <body>
@@ -19,59 +18,48 @@
 {% set active_page = "dashboard" %}
 {% include "partials/sidebar.html" %}
 
-<div class="stats">
-  <div class="stat"><span>Commands</span><strong data-kpi="commands">{{ commands|length }}</strong></div>
-  <div class="stat"><span>Open Tasks</span><strong data-kpi="tasks_pending">{{ tasks|length }}</strong></div>
-  <div class="stat"><span>Projects</span><strong data-kpi="projects">{{ projects|length }}</strong></div>
-  <div class="stat"><span>Goals</span><strong data-kpi="goals">{{ goals|length }}</strong></div>
-  <div class="stat"><span>Contacts</span><strong data-kpi="contacts">{{ contacts|length }}</strong></div>
-  <div class="stat">
-    <span>Balance</span>
-    <strong class="{% if finance.balance >= 0 %}balance-pos{% else %}balance-neg{% endif %}">
-      ${{ finance.balance | round(2) }}
-    </strong>
-  </div>
-  <div class="notif-bell-container">
-    <button id="notif-bell-btn" class="notif-bell" type="button" aria-label="Notifications">
-      <i data-lucide="bell"></i>
-      <span id="notif-badge" class="notif-badge">0</span>
-    </button>
-    <div id="notif-dropdown" class="notif-dropdown" style="display:none">
-      <div class="notif-header">
-        <span class="notif-title">Notifications</span>
-        <button id="notif-mark-all-btn" class="notif-action-btn" type="button">Mark all read</button>
-      </div>
-      <div id="notif-list" class="notif-list">
-        <div class="notif-empty">No notifications</div>
-      </div>
-    </div>
-  </div>
-</div>
+<main class="dash-main">
 
-<main>
-  <div class="hero">
-    <div>
-      <h1>Good {% if executive.date %}{{ executive.date }}{% endif %}, Nidin</h1>
-      <p id="hero-summary" style="color:var(--text-muted);font-size:.84rem;line-height:1.45">
-        {{ executive.team_summary.total_members }} team &middot; {{ tasks|length }} open tasks &middot; {{ executive.approvals.pending_count }} approvals pending &middot; {{ executive.inbox.unread_count }} unread
-      </p>
+  <!-- Top bar: greeting + KPIs inline -->
+  <div class="dash-topbar">
+    <div class="dash-greeting">
+      <h1>Hi Nidin</h1>
+      <span class="dash-date">{{ executive.date }}</span>
     </div>
-    <div class="hero-chips">
-      <span class="hero-chip">AI Assisted</span>
-      <span class="hero-chip">Approval Safe</span>
-      <span class="hero-chip">{{ executive.date }}</span>
+    <div class="dash-kpis">
+      <div class="dash-kpi"><span>{{ tasks|length }}</span> tasks</div>
+      <div class="dash-kpi"><span>{{ executive.approvals.pending_count }}</span> approvals</div>
+      <div class="dash-kpi"><span>{{ executive.inbox.unread_count }}</span> unread</div>
+      <div class="dash-kpi"><span>${{ finance.balance | round(0) | int }}</span> balance</div>
+      <div class="notif-bell-container">
+        <button id="notif-bell-btn" class="notif-bell" type="button" aria-label="Notifications">
+          <i data-lucide="bell"></i>
+          <span id="notif-badge" class="notif-badge">0</span>
+        </button>
+        <div id="notif-dropdown" class="notif-dropdown" style="display:none">
+          <div class="notif-header">
+            <span class="notif-title">Notifications</span>
+            <button id="notif-mark-all-btn" class="notif-action-btn" type="button">Mark all read</button>
+          </div>
+          <div id="notif-list" class="notif-list">
+            <div class="notif-empty">No notifications</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="section-label">Command</div>
-  <div class="card">
-    <div class="card-head">
-      <span class="card-title">Command your agent</span>
-      <span class="card-count" id="chat-role-display">CEO Agent</span>
-    </div>
-    <div style="padding:1rem 1.1rem">
-      <div class="chat-panel">
-        <div class="chat-input-area">
+  <!-- Two-column layout: Command + Chat | Inbox + Tasks -->
+  <div class="dash-grid">
+
+    <!-- LEFT: Command center -->
+    <div class="dash-col">
+      <div class="card dash-card">
+        <div class="card-head">
+          <span class="card-title">Command</span>
+          <span class="card-count" id="chat-role-display">CEO Agent</span>
+        </div>
+        <div class="dash-chat-wrap">
           <div class="chat-role-row">
             <button class="role-btn active" data-role="CEO Agent">CEO</button>
             <button class="role-btn" data-role="Ops Manager Agent">Ops</button>
@@ -79,178 +67,97 @@
             <button class="role-btn" data-role="Tech PM Agent">Tech PM</button>
             <button class="role-btn" data-role="">Auto</button>
           </div>
-          <textarea id="chat-input" class="chat-textarea" placeholder='Ask your agent anything… e.g. "What should I focus on today?" or "Create task: review contracts"' aria-label="Chat message"></textarea>
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <span class="chat-hint">Ctrl+Enter to send</span>
+          <div class="dash-chat-body">
+            <div class="chat-history" id="chat-history">
+              <div class="chat-empty" id="chat-placeholder">Ask me anything — tasks, emails, priorities.</div>
+            </div>
+          </div>
+          <div class="dash-chat-input">
+            <textarea id="chat-input" class="chat-textarea" placeholder="Type a command..." aria-label="Chat message" rows="2"></textarea>
             <button id="chat-send" class="chat-send" type="button">Send</button>
           </div>
         </div>
-        <div class="chat-history" id="chat-history">
-          <div class="chat-empty" id="chat-placeholder">Your conversation will appear here.</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Inbox + Tasks stacked -->
+    <div class="dash-col">
+      <!-- Inbox -->
+      <div class="card dash-card">
+        <div class="card-head">
+          <span class="card-title">Inbox</span>
+          <div style="display:flex;gap:.4rem;align-items:center">
+            <span id="inbox-unread-badge" class="card-count">{{ executive.inbox.unread_count }} unread</span>
+            <button id="inbox-sync-btn" class="btn-run" type="button">Sync</button>
+            <button id="inbox-compose-btn" class="btn-run" type="button">Compose</button>
+          </div>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="section-label">Gmail Inbox</div>
-  <div class="card" id="inbox-card">
-    <div class="card-head">
-      <span class="card-title">Inbox</span>
-      <div style="display:flex;gap:.6rem;align-items:center">
-        <span id="inbox-unread-badge" class="card-count">{{ executive.inbox.unread_count }} unread</span>
-        <button id="inbox-sync-btn" class="btn-run" type="button">Sync Gmail</button>
-        <button id="inbox-compose-btn" class="btn-run" type="button">+ Compose</button>
-      </div>
-    </div>
-    <div id="inbox-compose-form" class="compose-area" style="display:none">
-      <div class="compose-grid">
-        <input id="compose-to" type="email" placeholder="To: email@example.com" aria-label="Recipient email" />
-        <input id="compose-subject" type="text" placeholder="Subject" aria-label="Email subject" />
-      </div>
-      <textarea id="compose-instruction" placeholder="Instructions for ChatGPT: e.g. 'Follow up on the overseas education proposal, be professional but warm'" style="min-height:70px;resize:vertical" aria-label="Compose instructions"></textarea>
-      <div class="compose-footer">
-        <span id="compose-status" class="run-status"></span>
-        <div class="flex gap-2">
-          <button id="compose-cancel-btn" class="btn danger" type="button">Cancel</button>
-          <button id="compose-send-btn" class="btn primary" type="button">Draft with ChatGPT</button>
-        </div>
-      </div>
-    </div>
-    <div id="inbox-list">
-      <div class="empty" id="inbox-loading">Loading emails…</div>
-    </div>
-  </div>
-
-  <div class="section-label">Pending Approvals</div>
-  <div class="card" id="approvals-card">
-    <div class="card-head">
-      <span class="card-title">Action Required</span>
-      <div style="display:flex;gap:.6rem;align-items:center">
-        <span id="approvals-pending-count" class="card-count">...</span>
-        <button id="approvals-refresh-btn" class="btn-run" type="button">Refresh</button>
-      </div>
-    </div>
-    <div id="approvals-list">
-      <div class="empty">Loading approvals…</div>
-    </div>
-  </div>
-
-  <!-- Task Manager -->
-  <div class="section-label">Tasks</div>
-  <div class="card" id="tasks-card">
-    <div class="card-head">
-      <span class="card-title">Task Manager</span>
-      <div style="display:flex;gap:.4rem;align-items:center">
-        <span id="tasks-count" class="card-count">...</span>
-        <button id="tasks-tab-open" class="btn-run tab-active" style="padding:.2rem .45rem;font-size:.63rem" type="button">Open</button>
-        <button id="tasks-tab-done" class="btn-run" style="padding:.2rem .45rem;font-size:.63rem" type="button">Done</button>
-      </div>
-    </div>
-    <div id="tasks-list" style="max-height:280px;overflow-y:auto">
-      {% if tasks %}
-        {% for t in tasks %}
-        <div class="item" id="task-item-{{ t.id }}">
-          <div style="display:flex;align-items:flex-start;gap:.55rem">
-            <input type="checkbox" class="task-check" data-task-id="{{ t.id }}" {% if t.is_done %}checked{% endif %} aria-label="Toggle task {{ t.title }}" />
-            <div style="flex:1;min-width:0">
-              <div class="item-text" style="{% if t.is_done %}text-decoration:line-through;color:var(--text-faint){% endif %}">
-                {{ t.title }}
-              </div>
-              <div class="item-meta">
-                {{ t.category or "personal" }}{% if t.due_date %} · due {{ t.due_date }}{% endif %}
-                · <span style="color:{% if t.priority == 4 %}var(--danger){% elif t.priority == 3 %}var(--warn){% elif t.priority == 2 %}var(--brand){% else %}var(--text-faint){% endif %};font-size:.65rem">
-                  {% if t.priority == 4 %}Urgent{% elif t.priority == 3 %}High{% elif t.priority == 2 %}Med{% else %}Low{% endif %}
-                </span>
-              </div>
+        <div id="inbox-compose-form" class="compose-area" style="display:none">
+          <div class="compose-grid">
+            <input id="compose-to" type="email" placeholder="To: email@example.com" aria-label="Recipient email" />
+            <input id="compose-subject" type="text" placeholder="Subject" aria-label="Email subject" />
+          </div>
+          <textarea id="compose-instruction" placeholder="Instructions for ChatGPT..." style="min-height:50px;resize:vertical" aria-label="Compose instructions"></textarea>
+          <div class="compose-footer">
+            <span id="compose-status" class="run-status"></span>
+            <div class="flex gap-2">
+              <button id="compose-cancel-btn" class="btn danger" type="button">Cancel</button>
+              <button id="compose-send-btn" class="btn primary" type="button">Draft</button>
             </div>
           </div>
         </div>
-        {% endfor %}
-      {% else %}
-        <div class="empty">No tasks yet.</div>
-      {% endif %}
-    </div>
-    <div style="padding:.55rem 1.08rem;border-top:1px solid var(--line-soft);display:flex;gap:.5rem">
-      <input id="tasks-new-title" class="mem-input" style="flex:1" placeholder="Quick add task…" aria-label="New task title" />
-      <button id="tasks-add-btn" class="btn-run" type="button">+ Add</button>
-    </div>
-  </div>
+        <div id="inbox-list" class="dash-scroll-sm">
+          <div class="empty" id="inbox-loading" style="padding:1.2rem">No emails synced yet. Click Sync.</div>
+        </div>
+      </div>
 
-  <!-- Overview: Projects, Goals, Finance in compact grid -->
-  <div class="section-label">Overview</div>
-  <div class="grid-3">
-    <div class="card">
-      <div class="card-head"><span class="card-title">Projects</span><span class="card-count">{{ projects|length }}</span></div>
-      {% if projects %}
-        {% for p in projects[:3] %}
-        <div class="item">
-          <div class="task-row">
-            <div class="item-text">{{ p.title }}</div>
-            <span class="badge b-{{ p.status }}">{{ p.status }}</span>
+      <!-- Tasks -->
+      <div class="card dash-card">
+        <div class="card-head">
+          <span class="card-title">Tasks</span>
+          <div style="display:flex;gap:.4rem;align-items:center">
+            <span id="tasks-count" class="card-count">{{ tasks|length }}</span>
+            <button id="tasks-tab-open" class="btn-run tab-active" style="padding:.18rem .4rem;font-size:.6rem" type="button">Open</button>
+            <button id="tasks-tab-done" class="btn-run" style="padding:.18rem .4rem;font-size:.6rem" type="button">Done</button>
           </div>
         </div>
-        {% endfor %}
-      {% else %}
-        <div class="empty">No projects yet.</div>
-      {% endif %}
-    </div>
-    <div class="card">
-      <div class="card-head"><span class="card-title">Goals</span><span class="card-count">{{ goals|length }}</span></div>
-      {% if goals %}
-        {% for g in goals[:3] %}
-        <div class="item">
-          <div class="task-row">
-            <div class="item-text">{{ g.title }}</div>
-            <span class="badge b-{{ g.status }}">{{ g.status }}</span>
-          </div>
-          <div class="prog-wrap"><div class="prog-fill" style="width:{{ g.progress }}%"></div></div>
+        <div id="tasks-list" class="dash-scroll-sm">
+          {% if tasks %}
+            {% for t in tasks %}
+            <div class="item" id="task-item-{{ t.id }}">
+              <div style="display:flex;align-items:flex-start;gap:.45rem">
+                <input type="checkbox" class="task-check" data-task-id="{{ t.id }}" {% if t.is_done %}checked{% endif %} aria-label="Toggle task {{ t.title }}" />
+                <div style="flex:1;min-width:0">
+                  <div class="item-text" style="font-size:.8rem;{% if t.is_done %}text-decoration:line-through;color:var(--text-faint){% endif %}">{{ t.title }}</div>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="empty" style="padding:1.2rem">No tasks yet.</div>
+          {% endif %}
         </div>
-        {% endfor %}
-      {% else %}
-        <div class="empty">No goals yet.</div>
-      {% endif %}
-    </div>
-    <div class="card">
-      <div class="card-head"><span class="card-title">Finance</span></div>
-      <div class="fin-row">
-        <span class="fin-label">Income</span>
-        <span class="fin-val fin-green">${{ finance.total_income | round(2) }}</span>
-      </div>
-      <div class="fin-row">
-        <span class="fin-label">Expenses</span>
-        <span class="fin-val fin-red">${{ finance.total_expense | round(2) }}</span>
-      </div>
-      <div class="fin-row" style="border-top:1px solid var(--line)">
-        <span class="fin-label" style="font-weight:700">Balance</span>
-        <span class="fin-val {% if finance.balance >= 0 %}fin-green{% else %}fin-red{% endif %}">
-          ${{ finance.balance | round(2) }}
-        </span>
+        <div style="padding:.4rem .8rem;border-top:1px solid var(--line-soft);display:flex;gap:.4rem">
+          <input id="tasks-new-title" class="mem-input" style="flex:1;padding:.3rem .5rem;font-size:.78rem" placeholder="Quick add task..." aria-label="New task title" />
+          <button id="tasks-add-btn" class="btn-run" style="padding:.25rem .5rem;font-size:.65rem" type="button">+ Add</button>
+        </div>
       </div>
     </div>
+
   </div>
 
-  <!-- Activity -->
-  <div class="section-label">Activity</div>
-  <div class="card" id="audit-card">
-    <div class="card-head">
-      <span class="card-title">Recent Activity</span>
-      <div style="display:flex;gap:.6rem;align-items:center">
-        <span id="audit-count" class="card-count">...</span>
-        <button id="audit-refresh-btn" class="btn-run" type="button">Refresh</button>
-      </div>
-    </div>
-    <div id="audit-list">
-      <div class="empty">Loading activity log…</div>
-    </div>
+  <!-- Approvals bar (hidden element for JS compatibility) -->
+  <div id="approvals-card" style="display:none">
+    <span id="approvals-pending-count"></span>
+    <button id="approvals-refresh-btn" type="button"></button>
+    <div id="approvals-list"></div>
   </div>
 
 </main>
-<script nonce="{{ csp_nonce }}" src="/static/js/api-client.js"></script>
 
-
-<!-- Toast notification system -->
 <div id="toast-container"></div>
 
+<script nonce="{{ csp_nonce }}" src="/static/js/api-client.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
