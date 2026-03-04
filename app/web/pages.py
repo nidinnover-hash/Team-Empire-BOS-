@@ -1,9 +1,9 @@
 """Web page routes: dashboard, talk bootstrap, static authenticated pages."""
 
 import asyncio
-from datetime import datetime, timezone
 import logging
 import time as _time
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -283,7 +283,7 @@ async def dashboard(
 
     ceo_action = _extract_ceo_action(compliance_report)
 
-    hour = datetime.now(timezone.utc).hour + 5  # IST offset (UTC+5:30 approx)
+    hour = datetime.now(UTC).hour + 5  # IST offset (UTC+5:30 approx)
     if hour >= 24:
         hour -= 24
     if hour < 12:

@@ -19,29 +19,21 @@
 
 <main class="dash">
 
-  <!-- ── Header ──────────────────────────────────────────────────────── -->
-  <header class="dash-header">
-    <div class="dash-header-left">
-      <div class="dash-avatar">N</div>
-      <div>
-        <h1 class="dash-title">{{ greeting }}, Nidin</h1>
-        <p class="dash-subtitle">{{ executive.date }} — {{ tasks|length }} tasks, {{ executive.inbox.unread_count }} unread, {{ executive.approvals.pending_count }} pending</p>
-      </div>
+  <!-- ── Top Nav Bar ──────────────────────────────────────────────────── -->
+  <header class="topnav">
+    <div class="topnav-left">
+      <span class="topnav-brand">Nidin BOS</span>
     </div>
-    <div class="dash-header-right">
-      <div class="dash-metrics">
-        <div class="dash-metric">
-          <div class="dash-metric-val">{{ tasks|length }}</div>
-          <div class="dash-metric-label">Tasks</div>
-        </div>
-        <div class="dash-metric">
-          <div class="dash-metric-val">{{ executive.inbox.unread_count }}</div>
-          <div class="dash-metric-label">Unread</div>
-        </div>
-        <div class="dash-metric">
-          <div class="dash-metric-val">${{ finance.balance | round(0) | int }}</div>
-          <div class="dash-metric-label">Balance</div>
-        </div>
+    <nav class="topnav-tabs">
+      <button class="topnav-tab active" data-view="dashboard" type="button">Dashboard</button>
+      <button class="topnav-tab" data-view="chat" type="button">Agent Chat</button>
+      <a href="/web/tasks" class="topnav-tab">Tasks</a>
+      <a href="/web/finance" class="topnav-tab">Finance</a>
+    </nav>
+    <div class="topnav-right">
+      <div class="topnav-search">
+        <i data-lucide="search" class="topnav-search-icon"></i>
+        <input type="text" placeholder="Search... (Ctrl+K)" aria-label="Search" class="topnav-search-input" readonly />
       </div>
       <div class="notif-bell-container">
         <button id="notif-bell-btn" class="notif-bell" type="button" aria-label="Notifications">
@@ -61,135 +53,252 @@
     </div>
   </header>
 
-  <!-- ── Content: 2 columns ──────────────────────────────────────────── -->
-  <div class="dash-body">
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <!-- VIEW 1: Dashboard (Revenue + Health + Compact Chat + Tasks)      -->
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <div id="view-dashboard" class="dash-view">
+    <div class="dash-grid">
 
-    <!-- LEFT: AI Agent Chat -->
-    <section class="dash-panel dash-panel-chat">
-      <div class="panel-card">
-        <div class="panel-head">
-          <div class="panel-head-left">
-            <i data-lucide="bot" class="panel-icon"></i>
-            <span class="panel-title">AI Agent</span>
-          </div>
-          <div class="panel-head-right">
-            <div class="chat-role-row">
-              <button class="role-btn active" data-role="CEO Agent">CEO</button>
-              <button class="role-btn" data-role="Ops Manager Agent">Ops</button>
-              <button class="role-btn" data-role="Sales Lead Agent">Sales</button>
-              <button class="role-btn" data-role="">Auto</button>
+      <!-- LEFT COLUMN -->
+      <div class="dash-col-main">
+
+        <!-- Revenue + Health Score row -->
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-label">REVENUE</div>
+            <div class="stat-big">${{ (finance.balance or 0) | round(0) | int }}<span class="stat-change positive">+{{ (((finance.total_income or 0) / ((finance.total_expense or 0) or 1)) * 10) | round(0) | int }}%</span></div>
+            <div class="stat-bars">
+              <div class="stat-bar"></div>
+              <div class="stat-bar"></div>
+              <div class="stat-bar"></div>
+              <div class="stat-bar"></div>
+              <div class="stat-bar"></div>
+              <div class="stat-bar active"></div>
             </div>
-            <span class="card-count" id="chat-role-display">CEO Agent</span>
+          </div>
+          <div class="stat-card stat-card-health">
+            <div class="stat-label">BUSINESS HEALTH</div>
+            <div class="health-ring">
+              <svg viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="var(--line-soft)" stroke-width="8"/>
+                <circle cx="60" cy="60" r="50" fill="none" stroke="#34c759" stroke-width="8" stroke-linecap="round"
+                  stroke-dasharray="314" stroke-dashoffset="50" transform="rotate(-90 60 60)"/>
+              </svg>
+              <div class="health-val">84</div>
+            </div>
+            <div class="health-label">OPTIMAL PERFORMANCE</div>
           </div>
         </div>
-        <div class="chat-area">
-          <div class="chat-messages" id="chat-history">
-            <div class="chat-welcome" id="chat-placeholder">
-              <div class="chat-welcome-icon"><i data-lucide="sparkles"></i></div>
-              <p>How can I help you today?</p>
-              <span>Ask about tasks, emails, calendar, or give me a command.</span>
-              <div class="chat-suggestions">
-                <button class="chat-suggestion" type="button">What's my schedule today?</button>
-                <button class="chat-suggestion" type="button">Summarize my inbox</button>
-                <button class="chat-suggestion" type="button">Show open tasks</button>
-                <button class="chat-suggestion" type="button">Create a task</button>
-                <button class="chat-suggestion" type="button">Draft an email</button>
-                <button class="chat-suggestion" type="button">How's my business doing?</button>
+
+        <!-- AI Agent compact chat -->
+        <div class="panel-card chat-card-compact">
+          <div class="panel-head">
+            <div class="panel-head-left">
+              <i data-lucide="sparkles" class="panel-icon"></i>
+              <span class="panel-title">AI Operations Assistant</span>
+            </div>
+            <div class="chat-online-dot"></div>
+          </div>
+          <div class="chat-area">
+            <div class="chat-messages" id="chat-history">
+              <div class="chat-welcome" id="chat-placeholder">
+                <div class="chat-welcome-icon"><i data-lucide="sparkles"></i></div>
+                <p>How can I help you today?</p>
+                <span>Ask about tasks, emails, calendar, or give me a command.</span>
+                <div class="chat-suggestions">
+                  <button class="chat-suggestion" type="button">What's my schedule today?</button>
+                  <button class="chat-suggestion" type="button">Summarize my inbox</button>
+                  <button class="chat-suggestion" type="button">Show open tasks</button>
+                  <button class="chat-suggestion" type="button">How's my business doing?</button>
+                </div>
               </div>
             </div>
-          </div>
-          <div class="chat-composer">
-            <textarea id="chat-input" class="chat-input" placeholder="Ask anything or give a command..." aria-label="Chat message" rows="1"></textarea>
-            <button id="chat-send" class="chat-send-btn" type="button">
-              <i data-lucide="arrow-up"></i>
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- RIGHT: Inbox + Tasks -->
-    <section class="dash-panel dash-panel-side">
-
-      <!-- Inbox -->
-      <div class="panel-card panel-card-half">
-        <div class="panel-head">
-          <div class="panel-head-left">
-            <i data-lucide="mail" class="panel-icon"></i>
-            <span class="panel-title">Inbox</span>
-            <span id="inbox-unread-badge" class="count-pill">{{ executive.inbox.unread_count }}</span>
-          </div>
-          <div class="panel-head-right">
-            <button id="inbox-sync-btn" class="btn-ghost-sm" type="button"><i data-lucide="refresh-cw"></i></button>
-            <button id="inbox-compose-btn" class="btn-ghost-sm" type="button"><i data-lucide="pen-line"></i></button>
-          </div>
-        </div>
-        <div id="inbox-compose-form" class="compose-area" style="display:none">
-          <div class="compose-grid">
-            <input id="compose-to" type="email" placeholder="To: email@example.com" aria-label="Recipient email" />
-            <input id="compose-subject" type="text" placeholder="Subject" aria-label="Email subject" />
-          </div>
-          <textarea id="compose-instruction" placeholder="Instructions for ChatGPT..." style="min-height:50px;resize:vertical" aria-label="Compose instructions"></textarea>
-          <div class="compose-footer">
-            <span id="compose-status" class="run-status"></span>
-            <div class="flex gap-2">
-              <button id="compose-cancel-btn" class="btn danger sm" type="button">Cancel</button>
-              <button id="compose-send-btn" class="btn primary sm" type="button">Draft</button>
+            <div class="chat-composer">
+              <textarea id="chat-input" class="chat-input" placeholder="Ask anything about your operations..." aria-label="Chat message" rows="1"></textarea>
+              <button id="chat-send" class="chat-send-btn" type="button" aria-label="Send message">
+                <i data-lucide="arrow-up"></i>
+              </button>
             </div>
           </div>
         </div>
-        <div id="inbox-list" class="panel-scroll">
-          <div class="panel-empty" id="inbox-loading">
-            <i data-lucide="inbox"></i>
-            <span>No emails synced yet</span>
-          </div>
-        </div>
+
       </div>
 
-      <!-- Tasks -->
-      <div class="panel-card panel-card-half">
-        <div class="panel-head">
-          <div class="panel-head-left">
-            <i data-lucide="check-circle-2" class="panel-icon"></i>
-            <span class="panel-title">Tasks</span>
-            <span id="tasks-count" class="count-pill">{{ tasks|length }}</span>
-          </div>
-          <div class="panel-head-right">
-            <button id="tasks-tab-open" class="seg-btn active" type="button">Open</button>
-            <button id="tasks-tab-done" class="seg-btn" type="button">Done</button>
-          </div>
-        </div>
-        <div id="tasks-list" class="panel-scroll">
-          {% if tasks %}
-            {% for t in tasks %}
-            <div class="task-item" id="task-item-{{ t.id }}">
-              <input type="checkbox" class="task-check" data-task-id="{{ t.id }}" {% if t.is_done %}checked{% endif %} aria-label="Toggle task {{ t.title }}" />
-              <span class="task-label{% if t.is_done %} done{% endif %}">{{ t.title }}</span>
+      <!-- RIGHT COLUMN -->
+      <div class="dash-col-side">
+
+        <!-- Next Up / Meeting -->
+        <div class="widget-card">
+          <div class="widget-label">NEXT UP</div>
+          {% if executive and executive.calendar and executive.calendar.events %}
+          <div class="widget-meeting">
+            <div class="widget-meeting-date">
+              <span class="meeting-month">{{ (executive.date or '')[:3] | upper }}</span>
+              <span class="meeting-day">{{ (executive.date or '')[-2:] }}</span>
             </div>
-            {% endfor %}
+            <div class="widget-meeting-info">
+              <div class="meeting-title">{{ executive.calendar.events[0].content | e }}</div>
+              <div class="meeting-meta">{{ (executive.calendar.events[0].location or 'No location') | e }}</div>
+            </div>
+          </div>
           {% else %}
-            <div class="panel-empty">
-              <i data-lucide="clipboard-list"></i>
-              <span>No tasks yet</span>
-            </div>
+          <div class="widget-empty">No upcoming events</div>
           {% endif %}
         </div>
-        <div class="task-add-bar">
-          <input id="tasks-new-title" class="task-add-input" placeholder="Add a task..." aria-label="New task title" />
-          <button id="tasks-add-btn" class="task-add-btn" type="button">
-            <i data-lucide="plus"></i>
-          </button>
+
+        <!-- Quick Tasks -->
+        <div class="widget-card">
+          <div class="widget-head">
+            <span class="widget-label">QUICK TASKS</span>
+            <button id="tasks-add-btn" class="widget-add-btn" type="button" aria-label="Add task"><i data-lucide="plus"></i></button>
+          </div>
+          <div id="tasks-list" class="widget-list">
+            {% if tasks %}
+              {% for t in tasks[:5] %}
+              <div class="task-item" id="task-item-{{ t.id }}">
+                <input type="checkbox" class="task-check" data-task-id="{{ t.id }}" {% if t.is_done %}checked{% endif %} aria-label="Toggle task {{ t.title | e }}" />
+                <span class="task-label{% if t.is_done %} done{% endif %}">{{ t.title | e }}</span>
+              </div>
+              {% endfor %}
+            {% else %}
+              <div class="widget-empty">No tasks yet</div>
+            {% endif %}
+          </div>
+          <div class="task-add-bar">
+            <input id="tasks-new-title" class="task-add-input" placeholder="Add a quick task..." aria-label="New task title" />
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <!-- VIEW 2: Agent Chat (Full chat + Inbox + Agenda)                  -->
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <div id="view-chat" class="dash-view" style="display:none">
+    <div class="dash-grid">
+
+      <!-- CENTER: Full Chat -->
+      <div class="dash-col-main">
+        <div class="panel-card chat-card-full">
+          <div class="panel-head">
+            <div class="panel-head-left">
+              <div class="agent-avatar"><i data-lucide="bot"></i></div>
+              <div>
+                <span class="panel-title">Nidin AI</span>
+                <span class="agent-status">Online &amp; Ready</span>
+              </div>
+            </div>
+            <div class="panel-head-right">
+              <div class="chat-role-row">
+                <button class="role-btn active" data-role="CEO Agent" type="button">CEO</button>
+                <button class="role-btn" data-role="Ops Manager Agent" type="button">Ops</button>
+                <button class="role-btn" data-role="Sales Lead Agent" type="button">Sales</button>
+                <button class="role-btn" data-role="" type="button">Auto</button>
+              </div>
+              <span class="card-count" id="chat-role-display">CEO Agent</span>
+            </div>
+          </div>
+          <div class="chat-area chat-area-full">
+            <div class="chat-messages" id="chat-history-full"></div>
+            <div class="chat-composer">
+              <textarea id="chat-input-full" class="chat-input" placeholder="Type a command or ask a question..." aria-label="Chat message" rows="1"></textarea>
+              <button id="chat-send-full" class="chat-send-btn" type="button" aria-label="Send message">
+                <i data-lucide="arrow-up"></i>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-    </section>
+      <!-- RIGHT: Inbox + Agenda -->
+      <div class="dash-col-side">
+
+        <!-- Priority Inbox -->
+        <div class="widget-card widget-card-half">
+          <div class="widget-head">
+            <span class="widget-label">Priority Inbox</span>
+            <span class="count-pill" id="inbox-unread-badge">{{ (executive.inbox.unread_count if executive and executive.inbox else 0) }}</span>
+          </div>
+          <div id="inbox-list" class="widget-list widget-scroll">
+            {% if executive and executive.inbox and executive.inbox.recent_unread %}
+              {% for e in executive.inbox.recent_unread[:4] %}
+              <div class="inbox-row">
+                <div class="inbox-avatar">{{ (e['from'] or 'XX')[:2] | upper }}</div>
+                <div class="inbox-body">
+                  <div class="inbox-from-line">
+                    <span class="inbox-sender">{{ (e['from'] or '').split('@')[0] | title | e }}</span>
+                    <span class="inbox-time">{{ e.received_at[-5:] if e.received_at else '' }}</span>
+                  </div>
+                  <div class="inbox-subject">{{ e.subject | e }}</div>
+                </div>
+              </div>
+              {% endfor %}
+            {% else %}
+              <div class="widget-empty">No unread emails</div>
+            {% endif %}
+          </div>
+          <div class="panel-head" style="border-top:1px solid var(--line-soft);border-bottom:none">
+            <div class="panel-head-right" style="width:100%;justify-content:space-between">
+              <button id="inbox-sync-btn" class="btn-ghost-sm" type="button" aria-label="Sync inbox"><i data-lucide="refresh-cw"></i></button>
+              <button id="inbox-compose-btn" class="btn-ghost-sm" type="button" aria-label="Compose email"><i data-lucide="pen-line"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Daily Agenda -->
+        <div class="widget-card widget-card-half">
+          <div class="widget-head">
+            <span class="widget-label">Daily Agenda</span>
+            <button class="widget-add-btn" type="button" aria-label="Add event"><i data-lucide="plus"></i></button>
+          </div>
+          <div class="widget-list widget-scroll">
+            {% if tasks %}
+              {% for t in tasks[:4] %}
+              <div class="agenda-item">
+                <input type="checkbox" class="task-check" data-task-id="{{ t.id }}" {% if t.is_done %}checked{% endif %} aria-label="Toggle task {{ t.title | e }}" />
+                <div class="agenda-body">
+                  <div class="agenda-title">{{ t.title | e }}</div>
+                  <div class="agenda-meta">{% if t.is_done %}Completed{% else %}Pending{% endif %}</div>
+                </div>
+              </div>
+              {% endfor %}
+            {% else %}
+              <div class="widget-empty">No items today</div>
+            {% endif %}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden compose form (reused by JS) -->
+  <div id="inbox-compose-form" class="compose-area" style="display:none">
+    <div class="compose-grid">
+      <input id="compose-to" type="email" placeholder="To: email@example.com" aria-label="Recipient email" />
+      <input id="compose-subject" type="text" placeholder="Subject" aria-label="Email subject" />
+    </div>
+    <textarea id="compose-instruction" placeholder="Instructions for ChatGPT..." style="min-height:50px;resize:vertical" aria-label="Compose instructions"></textarea>
+    <div class="compose-footer">
+      <span id="compose-status" class="run-status"></span>
+      <div class="flex gap-2">
+        <button id="compose-cancel-btn" class="btn danger sm" type="button">Cancel</button>
+        <button id="compose-send-btn" class="btn primary sm" type="button">Draft</button>
+      </div>
+    </div>
   </div>
 
   <!-- Hidden elements for JS compatibility -->
-  <div id="approvals-card" style="display:none">
+  <div style="display:none">
+    <span id="tasks-count">{{ tasks|length }}</span>
     <span id="approvals-pending-count"></span>
     <button id="approvals-refresh-btn" type="button"></button>
     <div id="approvals-list"></div>
+    <div id="approvals-card"></div>
+    <button id="tasks-tab-open" class="seg-btn active" type="button"></button>
+    <button id="tasks-tab-done" class="seg-btn" type="button"></button>
   </div>
 
 </main>

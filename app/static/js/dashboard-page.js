@@ -13,6 +13,38 @@
     } catch(e) { return null; }
   })();
 
+  // ── Top Nav Tab Switching ──────────────────────────────────────────────────
+  (function () {
+    var tabs = document.querySelectorAll(".topnav-tab[data-view]");
+    var views = {
+      dashboard: document.getElementById("view-dashboard"),
+      chat:      document.getElementById("view-chat")
+    };
+    var STORAGE_KEY = "nn_active_tab";
+
+    function switchTab(viewName) {
+      Object.keys(views).forEach(function (k) {
+        if (views[k]) views[k].style.display = k === viewName ? "" : "none";
+      });
+      tabs.forEach(function (t) {
+        t.classList.toggle("active", t.dataset.view === viewName);
+      });
+      try { localStorage.setItem(STORAGE_KEY, viewName); } catch(e) {}
+    }
+
+    tabs.forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        switchTab(tab.dataset.view);
+      });
+    });
+
+    // Restore last active tab
+    try {
+      var saved = localStorage.getItem(STORAGE_KEY);
+      if (saved && views[saved]) switchTab(saved);
+    } catch(e) {}
+  })();
+
   (function () {
     const btn = document.getElementById("daily-run-btn");
     const status = document.getElementById("daily-run-status");
@@ -104,6 +136,12 @@
     const placeholder = document.getElementById("chat-placeholder");
     const roleDisplay = document.getElementById("chat-role-display");
     const roleBtns   = document.querySelectorAll(".role-btn");
+
+    // Full chat view elements
+    const inputFull  = document.getElementById("chat-input-full");
+    const sendBtnFull = document.getElementById("chat-send-full");
+    const historyFull = document.getElementById("chat-history-full");
+
     if (!input || !sendBtn || !history) return;
 
     let selectedRole = "CEO Agent";
@@ -128,6 +166,11 @@
       if (!node) return;
       history.appendChild(node);
       history.scrollTop = history.scrollHeight;
+      // Mirror to full chat view
+      if (historyFull) {
+        historyFull.appendChild(node.cloneNode(true));
+        historyFull.scrollTop = historyFull.scrollHeight;
+      }
     }
 
     async function ensureLoggedIn() {
@@ -139,8 +182,9 @@
       return false;
     }
 
-    async function send() {
-      const message = input.value.trim();
+    async function send(sourceInput) {
+      var activeInput = sourceInput || input;
+      const message = activeInput.value.trim();
       if (!message) return;
 
       const loggedIn = await ensureLoggedIn();
@@ -162,8 +206,16 @@
       if (placeholder && placeholder.parentNode) placeholder.remove();
       history.appendChild(userDiv);
       history.scrollTop = history.scrollHeight;
+      // Mirror user message to full chat
+      if (historyFull) {
+        historyFull.appendChild(userDiv.cloneNode(true));
+        historyFull.scrollTop = historyFull.scrollHeight;
+      }
+      activeInput.value = "";
+      if (inputFull) inputFull.value = "";
       input.value = "";
       sendBtn.disabled = true;
+      if (sendBtnFull) sendBtnFull.disabled = true;
 
       const form = new URLSearchParams();
       form.set("message", message);
@@ -223,8 +275,20 @@
         appendNode('<div class="chat-msg-agent"><div class="chat-role-tag">Error</div>Could not reach server.</div>');
       } finally {
         sendBtn.disabled = false;
-        input.focus();
+        if (sendBtnFull) sendBtnFull.disabled = false;
+        activeInput.focus();
       }
+    }
+
+    // Event delegation for agent action buttons in both chat areas
+    if (historyFull) {
+      historyFull.addEventListener('click', function(e) {
+        var btn = e.target.closest('[data-agent-msg]');
+        if (!btn) return;
+        var msgId = parseInt(btn.dataset.agentMsg, 10);
+        var idx = parseInt(btn.dataset.agentIdx, 10);
+        executeAgentAction(msgId, idx);
+      });
     }
 
     // Event delegation for agent action buttons (CSP-safe, no inline onclick)
@@ -300,16 +364,22 @@
       }
     };
 
-    sendBtn.addEventListener("click", send);
+    sendBtn.addEventListener("click", function() { send(input); });
     input.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); }
+    });
+
+    // Full chat view send wiring
+    if (sendBtnFull) sendBtnFull.addEventListener("click", function() { send(inputFull); });
+    if (inputFull) inputFull.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(inputFull); }
     });
 
     // Suggestion chips — click to auto-send
     document.querySelectorAll(".chat-suggestion").forEach(function (chip) {
       chip.addEventListener("click", function () {
         input.value = chip.textContent;
-        send();
+        send(input);
       });
     });
 
@@ -1377,6 +1447,19 @@ window.showToast = function(msg, type) {
         if (fuEl) fuEl.textContent = String(duContacts.length);
       }
     } catch (_e) { /* silent */ }
+  })();
+
+  // Wire topnav search to Ctrl+K palette
+  (function () {
+    var searchInput = document.querySelector(".topnav-search-input");
+    if (searchInput) {
+      searchInput.addEventListener("click", function () {
+        var overlay = document.getElementById("search-overlay");
+        if (overlay) overlay.classList.add("open");
+        var paletteInput = document.getElementById("search-input");
+        if (paletteInput) paletteInput.focus();
+      });
+    }
   })();
 
   // Init Lucide icons

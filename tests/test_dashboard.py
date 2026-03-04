@@ -24,15 +24,12 @@ async def test_dashboard_contains_brand_name(client):
     _set_dashboard_session(client)
     response = await client.get("/")
     assert "Nidin BOS" in response.text
-    assert "Executive Briefing" in response.text
-    assert "Generate Daily Run (Draft Only)" in response.text
-    assert "/web/integrations" in response.text
-    assert "Efficiency Score (30d)" in response.text
-    assert "Efficiency API ->" in response.text
-    assert "Market Like A Pro" in response.text
-    assert "Study Like A Pro" in response.text
-    assert "Train Like A Pro" in response.text
-    assert "Morning Brief - Executive Diff Engine" in response.text
+    assert "AI Operations Assistant" in response.text
+    assert "REVENUE" in response.text
+    assert "BUSINESS HEALTH" in response.text
+    assert "QUICK TASKS" in response.text
+    assert "view-dashboard" in response.text
+    assert "view-chat" in response.text
     assert "/static/css/dashboard.css" in response.text
     assert "/static/js/dashboard-page.js" in response.text
 
@@ -40,19 +37,8 @@ async def test_dashboard_contains_brand_name(client):
 async def test_dashboard_shows_empty_states(client):
     _set_dashboard_session(client)
     response = await client.get("/")
-    assert "No commands yet" in response.text
     assert "No tasks yet" in response.text
-    assert "No notes yet" in response.text
-
-
-async def test_dashboard_shows_seeded_command(client):
-    _set_dashboard_session(client)
-    await client.post(
-        "/api/v1/commands",
-        json={"command_text": "Plan my week"},
-    )
-    response = await client.get("/")
-    assert "Plan my week" in response.text
+    assert "No upcoming events" in response.text
 
 
 async def test_dashboard_shows_seeded_task(client):
@@ -60,13 +46,6 @@ async def test_dashboard_shows_seeded_task(client):
     await client.post("/api/v1/tasks", json={"title": "Finish the backend"})
     response = await client.get("/")
     assert "Finish the backend" in response.text
-
-
-async def test_dashboard_shows_seeded_note(client):
-    _set_dashboard_session(client)
-    await client.post("/api/v1/notes", json={"content": "Check emails at 9am"})
-    response = await client.get("/")
-    assert "Check emails at 9am" in response.text
 
 
 async def test_dashboard_shows_task_done_badge(client):
