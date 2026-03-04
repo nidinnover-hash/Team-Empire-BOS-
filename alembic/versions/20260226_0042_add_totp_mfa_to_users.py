@@ -20,7 +20,7 @@ def upgrade() -> None:
     )
     op.add_column(
         "users",
-        sa.Column("mfa_enabled", sa.Boolean(), nullable=False, server_default="0"),
+        sa.Column("mfa_enabled", sa.Boolean(), nullable=False, server_default=sa.text("false")),
     )
 
 

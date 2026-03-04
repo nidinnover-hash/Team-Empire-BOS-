@@ -39,7 +39,7 @@ def upgrade() -> None:
         sa.Column("source", sa.String(20), nullable=False),
         sa.Column("address", sa.String(500), nullable=True),
         sa.Column("ip_address", sa.String(45), nullable=True),
-        sa.Column("is_active", sa.Boolean, nullable=False, server_default="1"),
+        sa.Column("is_active", sa.Boolean, nullable=False, server_default=sa.text("true")),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -119,7 +119,7 @@ def upgrade() -> None:
             "location_tracking_consent",
             sa.Boolean,
             nullable=False,
-            server_default="0",
+            server_default=sa.text("false"),
         ),
     )
 

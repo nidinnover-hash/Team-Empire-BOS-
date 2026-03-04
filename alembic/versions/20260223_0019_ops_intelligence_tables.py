@@ -25,7 +25,7 @@ def upgrade() -> None:
         sa.Column("email", sa.String(320), nullable=False),
         sa.Column("github_username", sa.String(100), nullable=True),
         sa.Column("clickup_user_id", sa.String(100), nullable=True),
-        sa.Column("is_active", sa.Boolean, nullable=False, server_default=sa.text("1")),
+        sa.Column("is_active", sa.Boolean, nullable=False, server_default=sa.text("true")),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.UniqueConstraint("organization_id", "email", name="uq_employee_org_email"),
@@ -120,7 +120,7 @@ def upgrade() -> None:
         sa.Column("title", sa.String(255), nullable=False),
         sa.Column("rule_text", sa.Text, nullable=False),
         sa.Column("examples_json", sa.Text, nullable=False, server_default="[]"),
-        sa.Column("is_active", sa.Boolean, nullable=False, server_default=sa.text("0")),
+        sa.Column("is_active", sa.Boolean, nullable=False, server_default=sa.text("false")),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
 

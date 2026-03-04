@@ -29,7 +29,7 @@ def upgrade() -> None:
         sa.Column("secret_encrypted", sa.Text, nullable=False),
         sa.Column("event_types", sa.JSON, nullable=False, server_default="[]"),
         sa.Column(
-            "is_active", sa.Boolean, nullable=False, server_default=sa.text("1")
+            "is_active", sa.Boolean, nullable=False, server_default=sa.text("true")
         ),
         sa.Column(
             "created_at",

@@ -30,7 +30,7 @@ def upgrade() -> None:
             sa.Column("email", sa.String(320), nullable=False),
             sa.Column("name", sa.String(255), nullable=True),
             sa.Column("internal_role", sa.String(50), nullable=False),
-            sa.Column("active", sa.Boolean, nullable=False, server_default=sa.text("1")),
+            sa.Column("active", sa.Boolean, nullable=False, server_default=sa.text("true")),
             sa.Column("manager_email", sa.String(320), nullable=True),
             sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
             sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
@@ -93,9 +93,9 @@ def upgrade() -> None:
         sa.Column("organization_id", sa.Integer, sa.ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False),
         sa.Column("repo_name", sa.String(255), nullable=False),
         sa.Column("default_branch", sa.String(120), nullable=True),
-        sa.Column("is_protected", sa.Boolean, nullable=False, server_default=sa.text("0")),
-        sa.Column("requires_reviews", sa.Boolean, nullable=False, server_default=sa.text("0")),
-        sa.Column("required_checks_enabled", sa.Boolean, nullable=False, server_default=sa.text("0")),
+        sa.Column("is_protected", sa.Boolean, nullable=False, server_default=sa.text("false")),
+        sa.Column("requires_reviews", sa.Boolean, nullable=False, server_default=sa.text("false")),
+        sa.Column("required_checks_enabled", sa.Boolean, nullable=False, server_default=sa.text("false")),
         sa.Column("synced_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
     op.create_index("ix_gh_repo_snapshot_org_id", "github_repo_snapshot", ["organization_id"])

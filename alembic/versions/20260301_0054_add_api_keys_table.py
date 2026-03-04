@@ -33,7 +33,7 @@ def upgrade() -> None:
         sa.Column("key_prefix", sa.String(12), nullable=False),
         sa.Column("key_hash", sa.String(128), nullable=False),
         sa.Column("scopes", sa.Text, nullable=False, server_default="*"),
-        sa.Column("is_active", sa.Boolean, nullable=False, server_default=sa.text("1")),
+        sa.Column("is_active", sa.Boolean, nullable=False, server_default=sa.text("true")),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_used_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
