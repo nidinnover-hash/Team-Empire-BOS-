@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="AI Agent Factory — Nidin BOS" />
   <meta name="theme-color" content="#f5f5f7" />
   <link rel="manifest" href="/static/manifest.json" />
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
@@ -18,19 +17,32 @@
 {% set active_page = "dashboard" %}
 {% include "partials/sidebar.html" %}
 
-<main class="dash-main">
+<main class="dash">
 
-  <!-- Top bar: greeting + KPIs inline -->
-  <div class="dash-topbar">
-    <div class="dash-greeting">
-      <h1>Hi Nidin</h1>
-      <span class="dash-date">{{ executive.date }}</span>
+  <!-- ── Header ──────────────────────────────────────────────────────── -->
+  <header class="dash-header">
+    <div class="dash-header-left">
+      <div class="dash-avatar">N</div>
+      <div>
+        <h1 class="dash-title">Good morning, Nidin</h1>
+        <p class="dash-subtitle">{{ executive.date }} — {{ tasks|length }} tasks, {{ executive.inbox.unread_count }} unread, {{ executive.approvals.pending_count }} pending</p>
+      </div>
     </div>
-    <div class="dash-kpis">
-      <div class="dash-kpi"><span>{{ tasks|length }}</span> tasks</div>
-      <div class="dash-kpi"><span>{{ executive.approvals.pending_count }}</span> approvals</div>
-      <div class="dash-kpi"><span>{{ executive.inbox.unread_count }}</span> unread</div>
-      <div class="dash-kpi"><span>${{ finance.balance | round(0) | int }}</span> balance</div>
+    <div class="dash-header-right">
+      <div class="dash-metrics">
+        <div class="dash-metric">
+          <div class="dash-metric-val">{{ tasks|length }}</div>
+          <div class="dash-metric-label">Tasks</div>
+        </div>
+        <div class="dash-metric">
+          <div class="dash-metric-val">{{ executive.inbox.unread_count }}</div>
+          <div class="dash-metric-label">Unread</div>
+        </div>
+        <div class="dash-metric">
+          <div class="dash-metric-val">${{ finance.balance | round(0) | int }}</div>
+          <div class="dash-metric-label">Balance</div>
+        </div>
+      </div>
       <div class="notif-bell-container">
         <button id="notif-bell-btn" class="notif-bell" type="button" aria-label="Notifications">
           <i data-lucide="bell"></i>
@@ -47,49 +59,61 @@
         </div>
       </div>
     </div>
-  </div>
+  </header>
 
-  <!-- Two-column layout: Command + Chat | Inbox + Tasks -->
-  <div class="dash-grid">
+  <!-- ── Content: 2 columns ──────────────────────────────────────────── -->
+  <div class="dash-body">
 
-    <!-- LEFT: Command center -->
-    <div class="dash-col">
-      <div class="card dash-card">
-        <div class="card-head">
-          <span class="card-title">Command</span>
-          <span class="card-count" id="chat-role-display">CEO Agent</span>
-        </div>
-        <div class="dash-chat-wrap">
-          <div class="chat-role-row">
-            <button class="role-btn active" data-role="CEO Agent">CEO</button>
-            <button class="role-btn" data-role="Ops Manager Agent">Ops</button>
-            <button class="role-btn" data-role="Sales Lead Agent">Sales</button>
-            <button class="role-btn" data-role="Tech PM Agent">Tech PM</button>
-            <button class="role-btn" data-role="">Auto</button>
+    <!-- LEFT: AI Agent Chat -->
+    <section class="dash-panel dash-panel-chat">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div class="panel-head-left">
+            <i data-lucide="bot" class="panel-icon"></i>
+            <span class="panel-title">AI Agent</span>
           </div>
-          <div class="dash-chat-body">
-            <div class="chat-history" id="chat-history">
-              <div class="chat-empty" id="chat-placeholder">Ask me anything — tasks, emails, priorities.</div>
+          <div class="panel-head-right">
+            <div class="chat-role-row">
+              <button class="role-btn active" data-role="CEO Agent">CEO</button>
+              <button class="role-btn" data-role="Ops Manager Agent">Ops</button>
+              <button class="role-btn" data-role="Sales Lead Agent">Sales</button>
+              <button class="role-btn" data-role="">Auto</button>
+            </div>
+            <span class="card-count" id="chat-role-display">CEO Agent</span>
+          </div>
+        </div>
+        <div class="chat-area">
+          <div class="chat-messages" id="chat-history">
+            <div class="chat-welcome" id="chat-placeholder">
+              <div class="chat-welcome-icon"><i data-lucide="sparkles"></i></div>
+              <p>How can I help you today?</p>
+              <span>Ask about tasks, emails, priorities, or give me a command.</span>
             </div>
           </div>
-          <div class="dash-chat-input">
-            <textarea id="chat-input" class="chat-textarea" placeholder="Type a command..." aria-label="Chat message" rows="2"></textarea>
-            <button id="chat-send" class="chat-send" type="button">Send</button>
+          <div class="chat-composer">
+            <textarea id="chat-input" class="chat-input" placeholder="Ask anything or give a command..." aria-label="Chat message" rows="1"></textarea>
+            <button id="chat-send" class="chat-send-btn" type="button">
+              <i data-lucide="arrow-up"></i>
+            </button>
           </div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- RIGHT: Inbox + Tasks stacked -->
-    <div class="dash-col">
+    <!-- RIGHT: Inbox + Tasks -->
+    <section class="dash-panel dash-panel-side">
+
       <!-- Inbox -->
-      <div class="card dash-card">
-        <div class="card-head">
-          <span class="card-title">Inbox</span>
-          <div style="display:flex;gap:.4rem;align-items:center">
-            <span id="inbox-unread-badge" class="card-count">{{ executive.inbox.unread_count }} unread</span>
-            <button id="inbox-sync-btn" class="btn-run" type="button">Sync</button>
-            <button id="inbox-compose-btn" class="btn-run" type="button">Compose</button>
+      <div class="panel-card panel-card-half">
+        <div class="panel-head">
+          <div class="panel-head-left">
+            <i data-lucide="mail" class="panel-icon"></i>
+            <span class="panel-title">Inbox</span>
+            <span id="inbox-unread-badge" class="count-pill">{{ executive.inbox.unread_count }}</span>
+          </div>
+          <div class="panel-head-right">
+            <button id="inbox-sync-btn" class="btn-ghost-sm" type="button"><i data-lucide="refresh-cw"></i></button>
+            <button id="inbox-compose-btn" class="btn-ghost-sm" type="button"><i data-lucide="pen-line"></i></button>
           </div>
         </div>
         <div id="inbox-compose-form" class="compose-area" style="display:none">
@@ -101,52 +125,59 @@
           <div class="compose-footer">
             <span id="compose-status" class="run-status"></span>
             <div class="flex gap-2">
-              <button id="compose-cancel-btn" class="btn danger" type="button">Cancel</button>
-              <button id="compose-send-btn" class="btn primary" type="button">Draft</button>
+              <button id="compose-cancel-btn" class="btn danger sm" type="button">Cancel</button>
+              <button id="compose-send-btn" class="btn primary sm" type="button">Draft</button>
             </div>
           </div>
         </div>
-        <div id="inbox-list" class="dash-scroll-sm">
-          <div class="empty" id="inbox-loading" style="padding:1.2rem">No emails synced yet. Click Sync.</div>
+        <div id="inbox-list" class="panel-scroll">
+          <div class="panel-empty" id="inbox-loading">
+            <i data-lucide="inbox"></i>
+            <span>No emails synced yet</span>
+          </div>
         </div>
       </div>
 
       <!-- Tasks -->
-      <div class="card dash-card">
-        <div class="card-head">
-          <span class="card-title">Tasks</span>
-          <div style="display:flex;gap:.4rem;align-items:center">
-            <span id="tasks-count" class="card-count">{{ tasks|length }}</span>
-            <button id="tasks-tab-open" class="btn-run tab-active" style="padding:.18rem .4rem;font-size:.6rem" type="button">Open</button>
-            <button id="tasks-tab-done" class="btn-run" style="padding:.18rem .4rem;font-size:.6rem" type="button">Done</button>
+      <div class="panel-card panel-card-half">
+        <div class="panel-head">
+          <div class="panel-head-left">
+            <i data-lucide="check-circle-2" class="panel-icon"></i>
+            <span class="panel-title">Tasks</span>
+            <span id="tasks-count" class="count-pill">{{ tasks|length }}</span>
+          </div>
+          <div class="panel-head-right">
+            <button id="tasks-tab-open" class="seg-btn active" type="button">Open</button>
+            <button id="tasks-tab-done" class="seg-btn" type="button">Done</button>
           </div>
         </div>
-        <div id="tasks-list" class="dash-scroll-sm">
+        <div id="tasks-list" class="panel-scroll">
           {% if tasks %}
             {% for t in tasks %}
-            <div class="item" id="task-item-{{ t.id }}">
-              <div style="display:flex;align-items:flex-start;gap:.45rem">
-                <input type="checkbox" class="task-check" data-task-id="{{ t.id }}" {% if t.is_done %}checked{% endif %} aria-label="Toggle task {{ t.title }}" />
-                <div style="flex:1;min-width:0">
-                  <div class="item-text" style="font-size:.8rem;{% if t.is_done %}text-decoration:line-through;color:var(--text-faint){% endif %}">{{ t.title }}</div>
-                </div>
-              </div>
+            <div class="task-item" id="task-item-{{ t.id }}">
+              <input type="checkbox" class="task-check" data-task-id="{{ t.id }}" {% if t.is_done %}checked{% endif %} aria-label="Toggle task {{ t.title }}" />
+              <span class="task-label{% if t.is_done %} done{% endif %}">{{ t.title }}</span>
             </div>
             {% endfor %}
           {% else %}
-            <div class="empty" style="padding:1.2rem">No tasks yet.</div>
+            <div class="panel-empty">
+              <i data-lucide="clipboard-list"></i>
+              <span>No tasks yet</span>
+            </div>
           {% endif %}
         </div>
-        <div style="padding:.4rem .8rem;border-top:1px solid var(--line-soft);display:flex;gap:.4rem">
-          <input id="tasks-new-title" class="mem-input" style="flex:1;padding:.3rem .5rem;font-size:.78rem" placeholder="Quick add task..." aria-label="New task title" />
-          <button id="tasks-add-btn" class="btn-run" style="padding:.25rem .5rem;font-size:.65rem" type="button">+ Add</button>
+        <div class="task-add-bar">
+          <input id="tasks-new-title" class="task-add-input" placeholder="Add a task..." aria-label="New task title" />
+          <button id="tasks-add-btn" class="task-add-btn" type="button">
+            <i data-lucide="plus"></i>
+          </button>
         </div>
       </div>
-    </div>
 
+    </section>
   </div>
 
-  <!-- Approvals bar (hidden element for JS compatibility) -->
+  <!-- Hidden elements for JS compatibility -->
   <div id="approvals-card" style="display:none">
     <span id="approvals-pending-count"></span>
     <button id="approvals-refresh-btn" type="button"></button>
