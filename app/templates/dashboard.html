@@ -63,21 +63,6 @@
     </div>
   </div>
 
-  <div class="section-label">First Login</div>
-  <div class="card" id="first-login-card">
-    <div class="card-head">
-      <span class="card-title">Onboarding Checklist</span>
-      <span class="card-count" id="onboarding-progress">0/5</span>
-    </div>
-    <div class="item">
-      <div class="item-meta">Complete these once to get clean daily output quality.</div>
-      <div class="onboarding-list" id="onboarding-list"></div>
-      <div class="item-meta" style="margin-top:.6rem">
-        Full guide: <a href="/docs/USER_ONBOARDING.md" target="_blank" rel="noopener noreferrer" class="link-muted">User Onboarding</a>
-      </div>
-    </div>
-  </div>
-
   <div class="section-label">Command</div>
   <div class="card">
     <div class="card-head">
@@ -150,313 +135,89 @@
     </div>
   </div>
 
-  <div class="section-label">CEO Action Center</div>
-  <div class="card">
+  <!-- Task Manager -->
+  <div class="section-label">Tasks</div>
+  <div class="card" id="tasks-card">
     <div class="card-head">
-      <span class="card-title">Risk & Compliance Radar</span>
-      <div style="display:flex;gap:.45rem;align-items:center">
-        <span class="card-count">Critical {{ ceo_action.critical }}</span>
-        <span class="card-count">High {{ ceo_action.high }}</span>
+      <span class="card-title">Task Manager</span>
+      <div style="display:flex;gap:.4rem;align-items:center">
+        <span id="tasks-count" class="card-count">...</span>
+        <button id="tasks-tab-open" class="btn-run tab-active" style="padding:.2rem .45rem;font-size:.63rem" type="button">Open</button>
+        <button id="tasks-tab-done" class="btn-run" style="padding:.2rem .45rem;font-size:.63rem" type="button">Done</button>
       </div>
     </div>
-    {% if ceo_action.recent %}
-      {% for item in ceo_action.recent %}
-      <div class="item">
-        <div class="task-row">
-          <div class="item-text">{{ item.title }}</div>
-          <span class="badge b-{{ item.severity|lower }}">{{ item.severity }}</span>
-        </div>
-        <div class="item-meta">{{ item.platform }}</div>
-      </div>
-      {% endfor %}
-      <div class="item">
-        <a href="/api/v1/control/compliance/report" class="link-muted">Open compliance report -></a>
-      </div>
-    {% else %}
-      <div class="empty">No active compliance violations.</div>
-    {% endif %}
-  </div>
-
-  <div class="section-label">Executive Snapshot</div>
-  <div class="card" style="margin-bottom:1.18rem">
-    <div class="card-head">
-      <span class="card-title">Morning Brief - Executive Diff Engine</span>
-      <div style="display:flex;gap:.45rem;align-items:center">
-        <span class="card-count">{{ intelligence_diff.date_yesterday }} -> {{ intelligence_diff.date_today }}</span>
-        <span class="card-count">Confidence {{ '%.0f'|format(intelligence_diff.confidence_score * 100) }}%</span>
-        <span class="card-count">Risk {{ intelligence_diff.risk_tier|upper }}</span>
-      </div>
-    </div>
-    <div class="item">
-      <div class="item-text" style="font-weight:700">What changed since yesterday?</div>
-      <div class="item-meta">{{ intelligence_diff.what_changed_since_yesterday }}</div>
-    </div>
-    <div class="item">
-      <div class="item-text" style="font-weight:700">What risk increased?</div>
-      <div class="item-meta">{{ intelligence_diff.risk_increased }}</div>
-    </div>
-    <div class="item">
-      <div class="item-text" style="font-weight:700">What opportunity increased?</div>
-      <div class="item-meta">{{ intelligence_diff.opportunity_increased }}</div>
-    </div>
-    <div class="item">
-      <div class="item-text" style="font-weight:700">What decision is now urgent?</div>
-      <div class="item-meta">{{ intelligence_diff.urgent_decision }}</div>
-      <div class="item-sub">Why: {{ intelligence_diff.reasoning|join(' | ') }}</div>
-    </div>
-  </div>
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-head">
-        <span class="card-title">Executive Briefing</span>
-        <div style="display:flex;gap:.45rem;align-items:center">
-          <span class="card-count">{{ executive.date }}</span>
-          <span class="card-count">Confidence {{ '%.0f'|format(intelligence_summary.confidence_score * 100) }}%</span>
-          <span class="card-count">Risk {{ intelligence_summary.risk_tier|upper }}</span>
-        </div>
-      </div>
-      <div class="item">
-        <div class="item-text">Team members: {{ executive.team_summary.total_members }}</div>
-        <div class="item-meta">With plan: {{ executive.team_summary.members_with_plan }}</div>
-        <div class="item-meta">Pending approvals: {{ executive.approvals.pending_count }}</div>
-        <div class="item-meta">Unread emails: {{ executive.inbox.unread_count }}</div>
-        <div class="item-meta">Summary: {{ intelligence_summary.decision_summary }}</div>
-      </div>
-      <div class="item">
-        <div class="item-text" style="font-weight:600">Today's Priorities</div>
-        {% if executive.today_priorities %}
-          {% for p in executive.today_priorities %}
-          <div class="item-meta">- {{ p }}</div>
-          {% endfor %}
-        {% else %}
-          <div class="item-meta">No priorities captured yet.</div>
-        {% endif %}
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-head">
-        <span class="card-title">Recent Approvals</span>
-        <span class="card-count">{{ executive.approvals.recent|length }}</span>
-      </div>
-      <div class="item">
-        <div class="action-wrap">
-          <button id="daily-run-btn" class="btn-run" type="button">Generate Daily Run (Draft Only)</button>
-          <span id="daily-run-status" class="run-status">Creates drafts only. No sending/execution.</span>
-        </div>
-      </div>
-      <div id="daily-run-result" class="item" style="display:none">
-        <div class="item-text" id="run-msg"></div>
-        <div class="item-meta" id="run-counts"></div>
-        <div class="item-meta"><a href="/api/v1/approvals" class="link-muted">Open approvals →</a></div>
-      </div>
-      {% if executive.approvals.recent %}
-        {% for a in executive.approvals.recent[:5] %}
-        <div class="item">
-          <div class="task-row">
-            <div class="item-text">{{ a.approval_type }}</div>
-            <span class="badge b-{{ a.status }}">{{ a.status }}</span>
-          </div>
-          <div class="item-meta">Requested by #{{ a.requested_by }}</div>
-        </div>
-        {% endfor %}
-      {% else %}
-        <div class="empty">No approvals yet.</div>
-      {% endif %}
-    </div>
-  </div>
-
-  <div class="section-label">Core Operations</div>
-  <div class="grid-3">
-
-    <!-- AI Commands -->
-    <div class="card">
-      <div class="card-head"><span class="card-title">AI Commands</span><span class="card-count">{{ commands|length }}</span></div>
-      {% if commands %}
-        {% for cmd in commands %}
-        <div class="item">
-          <div class="item-text">{{ cmd.command_text }}</div>
-          {% if cmd.ai_response %}
-          <div class="item-sub">{{ cmd.ai_response[:120] }}{% if cmd.ai_response|length > 120 %}...{% endif %}</div>
-          {% endif %}
-          <div class="item-meta">{{ cmd.created_at.strftime('%b %d - %H:%M') }}{% if cmd.model_used %} - {{ cmd.model_used }}{% endif %}</div>
-        </div>
-        {% endfor %}
-      {% else %}
-        <div class="empty">No commands yet.<code>POST /api/v1/commands</code></div>
-      {% endif %}
-    </div>
-
-    <!-- Task Manager (dynamic) -->
-    <div class="card" id="tasks-card">
-      <div class="card-head">
-        <span class="card-title">Task Manager</span>
-        <div style="display:flex;gap:.4rem;align-items:center">
-          <span id="tasks-count" class="card-count">...</span>
-          <button id="tasks-tab-open" class="btn-run tab-active" style="padding:.2rem .45rem;font-size:.63rem" type="button">Open</button>
-          <button id="tasks-tab-done" class="btn-run" style="padding:.2rem .45rem;font-size:.63rem" type="button">Done</button>
-        </div>
-      </div>
-      <div id="tasks-list" style="max-height:280px;overflow-y:auto">
-        {% if tasks %}
-          {% for t in tasks %}
-          <div class="item" id="task-item-{{ t.id }}">
-            <div style="display:flex;align-items:flex-start;gap:.55rem">
-              <input type="checkbox" class="task-check" data-task-id="{{ t.id }}" {% if t.is_done %}checked{% endif %} aria-label="Toggle task {{ t.title }}" />
-              <div style="flex:1;min-width:0">
-                <div class="item-text" style="{% if t.is_done %}text-decoration:line-through;color:var(--text-faint){% endif %}">
-                  {{ t.title }}
-                </div>
-                <div class="item-meta">
-                  {{ t.category or "personal" }}{% if t.due_date %} · due {{ t.due_date }}{% endif %}
-                  · <span style="color:{% if t.priority == 4 %}var(--danger){% elif t.priority == 3 %}var(--warn){% elif t.priority == 2 %}var(--brand){% else %}var(--text-faint){% endif %};font-size:.65rem">
-                    {% if t.priority == 4 %}Urgent{% elif t.priority == 3 %}High{% elif t.priority == 2 %}Med{% else %}Low{% endif %}
-                  </span>
-                </div>
+    <div id="tasks-list" style="max-height:280px;overflow-y:auto">
+      {% if tasks %}
+        {% for t in tasks %}
+        <div class="item" id="task-item-{{ t.id }}">
+          <div style="display:flex;align-items:flex-start;gap:.55rem">
+            <input type="checkbox" class="task-check" data-task-id="{{ t.id }}" {% if t.is_done %}checked{% endif %} aria-label="Toggle task {{ t.title }}" />
+            <div style="flex:1;min-width:0">
+              <div class="item-text" style="{% if t.is_done %}text-decoration:line-through;color:var(--text-faint){% endif %}">
+                {{ t.title }}
+              </div>
+              <div class="item-meta">
+                {{ t.category or "personal" }}{% if t.due_date %} · due {{ t.due_date }}{% endif %}
+                · <span style="color:{% if t.priority == 4 %}var(--danger){% elif t.priority == 3 %}var(--warn){% elif t.priority == 2 %}var(--brand){% else %}var(--text-faint){% endif %};font-size:.65rem">
+                  {% if t.priority == 4 %}Urgent{% elif t.priority == 3 %}High{% elif t.priority == 2 %}Med{% else %}Low{% endif %}
+                </span>
               </div>
             </div>
           </div>
-          {% endfor %}
-        {% else %}
-          <div class="empty">No tasks yet.<code>POST /api/v1/tasks</code></div>
-        {% endif %}
-      </div>
-      <div style="padding:.55rem 1.08rem;border-top:1px solid var(--line-soft);display:flex;gap:.5rem">
-        <input id="tasks-new-title" class="mem-input" style="flex:1" placeholder="Quick add task…" aria-label="New task title" />
-        <button id="tasks-add-btn" class="btn-run" type="button">+ Add</button>
-      </div>
-    </div>
-
-    <!-- Notes -->
-    <div class="card">
-      <div class="card-head"><span class="card-title">Notes</span><span class="card-count">{{ notes|length }}</span></div>
-      {% if notes %}
-        {% for n in notes %}
-        <div class="item">
-          {% if n.title %}<div class="item-text" style="font-weight:600;margin-bottom:.2rem">{{ n.title }}</div>{% endif %}
-          <div class="item-text" style="{% if n.title %}color:var(--text-muted);font-size:.8rem{% endif %}">{{ n.content }}</div>
-          {% if n.tags %}<div class="item-meta">{{ n.tags }}</div>{% endif %}
-          <div class="item-meta">{{ n.created_at.strftime('%b %d - %H:%M') }}</div>
         </div>
         {% endfor %}
       {% else %}
-        <div class="empty">No notes yet.<code>POST /api/v1/notes</code></div>
+        <div class="empty">No tasks yet.</div>
       {% endif %}
     </div>
-
+    <div style="padding:.55rem 1.08rem;border-top:1px solid var(--line-soft);display:flex;gap:.5rem">
+      <input id="tasks-new-title" class="mem-input" style="flex:1" placeholder="Quick add task…" aria-label="New task title" />
+      <button id="tasks-add-btn" class="btn-run" type="button">+ Add</button>
+    </div>
   </div>
 
-  <div class="section-label">Projects & Goals</div>
-  <div class="grid-2">
-
-    <!-- Projects -->
+  <!-- Overview: Projects, Goals, Finance in compact grid -->
+  <div class="section-label">Overview</div>
+  <div class="grid-3">
     <div class="card">
       <div class="card-head"><span class="card-title">Projects</span><span class="card-count">{{ projects|length }}</span></div>
       {% if projects %}
-        {% for p in projects %}
+        {% for p in projects[:3] %}
         <div class="item">
           <div class="task-row">
             <div class="item-text">{{ p.title }}</div>
             <span class="badge b-{{ p.status }}">{{ p.status }}</span>
           </div>
-          <div class="item-meta">{{ p.category }}{% if p.due_date %} - due {{ p.due_date }}{% endif %}</div>
         </div>
         {% endfor %}
       {% else %}
-        <div class="empty">No projects yet.<code>POST /api/v1/projects</code></div>
+        <div class="empty">No projects yet.</div>
       {% endif %}
     </div>
-
-    <!-- Goals -->
     <div class="card">
       <div class="card-head"><span class="card-title">Goals</span><span class="card-count">{{ goals|length }}</span></div>
       {% if goals %}
-        {% for g in goals %}
+        {% for g in goals[:3] %}
         <div class="item">
           <div class="task-row">
             <div class="item-text">{{ g.title }}</div>
             <span class="badge b-{{ g.status }}">{{ g.status }}</span>
           </div>
           <div class="prog-wrap"><div class="prog-fill" style="width:{{ g.progress }}%"></div></div>
-          <div class="item-meta">{{ g.progress }}% - {{ g.category }}{% if g.target_date %} - {{ g.target_date }}{% endif %}</div>
         </div>
         {% endfor %}
       {% else %}
-        <div class="empty">No goals yet.<code>POST /api/v1/goals</code></div>
+        <div class="empty">No goals yet.</div>
       {% endif %}
     </div>
-
-  </div>
-
-  <div class="section-label">Network & Finance</div>
-  <div class="grid-2">
-
-    <!-- Contacts & CRM Pipeline -->
-    <div class="card">
-      <div class="card-head">
-        <span class="card-title">CRM Pipeline</span>
-        <span class="card-count">{{ contacts|length }} contacts</span>
-      </div>
-      <div id="pipeline-funnel-dash" style="display:flex;gap:0;margin:.6rem 1rem .4rem">
-        <div style="flex:1;text-align:center;padding:.3rem 0;font-size:.65rem;color:var(--text-muted)">
-          <div style="font-weight:700;font-size:.9rem" id="dash-pf-new">-</div>New
-        </div>
-        <div style="flex:1;text-align:center;padding:.3rem 0;font-size:.65rem;color:var(--text-muted)">
-          <div style="font-weight:700;font-size:.9rem" id="dash-pf-contacted">-</div>Contacted
-        </div>
-        <div style="flex:1;text-align:center;padding:.3rem 0;font-size:.65rem;color:var(--text-muted)">
-          <div style="font-weight:700;font-size:.9rem" id="dash-pf-qualified">-</div>Qualified
-        </div>
-        <div style="flex:1;text-align:center;padding:.3rem 0;font-size:.65rem;color:var(--text-muted)">
-          <div style="font-weight:700;font-size:.9rem" id="dash-pf-proposal">-</div>Proposal
-        </div>
-        <div style="flex:1;text-align:center;padding:.3rem 0;font-size:.65rem;color:var(--text-muted)">
-          <div style="font-weight:700;font-size:.9rem" id="dash-pf-negotiation">-</div>Negotiation
-        </div>
-        <div style="flex:1;text-align:center;padding:.3rem 0;font-size:.65rem;color:var(--text-muted)">
-          <div style="font-weight:700;font-size:.9rem;color:var(--success)" id="dash-pf-won">-</div>Won
-        </div>
-        <div style="flex:1;text-align:center;padding:.3rem 0;font-size:.65rem;color:var(--text-muted)">
-          <div style="font-weight:700;font-size:.9rem;color:var(--text-faint)" id="dash-pf-lost">-</div>Lost
-        </div>
-      </div>
-      <div class="fin-row">
-        <span class="fin-label">Total Pipeline Value</span>
-        <span class="fin-val fin-green" id="dash-pipeline-val">$0</span>
-      </div>
-      <div class="fin-row">
-        <span class="fin-label">Follow-ups Due</span>
-        <span class="fin-val" id="dash-followup-count">0</span>
-      </div>
-      {% if contacts %}
-        {% for c in contacts[:5] %}
-        <div class="item">
-          <div class="task-row">
-            <div>
-              <div class="item-text">{{ c.name }}</div>
-              {% if c.company %}<div class="item-meta">{{ c.company }}{% if c.role %} - {{ c.role }}{% endif %}</div>{% endif %}
-            </div>
-            <span class="badge b-{{ c.pipeline_stage or c.relationship }}">{{ c.pipeline_stage or c.relationship }}</span>
-          </div>
-          {% if c.deal_value %}<div class="item-meta">${{ c.deal_value | round(0) }} deal value</div>{% endif %}
-        </div>
-        {% endfor %}
-        {% if contacts|length > 5 %}
-        <div class="item"><a href="/web/contacts" class="link-muted">View all {{ contacts|length }} contacts -></a></div>
-        {% endif %}
-      {% else %}
-        <div class="empty">No contacts yet. <a href="/web/contacts" class="link-muted">Add contacts -></a></div>
-      {% endif %}
-    </div>
-
-    <!-- Finance -->
     <div class="card">
       <div class="card-head"><span class="card-title">Finance</span></div>
       <div class="fin-row">
-        <span class="fin-label">Total Income</span>
+        <span class="fin-label">Income</span>
         <span class="fin-val fin-green">${{ finance.total_income | round(2) }}</span>
       </div>
       <div class="fin-row">
-        <span class="fin-label">Total Expenses</span>
+        <span class="fin-label">Expenses</span>
         <span class="fin-val fin-red">${{ finance.total_expense | round(2) }}</span>
       </div>
       <div class="fin-row" style="border-top:1px solid var(--line)">
@@ -465,42 +226,11 @@
           ${{ finance.balance | round(2) }}
         </span>
       </div>
-      <div class="fin-row">
-        <span class="fin-label">Efficiency Score (30d)</span>
-        <span class="fin-val {% if finance_efficiency.efficiency_score >= 75 %}fin-green{% elif finance_efficiency.efficiency_score >= 50 %}{% else %}fin-red{% endif %}">
-          {{ finance_efficiency.efficiency_score }}/100
-        </span>
-      </div>
-      <div class="fin-row">
-        <span class="fin-label">Digital Spend Ratio</span>
-        <span class="fin-val">{{ (finance_efficiency.digital_expense_ratio * 100) | round(1) }}%</span>
-      </div>
-      {% if finance_efficiency.findings %}
-      <div class="fin-row">
-        <span class="fin-label">Top Risk</span>
-        <span class="fin-val" style="font-size:.78rem;color:var(--warn);max-width:56%;text-align:right;line-height:1.35">
-          {{ finance_efficiency.findings[0].message }}
-        </span>
-      </div>
-      {% endif %}
-      {% if finance_efficiency.recommendations %}
-      <div class="fin-row">
-        <span class="fin-label">Potential Savings</span>
-        <span class="fin-val fin-green">
-          ${{ finance_efficiency.recommendations[0].estimated_monthly_savings | round(2) }}/mo
-        </span>
-      </div>
-      {% endif %}
-      <div style="padding:.6rem 1.1rem">
-        <a href="/api/v1/finance" class="link-muted">View all entries -></a>
-        <span class="link-separator">|</span>
-        <a href="/api/v1/finance/efficiency" class="link-muted">Efficiency API -></a>
-      </div>
     </div>
-
   </div>
 
-  <div class="section-label">Audit Log</div>
+  <!-- Activity -->
+  <div class="section-label">Activity</div>
   <div class="card" id="audit-card">
     <div class="card-head">
       <span class="card-title">Recent Activity</span>
@@ -511,124 +241,6 @@
     </div>
     <div id="audit-list">
       <div class="empty">Loading activity log…</div>
-    </div>
-  </div>
-
-  <div class="section-label">Market Like A Pro · Study Like A Pro · Train Like A Pro</div>
-  <div class="grid-3">
-    <div class="card">
-      <div class="card-head"><span class="card-title">Market Like A Pro</span></div>
-      <div class="fin-row">
-        <span class="fin-label">Readiness Score (30d)</span>
-        <span class="fin-val {% if marketing_layer.readiness_score >= 75 %}fin-green{% elif marketing_layer.readiness_score >= 50 %}{% else %}fin-red{% endif %}">
-          {{ marketing_layer.readiness_score }}/100
-        </span>
-      </div>
-      <div class="fin-row">
-        <span class="fin-label">New Business Contacts</span>
-        <span class="fin-val">{{ marketing_layer.new_business_contacts }}</span>
-      </div>
-      <div class="fin-row">
-        <span class="fin-label">Open Follow-up Tasks</span>
-        <span class="fin-val">{{ marketing_layer.open_follow_up_tasks }}</span>
-      </div>
-      {% if marketing_layer.bottlenecks %}
-      <div class="fin-row">
-        <span class="fin-label">Top Bottleneck</span>
-        <span class="fin-val" style="font-size:.78rem;color:var(--warn);max-width:56%;text-align:right;line-height:1.35">
-          {{ marketing_layer.bottlenecks[0] }}
-        </span>
-      </div>
-      {% endif %}
-      <div style="padding:.6rem 1.1rem">
-        <a href="/api/v1/layers/marketing" class="link-muted">Marketing API -></a>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-head"><span class="card-title">Study Like A Pro</span></div>
-      <div class="fin-row">
-        <span class="fin-label">Operational Score (30d)</span>
-        <span class="fin-val {% if study_layer.operational_score >= 75 %}fin-green{% elif study_layer.operational_score >= 50 %}{% else %}fin-red{% endif %}">
-          {{ study_layer.operational_score }}/100
-        </span>
-      </div>
-      <div class="fin-row">
-        <span class="fin-label">Study Pipeline Contacts</span>
-        <span class="fin-val">{{ study_layer.study_pipeline_contacts }}</span>
-      </div>
-      <div class="fin-row">
-        <span class="fin-label">Due Soon Study Tasks</span>
-        <span class="fin-val">{{ study_layer.due_soon_study_tasks }}</span>
-      </div>
-      {% if study_layer.blockers %}
-      <div class="fin-row">
-        <span class="fin-label">Top Blocker</span>
-        <span class="fin-val" style="font-size:.78rem;color:var(--warn);max-width:56%;text-align:right;line-height:1.35">
-          {{ study_layer.blockers[0] }}
-        </span>
-      </div>
-      {% endif %}
-      <div style="padding:.6rem 1.1rem">
-        <a href="/api/v1/layers/study" class="link-muted">Study API -></a>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-head"><span class="card-title">Train Like A Pro</span></div>
-      <div class="fin-row">
-        <span class="fin-label">Training Score (30d)</span>
-        <span class="fin-val {% if training_layer.training_score >= 75 %}fin-green{% elif training_layer.training_score >= 50 %}{% else %}fin-red{% endif %}">
-          {{ training_layer.training_score }}/100
-        </span>
-      </div>
-      <div class="fin-row">
-        <span class="fin-label">Active Team Members</span>
-        <span class="fin-val">{{ training_layer.active_team_members }}</span>
-      </div>
-      <div class="fin-row">
-        <span class="fin-label">Avg AI Level</span>
-        <span class="fin-val">{{ training_layer.avg_ai_level }}</span>
-      </div>
-      <div class="fin-row">
-        <span class="fin-label">Open Training Tasks</span>
-        <span class="fin-val">{{ training_layer.open_training_tasks }}</span>
-      </div>
-      {% if training_layer.blockers %}
-      <div class="fin-row">
-        <span class="fin-label">Top Blocker</span>
-        <span class="fin-val" style="font-size:.78rem;color:var(--warn);max-width:56%;text-align:right;line-height:1.35">
-          {{ training_layer.blockers[0] }}
-        </span>
-      </div>
-      {% endif %}
-      <div style="padding:.6rem 1.1rem">
-        <a href="/api/v1/layers/training" class="link-muted">Training API -></a>
-      </div>
-    </div>
-  </div>
-
-  <div class="section-label">Memory Editor</div>
-  <div class="card" id="memory-card">
-    <div class="card-head">
-      <span class="card-title">Profile Memory</span>
-      <div style="display:flex;gap:.6rem;align-items:center">
-        <span id="mem-count" class="card-count">...</span>
-        <button id="mem-add-toggle" class="btn-run" type="button">+ Add</button>
-        <button id="mem-refresh-btn" class="btn-run" type="button">Refresh</button>
-      </div>
-    </div>
-    <div id="mem-add-form" class="mem-add-form" style="display:none">
-      <div style="display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:.5rem;align-items:end">
-        <input id="mem-input-key" class="mem-input" placeholder="Key (e.g. name)" aria-label="Memory key" />
-        <input id="mem-input-cat" class="mem-input" placeholder="Category (optional)" aria-label="Memory category" />
-        <input id="mem-input-val" class="mem-input" placeholder="Value" aria-label="Memory value" />
-        <button id="mem-save-btn" class="btn-run" type="button" style="white-space:nowrap">Save</button>
-      </div>
-      <div id="mem-form-status" class="run-status" style="margin-top:.4rem"></div>
-    </div>
-    <div id="mem-list">
-      <div class="empty">Loading memory…</div>
     </div>
   </div>
 

@@ -5,7 +5,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   /* ── Surface palette (Apple light) ──────────────────────────────────── */
   --bg:           #f5f5f7;       /* Apple light gray */
@@ -133,41 +133,8 @@
 }
 .theme-toggle:hover { color: var(--sb-text-hover); }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg:           #000000;
-    --surface:      #1c1c1e;
-    --surface-alt:  #2c2c2e;
-    --line:         #38383a;
-    --line-soft:    #2c2c2e;
-    --sb-bg:        rgba(28, 28, 30, 0.88);
-    --sb-text:      #98989d;
-    --sb-text-hover:#f5f5f7;
-    --sb-active-bg: rgba(0, 122, 255, 0.15);
-    --sb-active-text: #0a84ff;
-    --sb-line:      rgba(255, 255, 255, 0.06);
-    --text:         #f5f5f7;
-    --text-secondary:#a1a1a6;
-    --text-muted:   #8e8e93;
-    --text-faint:   #636366;
-    --brand:        #0a84ff;
-    --brand-hover:  #409cff;
-    --ok:           #30d158;
-    --ok-soft:      rgba(48, 209, 88, 0.12);
-    --ok-border:    rgba(48, 209, 88, 0.3);
-    --warn-soft:    rgba(255, 159, 10, 0.12);
-    --warn-border:  rgba(255, 159, 10, 0.3);
-    --danger:       #ff453a;
-    --danger-soft:  rgba(255, 69, 58, 0.12);
-    --danger-border:rgba(255, 69, 58, 0.3);
-    --info-soft:    rgba(94, 92, 230, 0.12);
-    --info-border:  rgba(94, 92, 230, 0.3);
-    --shadow-sm:  0 1px 3px rgba(0,0,0,0.2);
-    --shadow:     0 2px 8px rgba(0,0,0,0.3);
-    --shadow-md:  0 4px 16px rgba(0,0,0,0.35);
-    --shadow-lg:  0 12px 40px rgba(0,0,0,0.5);
-  }
-}
+/* prefers-color-scheme auto-dark removed — light-only by default.
+   Dark mode still available via manual toggle (data-theme="dark"). */
 
 /* ── Reset ─────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

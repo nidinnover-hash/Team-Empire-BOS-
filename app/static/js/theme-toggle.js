@@ -17,7 +17,7 @@
     var stored = localStorage.getItem(KEY);
     if (stored === 'dark' || stored === 'light') return stored;
     if (defaultTheme === 'dark' || defaultTheme === 'light') return defaultTheme;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    return 'light';
   }
 
   function apply(theme) {
