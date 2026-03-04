@@ -24,9 +24,14 @@ def _patch_webhook_session(db, monkeypatch):
 
     monkeypatch.setattr(webhook_service, "AsyncSessionLocal", _test_session)
 
-CEO_HEADERS = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
-ORG2_HEADERS = _make_auth_headers(2, "ceo@org2.com", "CEO", 2)
-STAFF_HEADERS = _make_auth_headers(4, "staff@org1.com", "STAFF", 1)
+def _ceo_headers() -> dict[str, str]:
+    return _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
+
+def _org2_headers() -> dict[str, str]:
+    return _make_auth_headers(2, "ceo@org2.com", "CEO", 2)
+
+def _staff_headers() -> dict[str, str]:
+    return _make_auth_headers(4, "staff@org1.com", "STAFF", 1)
 
 BASE = "/api/v1/webhooks"
 
@@ -40,7 +45,7 @@ async def _create_webhook(client, url="https://example.com/hook", events=None, h
     body: dict = {"url": url}
     if events is not None:
         body["event_types"] = events
-    return await client.post(BASE, json=body, headers=headers or CEO_HEADERS)
+    return await client.post(BASE, json=body, headers=headers or _ceo_headers())
 
 
 class _FakeResponse:
@@ -143,7 +148,7 @@ async def test_create_webhook_rejects_dns_resolving_to_private_ip(db, monkeypatc
 async def test_list_webhook_endpoints(client):
     await _create_webhook(client, url="https://example.com/hook1")
     await _create_webhook(client, url="https://example.com/hook2")
-    resp = await client.get(BASE, headers=CEO_HEADERS)
+    resp = await client.get(BASE, headers=_ceo_headers())
     assert resp.status_code == 200
     items = resp.json()
     assert len(items) >= 2
@@ -154,7 +159,7 @@ async def test_list_webhook_endpoints(client):
 async def test_get_webhook_endpoint(client):
     create_resp = await _create_webhook(client)
     wh_id = create_resp.json()["id"]
-    resp = await client.get(f"{BASE}/{wh_id}", headers=CEO_HEADERS)
+    resp = await client.get(f"{BASE}/{wh_id}", headers=_ceo_headers())
     assert resp.status_code == 200
     assert resp.json()["id"] == wh_id
     assert "signing_secret" not in resp.json()
@@ -162,7 +167,7 @@ async def test_get_webhook_endpoint(client):
 
 @pytest.mark.asyncio
 async def test_get_webhook_not_found(client):
-    resp = await client.get(f"{BASE}/99999", headers=CEO_HEADERS)
+    resp = await client.get(f"{BASE}/99999", headers=_ceo_headers())
     assert resp.status_code == 404
 
 
@@ -173,7 +178,7 @@ async def test_update_webhook_endpoint(client):
     resp = await client.patch(
         f"{BASE}/{wh_id}",
         json={"url": "https://updated.example.com/hook", "is_active": False},
-        headers=CEO_HEADERS,
+        headers=_ceo_headers(),
     )
     assert resp.status_code == 200
     assert resp.json()["url"] == "https://updated.example.com/hook"
@@ -185,7 +190,7 @@ async def test_update_webhook_not_found(client):
     resp = await client.patch(
         f"{BASE}/99999",
         json={"is_active": False},
-        headers=CEO_HEADERS,
+        headers=_ceo_headers(),
     )
     assert resp.status_code == 404
 
@@ -194,15 +199,15 @@ async def test_update_webhook_not_found(client):
 async def test_delete_webhook_endpoint(client):
     create_resp = await _create_webhook(client)
     wh_id = create_resp.json()["id"]
-    del_resp = await client.delete(f"{BASE}/{wh_id}", headers=CEO_HEADERS)
+    del_resp = await client.delete(f"{BASE}/{wh_id}", headers=_ceo_headers())
     assert del_resp.status_code == 204
-    get_resp = await client.get(f"{BASE}/{wh_id}", headers=CEO_HEADERS)
+    get_resp = await client.get(f"{BASE}/{wh_id}", headers=_ceo_headers())
     assert get_resp.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_delete_webhook_not_found(client):
-    resp = await client.delete(f"{BASE}/99999", headers=CEO_HEADERS)
+    resp = await client.delete(f"{BASE}/99999", headers=_ceo_headers())
     assert resp.status_code == 404
 
 
@@ -215,7 +220,7 @@ async def test_delete_webhook_not_found(client):
 async def test_cross_org_get_denied(client):
     create_resp = await _create_webhook(client)
     wh_id = create_resp.json()["id"]
-    resp = await client.get(f"{BASE}/{wh_id}", headers=ORG2_HEADERS)
+    resp = await client.get(f"{BASE}/{wh_id}", headers=_org2_headers())
     assert resp.status_code == 404
 
 
@@ -223,7 +228,7 @@ async def test_cross_org_get_denied(client):
 async def test_cross_org_delete_denied(client):
     create_resp = await _create_webhook(client)
     wh_id = create_resp.json()["id"]
-    resp = await client.delete(f"{BASE}/{wh_id}", headers=ORG2_HEADERS)
+    resp = await client.delete(f"{BASE}/{wh_id}", headers=_org2_headers())
     assert resp.status_code == 404
 
 
@@ -234,7 +239,7 @@ async def test_cross_org_delete_denied(client):
 
 @pytest.mark.asyncio
 async def test_staff_cannot_create_webhook(client):
-    resp = await _create_webhook(client, headers=STAFF_HEADERS)
+    resp = await _create_webhook(client, headers=_staff_headers())
     assert resp.status_code == 403
 
 
@@ -466,7 +471,7 @@ async def test_send_test_webhook(db, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_send_test_webhook_not_found(client):
-    resp = await client.post(f"{BASE}/99999/test", headers=CEO_HEADERS)
+    resp = await client.post(f"{BASE}/99999/test", headers=_ceo_headers())
     assert resp.status_code == 404
 
 
