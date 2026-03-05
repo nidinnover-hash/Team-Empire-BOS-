@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 
 revision = "20260221_0002"
-down_revision = "20260221_0001"
+down_revision = "20260221_0001b"
 branch_labels = None
 depends_on = None
 
