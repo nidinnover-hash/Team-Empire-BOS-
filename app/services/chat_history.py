@@ -9,10 +9,8 @@ from app.models.chat_message import ChatMessage
 
 def _normalize_avatar_mode(avatar_mode: str | None) -> str:
     mode = (avatar_mode or "professional").strip().lower()
-    if mode == "personal":
-        return "personal"
-    if mode == "entertainment":
-        return "entertainment"
+    if mode in {"personal", "entertainment", "strategy"}:
+        return mode
     return "professional"
 
 

@@ -115,6 +115,7 @@ router.get("/web/goals", response_class=HTMLResponse, include_in_schema=False)(_
 router.get("/web/contacts", response_class=HTMLResponse, include_in_schema=False)(_web_page("contacts.html"))
 router.get("/web/finance", response_class=HTMLResponse, include_in_schema=False)(_web_page("finance.html"))
 router.get("/web/maps", response_class=HTMLResponse, include_in_schema=False)(_web_page("maps.html"))
+router.get("/web/strategy", response_class=HTMLResponse, include_in_schema=False)(_web_page("strategy.html"))
 
 
 @router.get("/web/login", response_class=HTMLResponse, include_in_schema=False)
@@ -201,6 +202,41 @@ async def web_talk_bootstrap(
             "Draft responses for my urgent emails.",
             "What approvals need my decision first?",
             "Build a 2-hour execution plan for my current priorities.",
+        ],
+    }
+
+
+@router.get("/web/strategy/bootstrap", include_in_schema=False)
+async def web_strategy_bootstrap(
+    user: dict = Depends(get_current_web_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Bootstrap data for the strategy workspace page."""
+    org_id = int(user["org_id"])
+    strategy_memories = await memory_service.get_avatar_memory(
+        db, organization_id=org_id, avatar_mode="strategy",
+    )
+
+    rules = [
+        {"id": m.id, "key": m.key, "value": m.value,
+         "updated_at": m.updated_at.isoformat() if m.updated_at else None}
+        for m in strategy_memories if m.key.startswith("rule.")
+    ]
+    memories = [
+        {"id": m.id, "key": m.key, "value": m.value,
+         "updated_at": m.updated_at.isoformat() if m.updated_at else None}
+        for m in strategy_memories if not m.key.startswith("rule.")
+    ]
+
+    return {
+        "rules": rules[:20],
+        "memories": memories[:30],
+        "suggested_prompts": [
+            "What should our growth strategy be for Q2?",
+            "Analyze our competitive positioning in the study abroad market.",
+            "Help me think through a partnership decision.",
+            "Review our pricing strategy and suggest improvements.",
+            "What are the biggest strategic risks we face right now?",
         ],
     }
 

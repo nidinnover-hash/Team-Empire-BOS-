@@ -385,7 +385,11 @@ async def test_service_upload_and_get(db: AsyncSession, tmp_path, monkeypatch):
     class FakeUpload:
         filename = "direct.png"
         content_type = "image/png"
-        async def read(self):
+        _sent = False
+        async def read(self, size=-1):
+            if self._sent:
+                return b""
+            self._sent = True
             return b"pixels"
 
     att = await media_storage.upload_file(db, org_id=1, file=FakeUpload(), user_id=1)
@@ -405,7 +409,11 @@ async def test_service_soft_delete(db: AsyncSession, tmp_path, monkeypatch):
     class FakeUpload:
         filename = "delete-me.png"
         content_type = "image/png"
-        async def read(self):
+        _sent = False
+        async def read(self, size=-1):
+            if self._sent:
+                return b""
+            self._sent = True
             return b"data"
 
     att = await media_storage.upload_file(db, org_id=1, file=FakeUpload(), user_id=1)
@@ -425,7 +433,11 @@ async def test_service_storage_stats(db: AsyncSession, tmp_path, monkeypatch):
     class FakeUpload:
         filename = "stats.png"
         content_type = "image/png"
-        async def read(self):
+        _sent = False
+        async def read(self, size=-1):
+            if self._sent:
+                return b""
+            self._sent = True
             return b"x" * 500
 
     await media_storage.upload_file(db, org_id=1, file=FakeUpload(), user_id=1)
@@ -456,7 +468,11 @@ async def test_service_list_with_entity_filter(db: AsyncSession, tmp_path, monke
     class FakeUpload:
         filename = "emp.png"
         content_type = "image/png"
-        async def read(self):
+        _sent = False
+        async def read(self, size=-1):
+            if self._sent:
+                return b""
+            self._sent = True
             return b"img"
 
     await media_storage.upload_file(

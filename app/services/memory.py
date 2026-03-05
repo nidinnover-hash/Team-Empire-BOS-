@@ -52,7 +52,7 @@ async def get_avatar_memory(
     avatar_mode: str,
 ) -> list[AvatarMemory]:
     lowered = str(avatar_mode).strip().lower()
-    mode = lowered if lowered in {"personal", "professional", "entertainment"} else "professional"
+    mode = lowered if lowered in {"personal", "professional", "entertainment", "strategy"} else "professional"
     result = await db.execute(
         select(AvatarMemory)
         .where(
@@ -63,6 +63,59 @@ async def get_avatar_memory(
         .limit(500)
     )
     return list(result.scalars().all())
+
+
+async def upsert_avatar_memory(
+    db: AsyncSession,
+    organization_id: int,
+    avatar_mode: str,
+    key: str,
+    value: str,
+) -> AvatarMemory:
+    """Create or update an avatar-scoped memory entry."""
+    result = await db.execute(
+        select(AvatarMemory).where(
+            AvatarMemory.organization_id == organization_id,
+            AvatarMemory.avatar_mode == avatar_mode,
+            AvatarMemory.key == key,
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        existing.value = value
+        existing.updated_at = datetime.now(UTC)
+        await db.commit()
+        await db.refresh(existing)
+        return existing
+
+    new_entry = AvatarMemory(
+        organization_id=organization_id,
+        avatar_mode=avatar_mode,
+        key=key,
+        value=value,
+    )
+    db.add(new_entry)
+    try:
+        await db.commit()
+        await db.refresh(new_entry)
+    except IntegrityError:
+        await db.rollback()
+        retry = await db.execute(
+            select(AvatarMemory).where(
+                AvatarMemory.organization_id == organization_id,
+                AvatarMemory.avatar_mode == avatar_mode,
+                AvatarMemory.key == key,
+            )
+        )
+        existing = retry.scalar_one_or_none()
+        if existing is None:
+            raise
+        existing.value = value
+        existing.updated_at = datetime.now(UTC)
+        await db.commit()
+        await db.refresh(existing)
+        return existing
+    return new_entry
 
 
 async def upsert_profile_memory(

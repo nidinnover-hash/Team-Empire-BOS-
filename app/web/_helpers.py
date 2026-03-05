@@ -179,6 +179,8 @@ def resolve_login_profile_cached(email: str) -> dict[str, str]:
 
 
 def read_avatar_scope(user: dict[str, Any], requested_mode: str) -> str:
+    if requested_mode == "strategy":
+        return "strategy"
     if not settings.PURPOSE_STRICT_BARRIERS:
         return requested_mode
     purpose = str(user.get("purpose") or "professional").strip().lower()
@@ -194,6 +196,8 @@ def read_avatar_scope(user: dict[str, Any], requested_mode: str) -> str:
 
 
 def write_avatar_scope(user: dict[str, Any], requested_mode: str) -> str:
+    if requested_mode == "strategy":
+        return "strategy"
     if not settings.PURPOSE_STRICT_BARRIERS:
         return requested_mode
     purpose = str(user.get("purpose") or "professional").strip().lower()

@@ -31,6 +31,7 @@ class AgentChatRequest(BaseModel):
     force_role: str | None = Field(None, max_length=50)
     avatar_mode: str | None = Field(None, max_length=30)
     employee_id: int | None = Field(None, ge=1)
+    provider: str | None = Field(None, max_length=20)
 
 
 class ProposedAction(BaseModel):
@@ -120,6 +121,17 @@ ROLE_PROMPTS: dict[str, str] = {
         "- Prioritize tasks that directly move active projects forward.\n"
         "- Be specific — give actual task names, not generic descriptions."
     ),
+    "Strategist": (
+        "You are Nidin's Strategist — his dedicated thinking partner for high-level decisions.\n"
+        "Your job: help Nidin think through business strategy, market moves, competitive positioning, "
+        "growth plans, partnerships, and long-term vision.\n"
+        "Rules:\n"
+        "- Always respond with structured strategic analysis.\n"
+        "- When a decision is reached, state it clearly as: 'DECISION: <statement>'\n"
+        "- Reference relevant context from past strategy sessions.\n"
+        "- Push back on weak reasoning. Be the devil's advocate when needed.\n"
+        "- Separate strategy from execution — execution belongs to the business agent."
+    ),
 }
 
 _RISKY_TOKENS = ("send", "assign", "change", "spend", "delete", "fire", "hire", "pay")
@@ -143,6 +155,19 @@ AVATAR_PROMPTS: dict[str, str] = {
         "Focus on storytelling, hooks, scripts, campaign ideas, and audience excitement.\n"
         "Entertainment channels are restricted to YouTube and Audible contexts.\n"
         "Avoid mixing confidential operational decisions into this mode."
+    ),
+    "strategy": (
+        "Avatar mode: STRATEGY.\n"
+        "You are Nidin's Strategy Partner — a senior strategic advisor.\n"
+        "Your role: deep-think on business direction, market positioning, competitive moves, "
+        "growth frameworks, and long-term planning.\n"
+        "Rules:\n"
+        "- Think in frameworks: SWOT, Porter's 5 Forces, OKRs, first-principles reasoning.\n"
+        "- Challenge assumptions. Push Nidin to think bigger and more clearly.\n"
+        "- When a decision is reached, prefix it with DECISION: so it can be extracted.\n"
+        "- Reference past strategy sessions and decisions when relevant.\n"
+        "- Never dilute strategic thinking with operational details — that's for the business agent.\n"
+        "- Be direct, analytical, and structured. Use numbered lists for multi-part answers."
     ),
 }
 
@@ -227,10 +252,18 @@ async def run_agent(
     Returns:
         AgentChatResponse with role, AI response, approval flag, and proposed_actions.
     """
-    role = route_role(request.message, request.force_role)
     avatar_key = (request.avatar_mode or "professional").strip().lower()
     if avatar_key not in AVATAR_PROMPTS:
         avatar_key = "professional"
+
+    # Strategy mode always uses Strategist role + OpenAI provider
+    if avatar_key == "strategy":
+        role = "Strategist"
+        effective_provider = "openai"
+    else:
+        role = route_role(request.message, request.force_role)
+        effective_provider = request.provider
+
     system_prompt = f"{AVATAR_PROMPTS[avatar_key]}\n\n{ROLE_PROMPTS[role]}"
 
     response_text = await call_ai(
@@ -240,6 +273,7 @@ async def run_agent(
         conversation_history=conversation_history,
         organization_id=organization_id,
         brain_context=brain_context,
+        provider=effective_provider,
     )
 
     requires_approval = any(t in request.message.lower() for t in _RISKY_TOKENS)

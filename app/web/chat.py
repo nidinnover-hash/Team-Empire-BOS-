@@ -36,7 +36,10 @@ async def web_agent_chat(
         force_role = None
     default_avatar = str(user.get("default_avatar_mode") or "professional")
     avatar_mode = (avatar_mode or default_avatar).strip().lower()
-    if avatar_mode not in {"personal", "professional", "entertainment"}:
+    if avatar_mode not in {"personal", "professional", "entertainment", "strategy"}:
+        avatar_mode = "professional"
+    # Strategy mode is CEO/ADMIN only
+    if avatar_mode == "strategy" and user["role"] not in {"CEO", "ADMIN"}:
         avatar_mode = "professional"
     read_mode = read_avatar_scope(user, avatar_mode)
     write_mode = write_avatar_scope(user, avatar_mode)
@@ -93,8 +96,9 @@ async def web_agent_chat(
     result = await run_agent(
         request=AgentChatRequest(
             message=message,
-            force_role=force_role if force_role else None,
+            force_role="Strategist" if read_mode == "strategy" else (force_role or None),
             avatar_mode=read_mode if read_mode else None,
+            provider="openai" if read_mode == "strategy" else None,
         ),
         memory_context=memory_context,
         conversation_history=history,
@@ -134,10 +138,11 @@ async def web_chat_history(
     from app.services import chat_history as chat_history_service
 
     org_id = int(user["org_id"])
-    avatar_mode = read_avatar_scope(
-        user,
-        (avatar_mode or str(user.get("default_avatar_mode") or "professional")).strip().lower(),
-    )
+    resolved_mode = (avatar_mode or str(user.get("default_avatar_mode") or "professional")).strip().lower()
+    # Strategy mode bypasses purpose barriers but requires CEO/ADMIN
+    if resolved_mode == "strategy" and user["role"] not in {"CEO", "ADMIN"}:
+        resolved_mode = "professional"
+    avatar_mode = read_avatar_scope(user, resolved_mode)
     recent = await chat_history_service.get_recent(
         db, org_id=org_id, limit=20, avatar_mode=avatar_mode,
     )
@@ -173,3 +178,66 @@ async def web_daily_run(
         team=team,
     )
     return JSONResponse(content=data)
+
+
+# ── Strategy Workspace Endpoints ────────────────────────────────────────────
+
+
+@router.post("/web/strategy/push-decision")
+async def web_push_decision(
+    decision: str = Form(..., max_length=2000),
+    _csrf_ok: None = Depends(verify_csrf),
+    user: dict = Depends(get_current_web_user),
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    """Push a strategy decision to the business agent's context."""
+    from datetime import date as date_cls
+
+    from app.schemas.memory import DailyContextCreate
+
+    if user["role"] not in {"CEO", "ADMIN"}:
+        raise HTTPException(status_code=403, detail="Only CEO/ADMIN can push decisions")
+
+    org_id = int(user["org_id"])
+
+    await memory_service.add_daily_context(
+        db,
+        DailyContextCreate(
+            date=date_cls.today(),
+            context_type="decision",
+            content=f"[STRATEGY DECISION] {decision}",
+            related_to="strategy_workspace",
+        ),
+        organization_id=org_id,
+    )
+
+    key = f"strategy.decision.{date_cls.today().isoformat()}.{abs(hash(decision)) % 10000}"
+    await memory_service.upsert_profile_memory(
+        db, organization_id=org_id,
+        key=key, value=decision, category="strategy_decision",
+    )
+
+    memory_service.invalidate_memory_cache(org_id)
+    return JSONResponse(content={"ok": True, "message": "Decision pushed to business agent."})
+
+
+@router.post("/web/strategy/rules")
+async def web_save_strategy_rule(
+    rule_key: str = Form(..., max_length=100),
+    rule_value: str = Form(..., max_length=2000),
+    _csrf_ok: None = Depends(verify_csrf),
+    user: dict = Depends(get_current_web_user),
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    """Save or update a strategy rule."""
+    if user["role"] not in {"CEO", "ADMIN"}:
+        raise HTTPException(status_code=403, detail="Only CEO/ADMIN can set strategy rules")
+
+    org_id = int(user["org_id"])
+    entry = await memory_service.upsert_avatar_memory(
+        db, organization_id=org_id,
+        avatar_mode="strategy",
+        key=f"rule.{rule_key}",
+        value=rule_value,
+    )
+    return JSONResponse(content={"ok": True, "id": entry.id, "key": entry.key})
