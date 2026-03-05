@@ -59,3 +59,7 @@ uploads/
 
 # Node
 node_modules/
+
+# Figma design exports
+stich/
+stich.zip
