@@ -17,6 +17,10 @@ class CloneMemoryEntry(Base):
         Integer, ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
+    workspace_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("workspaces.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
     employee_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("employees.id", ondelete="CASCADE"),
         nullable=False, index=True,

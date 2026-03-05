@@ -32,7 +32,7 @@ def _index_exists(table: str, index_name: str) -> bool:
 def upgrade() -> None:
     bind = op.get_bind()
 
-    # profile_memory — stores identity/rules/goals/preferences
+    # profile_memory - stores identity/rules/goals/preferences
     if not _table_exists("profile_memory"):
         op.create_table(
             "profile_memory",

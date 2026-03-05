@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_db
+from app.core.deps import get_current_workspace_id, get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
 from app.schemas.goal import GoalCreate, GoalProgressUpdate, GoalRead, GoalStatusUpdate
@@ -15,6 +15,7 @@ async def create_goal(
     data: GoalCreate,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> GoalRead:
     """Create a long-term goal with a target date."""
     goal = await goal_service.create_goal(db, data, organization_id=actor["org_id"])
@@ -36,6 +37,7 @@ async def list_goals(
     offset: int = Query(0, ge=0, le=10_000),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> list[GoalRead]:
     """List all goals, newest first."""
     return await goal_service.list_goals(db, organization_id=actor["org_id"], limit=limit, offset=offset)
@@ -47,6 +49,7 @@ async def update_progress(
     data: GoalProgressUpdate,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> GoalRead:
     """Update goal progress (0-100). Auto-completes at 100."""
     goal = await goal_service.update_goal_progress(db, goal_id, data, organization_id=actor["org_id"])
@@ -61,6 +64,7 @@ async def update_status(
     data: GoalStatusUpdate,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> GoalRead:
     """Update goal status (active|completed|paused|abandoned)."""
     goal = await goal_service.update_goal_status(db, goal_id, data, organization_id=actor["org_id"])
@@ -74,6 +78,7 @@ async def get_goal(
     goal_id: int,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> GoalRead:
     goal = await goal_service.get_goal(db, goal_id, organization_id=actor["org_id"])
     if goal is None:
@@ -86,6 +91,7 @@ async def delete_goal(
     goal_id: int,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> None:
     deleted = await goal_service.delete_goal(db, goal_id, organization_id=actor["org_id"])
     if not deleted:

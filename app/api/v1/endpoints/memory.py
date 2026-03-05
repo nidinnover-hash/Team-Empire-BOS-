@@ -24,19 +24,22 @@ router = APIRouter(prefix="/memory", tags=["Memory"])
 
 @router.get("/profile", response_model=list[ProfileMemoryRead])
 async def list_profile_memory(
+    workspace_id: int | None = Query(None, description="Scope to workspace"),
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(require_roles("CEO")),
 ) -> list[ProfileMemoryRead]:
     """List all profile memory entries. CEO only."""
     return await memory_service.get_profile_memory(
         db,
-            organization_id=int(user["org_id"]),
+        organization_id=int(user["org_id"]),
+        workspace_id=workspace_id,
     )
 
 
 @router.post("/profile", response_model=ProfileMemoryRead, status_code=201)
 async def set_profile_memory(
     data: ProfileMemoryCreate,
+    workspace_id: int | None = Query(None, description="Scope to workspace"),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_roles("CEO")),
 ) -> ProfileMemoryRead:
@@ -48,6 +51,7 @@ async def set_profile_memory(
         key=data.key,
         value=data.value,
         category=data.category,
+        workspace_id=workspace_id,
     )
     await record_action(
         db=db,
@@ -160,20 +164,23 @@ async def update_team_member(
 @router.get("/context", response_model=list[DailyContextRead])
 async def get_daily_context(
     for_date: date | None = None,
+    workspace_id: int | None = Query(None, description="Scope to workspace"),
     db: AsyncSession = Depends(get_db),
     _user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> list[DailyContextRead]:
     """Get today's context entries (priorities, meetings, blockers, decisions)."""
     return await memory_service.get_daily_context(
         db,
-            organization_id=int(_user["org_id"]),
+        organization_id=int(_user["org_id"]),
         for_date=for_date,
+        workspace_id=workspace_id,
     )
 
 
 @router.post("/context", response_model=DailyContextRead, status_code=201)
 async def add_daily_context(
     data: DailyContextCreate,
+    workspace_id: int | None = Query(None, description="Scope to workspace"),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> DailyContextRead:
@@ -183,6 +190,7 @@ async def add_daily_context(
         db,
         data,
         organization_id=org_id,
+        workspace_id=workspace_id,
     )
     await record_action(
         db=db,

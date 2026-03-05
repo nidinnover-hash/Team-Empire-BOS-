@@ -45,6 +45,12 @@ class Task(Base):
         nullable=False,
         index=True,
     )
+    workspace_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 1=low  2=medium  3=high  4=urgent

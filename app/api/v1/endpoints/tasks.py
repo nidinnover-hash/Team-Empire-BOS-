@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_db
+from app.core.deps import get_current_workspace_id, get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
@@ -15,9 +15,15 @@ async def create_task(
     data: TaskCreate,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> TaskRead:
     """Create a task. Optionally link to a project and set priority/due_date."""
-    task = await task_service.create_task(db, data, organization_id=actor["org_id"])
+    task = await task_service.create_task(
+        db,
+        data,
+        organization_id=actor["org_id"],
+        workspace_id=workspace_id,
+    )
     await record_action(
         db, event_type="task_created", actor_user_id=actor["id"],
         organization_id=actor["org_id"], entity_type="task", entity_id=task.id,
@@ -30,6 +36,7 @@ async def create_task(
 async def list_tasks(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+    workspace_id: int = Depends(get_current_workspace_id),
     project_id: int | None = Query(None, description="Filter by project"),
     category: str | None = Query(None, description="personal|business|health|finance|other", max_length=50),
     is_done: bool | None = Query(None, description="true=done, false=open"),
@@ -40,6 +47,7 @@ async def list_tasks(
     return await task_service.list_tasks(
         db, organization_id=actor["org_id"], project_id=project_id,
         category=category, is_done=is_done, limit=limit, offset=offset,
+        workspace_id=workspace_id,
     )
 
 
@@ -49,9 +57,16 @@ async def update_task(
     data: TaskUpdate,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> TaskRead:
     """Update a task — edit fields, mark done, or reopen."""
-    task = await task_service.update_task(db, task_id, data, organization_id=actor["org_id"])
+    task = await task_service.update_task(
+        db,
+        task_id,
+        data,
+        organization_id=actor["org_id"],
+        workspace_id=workspace_id,
+    )
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     await record_action(
@@ -67,9 +82,15 @@ async def delete_task(
     task_id: int,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> None:
     """Delete a task. CEO/ADMIN only."""
-    deleted = await task_service.delete_task(db, task_id, organization_id=actor["org_id"])
+    deleted = await task_service.delete_task(
+        db,
+        task_id,
+        organization_id=actor["org_id"],
+        workspace_id=workspace_id,
+    )
     if not deleted:
         raise HTTPException(status_code=404, detail="Task not found")
     await record_action(

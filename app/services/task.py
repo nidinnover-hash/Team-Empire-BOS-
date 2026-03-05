@@ -9,9 +9,9 @@ from app.services.notification import create_notification
 
 
 async def create_task(
-    db: AsyncSession, data: TaskCreate, organization_id: int,
+    db: AsyncSession, data: TaskCreate, organization_id: int, workspace_id: int | None = None,
 ) -> Task:
-    task = Task(**data.model_dump(), organization_id=organization_id)
+    task = Task(**data.model_dump(), organization_id=organization_id, workspace_id=workspace_id)
     db.add(task)
     await db.commit()
     await db.refresh(task)
@@ -23,6 +23,7 @@ async def list_tasks(
     limit: int = 50,
     offset: int = 0,
     organization_id: int | None = None,
+    workspace_id: int | None = None,
     project_id: int | None = None,
     category: str | None = None,
     is_done: bool | None = None,
@@ -30,6 +31,8 @@ async def list_tasks(
     query = select(Task)
     if organization_id is not None:
         query = query.where(Task.organization_id == organization_id)
+    if workspace_id is not None:
+        query = query.where(Task.workspace_id == workspace_id)
     if project_id is not None:
         query = query.where(Task.project_id == project_id)
     if category is not None:
@@ -47,10 +50,13 @@ async def update_task(
     task_id: int,
     data: TaskUpdate,
     organization_id: int | None = None,
+    workspace_id: int | None = None,
 ) -> Task | None:
     query = select(Task).where(Task.id == task_id)
     if organization_id is not None:
         query = query.where(Task.organization_id == organization_id)
+    if workspace_id is not None:
+        query = query.where(Task.workspace_id == workspace_id)
     result = await db.execute(query)
     task = result.scalar_one_or_none()
     if task is None:
@@ -96,9 +102,12 @@ async def delete_task(
     db: AsyncSession,
     task_id: int,
     organization_id: int,
+    workspace_id: int | None = None,
 ) -> bool:
     """Delete a task. Returns True if deleted, False if not found."""
     query = select(Task).where(Task.id == task_id, Task.organization_id == organization_id)
+    if workspace_id is not None:
+        query = query.where(Task.workspace_id == workspace_id)
     result = await db.execute(query)
     task = result.scalar_one_or_none()
     if task is None:

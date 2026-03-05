@@ -4,16 +4,18 @@ import re
 from collections.abc import AsyncGenerator
 from typing import TypedDict
 
-from fastapi import Cookie, Depends, Header, HTTPException, Request, status
+from fastapi import Cookie, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_access_token, oauth2_scheme
 from app.db.session import AsyncSessionLocal
+from app.models.org_membership import OrganizationMembership
 from app.models.user import User
 from app.services import api_key as api_key_service
 from app.services import api_quota as api_quota_service
+from app.services import workspace as workspace_service
 
 logger = logging.getLogger(__name__)
 
@@ -192,8 +194,11 @@ async def get_current_api_user(
         except HTTPException:
             raise
         except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as exc:
-            # Fail open: quota accounting errors should not block API traffic.
-            logger.warning("API quota check failed; continuing request: %s", type(exc).__name__)
+            logger.warning("API quota check failed; denying request: %s", type(exc).__name__)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="API quota service temporarily unavailable. Please retry shortly.",
+            ) from exc
         return {
             "id": int(db_user.id),
             "email": str(db_user.email),
@@ -227,8 +232,23 @@ async def get_current_api_user(
     db_user = result.scalar_one_or_none()
     org_mismatch = False
     token_version_mismatch = False
+    effective_role = _claim_as_str(payload.get("role")) or str(getattr(db_user, "role", "STAFF"))
     if db_user is not None:
-        org_mismatch = int(db_user.organization_id) != org_id
+        if int(db_user.organization_id) == org_id:
+            org_mismatch = False
+            effective_role = str(getattr(db_user, "role", effective_role))
+        else:
+            membership_result = await db.execute(
+                select(OrganizationMembership).where(
+                    OrganizationMembership.organization_id == org_id,
+                    OrganizationMembership.user_id == int(db_user.id),
+                    OrganizationMembership.is_active.is_(True),
+                )
+            )
+            membership = membership_result.scalar_one_or_none()
+            org_mismatch = membership is None
+            if membership is not None:
+                effective_role = str(membership.role)
         token_version_mismatch = int(getattr(db_user, "token_version", 1)) != token_version
     if (
         db_user is None
@@ -258,8 +278,8 @@ async def get_current_api_user(
     return {
         "id": int(db_user.id),
         "email": str(db_user.email),
-        "role": str(db_user.role),
-        "org_id": int(db_user.organization_id),
+        "role": effective_role,
+        "org_id": int(org_id),
         "token_version": int(getattr(db_user, "token_version", 1)),
         "purpose": _claim_as_str(payload.get("purpose")) or "professional",
         "default_theme": _claim_as_str(payload.get("default_theme")),
@@ -294,10 +314,28 @@ async def get_current_web_user(
     token_version = _claim_as_int(payload.get("token_version", 1)) or 1
     result = await db.execute(select(User).where(User.id == user_id))
     db_user = result.scalar_one_or_none()
+    effective_role = _claim_as_str(payload.get("role")) or "STAFF"
+    org_allowed = False
+    if db_user is not None and int(db_user.organization_id) == org_id:
+        org_allowed = True
+        effective_role = str(getattr(db_user, "role", effective_role))
+    elif db_user is not None:
+        membership_result = await db.execute(
+            select(OrganizationMembership).where(
+                OrganizationMembership.organization_id == org_id,
+                OrganizationMembership.user_id == int(db_user.id),
+                OrganizationMembership.is_active.is_(True),
+            )
+        )
+        membership = membership_result.scalar_one_or_none()
+        org_allowed = membership is not None
+        if membership is not None:
+            effective_role = str(membership.role)
+
     if (
         db_user is None
         or not bool(db_user.is_active)
-        or int(db_user.organization_id) != org_id
+        or not org_allowed
         or int(getattr(db_user, "token_version", 1)) != token_version
     ):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
@@ -309,8 +347,8 @@ async def get_current_web_user(
     return {
         "id": int(db_user.id),
         "email": str(db_user.email),
-        "role": str(db_user.role),
-        "org_id": int(db_user.organization_id),
+        "role": effective_role,
+        "org_id": int(org_id),
         "token_version": int(getattr(db_user, "token_version", 1)),
         "purpose": _claim_as_str(payload.get("purpose")) or "professional",
         "default_theme": _claim_as_str(payload.get("default_theme")),
@@ -329,3 +367,44 @@ def verify_csrf(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing CSRF token")
     if not hmac.compare_digest(csrf_cookie, csrf_header):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
+
+
+async def get_current_workspace_id(
+    request: Request,
+    workspace_id_query: int | None = Query(default=None, alias="workspace_id"),
+    workspace_id_header: int | None = Header(default=None, alias="X-Workspace-Id"),
+    actor: ActorDict = Depends(get_current_api_user),
+    db: AsyncSession = Depends(get_db),
+) -> int:
+    """
+    Resolve active workspace context for the request.
+
+    Sources:
+    - `X-Workspace-Id` header
+    - `workspace_id` query parameter
+    - org default workspace (created lazily if missing)
+    """
+    if workspace_id_header is not None and workspace_id_query is not None and workspace_id_header != workspace_id_query:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Workspace mismatch between header and query parameter",
+        )
+
+    workspace_id = workspace_id_header if workspace_id_header is not None else workspace_id_query
+    if workspace_id is None:
+        default_ws = await workspace_service.ensure_default_workspace(db, int(actor["org_id"]))
+        workspace_id = int(default_ws.id)
+
+    allowed = await workspace_service.user_can_access_workspace(
+        db,
+        workspace_id=int(workspace_id),
+        org_id=int(actor["org_id"]),
+        user_id=int(actor["id"]),
+        actor_role=str(actor["role"]),
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Workspace access denied",
+        )
+    return int(workspace_id)

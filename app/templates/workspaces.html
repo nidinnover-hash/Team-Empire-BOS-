@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f5f7" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Workspaces — Nidin BOS</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
+  <link rel="stylesheet" href="/static/css/workspaces.css" />
+  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+</head>
+<body>
+{% set active_page = "workspaces" %}
+{% include "partials/sidebar.html" %}
+
+<div class="main-wrap">
+  <div class="page-header">
+    <div>
+      <h1>Workspaces</h1>
+      <p class="page-subtitle">Isolated AI brains with their own memory, tasks, and context.</p>
+    </div>
+    {% if session_user and session_user.get('role') in ['CEO', 'ADMIN'] %}
+    <button class="btn-primary" id="ws-page-create-btn" type="button">
+      <i data-lucide="plus" style="width:14px;height:14px;margin-right:4px"></i> New Workspace
+    </button>
+    {% endif %}
+  </div>
+
+  <div class="ws-grid" id="ws-grid">
+    <div class="ws-loading">Loading workspaces...</div>
+  </div>
+</div>
+
+<!-- Create / Edit modal -->
+<div id="ws-page-modal-overlay" class="ws-page-overlay" style="display:none">
+  <div class="ws-page-modal">
+    <div class="ws-page-modal-head">
+      <span id="ws-page-modal-title">New Workspace</span>
+      <button class="ws-page-modal-close" id="ws-page-modal-close" type="button" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="ws-page-modal-body">
+      <input type="hidden" id="ws-edit-id" value="" />
+      <div class="ws-field">
+        <label class="ws-label" for="ws-field-name">Name</label>
+        <input class="ws-input" id="ws-field-name" type="text" placeholder="e.g. Sales Brain" maxlength="120" />
+      </div>
+      <div class="ws-field">
+        <label class="ws-label" for="ws-field-type">Type</label>
+        <select class="ws-select" id="ws-field-type">
+          <option value="general">General</option>
+          <option value="department">Department</option>
+          <option value="project">Project</option>
+          <option value="client">Client</option>
+        </select>
+      </div>
+      <div class="ws-field">
+        <label class="ws-label" for="ws-field-desc">Description</label>
+        <input class="ws-input" id="ws-field-desc" type="text" placeholder="What is this workspace for?" maxlength="500" />
+      </div>
+    </div>
+    <div class="ws-page-modal-foot">
+      <button class="btn-secondary" id="ws-page-modal-cancel" type="button">Cancel</button>
+      <button class="btn-primary" id="ws-page-modal-save" type="button">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Members drawer -->
+<div id="ws-members-overlay" class="ws-page-overlay" style="display:none">
+  <div class="ws-members-drawer">
+    <div class="ws-page-modal-head">
+      <span id="ws-members-title">Members</span>
+      <button class="ws-page-modal-close" id="ws-members-close" type="button" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div class="ws-members-body">
+      <div class="ws-members-add" id="ws-members-add-row">
+        <input class="ws-input" id="ws-member-user-id" type="number" placeholder="User ID" style="width:100px" />
+        <select class="ws-select" id="ws-member-role-override" style="width:120px">
+          <option value="">No override</option>
+          <option value="ADMIN">Admin</option>
+          <option value="MANAGER">Manager</option>
+        </select>
+        <button class="btn-primary" id="ws-member-add-btn" type="button">Add</button>
+      </div>
+      <div class="ws-members-list" id="ws-members-list">
+        <div class="ws-loading">Loading members...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script nonce="{{ csp_nonce }}" src="/static/js/api-client.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/workspaces-page.js"></script>
+</body>
+</html>

@@ -20,7 +20,7 @@ class ProfileMemory(Base):
     """Key-value store for Nidin's identity, business rules, goals, and preferences."""
     __tablename__ = "profile_memory"
     __table_args__ = (
-        UniqueConstraint("organization_id", "key", name="uq_profile_memory_org_key"),
+        UniqueConstraint("organization_id", "key", "workspace_id", name="uq_profile_memory_org_key_ws"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -28,6 +28,12 @@ class ProfileMemory(Base):
         Integer,
         ForeignKey("organizations.id", ondelete="RESTRICT"),
         nullable=False,
+        index=True,
+    )
+    workspace_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     key: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -93,6 +99,12 @@ class DailyContext(Base):
         ForeignKey("organizations.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    workspace_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     date: Mapped[dt.date] = mapped_column(Date, nullable=False)
     context_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -107,7 +119,7 @@ class AvatarMemory(Base):
     """Strict avatar-scoped memory store to prevent personal/professional cross-leakage."""
     __tablename__ = "avatar_memory"
     __table_args__ = (
-        UniqueConstraint("organization_id", "avatar_mode", "key", name="uq_avatar_memory_org_mode_key"),
+        UniqueConstraint("organization_id", "avatar_mode", "key", "workspace_id", name="uq_avatar_memory_org_mode_key_ws"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -115,6 +127,12 @@ class AvatarMemory(Base):
         Integer,
         ForeignKey("organizations.id", ondelete="RESTRICT"),
         nullable=False,
+        index=True,
+    )
+    workspace_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     avatar_mode: Mapped[str] = mapped_column(String(20), nullable=False, index=True)

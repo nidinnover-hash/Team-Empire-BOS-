@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_db
+from app.core.deps import get_current_workspace_id, get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectStatusUpdate, ProjectUpdate
@@ -15,6 +15,7 @@ async def create_project(
     data: ProjectCreate,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> ProjectRead:
     """Create a project — business or personal."""
     project = await project_service.create_project(db, data, organization_id=actor["org_id"])
@@ -36,6 +37,7 @@ async def list_projects(
     offset: int = Query(0, ge=0, le=10_000),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> list[ProjectRead]:
     """List all projects, newest first. Use limit/offset for pagination."""
     return await project_service.list_projects(db, limit=limit, offset=offset, organization_id=actor["org_id"])
@@ -47,6 +49,7 @@ async def update_status(
     data: ProjectStatusUpdate,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> ProjectRead:
     """Update a project's status (active|completed|paused|archived)."""
     project = await project_service.update_project_status(db, project_id, data, organization_id=actor["org_id"])
@@ -60,6 +63,7 @@ async def get_project(
     project_id: int,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> ProjectRead:
     project = await project_service.get_project(db, project_id, organization_id=actor["org_id"])
     if project is None:
@@ -73,6 +77,7 @@ async def update_project(
     data: ProjectUpdate,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> ProjectRead:
     project = await project_service.update_project(db, project_id, data, organization_id=actor["org_id"])
     if project is None:
@@ -89,6 +94,7 @@ async def delete_project(
     project_id: int,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> None:
     deleted = await project_service.delete_project(db, project_id, organization_id=actor["org_id"])
     if not deleted:
