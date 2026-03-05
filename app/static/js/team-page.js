@@ -10,6 +10,7 @@
     .then(function (d) { return d.token; });
 
   var members = [];
+  var employees = [];
   var ROLES = ["CEO", "ADMIN", "MANAGER", "STAFF", "OWNER", "TECH_LEAD", "OPS_MANAGER", "DEVELOPER", "VIEWER"];
 
   function $(id) { return document.getElementById(id); }
@@ -27,13 +28,20 @@
     try {
       var token = await window.__bootPromise;
       if (!token) throw new Error("Session expired");
-      members = await reqJson("/api/v1/users?limit=200", { auth: true, token: token });
-      if (!Array.isArray(members)) members = [];
+      var usersP = reqJson("/api/v1/users?limit=200", { auth: true, token: token });
+      var empsP = reqJson("/api/v1/ops/employees?limit=200", { auth: true, token: token }).catch(function () { return []; });
+      var results = await Promise.all([usersP, empsP]);
+      members = Array.isArray(results[0]) ? results[0] : [];
+      employees = Array.isArray(results[1]) ? results[1] : [];
       updateKPIs();
       renderList();
     } catch (e) {
       container.innerHTML = '<div class="empty">' + escHtml(mapErr(e)) + "</div>";
     }
+  }
+
+  function findEmployee(userEmail) {
+    return employees.find(function (emp) { return emp.email === userEmail; }) || null;
   }
 
   function updateKPIs() {
@@ -42,24 +50,41 @@
     $("k-inactive").textContent = members.filter(function (m) { return !m.is_active; }).length;
   }
 
+  function getFilteredMembers() {
+    var query = ($("filter-query") ? $("filter-query").value : "").toLowerCase().trim();
+    var roleFilter = $("filter-role") ? $("filter-role").value : "";
+    var statusFilter = $("filter-status") ? $("filter-status").value : "";
+    return members.filter(function (m) {
+      if (query && m.name.toLowerCase().indexOf(query) === -1 && m.email.toLowerCase().indexOf(query) === -1) return false;
+      if (roleFilter && m.role !== roleFilter) return false;
+      if (statusFilter === "active" && !m.is_active) return false;
+      if (statusFilter === "inactive" && m.is_active) return false;
+      return true;
+    });
+  }
+
   function renderList() {
     var container = $("member-list");
-    if (!members.length) {
-      container.innerHTML = '<div class="empty">No team members found.</div>';
+    var filtered = getFilteredMembers();
+    if (!filtered.length) {
+      container.innerHTML = '<div class="empty">' + (members.length ? "No members match your filters." : "No team members found.") + '</div>';
       return;
     }
-    container.innerHTML = members.map(function (m) {
+    container.innerHTML = filtered.map(function (m) {
       var roleCls = (m.role === "CEO" || m.role === "ADMIN" || m.role === "MANAGER") ? " " + m.role : "";
       var statusCls = m.is_active ? "active" : "inactive";
       var roleOpts = ROLES.map(function (r) {
         return '<option value="' + r + '"' + (r === m.role ? ' selected' : '') + '>' + r + '</option>';
       }).join("");
 
+      var emp = findEmployee(m.email);
+      var jobTitle = emp && emp.job_title ? emp.job_title : "";
       return '<div class="member-card" data-id="' + m.id + '">' +
         '<div class="member-avatar">' + escHtml(getInitials(m.name)) + '</div>' +
         '<div class="member-info">' +
           '<div class="member-name">' + escHtml(m.name) + '</div>' +
           '<div class="member-email">' + escHtml(m.email) + '</div>' +
+          (jobTitle ? '<div class="member-title">' + escHtml(jobTitle) + '</div>' : '') +
         '</div>' +
         '<span class="role-badge' + roleCls + '">' + escHtml(m.role) + '</span>' +
         '<div class="status-dot ' + statusCls + '" title="' + statusCls + '"></div>' +
@@ -121,12 +146,29 @@
 
   async function createMember(data) {
     var token = await window.__bootPromise;
-    await reqJson("/api/v1/users", {
+    await reqJson("/api/v1/users/team-member", {
       method: "POST", auth: true, token: token,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
     await loadMembers();
+  }
+
+  async function loadDepartments() {
+    try {
+      var token = await window.__bootPromise;
+      var depts = await reqJson("/api/v1/departments?limit=200", { auth: true, token: token });
+      var sel = $("inv-department");
+      if (!sel || !Array.isArray(depts)) return;
+      depts.forEach(function (d) {
+        var opt = document.createElement("option");
+        opt.value = d.id;
+        opt.textContent = d.name;
+        sel.appendChild(opt);
+      });
+    } catch (_) {
+      // departments endpoint may not exist yet — silently skip
+    }
   }
 
   // ── Modal Logic ───────────────────────────────────────────────────
@@ -151,17 +193,22 @@
     var session = await sessionRes.json();
     var orgId = session.user && session.user.org_id ? session.user.org_id : 1;
 
+    var deptVal = $("inv-department") ? $("inv-department").value : "";
     var data = {
       organization_id: orgId,
       name: $("inv-name").value.trim(),
       email: $("inv-email").value.trim(),
       password: $("inv-password").value,
       role: $("inv-role").value,
+      job_title: $("inv-job-title") ? $("inv-job-title").value.trim() || null : null,
+      department_id: deptVal ? Number(deptVal) : null,
+      github_username: $("inv-github") ? $("inv-github").value.trim() || null : null,
+      clickup_user_id: $("inv-clickup") ? $("inv-clickup").value.trim() || null : null,
     };
     window.PCUI.setButtonLoading(btn, true);
     try {
       await createMember(data);
-      if (window.showToast) window.showToast("Member invited.", "ok");
+      if (window.showToast) window.showToast("Team member added.", "ok");
       closeModal("invite-modal");
     } catch (err) {
       if (window.showToast) window.showToast(mapErr(err), "error");
@@ -201,8 +248,14 @@
     }
   }
 
+  // ── Filters ─────────────────────────────────────────────────────
+  if ($("filter-query")) $("filter-query").addEventListener("input", renderList);
+  if ($("filter-role")) $("filter-role").addEventListener("change", renderList);
+  if ($("filter-status")) $("filter-status").addEventListener("change", renderList);
+
   // ── Init ──────────────────────────────────────────────────────────
   loadMembers();
+  loadDepartments();
   loadMiniMap();
   if (typeof lucide !== "undefined") lucide.createIcons();
 })();

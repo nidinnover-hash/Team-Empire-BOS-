@@ -23,13 +23,36 @@
   <div class="main-wrap">
     <div class="page-header">
       <h1>Team Management</h1>
-      <button class="btn-primary" id="invite-btn" type="button">+ Invite Member</button>
+      <button class="btn-primary" id="invite-btn" type="button">+ Add Team Member</button>
     </div>
 
     <div class="kpi-row">
       <div class="kpi"><div class="label">Total Members</div><div class="val" id="k-total">0</div></div>
       <div class="kpi"><div class="label">Active</div><div class="val" id="k-active">0</div></div>
       <div class="kpi"><div class="label">Inactive</div><div class="val" id="k-inactive">0</div></div>
+    </div>
+
+    <div class="filter-bar">
+      <div class="filter-search">
+        <i data-lucide="search" class="filter-search-icon"></i>
+        <input id="filter-query" type="text" placeholder="Search by name or email..." aria-label="Search members" />
+      </div>
+      <select id="filter-role" class="filter-select" aria-label="Filter by role">
+        <option value="">All Roles</option>
+        <option value="CEO">CEO</option>
+        <option value="ADMIN">Admin</option>
+        <option value="MANAGER">Manager</option>
+        <option value="STAFF">Staff</option>
+        <option value="DEVELOPER">Developer</option>
+        <option value="TECH_LEAD">Tech Lead</option>
+        <option value="OPS_MANAGER">Ops Manager</option>
+        <option value="VIEWER">Viewer</option>
+      </select>
+      <select id="filter-status" class="filter-select" aria-label="Filter by status">
+        <option value="">All Status</option>
+        <option value="active">Active</option>
+        <option value="inactive">Inactive</option>
+      </select>
     </div>
 
     <!-- Mini-map: employee locations -->
@@ -45,7 +68,7 @@
   <div class="modal-overlay" id="invite-modal" style="display:none">
     <div class="modal-card">
       <div class="modal-header">
-        <h2>Invite Team Member</h2>
+        <h2>Add Team Member</h2>
         <button class="modal-close" id="invite-modal-close" type="button" aria-label="Close">&times;</button>
       </div>
       <form id="invite-form">
@@ -55,7 +78,7 @@
         <input id="inv-email" name="email" type="email" placeholder="email@example.com" required />
         <label for="inv-password">Temporary Password</label>
         <input id="inv-password" name="password" type="password" placeholder="Min 8 chars, upper+lower+digit+special" required minlength="8" maxlength="128" />
-        <label for="inv-role">Role</label>
+        <label for="inv-role">System Role</label>
         <select id="inv-role" name="role">
           <option value="STAFF">Staff</option>
           <option value="MANAGER">Manager</option>
@@ -65,9 +88,20 @@
           <option value="OPS_MANAGER">Ops Manager</option>
           <option value="VIEWER">Viewer</option>
         </select>
+        <hr class="form-divider" />
+        <label for="inv-job-title">Job Title <span class="form-hint">(optional)</span></label>
+        <input id="inv-job-title" name="job_title" type="text" placeholder="e.g. Senior Developer" maxlength="100" />
+        <label for="inv-department">Department <span class="form-hint">(optional)</span></label>
+        <select id="inv-department" name="department_id">
+          <option value="">— None —</option>
+        </select>
+        <label for="inv-github">GitHub Username <span class="form-hint">(optional)</span></label>
+        <input id="inv-github" name="github_username" type="text" placeholder="e.g. octocat" maxlength="100" />
+        <label for="inv-clickup">ClickUp User ID <span class="form-hint">(optional)</span></label>
+        <input id="inv-clickup" name="clickup_user_id" type="text" placeholder="e.g. 12345678" maxlength="100" />
         <div class="form-actions">
           <button type="button" class="btn-secondary" id="invite-cancel">Cancel</button>
-          <button type="submit" class="btn-primary" id="invite-submit">Create</button>
+          <button type="submit" class="btn-primary" id="invite-submit">Add Member</button>
         </div>
       </form>
     </div>

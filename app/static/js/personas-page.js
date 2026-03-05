@@ -33,7 +33,7 @@
             return "<tr><td>"
               + esc(row.employee_name || "--")
               + "</td><td>"
-              + esc(row.role || "--")
+              + esc(row.job_title || "--")
               + "</td><td>"
               + esc(row.readiness || "--")
               + "</td><td>"

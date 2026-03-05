@@ -137,7 +137,7 @@ window.__bootPromise = fetch('/web/api-token')
       tbody.innerHTML = data.map(e => `<tr>
         <td>${esc(e.name)}</td>
         <td style="color:#666">${esc(e.email)}</td>
-        <td>${esc(e.role || '-')}</td>
+        <td>${esc(e.job_title || '-')}</td>
         <td style="color:#999">${esc(e.github_username || '-')}</td>
         <td style="color:#999">${esc(e.clickup_user_id || '-')}</td>
         <td>${e.is_active ? '<span class="tag ok">Active</span>' : '<span class="tag err">Inactive</span>'}</td>
@@ -295,7 +295,7 @@ window.__bootPromise = fetch('/web/api-token')
       const role = document.getElementById('emp-role').value;
       const gh = document.getElementById('emp-github').value;
       const cu = document.getElementById('emp-clickup').value;
-      if (role) body.role = role;
+      if (role) body.job_title = role;
       if (gh) body.github_username = gh;
       if (cu) body.clickup_user_id = cu;
       try {

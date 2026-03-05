@@ -23,6 +23,26 @@
   <header class="topnav">
     <div class="topnav-left">
       <span class="topnav-brand">Nidin BOS</span>
+      <div class="ws-switcher" id="ws-switcher">
+        <button class="ws-switcher-btn" id="ws-switcher-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Switch workspace">
+          <i data-lucide="brain" class="ws-switcher-icon"></i>
+          <span class="ws-switcher-name" id="ws-current-name">Default</span>
+          <i data-lucide="chevron-down" class="ws-switcher-chevron"></i>
+        </button>
+        <div class="ws-dropdown" id="ws-dropdown" style="display:none" role="listbox" aria-label="Workspaces">
+          <div class="ws-dropdown-header">Workspaces</div>
+          <div class="ws-dropdown-list" id="ws-dropdown-list">
+            <div class="ws-dropdown-empty">Loading...</div>
+          </div>
+          {% if session_user and session_user.get('role') in ['CEO', 'ADMIN'] %}
+          <div class="ws-dropdown-footer">
+            <button class="ws-create-btn" id="ws-create-btn" type="button">
+              <i data-lucide="plus"></i> New Workspace
+            </button>
+          </div>
+          {% endif %}
+        </div>
+      </div>
     </div>
     <div class="topnav-tabs">
       <div role="tablist" aria-label="Dashboard views">
@@ -344,6 +364,7 @@
 <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/notifications.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/workspace-switcher.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/dashboard-page.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
 </body>

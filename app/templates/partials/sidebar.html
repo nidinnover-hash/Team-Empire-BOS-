@@ -1,17 +1,31 @@
 <nav class="sidebar" aria-label="Main navigation">
+  {% set role = (session_user.get('role', '') if session_user is defined and session_user else '') %}
   <div class="sb-brand">
     <div class="sb-brand-icon">N</div>
   </div>
   <div class="sb-nav">
     <a href="/" class="sb-item{{ ' active' if active_page == 'dashboard' }}" data-tooltip="Dashboard" aria-label="Dashboard"><i data-lucide="layout-dashboard"></i></a>
+    {% if role in ['CEO', 'ADMIN', 'MANAGER', 'STAFF'] %}
     <a href="/web/talk" class="sb-item{{ ' active' if active_page == 'talk' }}" data-tooltip="Agent Chat" aria-label="Agent Chat"><i data-lucide="message-circle"></i></a>
     <a href="/web/strategy" class="sb-item{{ ' active' if active_page == 'strategy' }}" data-tooltip="Strategy" aria-label="Strategy Workspace"><i data-lucide="lightbulb"></i></a>
+    {% endif %}
+    {% if role in ['CEO', 'ADMIN', 'MANAGER', 'STAFF'] %}
     <a href="/web/tasks" class="sb-item{{ ' active' if active_page == 'tasks' }}" data-tooltip="Tasks" aria-label="Tasks"><i data-lucide="check-square"></i></a>
     <a href="/web/projects" class="sb-item{{ ' active' if active_page == 'projects' }}" data-tooltip="Projects" aria-label="Projects"><i data-lucide="folder-kanban"></i></a>
     <a href="/web/contacts" class="sb-item{{ ' active' if active_page == 'contacts' }}" data-tooltip="Contacts" aria-label="Contacts"><i data-lucide="contact"></i></a>
+    {% endif %}
+    {% if role in ['CEO', 'ADMIN', 'MANAGER'] %}
     <a href="/web/finance" class="sb-item{{ ' active' if active_page == 'finance' }}" data-tooltip="Finance" aria-label="Finance"><i data-lucide="wallet"></i></a>
+    {% endif %}
+    {% if role in ['CEO', 'ADMIN', 'MANAGER'] %}
+    <a href="/web/workspaces" class="sb-item{{ ' active' if active_page == 'workspaces' }}" data-tooltip="Workspaces" aria-label="Workspaces"><i data-lucide="brain"></i></a>
+    {% endif %}
+    {% if role in ['CEO', 'ADMIN'] %}
     <a href="/web/integrations" class="sb-item{{ ' active' if active_page == 'integrations' }}" data-tooltip="Integrations" aria-label="Integrations"><i data-lucide="plug"></i></a>
+    {% endif %}
+    {% if role in ['CEO', 'ADMIN', 'MANAGER', 'EMPLOYEE'] %}
     <a href="/web/notifications" class="sb-item{{ ' active' if active_page == 'notifications' }}" data-tooltip="Notifications" aria-label="Notifications"><i data-lucide="bell"></i></a>
+    {% endif %}
   </div>
   <div class="sb-footer">
     <a href="/docs" class="sb-item" target="_blank" rel="noopener noreferrer" data-tooltip="API Docs" aria-label="API Docs">
