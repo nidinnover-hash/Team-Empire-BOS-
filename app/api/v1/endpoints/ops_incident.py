@@ -16,10 +16,12 @@ router = APIRouter(tags=["Ops"])
 @router.get("/ops/incident/command-mode", response_model=IncidentCommandRead)
 async def incident_command_mode(
     db: AsyncSession = Depends(get_db),
-    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "OPS_MANAGER", "TECH_LEAD", "DEVELOPER")),
 ) -> IncidentCommandRead:
     org_id = int(user["org_id"])
-    payload_raw = await trend_telemetry.compute_incident_snapshot(db, org_id)
+    payload_raw = await trend_telemetry.compute_incident_snapshot(
+        db, org_id, actor_role=user.get("role"),
+    )
     payload = IncidentCommandRead.model_validate(payload_raw)
     await trend_telemetry.record_trend_event(
         db,

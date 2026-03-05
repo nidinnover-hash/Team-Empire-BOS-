@@ -30,11 +30,11 @@ WEEK = date(2026, 2, 23)  # Monday
 # helpers
 # ---------------------------------------------------------------------------
 
-async def _add_employee(db: AsyncSession, org_id: int, name: str, role: str = "Engineer") -> Employee:
+async def _add_employee(db: AsyncSession, org_id: int, name: str, job_title: str = "Engineer") -> Employee:
     emp = Employee(
         organization_id=org_id,
         name=name,
-        role=role,
+        job_title=job_title,
         email=f"{name.lower().replace(' ', '.')}@test.com",
         is_active=True,
     )
@@ -208,7 +208,7 @@ async def test_generate_overwrites_existing(db: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_report_content_format(db: AsyncSession):
-    await _add_employee(db, org_id=1, name="Bob Format", role="Senior Dev")
+    await _add_employee(db, org_id=1, name="Bob Format", job_title="Senior Dev")
     await db.flush()
 
     report = await generate_weekly_report(db, org_id=1, week_start=WEEK, report_type="team_health")
@@ -258,7 +258,7 @@ async def test_generate_with_no_employees(db: AsyncSession):
 @pytest.mark.asyncio
 async def test_generate_with_metric_data(db: AsyncSession):
     """Add Employee + metric rows and verify the report references them."""
-    emp = await _add_employee(db, org_id=1, name="Charlie Metrics", role="Backend Dev")
+    emp = await _add_employee(db, org_id=1, name="Charlie Metrics", job_title="Backend Dev")
 
     await _add_task_metric(db, 1, emp.id, WEEK, assigned=10, completed=8, on_time=0.9, reopens=1)
     await _add_code_metric(db, 1, emp.id, WEEK, prs_opened=5, prs_merged=4, reviews=7, issues=3, files=20)

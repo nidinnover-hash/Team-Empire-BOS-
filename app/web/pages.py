@@ -31,6 +31,7 @@ templates = Jinja2Templates(directory="app/templates")
 # ── Dashboard Cache ──────────────────────────────────────────────────────
 _dashboard_cache: dict[int, tuple[float, dict]] = {}
 _DASHBOARD_CACHE_MAX_ORGS = 200
+_ALL_WEB_ROLES = {"CEO", "ADMIN", "MANAGER", "STAFF", "EMPLOYEE"}
 
 
 def _get_cached_dashboard(org_id: int) -> dict | None:
@@ -75,12 +76,15 @@ async def _get_web_user_or_none(request: Request, db: AsyncSession) -> dict | No
         return None
 
 
-def _web_page(template_name: str):
+def _web_page(template_name: str, allowed_roles: set[str] | None = None):
     """Factory for simple authenticated web page endpoints."""
     async def handler(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
         user = await _get_web_user_or_none(request, db)
         if user is None:
             return RedirectResponse(url="/web/login", status_code=302)
+        role = str(user.get("role") or "").upper()
+        if allowed_roles is not None and role not in allowed_roles:
+            raise HTTPException(status_code=403, detail="You do not have access to this page")
         nonce = getattr(request.state, "csp_nonce", "")
         return templates.TemplateResponse(
             request, template_name, {"request": request, "session_user": user, "csp_nonce": nonce},
@@ -91,31 +95,32 @@ def _web_page(template_name: str):
 router = APIRouter(tags=["Web Pages"])
 
 # Static authenticated pages
-router.get("/web/integrations", response_class=HTMLResponse, include_in_schema=False)(_web_page("integrations.html"))
-router.get("/web/talk", response_class=HTMLResponse, include_in_schema=False)(_web_page("talk.html"))
-router.get("/web/data-hub", response_class=HTMLResponse, include_in_schema=False)(_web_page("data_hub.html"))
-router.get("/web/observe", response_class=HTMLResponse, include_in_schema=False)(_web_page("observe.html"))
-router.get("/web/ops-intel", response_class=HTMLResponse, include_in_schema=False)(_web_page("ops_intel.html"))
-router.get("/web/tasks", response_class=HTMLResponse, include_in_schema=False)(_web_page("tasks.html"))
-router.get("/web/webhooks", response_class=HTMLResponse, include_in_schema=False)(_web_page("webhooks.html"))
-router.get("/web/notifications", response_class=HTMLResponse, include_in_schema=False)(_web_page("notifications.html"))
-router.get("/web/security", response_class=HTMLResponse, include_in_schema=False)(_web_page("security.html"))
-router.get("/web/api-keys", response_class=HTMLResponse, include_in_schema=False)(_web_page("api_keys.html"))
-router.get("/web/audit", response_class=HTMLResponse, include_in_schema=False)(_web_page("activity.html"))
-router.get("/web/team", response_class=HTMLResponse, include_in_schema=False)(_web_page("team.html"))
-router.get("/web/health", response_class=HTMLResponse, include_in_schema=False)(_web_page("health.html"))
-router.get("/web/automations", response_class=HTMLResponse, include_in_schema=False)(_web_page("automations.html"))
-router.get("/web/performance", response_class=HTMLResponse, include_in_schema=False)(_web_page("performance.html"))
-router.get("/web/governance", response_class=HTMLResponse, include_in_schema=False)(_web_page("governance.html"))
-router.get("/web/media", response_class=HTMLResponse, include_in_schema=False)(_web_page("media.html"))
-router.get("/web/personas", response_class=HTMLResponse, include_in_schema=False)(_web_page("personas.html"))
-router.get("/web/coaching", response_class=HTMLResponse, include_in_schema=False)(_web_page("coaching.html"))
-router.get("/web/projects", response_class=HTMLResponse, include_in_schema=False)(_web_page("projects.html"))
-router.get("/web/goals", response_class=HTMLResponse, include_in_schema=False)(_web_page("goals.html"))
-router.get("/web/contacts", response_class=HTMLResponse, include_in_schema=False)(_web_page("contacts.html"))
-router.get("/web/finance", response_class=HTMLResponse, include_in_schema=False)(_web_page("finance.html"))
-router.get("/web/maps", response_class=HTMLResponse, include_in_schema=False)(_web_page("maps.html"))
-router.get("/web/strategy", response_class=HTMLResponse, include_in_schema=False)(_web_page("strategy.html"))
+router.get("/web/integrations", response_class=HTMLResponse, include_in_schema=False)(_web_page("integrations.html", {"CEO", "ADMIN"}))
+router.get("/web/talk", response_class=HTMLResponse, include_in_schema=False)(_web_page("talk.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
+router.get("/web/data-hub", response_class=HTMLResponse, include_in_schema=False)(_web_page("data_hub.html", _ALL_WEB_ROLES))
+router.get("/web/observe", response_class=HTMLResponse, include_in_schema=False)(_web_page("observe.html", {"CEO", "ADMIN", "MANAGER"}))
+router.get("/web/ops-intel", response_class=HTMLResponse, include_in_schema=False)(_web_page("ops_intel.html", {"CEO", "ADMIN", "MANAGER"}))
+router.get("/web/tasks", response_class=HTMLResponse, include_in_schema=False)(_web_page("tasks.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
+router.get("/web/webhooks", response_class=HTMLResponse, include_in_schema=False)(_web_page("webhooks.html", {"CEO", "ADMIN"}))
+router.get("/web/notifications", response_class=HTMLResponse, include_in_schema=False)(_web_page("notifications.html", {"CEO", "ADMIN", "MANAGER", "EMPLOYEE"}))
+router.get("/web/security", response_class=HTMLResponse, include_in_schema=False)(_web_page("security.html", {"CEO", "ADMIN"}))
+router.get("/web/api-keys", response_class=HTMLResponse, include_in_schema=False)(_web_page("api_keys.html", {"CEO", "ADMIN"}))
+router.get("/web/audit", response_class=HTMLResponse, include_in_schema=False)(_web_page("activity.html", {"CEO", "ADMIN", "MANAGER"}))
+router.get("/web/team", response_class=HTMLResponse, include_in_schema=False)(_web_page("team.html", {"CEO", "ADMIN"}))
+router.get("/web/health", response_class=HTMLResponse, include_in_schema=False)(_web_page("health.html", {"CEO", "ADMIN", "MANAGER"}))
+router.get("/web/automations", response_class=HTMLResponse, include_in_schema=False)(_web_page("automations.html", {"CEO", "ADMIN", "MANAGER"}))
+router.get("/web/performance", response_class=HTMLResponse, include_in_schema=False)(_web_page("performance.html", {"CEO", "ADMIN", "MANAGER"}))
+router.get("/web/governance", response_class=HTMLResponse, include_in_schema=False)(_web_page("governance.html", {"CEO", "ADMIN", "MANAGER"}))
+router.get("/web/media", response_class=HTMLResponse, include_in_schema=False)(_web_page("media.html", {"CEO", "ADMIN", "MANAGER"}))
+router.get("/web/personas", response_class=HTMLResponse, include_in_schema=False)(_web_page("personas.html", {"CEO", "ADMIN", "MANAGER"}))
+router.get("/web/coaching", response_class=HTMLResponse, include_in_schema=False)(_web_page("coaching.html", {"CEO", "ADMIN", "MANAGER"}))
+router.get("/web/projects", response_class=HTMLResponse, include_in_schema=False)(_web_page("projects.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
+router.get("/web/goals", response_class=HTMLResponse, include_in_schema=False)(_web_page("goals.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
+router.get("/web/contacts", response_class=HTMLResponse, include_in_schema=False)(_web_page("contacts.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
+router.get("/web/finance", response_class=HTMLResponse, include_in_schema=False)(_web_page("finance.html", {"CEO", "ADMIN", "MANAGER"}))
+router.get("/web/maps", response_class=HTMLResponse, include_in_schema=False)(_web_page("maps.html", _ALL_WEB_ROLES))
+router.get("/web/strategy", response_class=HTMLResponse, include_in_schema=False)(_web_page("strategy.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
+router.get("/web/workspaces", response_class=HTMLResponse, include_in_schema=False)(_web_page("workspaces.html", {"CEO", "ADMIN", "MANAGER"}))
 
 
 @router.get("/web/login", response_class=HTMLResponse, include_in_schema=False)

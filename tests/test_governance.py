@@ -72,7 +72,7 @@ async def test_evaluate_compliance(db: AsyncSession):
     # Create employee with low hours
     emp = Employee(
         organization_id=1, name="Lazy Worker", email="lazy@test.com",
-        role="Staff", employment_status="active",
+        job_title="Staff", employment_status="active",
     )
     db.add(emp)
     await db.flush()

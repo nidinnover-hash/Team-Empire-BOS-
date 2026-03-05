@@ -1,5 +1,6 @@
 import logging
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.privacy import sanitize_audit_payload
@@ -61,7 +62,7 @@ async def record_action(
             event_type=event_type,
             event_payload=safe_payload,
         )
-    except (ImportError, RuntimeError, ValueError, TypeError, OSError, AttributeError) as exc:
+    except (ImportError, RuntimeError, ValueError, TypeError, OSError, AttributeError, SQLAlchemyError) as exc:
         logger.debug("Automation trigger matching failed for %s: %s", event_type, type(exc).__name__, exc_info=True)
 
     # Dispatch to registered webhook endpoints (best-effort).
@@ -80,7 +81,7 @@ async def record_action(
                 **(safe_payload or {}),
             },
         )
-    except (ImportError, RuntimeError, ValueError, TypeError, OSError, AttributeError) as exc:
+    except (ImportError, RuntimeError, ValueError, TypeError, OSError, AttributeError, SQLAlchemyError) as exc:
         logger.debug("Webhook dispatch failed for %s: %s", event_type, type(exc).__name__, exc_info=True)
 
     return event

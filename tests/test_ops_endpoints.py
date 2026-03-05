@@ -27,12 +27,12 @@ async def test_list_employees_empty(client):
 async def test_create_employee_returns_201(client):
     resp = await client.post(
         "/api/v1/ops/employees",
-        json={"name": "Alice", "role": "Engineer", "email": "alice@test.com"},
+        json={"name": "Alice", "job_title": "Engineer", "email": "alice@test.com"},
     )
     assert resp.status_code == 201
     body = resp.json()
     assert body["name"] == "Alice"
-    assert body["role"] == "Engineer"
+    assert body["job_title"] == "Engineer"
 
 
 async def test_get_employee_after_create(client):

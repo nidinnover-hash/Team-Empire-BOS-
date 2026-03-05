@@ -1,4 +1,5 @@
 """Super-admin cross-org analytics endpoints."""
+import json as _json
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Literal
@@ -28,6 +29,8 @@ from app.schemas.admin import (
     AutonomyRolloutRead,
     AutonomyRolloutUpdate,
     AutonomyTemplateRead,
+    CommandCenterConfigRead,
+    CommandCenterConfigUpdate,
     OrgReadinessFleetItem,
     OrgReadinessReport,
     OrgSummary,
@@ -39,6 +42,7 @@ from app.schemas.admin import (
 )
 from app.services import autonomy_policy
 from app.services.org_readiness import build_org_readiness_report
+from app.services.trend_telemetry import _default_command_center_config, _get_command_center_config
 
 logger = logging.getLogger(__name__)
 
@@ -618,3 +622,78 @@ async def revoke_super_admin(
         payload_json={"target_user_id": user_id},
     )
     return {"ok": True, "user_id": user_id, "is_super_admin": False}
+
+
+@router.get("/orgs/{org_id}/command-center-config", response_model=CommandCenterConfigRead)
+async def get_command_center_config(
+    org_id: int, db: AsyncSession = Depends(get_db),
+    _actor: dict = Depends(require_super_admin),
+) -> CommandCenterConfigRead:
+    cc = await _get_command_center_config(db, org_id)
+    return CommandCenterConfigRead(**cc)
+
+
+@router.patch("/orgs/{org_id}/command-center-config", response_model=CommandCenterConfigRead)
+async def update_command_center_config(
+    org_id: int,
+    data: CommandCenterConfigUpdate, db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_super_admin),
+) -> CommandCenterConfigRead:
+    org = (await db.execute(select(Organization).where(Organization.id == org_id))).scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    policy = _json.loads(org.policy_json) if org.policy_json else {}
+    cc = policy.get("command_center", {})
+
+    if data.weights is not None:
+        cc["weights"] = {**cc.get("weights", {}), **data.weights}
+    if data.thresholds is not None:
+        cc["thresholds"] = {**cc.get("thresholds", {}), **data.thresholds}
+    if data.levels is not None:
+        cc["levels"] = {**cc.get("levels", {}), **data.levels}
+
+    policy["command_center"] = cc
+    org.policy_json = _json.dumps(policy)
+    await db.commit()
+
+    await record_action(
+        db=db,
+        event_type="command_center_config_updated",
+        actor_user_id=_actor_user_id(actor),
+        organization_id=org_id,
+        entity_type="organization",
+        entity_id=org_id,
+        payload_json=data.model_dump(exclude_none=True),
+    )
+
+    merged = await _get_command_center_config(db, org_id)
+    return CommandCenterConfigRead(**merged)
+
+
+@router.post("/orgs/{org_id}/command-center-config/reset", response_model=CommandCenterConfigRead)
+async def reset_command_center_config(
+    org_id: int, db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_super_admin),
+) -> CommandCenterConfigRead:
+    org = (await db.execute(select(Organization).where(Organization.id == org_id))).scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    policy = _json.loads(org.policy_json) if org.policy_json else {}
+    policy["command_center"] = _default_command_center_config()
+    org.policy_json = _json.dumps(policy)
+    await db.commit()
+
+    await record_action(
+        db=db,
+        event_type="command_center_config_reset",
+        actor_user_id=_actor_user_id(actor),
+        organization_id=org_id,
+        entity_type="organization",
+        entity_id=org_id,
+        payload_json={},
+    )
+
+    merged = await _get_command_center_config(db, org_id)
+    return CommandCenterConfigRead(**merged)

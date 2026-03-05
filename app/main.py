@@ -49,6 +49,7 @@ from app.web._helpers import (
     authenticate_user,
     create_jwt,
     enforce_password_login_policy,
+    resolve_login_organization,
 )
 from app.web.auth import router as web_auth_router
 from app.web.chat import router as web_chat_router
@@ -383,12 +384,18 @@ async def login(
     username: str = Form(..., min_length=3, max_length=254),
     password: str = Form(..., min_length=8, max_length=128),
     totp_code: str | None = Form(None, min_length=6, max_length=6),
+    organization_id: int | None = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     enforce_password_login_policy()
     client_ip = get_client_ip(request)
     user = await authenticate_user(db, username, password, client_ip, "/token", totp_code=totp_code)
-    return {"access_token": create_jwt(user), "token_type": "bearer"}
+    selected_org_id, selected_role = await resolve_login_organization(
+        db,
+        user=user,
+        requested_org_id=organization_id,
+    )
+    return {"access_token": create_jwt(user, org_id=selected_org_id, role=selected_role), "token_type": "bearer"}
 
 
 @app.get("/me", response_model=UserMeRead)

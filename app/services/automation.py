@@ -12,6 +12,7 @@ from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.automation import AutomationTrigger, Workflow
@@ -166,13 +167,20 @@ async def fire_matching_triggers(
     The actual action execution is left to the caller (endpoint or scheduler)
     so we can respect the requires_approval flag.
     """
-    result = await db.execute(
-        select(AutomationTrigger).where(
-            AutomationTrigger.organization_id == organization_id,
-            AutomationTrigger.is_active.is_(True),
-            AutomationTrigger.source_event == event_type,
+    try:
+        result = await db.execute(
+            select(AutomationTrigger).where(
+                AutomationTrigger.organization_id == organization_id,
+                AutomationTrigger.is_active.is_(True),
+                AutomationTrigger.source_event == event_type,
+            )
         )
-    )
+    except OperationalError as exc:
+        # Older/local SQLite snapshots might not have automation tables yet.
+        if "no such table" in str(exc).lower() and "automation_triggers" in str(exc).lower():
+            logger.warning("Automation triggers table missing; skipping trigger dispatch")
+            return []
+        raise
     triggers = list(result.scalars().all())
     matched: list[AutomationTrigger] = []
     for t in triggers:

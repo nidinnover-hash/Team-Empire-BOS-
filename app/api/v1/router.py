@@ -15,6 +15,7 @@ from app.api.v1.endpoints import (
     control,
     dashboard_kpi,
     data_collection,
+    decision_cards,
     departments,
     email,
     executions,
@@ -38,16 +39,19 @@ from app.api.v1.endpoints import (
     observability,
     ops,
     ops_incident,
+    orchestrator,
     orgs,
     performance,
     personas,
     projects,
     search,
+    share_packets,
     slack_commands,
     social,
     tasks,
     users,
     webhooks,
+    workspaces,
 )
 
 api_router = APIRouter()
@@ -99,3 +103,7 @@ api_router.include_router(governance.router)
 api_router.include_router(media.router)
 api_router.include_router(locations.router)
 api_router.include_router(innovation.router)
+api_router.include_router(workspaces.router)
+api_router.include_router(share_packets.router)
+api_router.include_router(decision_cards.router)
+api_router.include_router(orchestrator.router)

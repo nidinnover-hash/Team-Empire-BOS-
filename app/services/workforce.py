@@ -103,7 +103,7 @@ async def onboard_employee(
         row = Employee(
             organization_id=organization_id,
             name=data.name.strip(),
-            role=normalized_role,
+            job_title=normalized_role,
             email=data.email.strip(),
             department_id=data.department_id,
             github_username=(data.github_username or "").strip() or None,
@@ -117,7 +117,7 @@ async def onboard_employee(
         await db.flush()
     else:
         row.name = data.name.strip()
-        row.role = normalized_role
+        row.job_title = normalized_role
         row.department_id = data.department_id
         row.github_username = (data.github_username or "").strip() or None
         row.clickup_user_id = (data.clickup_user_id or "").strip() or None

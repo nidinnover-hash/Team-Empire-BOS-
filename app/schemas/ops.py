@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 DecisionType = Literal["approve", "reject", "defer"]
 ReportType = Literal["team_health", "project_risk", "founder_review"]
@@ -30,6 +30,14 @@ class DailyRunResponse(BaseModel):
     confidence_reasoning: list[str] | None = None
 
 
+class IndustryPanel(BaseModel):
+    key: str
+    label: str
+    value: int | float | None = None
+    unit: str | None = None
+    trend: str | None = None
+
+
 class IncidentCommandRead(BaseModel):
     generated_at: datetime
     incident_level: Literal["green", "amber", "red"]
@@ -37,6 +45,8 @@ class IncidentCommandRead(BaseModel):
     triggers: dict[str, int]
     top_actions: list[str]
     status: str
+    view_type: Literal["strategic", "operational", "team", "technical"] = "strategic"
+    industry_panels: list[IndustryPanel] = []
 
 
 class IncidentCommandTrendPointRead(BaseModel):
@@ -80,7 +90,7 @@ class CicdSyncResultRead(BaseModel):
 
 class EmployeeCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
-    role: str | None = Field(None, max_length=100)
+    job_title: str | None = Field(None, max_length=100)
     email: str = Field(..., min_length=3, max_length=320)
     department_id: int | None = None
     github_username: str | None = Field(None, max_length=100)
@@ -88,10 +98,20 @@ class EmployeeCreate(BaseModel):
     employment_status: str = Field("active", max_length=20)
     is_active: bool = True
 
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_role_alias(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        if ("job_title" not in payload or payload.get("job_title") in {None, ""}) and "role" in payload:
+            payload["job_title"] = payload.get("role")
+        return payload
+
 
 class EmployeeUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
-    role: str | None = Field(None, max_length=100)
+    job_title: str | None = Field(None, max_length=100)
     email: str | None = Field(None, min_length=3, max_length=320)
     department_id: int | None = None
     github_username: str | None = None
@@ -99,22 +119,40 @@ class EmployeeUpdate(BaseModel):
     employment_status: str | None = Field(None, max_length=20)
     is_active: bool | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_role_alias(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        if ("job_title" not in payload or payload.get("job_title") in {None, ""}) and "role" in payload:
+            payload["job_title"] = payload.get("role")
+        return payload
+
 
 class EmployeeRead(BaseModel):
     id: int
     organization_id: int
+    user_id: int | None = None
     department_id: int | None = None
     name: str
-    role: str | None
+    job_title: str | None
     email: str
     github_username: str | None
     clickup_user_id: str | None
+    role: str | None = None
     employment_status: str = "active"
     is_active: bool
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def _fill_role_alias(self) -> "EmployeeRead":
+        if self.role in (None, ""):
+            self.role = self.job_title
+        return self
 
 
 # ---- Decision Log ----
@@ -256,7 +294,7 @@ class CloneDispatchRequest(BaseModel):
 class CloneDispatchItemRead(BaseModel):
     employee_id: int
     employee_name: str
-    role: str | None
+    job_title: str | None
     overall_score: float
     readiness_level: str
     fit_reason: str

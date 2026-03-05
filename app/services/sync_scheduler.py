@@ -1,11 +1,15 @@
 """
 Background sync scheduler — periodically syncs all connected integrations
-(ClickUp, GitHub, Slack) so the AI always has fresh context.
+and runs automation/maintenance jobs so the AI always has fresh context.
 
 Two modes:
   1. Scheduled: runs every SYNC_INTERVAL_MINUTES (default 30) in the background.
   2. On-demand: call trigger_sync_for_org(org_id) from login / dashboard load;
      a per-org throttle prevents redundant syncs within THROTTLE_MINUTES.
+
+Execution model:
+  - Integration jobs run through a dedicated worker pool.
+  - Automation/maintenance jobs run through a separate worker pool.
 """
 from __future__ import annotations
 
@@ -237,6 +241,7 @@ def _format_briefing_summary(summary: object) -> str:
 # Background task handle (stored so we can cancel on shutdown)
 _scheduler_task: asyncio.Task | None = None
 _inflight_tasks: set[asyncio.Task] = set()
+_MAX_SCHEDULER_POOL_SIZE = 64
 
 
 def _task_error_handler(task: asyncio.Task) -> None:
@@ -247,6 +252,32 @@ def _task_error_handler(task: asyncio.Task) -> None:
     exc = task.exception()
     if exc:
         logger.error("Background task failed: %s: %s", type(exc).__name__, exc)
+
+
+def _clamp_pool_size(raw_value: object, *, default: int) -> int:
+    try:
+        value = int(raw_value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return max(1, min(value, _MAX_SCHEDULER_POOL_SIZE))
+
+
+def _integration_pool_size() -> int:
+    from app.core.config import settings
+
+    return _clamp_pool_size(
+        getattr(settings, "SYNC_INTEGRATION_WORKERS", 4),
+        default=4,
+    )
+
+
+def _automation_pool_size() -> int:
+    from app.core.config import settings
+
+    return _clamp_pool_size(
+        getattr(settings, "SYNC_AUTOMATION_WORKERS", 4),
+        default=4,
+    )
 
 
 def _severity_rank(value: object) -> int:
@@ -1641,54 +1672,158 @@ async def _monitor_scheduler_slos(db: AsyncSession, org_id: int) -> None:
     await db.commit()
 
 
+async def _run_automation_jobs_for_org(db: AsyncSession, org_id: int) -> None:
+    """
+    Run non-integration scheduler jobs for one org.
+    Each job is isolated so one failure does not skip the rest.
+    """
+    jobs: list[tuple[str, Any]] = [
+        ("token_health_check", _check_token_health_job),
+        ("goal_deadline_check", _check_goal_deadlines),
+        ("stale_task_check", _check_stale_tasks),
+        ("contact_follow_up_check", _check_follow_up_contacts),
+        ("daily_briefing_notification", _maybe_emit_daily_briefing_notification),
+        ("morning_briefing", _check_morning_briefing),
+        ("daily_ceo_summary", _maybe_generate_daily_ceo_summary),
+        ("daily_pending_digest", _maybe_generate_daily_pending_digest),
+        ("social_publish_queue", _publish_due_social_posts),
+        ("cleanup_chat_messages", _cleanup_old_chat_messages),
+        ("cleanup_logs", _cleanup_old_logs),
+        ("cleanup_snapshots", _cleanup_old_job_runs_and_snapshots),
+        ("approval_auto_reject", _auto_reject_expired_approvals),
+        ("trend_snapshot", _snapshot_org_trends_job),
+        ("cleanup_trend_events", _cleanup_old_trend_events),
+        ("layer_snapshot", _snapshot_layer_scores_job),
+        ("monitor_scheduler_slo", _monitor_scheduler_slos),
+    ]
+    for job_name, job_fn in jobs:
+        try:
+            await job_fn(db, org_id)
+        except asyncio.CancelledError:
+            raise
+        except (
+            SQLAlchemyError,
+            IntegrationSyncError,
+            TimeoutError,
+            ConnectionError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+            OSError,
+            ImportError,
+            AttributeError,
+        ) as exc:
+            logger.warning(
+                "Automation job failed org=%d job=%s category=%s error_type=%s",
+                org_id,
+                job_name,
+                _scheduler_error_category(exc),
+                type(exc).__name__,
+            )
+
+
+async def _run_org_pool(
+    *,
+    org_ids: list[int],
+    worker_count: int,
+    pool_name: str,
+    org_runner: Any,
+) -> None:
+    """Run an org-scoped scheduler runner concurrently with a bounded worker pool."""
+    if not org_ids:
+        return
+    queue: asyncio.Queue[int] = asyncio.Queue()
+    for org_id in org_ids:
+        queue.put_nowait(org_id)
+
+    async def _worker(worker_index: int) -> None:
+        while True:
+            try:
+                org_id = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            try:
+                async with AsyncSessionLocal() as db:
+                    await org_runner(db, org_id)
+            except asyncio.CancelledError:
+                raise
+            except (
+                SQLAlchemyError,
+                IntegrationSyncError,
+                TimeoutError,
+                ConnectionError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+                OSError,
+                ImportError,
+                AttributeError,
+            ) as exc:
+                logger.warning(
+                    "Scheduler pool=%s worker=%d org=%d failed category=%s error_type=%s",
+                    pool_name,
+                    worker_index,
+                    org_id,
+                    _scheduler_error_category(exc),
+                    type(exc).__name__,
+                )
+            finally:
+                queue.task_done()
+
+    effective_workers = max(1, min(worker_count, len(org_ids)))
+    tasks = [
+        asyncio.create_task(_worker(idx + 1))
+        for idx in range(effective_workers)
+    ]
+    try:
+        await queue.join()
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
 async def _scheduler_loop(interval_minutes: int) -> None:
     """Runs forever; wakes up every interval_minutes and syncs all orgs."""
     from app.services.organization import list_organizations
 
-    logger.info("Sync scheduler started (interval=%d min)", interval_minutes)
+    logger.info(
+        "Sync scheduler started (interval=%d min, integration_workers=%d, automation_workers=%d)",
+        interval_minutes,
+        _integration_pool_size(),
+        _automation_pool_size(),
+    )
     while True:
         await asyncio.sleep(interval_minutes * 60)
         try:
             async with AsyncSessionLocal() as db:
                 orgs = await list_organizations(db)
-            for org in orgs:
-                try:
-                    async with AsyncSessionLocal() as db:
-                        await _run_integrations(db, org.id)
-                        await _check_token_health_job(db, org.id)
-                        await _check_goal_deadlines(db, org.id)
-                        await _check_stale_tasks(db, org.id)
-                        await _check_follow_up_contacts(db, org.id)
-                        await _maybe_emit_daily_briefing_notification(db, org.id)
-                        await _check_morning_briefing(db, org.id)
-                        await _maybe_generate_daily_ceo_summary(db, org.id)
-                        await _maybe_generate_daily_pending_digest(db, org.id)
-                        await _publish_due_social_posts(db, org.id)
-                        await _cleanup_old_chat_messages(db, org.id)
-                        await _cleanup_old_logs(db, org.id)
-                        await _cleanup_old_job_runs_and_snapshots(db, org.id)
-                        await _auto_reject_expired_approvals(db, org.id)
-                        await _snapshot_org_trends_job(db, org.id)
-                        await _cleanup_old_trend_events(db, org.id)
-                        await _snapshot_layer_scores_job(db, org.id)
-                        await _retry_webhook_deliveries(db)
-                        await _monitor_scheduler_slos(db, org.id)
-                        _last_synced[org.id] = datetime.now(UTC)
-                except asyncio.CancelledError:
-                    raise
-                except (
-                    SQLAlchemyError,
-                    IntegrationSyncError,
-                    TimeoutError,
-                    ConnectionError,
-                    RuntimeError,
-                    ValueError,
-                    TypeError,
-                    OSError,
-                    ImportError,
-                    AttributeError,
-                ) as exc:
-                    logger.warning("Sync failed for org=%d: %s", org.id, exc)
+            org_ids = [int(org.id) for org in orgs]
+            integration_workers = _integration_pool_size()
+            automation_workers = _automation_pool_size()
+            # _cleanup_old_chat_messages runs inside _run_automation_jobs_for_org.
+
+            async def _integrations_runner(db: AsyncSession, org_id: int) -> None:
+                await _run_integrations(db, org_id)
+                _last_synced[org_id] = datetime.now(UTC)
+
+            await asyncio.gather(
+                _run_org_pool(
+                    org_ids=org_ids,
+                    worker_count=integration_workers,
+                    pool_name="integrations",
+                    org_runner=_integrations_runner,
+                ),
+                _run_org_pool(
+                    org_ids=org_ids,
+                    worker_count=automation_workers,
+                    pool_name="automation",
+                    org_runner=_run_automation_jobs_for_org,
+                ),
+            )
+            async with AsyncSessionLocal() as db:
+                await _retry_webhook_deliveries(db)
             # Daily database backup (once per day)
             await _maybe_run_daily_backup()
             logger.info("Scheduled sync complete (%d org(s))", len(orgs))

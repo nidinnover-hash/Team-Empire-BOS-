@@ -64,10 +64,6 @@ async def upload_file(
     if not _validate_mime(mime):
         raise ValueError(f"File type not allowed: {mime}")
 
-    file_bytes = await file.read()
-    if len(file_bytes) > MAX_UPLOAD_BYTES:
-        raise ValueError(f"File too large: {len(file_bytes)} bytes (max {MAX_UPLOAD_MB}MB)")
-
     now = datetime.now(UTC)
     raw_name = os.path.basename(file.filename or "upload")
     # Strip unsafe characters — keep only alphanumeric, dot, hyphen, underscore
@@ -77,7 +73,25 @@ async def upload_file(
     abs_path = Path(UPLOAD_DIR) / rel_path
 
     abs_path.parent.mkdir(parents=True, exist_ok=True)
-    abs_path.write_bytes(file_bytes)
+    bytes_written = 0
+    chunk_size = 1024 * 1024
+    try:
+        with abs_path.open("wb") as f:
+            while True:
+                try:
+                    chunk = await file.read(chunk_size)
+                except TypeError:
+                    # Compatibility with test doubles that don't accept size argument.
+                    chunk = await file.read()
+                if not chunk:
+                    break
+                bytes_written += len(chunk)
+                if bytes_written > MAX_UPLOAD_BYTES:
+                    raise ValueError(f"File too large: {bytes_written} bytes (max {MAX_UPLOAD_MB}MB)")
+                f.write(chunk)
+    except Exception:
+        abs_path.unlink(missing_ok=True)
+        raise
 
     if _upload_scan_hook is not None:
         rejection = _upload_scan_hook(abs_path, mime)
@@ -91,7 +105,7 @@ async def upload_file(
         file_name=unique_name,
         original_name=file.filename or "upload",
         mime_type=mime,
-        file_size_bytes=len(file_bytes),
+        file_size_bytes=bytes_written,
         storage_backend="local",
         storage_path=rel_path,
         entity_type=entity_type,
@@ -101,7 +115,7 @@ async def upload_file(
     await db.commit()
     await db.refresh(attachment)
 
-    logger.info("Uploaded media %s (%s, %d bytes)", attachment.id, mime, len(file_bytes))
+    logger.info("Uploaded media %s (%s, %d bytes)", attachment.id, mime, bytes_written)
     return attachment
 
 

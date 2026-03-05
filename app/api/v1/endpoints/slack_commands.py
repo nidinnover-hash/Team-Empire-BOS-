@@ -29,12 +29,10 @@ from app.models.task import Task
 router = APIRouter(prefix="/slack", tags=["Slack Commands"])
 logger = logging.getLogger(__name__)
 
-_DEFAULT_ORG_ID = 1
-
 
 def _verify_slack_signature(request_body: bytes, timestamp: str, signature: str) -> bool:
     """Verify Slack request signature using signing secret."""
-    signing_secret = getattr(settings, "SLACK_SIGNING_SECRET", None)
+    signing_secret = settings.SLACK_SIGNING_SECRET
     if not signing_secret:
         return False
     sig_basestring = f"v0:{timestamp}:{request_body.decode()}"
@@ -42,6 +40,20 @@ def _verify_slack_signature(request_body: bytes, timestamp: str, signature: str)
         signing_secret.encode(), sig_basestring.encode(), sha256
     ).hexdigest()
     return hmac.compare_digest(computed, signature)
+
+
+async def _resolve_org_id_for_team(db: AsyncSession, team_id: str) -> int | None:
+    result = await db.execute(
+        select(Integration).where(
+            Integration.type == "slack",
+            Integration.status == "connected",
+        )
+    )
+    for integration in result.scalars().all():
+        cfg = integration.config_json if isinstance(integration.config_json, dict) else {}
+        if str(cfg.get("team_id") or "").strip() == team_id:
+            return int(integration.organization_id)
+    return None
 
 
 @router.post("/commands")
@@ -54,23 +66,31 @@ async def handle_slack_command(
     timestamp = request.headers.get("X-Slack-Request-Timestamp", "")
     signature = request.headers.get("X-Slack-Signature", "")
 
-    signing_secret = getattr(settings, "SLACK_SIGNING_SECRET", None)
-    if signing_secret:
-        # Reject replay attacks: timestamp must be within 5 minutes
-        try:
-            ts_int = int(timestamp)
-        except (ValueError, TypeError) as exc:
-            raise HTTPException(status_code=401, detail="Invalid request timestamp") from exc
-        if abs(time.time() - ts_int) > 300:
-            raise HTTPException(status_code=401, detail="Request timestamp too old")
-        if not _verify_slack_signature(body, timestamp, signature):
-            raise HTTPException(status_code=401, detail="Invalid Slack signature")
+    signing_secret = (settings.SLACK_SIGNING_SECRET or "").strip()
+    if not signing_secret:
+        raise HTTPException(status_code=503, detail="Slack commands are disabled")
+
+    # Reject replay attacks: timestamp must be within 5 minutes
+    try:
+        ts_int = int(timestamp)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=401, detail="Invalid request timestamp") from exc
+    if abs(time.time() - ts_int) > 300:
+        raise HTTPException(status_code=401, detail="Request timestamp too old")
+    if not _verify_slack_signature(body, timestamp, signature):
+        raise HTTPException(status_code=401, detail="Invalid Slack signature")
 
     form = await request.form()
     command_text = str(form.get("text", "")).strip().lower()
     user_name = str(form.get("user_name", "unknown"))
+    team_id = str(form.get("team_id", "")).strip()
+    if not team_id:
+        raise HTTPException(status_code=401, detail="Missing Slack team context")
 
-    org_id = _DEFAULT_ORG_ID
+    # Resolve org from connected Slack integration to avoid cross-tenant leakage.
+    org_id = await _resolve_org_id_for_team(db, team_id)
+    if org_id is None:
+        raise HTTPException(status_code=403, detail="Slack team is not connected")
 
     await record_action(
         db,

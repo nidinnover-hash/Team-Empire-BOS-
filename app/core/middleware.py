@@ -186,6 +186,20 @@ class RequestBodyLimitMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
+        def _normalize_content_length_header(value: str) -> None:
+            raw_headers = list(request.scope.get("headers", []))
+            normalized = []
+            replaced = False
+            for key, val in raw_headers:
+                if key.lower() == b"content-length":
+                    normalized.append((b"content-length", value.encode("ascii")))
+                    replaced = True
+                else:
+                    normalized.append((key, val))
+            if not replaced:
+                normalized.append((b"content-length", value.encode("ascii")))
+            request.scope["headers"] = normalized
+
         max_bytes = settings.MAX_REQUEST_BODY_BYTES
         if max_bytes and request.method in ("POST", "PUT", "PATCH"):
             content_length = request.headers.get("content-length")
@@ -193,6 +207,8 @@ class RequestBodyLimitMiddleware(BaseHTTPMiddleware):
                 try:
                     content_length_value = int(content_length)
                 except ValueError:
+                    # Keep downstream metrics middleware from crashing on bad header.
+                    _normalize_content_length_header("0")
                     return JSONResponse(
                         status_code=400,
                         content={"detail": "Invalid Content-Length header."},

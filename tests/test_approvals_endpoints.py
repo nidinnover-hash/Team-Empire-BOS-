@@ -138,7 +138,7 @@ async def test_approval_records_learning_feedback_when_employee_mapped(client):
             Employee(
                 organization_id=1,
                 name="CEO Employee",
-                role="CEO",
+                job_title="CEO",
                 email="ceo@org1.com",
                 is_active=True,
             )

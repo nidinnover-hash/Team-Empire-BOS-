@@ -33,7 +33,7 @@ def _check_required_env_vars() -> list[str]:
     return missing
 
 
-def _check_env_quality() -> list[str]:
+def _check_env_quality(*, skip_db: bool = False) -> list[str]:
     issues: list[str] = []
     weak_values = {"", "change_me_in_env", "secret", "changeme", "your_32_plus_char_secret_here"}
 
@@ -50,7 +50,7 @@ def _check_env_quality() -> list[str]:
         issues.append("TOKEN_ENCRYPTION_KEY must differ from SECRET_KEY")
     if admin_password in {"", "demo", "password", "admin", "123456", "changeme"} or len(admin_password) < 12:
         issues.append("ADMIN_PASSWORD is weak/too short (must be 12+ chars)")
-    if database_url.startswith("sqlite"):
+    if database_url.startswith("sqlite") and not skip_db:
         issues.append("DATABASE_URL must point to PostgreSQL for release preflight")
 
     return issues
@@ -104,12 +104,17 @@ def main() -> int:
         for key in missing:
             print(f"- {key}")
         return 1
-    quality_issues = _check_env_quality()
+    quality_issues = _check_env_quality(skip_db=args.skip_db)
     if quality_issues:
         print("Preflight failed: insecure environment values:")
         for issue in quality_issues:
             print(f"- {issue}")
         return 1
+    if args.skip_db and (os.environ.get("DATABASE_URL") or "").strip().lower().startswith("sqlite"):
+        print(
+            "Preflight warning: sqlite DATABASE_URL accepted because --skip-db was used. "
+            "Release deploy still requires PostgreSQL.",
+        )
     git_hygiene_issues = _check_git_hygiene()
     if git_hygiene_issues:
         print("Preflight failed: repository secret hygiene issues:")
@@ -117,10 +122,10 @@ def main() -> int:
             print(f"- {issue}")
         return 1
 
-    _run_subprocess(
-        [sys.executable, str(ROOT / "scripts" / "smoke_prod_config.py"), "--import-app"],
-        "production startup smoke",
-    )
+    smoke_cmd = [sys.executable, str(ROOT / "scripts" / "smoke_prod_config.py"), "--import-app"]
+    if args.skip_db:
+        smoke_cmd.append("--allow-sqlite")
+    _run_subprocess(smoke_cmd, "production startup smoke")
 
     if not args.skip_db:
         try:

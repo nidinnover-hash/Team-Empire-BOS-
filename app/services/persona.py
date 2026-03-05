@@ -26,12 +26,12 @@ async def get_persona_dashboard(
         select(
             EmployeeCloneProfile.employee_id,
             Employee.name,
-            Employee.role,
+            Employee.job_title,
         )
         .join(Employee, EmployeeCloneProfile.employee_id == Employee.id)
         .where(EmployeeCloneProfile.organization_id == organization_id)
     )
-    profiles = profiles_result.all()  # list[(employee_id, name, role)]
+    profiles = profiles_result.all()  # list[(employee_id, name, job_title)]
 
     if not profiles:
         return PersonaDashboard(
@@ -90,13 +90,13 @@ async def get_persona_dashboard(
 
     # 4. Assemble rows
     rows: list[PersonaRow] = []
-    for emp_id, name, role in profiles:
+    for emp_id, name, job_title in profiles:
         ai_level, readiness = perf_map.get(emp_id, (0.0, "developing"))
         confidence, memory_count = mem_map.get(emp_id, (0.0, 0))
         rows.append(PersonaRow(
             employee_id=emp_id,
             employee_name=name,
-            role=role,
+            job_title=job_title,
             ai_level=round(ai_level, 2),
             readiness=readiness,
             confidence=round(confidence, 2),

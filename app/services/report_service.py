@@ -145,7 +145,7 @@ async def _generate_team_health(db: AsyncSession, org_id: int, week_start: date)
         cm = code_metrics.get(emp.id)
         comms = comms_metrics.get(emp.id)
 
-        lines.append(f"### {emp.name} ({emp.role or 'N/A'})")
+        lines.append(f"### {emp.name} ({emp.job_title or 'N/A'})")
         if tm:
             lines.append(f"- Tasks: {tm.tasks_completed}/{tm.tasks_assigned} completed, on-time rate {tm.on_time_rate:.0%}, reopens {tm.reopen_count}")
         else:

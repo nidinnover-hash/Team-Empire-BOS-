@@ -16,6 +16,7 @@ from app.models.event import Event
 from app.models.governance import GovernanceViolation
 from app.models.integration import Integration
 from app.models.notification import Notification
+from app.models.organization import Organization
 from app.models.trend_telemetry_counter import TrendTelemetryCounter
 from app.models.webhook import WebhookDelivery
 from app.services import feature_flags
@@ -195,7 +196,149 @@ def _to_int(value: object) -> int:
     return 0
 
 
-async def compute_incident_snapshot(db: AsyncSession, org_id: int) -> dict[str, Any]:
+def _default_command_center_config() -> dict[str, Any]:
+    """Default command center scoring config (matches organization.default_policy_config)."""
+    return {
+        "weights": {
+            "critical_tokens": 3,
+            "warning_tokens": 1,
+            "open_violations_high": 2,
+            "open_violations_low": 1,
+            "pending_approvals": 1,
+            "unread_emails": 1,
+            "unread_high_alerts_high": 2,
+            "unread_high_alerts_low": 1,
+            "sync_errors_high": 2,
+            "sync_errors_low": 1,
+            "webhook_failures_high": 2,
+            "webhook_failures_low": 1,
+        },
+        "thresholds": {
+            "warning_tokens_min": 3,
+            "open_violations_high": 5,
+            "pending_approvals_min": 10,
+            "unread_emails_min": 50,
+            "unread_high_alerts_high": 5,
+            "sync_errors_high": 3,
+            "webhook_failures_high": 10,
+        },
+        "levels": {"amber": 2, "red": 4},
+    }
+
+
+async def _get_command_center_config(db: AsyncSession, org_id: int) -> dict[str, Any]:
+    """Load org-specific command center config with fallback to defaults."""
+    import json as _json
+
+    defaults = _default_command_center_config()
+    org = (await db.execute(select(Organization).where(Organization.id == org_id))).scalar_one_or_none()
+    if org is None or not org.policy_json:
+        return defaults
+    try:
+        policy = _json.loads(org.policy_json) if isinstance(org.policy_json, str) else org.policy_json
+    except (ValueError, TypeError):
+        return defaults
+    cc = policy.get("command_center")
+    if not isinstance(cc, dict):
+        return defaults
+    # Merge: org overrides on top of defaults
+    merged = {
+        "weights": {**defaults["weights"], **cc.get("weights", {})},
+        "thresholds": {**defaults["thresholds"], **cc.get("thresholds", {})},
+        "levels": {**defaults["levels"], **cc.get("levels", {})},
+    }
+    return merged
+
+
+# -- Industry panels ----------------------------------------------------------
+
+_INDUSTRY_PANELS: dict[str, list[dict[str, Any]]] = {
+    "education": [
+        {"key": "active_enrollments", "label": "Active Enrollments", "value": None, "unit": "students", "trend": None},
+        {"key": "student_satisfaction", "label": "Student Satisfaction", "value": None, "unit": "%", "trend": None},
+        {"key": "placement_rate", "label": "Placement Rate", "value": None, "unit": "%", "trend": None},
+    ],
+    "saas": [
+        {"key": "mrr", "label": "Monthly Recurring Revenue", "value": None, "unit": "$", "trend": None},
+        {"key": "churn_rate", "label": "Churn Rate", "value": None, "unit": "%", "trend": None},
+        {"key": "active_users", "label": "Active Users", "value": None, "unit": "users", "trend": None},
+    ],
+    "consulting": [
+        {"key": "utilization_rate", "label": "Utilization Rate", "value": None, "unit": "%", "trend": None},
+        {"key": "project_margin", "label": "Project Margin", "value": None, "unit": "%", "trend": None},
+        {"key": "client_satisfaction", "label": "Client Satisfaction", "value": None, "unit": "%", "trend": None},
+    ],
+}
+
+
+def _get_industry_panels(industry_type: str | None) -> list[dict[str, Any]]:
+    if not industry_type:
+        return []
+    return [dict(p) for p in _INDUSTRY_PANELS.get(industry_type.lower(), [])]
+
+
+# -- Role-based view filtering ------------------------------------------------
+
+_ROLE_VIEW_MAP: dict[str, str] = {
+    "CEO": "strategic",
+    "ADMIN": "operational",
+    "OPS_MANAGER": "operational",
+    "MANAGER": "team",
+    "TECH_LEAD": "technical",
+    "DEVELOPER": "technical",
+}
+
+_TECHNICAL_TRIGGERS = {"critical_tokens", "warning_tokens", "sync_error_integrations", "webhook_failures_24h"}
+_TEAM_TRIGGERS = {"pending_approvals", "unread_emails", "unread_high_alerts", "open_governance_violations"}
+
+
+def _filter_snapshot_by_role(
+    snapshot: dict[str, Any], actor_role: str | None,
+) -> dict[str, Any]:
+    """Filter triggers/actions and add view_type based on actor role."""
+    view_type = _ROLE_VIEW_MAP.get(actor_role or "", "operational")
+    snapshot["view_type"] = view_type
+
+    if view_type == "strategic":
+        # CEO sees everything
+        return snapshot
+
+    if view_type == "technical":
+        # Only integration/webhook/token triggers
+        snapshot["triggers"] = {k: v for k, v in snapshot["triggers"].items() if k in _TECHNICAL_TRIGGERS}
+        snapshot["top_actions"] = [
+            a for a in snapshot["top_actions"]
+            if any(kw in a.lower() for kw in ("oauth", "token", "integration", "sync", "webhook", "replay"))
+        ]
+        snapshot["industry_panels"] = []
+
+    elif view_type == "team":
+        # Scope-relevant triggers only
+        snapshot["triggers"] = {k: v for k, v in snapshot["triggers"].items() if k in _TEAM_TRIGGERS}
+        snapshot["top_actions"] = [
+            a for a in snapshot["top_actions"]
+            if any(kw in a.lower() for kw in ("approval", "inbox", "email", "alert", "violation", "governance"))
+        ]
+        snapshot["industry_panels"] = []
+
+    else:  # operational
+        # All triggers, no industry panels
+        snapshot["industry_panels"] = []
+
+    if not snapshot["top_actions"]:
+        snapshot["top_actions"] = ["No actions for your view. Check with your admin."]
+
+    return snapshot
+
+
+async def compute_incident_snapshot(
+    db: AsyncSession, org_id: int, *, actor_role: str | None = None,
+) -> dict[str, Any]:
+    cc = await _get_command_center_config(db, org_id)
+    w = cc["weights"]
+    t = cc["thresholds"]
+    lvl = cc["levels"]
+
     recent_cutoff = datetime.now(UTC) - timedelta(hours=24)
     pending_approvals = int(
         (
@@ -263,30 +406,40 @@ async def compute_incident_snapshot(db: AsyncSession, org_id: int) -> dict[str, 
     critical_tokens = _to_int(token.get("critical"))
     warning_tokens = _to_int(token.get("warnings"))
 
+    # Configurable scoring
     score = 0
     if critical_tokens > 0:
-        score += 3
-    if warning_tokens >= 3:
-        score += 1
-    if open_violations >= 5:
-        score += 2
+        score += w.get("critical_tokens", 3)
+    if warning_tokens >= t.get("warning_tokens_min", 3):
+        score += w.get("warning_tokens", 1)
+    if open_violations >= t.get("open_violations_high", 5):
+        score += w.get("open_violations_high", 2)
     elif open_violations > 0:
-        score += 1
-    if pending_approvals >= 10:
-        score += 1
-    if unread_emails >= 50:
-        score += 1
+        score += w.get("open_violations_low", 1)
+    if pending_approvals >= t.get("pending_approvals_min", 10):
+        score += w.get("pending_approvals", 1)
+    if unread_emails >= t.get("unread_emails_min", 50):
+        score += w.get("unread_emails", 1)
     if unread_high_alerts > 0:
-        score += 2 if unread_high_alerts >= 5 else 1
+        if unread_high_alerts >= t.get("unread_high_alerts_high", 5):
+            score += w.get("unread_high_alerts_high", 2)
+        else:
+            score += w.get("unread_high_alerts_low", 1)
     if sync_error_integrations > 0:
-        score += 2 if sync_error_integrations >= 3 else 1
+        if sync_error_integrations >= t.get("sync_errors_high", 3):
+            score += w.get("sync_errors_high", 2)
+        else:
+            score += w.get("sync_errors_low", 1)
     if webhook_failures_24h > 0:
-        score += 2 if webhook_failures_24h >= 10 else 1
+        if webhook_failures_24h >= t.get("webhook_failures_high", 10):
+            score += w.get("webhook_failures_high", 2)
+        else:
+            score += w.get("webhook_failures_low", 1)
 
     level = "green"
-    if score >= 4:
+    if score >= lvl.get("red", 4):
         level = "red"
-    elif score >= 2:
+    elif score >= lvl.get("amber", 2):
         level = "amber"
 
     actions: list[str] = []
@@ -309,7 +462,12 @@ async def compute_incident_snapshot(db: AsyncSession, org_id: int) -> dict[str, 
     if not actions:
         actions.append("No active incident triggers. Maintain normal operating cadence.")
 
-    return {
+    # Industry panels
+    org = (await db.execute(select(Organization).where(Organization.id == org_id))).scalar_one_or_none()
+    industry_type = getattr(org, "industry_type", None) if org else None
+    industry_panels = _get_industry_panels(industry_type)
+
+    snapshot = {
         "generated_at": datetime.now(UTC),
         "incident_level": level,
         "score": int(score),
@@ -325,7 +483,11 @@ async def compute_incident_snapshot(db: AsyncSession, org_id: int) -> dict[str, 
         },
         "top_actions": actions[:5],
         "status": "active_monitoring" if score > 0 else "stable",
+        "view_type": "strategic",
+        "industry_panels": industry_panels,
     }
+
+    return _filter_snapshot_by_role(snapshot, actor_role)
 
 
 async def record_trend_event(

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 LocationSource = Literal["gps", "ip_geolocation", "manual_checkin", "google_maps"]
 CheckinType = Literal["arrival", "departure", "meeting", "site_visit", "other"]
@@ -68,6 +68,7 @@ class EmployeeLocationRead(BaseModel):
     employee_id: int
     employee_name: str
     role: str | None
+    job_title: str | None = None
     latitude: float
     longitude: float
     accuracy_m: float | None
@@ -76,3 +77,9 @@ class EmployeeLocationRead(BaseModel):
     last_seen: datetime
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def _fill_job_title_alias(self) -> "EmployeeLocationRead":
+        if self.job_title in (None, ""):
+            self.job_title = self.role
+        return self

@@ -4,7 +4,7 @@ from pydantic import BaseModel
 class PersonaRow(BaseModel):
     employee_id: int
     employee_name: str
-    role: str | None
+    job_title: str | None
     ai_level: float
     readiness: str
     confidence: float

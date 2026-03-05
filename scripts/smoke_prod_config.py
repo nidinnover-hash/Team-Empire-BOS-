@@ -27,10 +27,17 @@ def main() -> int:
         action="store_true",
         help="Also import app.main after config validation passes.",
     )
+    parser.add_argument(
+        "--allow-sqlite",
+        action="store_true",
+        help="Allow sqlite DATABASE_URL for local dry-runs (non-release).",
+    )
     args = parser.parse_args()
 
     effective = _prod_like_settings()
     issues = validate_startup_settings(effective)
+    if args.allow_sqlite:
+        issues = [i for i in issues if "DATABASE_URL should not use sqlite when DEBUG=false" not in i]
     if issues:
         print("Production-like startup validation failed:")
         print(format_startup_issues(issues))

@@ -23,6 +23,7 @@ from app.web._helpers import (
     create_jwt,
     effective_token_expiry_minutes,
     enforce_password_login_policy,
+    resolve_login_organization,
     resolve_login_profile_cached,
 )
 
@@ -38,6 +39,7 @@ async def web_login(
     username: str = Form(..., min_length=3, max_length=254),
     password: str = Form(..., min_length=8, max_length=128),
     totp_code: str | None = Form(None, min_length=6, max_length=6),
+    organization_id: int | None = Form(None),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     # Note: CSRF is intentionally NOT applied to login — no session exists yet.
@@ -47,7 +49,12 @@ async def web_login(
     enforce_password_login_policy()
     client_ip = get_client_ip(request)
     user = await authenticate_user(db, username, password, client_ip, "/web/login", totp_code=totp_code)
-    access_token = create_jwt(user)
+    selected_org_id, selected_role = await resolve_login_organization(
+        db,
+        user=user,
+        requested_org_id=organization_id,
+    )
+    access_token = create_jwt(user, org_id=selected_org_id, role=selected_role)
     purpose_profile = resolve_login_profile_cached(user.email)
     csrf_token = secrets.token_urlsafe(32)
     max_age = effective_token_expiry_minutes() * 60
@@ -71,9 +78,9 @@ async def web_login(
     # Kick off a background integration sync (throttled, fire-and-forget)
     if settings.SYNC_ENABLED:
         from app.services.sync_scheduler import trigger_sync_for_org
-        await trigger_sync_for_org(user.organization_id)
+        await trigger_sync_for_org(selected_org_id)
 
-    return {"status": "ok", "email": user.email, "role": user.role}
+    return {"status": "ok", "email": user.email, "role": selected_role}
 
 
 @router.post("/web/logout", response_model=WebLogoutResponse)

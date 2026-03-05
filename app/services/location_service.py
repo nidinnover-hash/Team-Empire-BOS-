@@ -54,7 +54,7 @@ async def get_active_locations(
         select(
             LocationTracking.employee_id,
             Employee.name.label("employee_name"),
-            Employee.role,
+            Employee.job_title.label("role"),
             LocationTracking.latitude,
             LocationTracking.longitude,
             LocationTracking.accuracy_m,

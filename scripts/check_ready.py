@@ -4,6 +4,7 @@ import importlib
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 CHECKS: list[list[str]] = [
     [sys.executable, "scripts/preflight_python.py"],
@@ -32,6 +33,29 @@ CHECKS: list[list[str]] = [
         ),
     ],
 ]
+
+ROOT = Path(__file__).resolve().parents[1]
+ENV_PATH = ROOT / ".env"
+
+
+def _load_env_file(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.exists():
+        return values
+    for raw in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.lower().startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        values[key] = value.strip()
+    return values
 
 
 def _require_module(module_name: str, package_name: str) -> int:
@@ -70,9 +94,13 @@ def main() -> int:
     base_env = os.environ.copy()
     base_env.setdefault("PYTHONUTF8", "1")
     base_env.setdefault("PYTHONIOENCODING", "utf-8")
+    startup_cmd = CHECKS[-1]
+    startup_env = base_env.copy()
+    startup_env.update(_load_env_file(ENV_PATH))
     for cmd in CHECKS:
         print(f"\n==> {' '.join(cmd)}")
-        proc = subprocess.run(cmd, check=False, env=base_env)
+        proc_env = startup_env if cmd == startup_cmd else base_env
+        proc = subprocess.run(cmd, check=False, env=proc_env)
         if proc.returncode != 0:
             return proc.returncode
     print("\nAll release checks passed.")

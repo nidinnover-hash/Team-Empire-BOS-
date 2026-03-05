@@ -447,8 +447,13 @@ def _rank_provider_candidates(primary: str, configured: list[str], org_id: int) 
     if not available:
         return ordered
 
+    # Preserve explicit intent: the chosen primary provider must be attempted first.
+    # Health-based ranking is only applied to fallback providers.
+    primary_candidate = primary if primary in available else available[0]
+    fallback_candidates = [p for p in available if p != primary_candidate]
+
     scored: list[tuple[int, float, float, int, str]] = []
-    for idx, candidate in enumerate(available):
+    for idx, candidate in enumerate(fallback_candidates):
         samples, error_rate, avg_latency = _provider_recent_health(
             candidate, _CIRCUIT_HEALTH_WINDOW_SECONDS
         )
@@ -457,7 +462,8 @@ def _rank_provider_candidates(primary: str, configured: list[str], org_id: int) 
         else:
             scored.append((0, error_rate, avg_latency, idx, candidate))
     scored.sort()
-    return [candidate for *_rest, candidate in scored]
+    ranked_fallbacks = [candidate for *_rest, candidate in scored]
+    return [primary_candidate, *ranked_fallbacks]
 
 
 def _configured_providers(org_id: int = 1) -> list[str]:
@@ -651,7 +657,7 @@ def _prepend_brain_context(system_prompt: str, brain_context: BrainContext) -> s
         lines.extend(
             [
                 f"employee_id={brain_context.employee.employee_id}",
-                f"employee_role={brain_context.employee.role or 'unknown'}",
+                f"employee_role={brain_context.employee.job_title or 'unknown'}",
                 f"employee_department_id={brain_context.employee.department_id or 0}",
                 f"employee_status={brain_context.employee.employment_status or 'unknown'}",
             ]

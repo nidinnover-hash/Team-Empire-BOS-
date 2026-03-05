@@ -24,7 +24,7 @@ async def _seed_employee(client, org_id=1, employee_id=10, consent=False):
         organization_id=org_id,
         name="Test Employee",
         email=f"emp{employee_id}@org{org_id}.com",
-        role="STAFF",
+        job_title="STAFF",
         is_active=True,
         location_tracking_consent=consent,
     )

@@ -22,11 +22,11 @@ async def _seed_perf_data(db: AsyncSession):
 
     emp1 = Employee(
         organization_id=1, department_id=dept.id, name="Top Worker",
-        email="top@test.com", role="Developer", employment_status="active",
+        email="top@test.com", job_title="Developer", employment_status="active",
     )
     emp2 = Employee(
         organization_id=1, department_id=dept.id, name="Low Worker",
-        email="low@test.com", role="Intern", employment_status="active",
+        email="low@test.com", job_title="Intern", employment_status="active",
     )
     db.add_all([emp1, emp2])
     await db.flush()
@@ -258,7 +258,7 @@ async def test_department_okr_progress_service(db: AsyncSession):
         department_id=dept.id,
         name="KR Worker",
         email="kr@test.com",
-        role="Developer",
+        job_title="Developer",
         employment_status="active",
     )
     db.add(emp)

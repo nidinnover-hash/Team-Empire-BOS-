@@ -17,7 +17,7 @@ async def _seed(db: AsyncSession):
         organization_id=1,
         name="Test Clone",
         email="clone@test.com",
-        role="Engineer",
+        job_title="Engineer",
         employment_status="active",
     )
     db.add(emp)

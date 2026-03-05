@@ -12,6 +12,7 @@ from app.services import clickup_service, do_service, github_service, slack_serv
 from app.services import finance as finance_service
 from app.services import project as project_service
 from app.services import task as task_service
+from app.services import workspace as workspace_service
 
 
 @dataclass(slots=True)
@@ -143,6 +144,8 @@ async def maybe_handle_talk_command(
     text = _norm(message)
     if not text:
         return TalkCommandResult(handled=False)
+    default_workspace = await workspace_service.ensure_default_workspace(db, org_id)
+    default_workspace_id = int(default_workspace.id)
 
     _PRIVILEGED_ROLES = {"CEO", "ADMIN", "MANAGER"}
 
@@ -205,7 +208,13 @@ async def maybe_handle_talk_command(
         )
 
     if text.startswith("list tasks") or text == "tasks":
-        tasks = await task_service.list_tasks(db, limit=10, organization_id=org_id, is_done=False)
+        tasks = await task_service.list_tasks(
+            db,
+            limit=10,
+            organization_id=org_id,
+            workspace_id=default_workspace_id,
+            is_done=False,
+        )
         if not tasks:
             return TalkCommandResult(handled=True, response="No open tasks found.")
         rows = [f"- #{t.id} {t.title} (priority {t.priority})" for t in tasks]
@@ -219,6 +228,7 @@ async def maybe_handle_talk_command(
             db,
             TaskCreate(title=task_title, category="business"),  # type: ignore[call-arg]
             organization_id=org_id,
+            workspace_id=default_workspace_id,
         )
         return TalkCommandResult(
             handled=True,

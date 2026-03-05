@@ -17,6 +17,7 @@ from app.core.middleware import (
 )
 from app.core.purpose import resolve_login_profile
 from app.core.security import create_access_token, hash_password, verify_password
+from app.services import org_membership as org_membership_service
 from app.services import user as user_service
 
 logger = logging.getLogger(__name__)
@@ -154,16 +155,24 @@ async def authenticate_user(
     return user
 
 
-def create_jwt(user, *, mfa_bootstrap: bool = False) -> str:
+def create_jwt(
+    user,
+    *,
+    mfa_bootstrap: bool = False,
+    org_id: int | None = None,
+    role: str | None = None,
+) -> str:
     """Create a JWT token for the authenticated user."""
     purpose_profile = resolve_login_profile_cached(user.email)
     token_version = int(getattr(user, "token_version", 1) or 1)
+    effective_org_id = int(org_id if org_id is not None else user.organization_id)
+    effective_role = str(role or user.role)
     return create_access_token(
         {
             "id": user.id,
             "email": user.email,
-            "role": user.role,
-            "org_id": user.organization_id,
+            "role": effective_role,
+            "org_id": effective_org_id,
             "token_version": token_version,
             "purpose": purpose_profile["purpose"],
             "default_theme": purpose_profile["default_theme"],
@@ -172,6 +181,43 @@ def create_jwt(user, *, mfa_bootstrap: bool = False) -> str:
         },
         expires_minutes=10 if mfa_bootstrap else effective_token_expiry_minutes(),
     )
+
+
+async def resolve_login_organization(
+    db: AsyncSession,
+    *,
+    user,
+    requested_org_id: int | None,
+) -> tuple[int, str]:
+    organizations = await org_membership_service.list_user_accessible_orgs(db, user=user)
+    if not organizations:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No active organization access for this user",
+        )
+    by_org_id = {int(str(item["id"])): item for item in organizations}
+    if requested_org_id is not None:
+        selected = by_org_id.get(int(requested_org_id))
+        if selected is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Requested organization is not accessible for this user",
+            )
+        return int(str(selected["id"])), str(selected["role"])
+
+    require_explicit_selection = bool(settings.ACCOUNT_REQUIRE_ORG_SELECTION_ALWAYS) or len(organizations) > 1
+    if require_explicit_selection:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "org_selection_required",
+                "message": "Select an organization to continue",
+                "organizations": organizations,
+            },
+        )
+
+    selected = organizations[0]
+    return int(str(selected["id"])), str(selected["role"])
 
 
 def resolve_login_profile_cached(email: str) -> dict[str, str]:

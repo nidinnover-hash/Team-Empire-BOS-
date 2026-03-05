@@ -182,10 +182,12 @@ def test_scheduler_loop_isolates_sessions():
 
     from app.services import sync_scheduler
     source = inspect.getsource(sync_scheduler._scheduler_loop)
-    # Should have session-per-org pattern
-    assert "for org in orgs:" in source
-    # Each org gets its own session (via retry wrapper or direct)
-    assert source.count("async with") >= 2
+    # Should fetch orgs and run them through isolated pools
+    assert "list_organizations" in source
+    # Each org gets its own session (via pool runner or direct)
+    assert source.count("async with") >= 1
+    # Uses org pool pattern for isolation
+    assert "_run_org_pool" in source
 
 
 # ── FEAT-6: Chat retention cleanup exists ─────────────────────────────────────

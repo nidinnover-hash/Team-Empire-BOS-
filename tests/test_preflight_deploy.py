@@ -60,6 +60,7 @@ def test_main_runs_expected_subprocesses_with_skip_db(monkeypatch: pytest.Monkey
         "production startup smoke",
         "migration heads",
     ]
+    assert "--allow-sqlite" in calls[0][1]
 
 
 def test_check_env_quality_flags_weak_values(monkeypatch: pytest.MonkeyPatch):
@@ -73,6 +74,16 @@ def test_check_env_quality_flags_weak_values(monkeypatch: pytest.MonkeyPatch):
     assert any("TOKEN_ENCRYPTION_KEY" in issue for issue in issues)
     assert any("ADMIN_PASSWORD" in issue for issue in issues)
     assert any("DATABASE_URL" in issue for issue in issues)
+
+
+def test_check_env_quality_allows_sqlite_when_skip_db(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///./local.db")
+    monkeypatch.setenv("SECRET_KEY", "0123456789abcdef0123456789abcdef")
+    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", "abcdef0123456789abcdef0123456789")
+    monkeypatch.setenv("ADMIN_PASSWORD", "StrongPassword123!")
+
+    issues = preflight_deploy._check_env_quality(skip_db=True)
+    assert not any("DATABASE_URL" in issue for issue in issues)
 
 
 def test_main_fails_when_dotenv_is_tracked(monkeypatch: pytest.MonkeyPatch):
