@@ -19,6 +19,7 @@ os.environ.setdefault("PURPOSE_PERSONAL_EMAILS", "nidinnover@gmail.com,purpose-l
 os.environ.setdefault("WHATSAPP_APP_SECRET", "test-whatsapp-secret")
 os.environ["DEBUG"] = "true"
 os.environ["ENFORCE_STARTUP_VALIDATION"] = "false"
+os.environ["EMBEDDING_ENABLED"] = "false"
 os.environ.setdefault("DASHBOARD_CACHE_TTL_SECONDS", "0")
 import pytest
 from httpx import ASGITransport, AsyncClient

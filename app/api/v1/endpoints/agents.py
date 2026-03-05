@@ -11,7 +11,7 @@ from app.agents.orchestrator import (
     run_agent,
     run_agent_multi_turn,
 )
-from app.core.deps import get_db
+from app.core.deps import get_current_workspace_id, get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
 from app.schemas.task import TaskCreate
@@ -20,7 +20,7 @@ from app.services import memory as memory_service
 from app.services import task as task_service
 from app.services.agent_policy import evaluate_agent_policy
 from app.services.context_builder import build_brain_context
-from app.services.memory import build_memory_context
+from app.services.memory import build_memory_context_semantic
 
 router = APIRouter(prefix="/agents", tags=["Agents"])
 
@@ -61,6 +61,7 @@ async def agent_chat(
     data: AgentChatRequest,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> AgentChatResponse:
     """
     Send a message to your AI agent. Returns a real AI response.
@@ -84,7 +85,7 @@ async def agent_chat(
         request_purpose=str(current_user.get("purpose") or "professional"),
         employee_id=data.employee_id,
     )
-    memory_context = await build_memory_context(db, organization_id=org_id)
+    memory_context = await build_memory_context_semantic(db, organization_id=org_id, query=data.message)
 
     result = await run_agent(
         request=data,
@@ -188,6 +189,7 @@ async def agent_chat(
                     db,
                     TaskCreate(title=title.strip()),  # type: ignore[call-arg]
                     organization_id=org_id,
+                    workspace_id=workspace_id,
                 )
                 await record_action(
                     db=db,
@@ -262,6 +264,7 @@ async def agent_multi_turn(
     data: AgentChatRequest,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+    workspace_id: int = Depends(get_current_workspace_id),
 ) -> MultiTurnResponse:
     """
     Execute a complex multi-step request.
@@ -284,7 +287,7 @@ async def agent_multi_turn(
         request_purpose=str(current_user.get("purpose") or "professional"),
         employee_id=data.employee_id,
     )
-    memory_context = await build_memory_context(db, organization_id=org_id)
+    memory_context = await build_memory_context_semantic(db, organization_id=org_id, query=data.message)
 
     result = await run_agent_multi_turn(
         request=data,

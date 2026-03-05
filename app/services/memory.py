@@ -31,10 +31,10 @@ logger = logging.getLogger(__name__)
 # ── Profile Memory ────────────────────────────────────────────────────────────
 
 async def get_profile_memory(
-    db: AsyncSession, organization_id: int
+    db: AsyncSession, organization_id: int, *, workspace_id: int | None = None,
 ) -> list[ProfileMemory]:
     now = datetime.now(UTC)
-    result = await db.execute(
+    query = (
         select(ProfileMemory)
         .where(
             ProfileMemory.organization_id == organization_id,
@@ -43,6 +43,9 @@ async def get_profile_memory(
         .order_by(ProfileMemory.category, ProfileMemory.key)
         .limit(500)
     )
+    if workspace_id is not None:
+        query = query.where(ProfileMemory.workspace_id == workspace_id)
+    result = await db.execute(query)
     return list(result.scalars().all())
 
 
@@ -50,10 +53,12 @@ async def get_avatar_memory(
     db: AsyncSession,
     organization_id: int,
     avatar_mode: str,
+    *,
+    workspace_id: int | None = None,
 ) -> list[AvatarMemory]:
     lowered = str(avatar_mode).strip().lower()
     mode = lowered if lowered in {"personal", "professional", "entertainment", "strategy"} else "professional"
-    result = await db.execute(
+    query = (
         select(AvatarMemory)
         .where(
             AvatarMemory.organization_id == organization_id,
@@ -62,6 +67,9 @@ async def get_avatar_memory(
         .order_by(AvatarMemory.key)
         .limit(500)
     )
+    if workspace_id is not None:
+        query = query.where(AvatarMemory.workspace_id == workspace_id)
+    result = await db.execute(query)
     return list(result.scalars().all())
 
 
@@ -71,15 +79,18 @@ async def upsert_avatar_memory(
     avatar_mode: str,
     key: str,
     value: str,
+    *,
+    workspace_id: int | None = None,
 ) -> AvatarMemory:
     """Create or update an avatar-scoped memory entry."""
-    result = await db.execute(
-        select(AvatarMemory).where(
-            AvatarMemory.organization_id == organization_id,
-            AvatarMemory.avatar_mode == avatar_mode,
-            AvatarMemory.key == key,
-        )
-    )
+    filters = [
+        AvatarMemory.organization_id == organization_id,
+        AvatarMemory.avatar_mode == avatar_mode,
+        AvatarMemory.key == key,
+    ]
+    if workspace_id is not None:
+        filters.append(AvatarMemory.workspace_id == workspace_id)
+    result = await db.execute(select(AvatarMemory).where(*filters))
     existing = result.scalar_one_or_none()
     if existing:
         existing.value = value
@@ -93,6 +104,7 @@ async def upsert_avatar_memory(
         avatar_mode=avatar_mode,
         key=key,
         value=value,
+        workspace_id=workspace_id,
     )
     db.add(new_entry)
     try:
@@ -100,13 +112,7 @@ async def upsert_avatar_memory(
         await db.refresh(new_entry)
     except IntegrityError:
         await db.rollback()
-        retry = await db.execute(
-            select(AvatarMemory).where(
-                AvatarMemory.organization_id == organization_id,
-                AvatarMemory.avatar_mode == avatar_mode,
-                AvatarMemory.key == key,
-            )
-        )
+        retry = await db.execute(select(AvatarMemory).where(*filters))
         existing = retry.scalar_one_or_none()
         if existing is None:
             raise
@@ -124,18 +130,21 @@ async def upsert_profile_memory(
     key: str,
     value: str,
     category: str | None = None,
+    *,
+    workspace_id: int | None = None,
 ) -> ProfileMemory:
     """Create or update a profile memory entry by key.
 
     Handles the TOCTOU race: if two concurrent calls both pass the SELECT,
     the INSERT that loses gets an IntegrityError and retries as an UPDATE.
     """
-    result = await db.execute(
-        select(ProfileMemory).where(
-            ProfileMemory.organization_id == organization_id,
-            ProfileMemory.key == key,
-        )
-    )
+    _filters = [
+        ProfileMemory.organization_id == organization_id,
+        ProfileMemory.key == key,
+    ]
+    if workspace_id is not None:
+        _filters.append(ProfileMemory.workspace_id == workspace_id)
+    result = await db.execute(select(ProfileMemory).where(*_filters))
     existing = result.scalar_one_or_none()
 
     if existing:
@@ -148,6 +157,12 @@ async def upsert_profile_memory(
         except SQLAlchemyError:
             await db.rollback()
             raise
+        from app.services.embedding import format_embedding_text, schedule_embed
+        schedule_embed(
+            organization_id, existing.workspace_id,
+            "profile_memory", existing.id,
+            format_embedding_text("profile_memory", key=key, value=value),
+        )
         return existing
 
     new_entry = ProfileMemory(
@@ -155,6 +170,7 @@ async def upsert_profile_memory(
         key=key,
         value=value,
         category=category,
+        workspace_id=workspace_id,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -165,12 +181,7 @@ async def upsert_profile_memory(
     except IntegrityError:
         # Concurrent insert won the race — retry as update
         await db.rollback()
-        retry = await db.execute(
-            select(ProfileMemory).where(
-                ProfileMemory.organization_id == organization_id,
-                ProfileMemory.key == key,
-            )
-        )
+        retry = await db.execute(select(ProfileMemory).where(*_filters))
         existing = retry.scalar_one_or_none()
         if existing is None:
             raise  # re-raise IntegrityError if the winning row vanished
@@ -179,10 +190,25 @@ async def upsert_profile_memory(
         existing.updated_at = datetime.now(UTC)
         await db.commit()
         await db.refresh(existing)
+        from app.services.embedding import format_embedding_text as _fmt
+        from app.services.embedding import schedule_embed as _sched
+        _sched(
+            organization_id, existing.workspace_id,
+            "profile_memory", existing.id,
+            _fmt("profile_memory", key=key, value=value),
+        )
         return existing
     except SQLAlchemyError:
         await db.rollback()
         raise
+
+    # Fire-and-forget embedding generation
+    from app.services.embedding import format_embedding_text, schedule_embed
+    schedule_embed(
+        organization_id, new_entry.workspace_id,
+        "profile_memory", new_entry.id,
+        format_embedding_text("profile_memory", key=key, value=value),
+    )
     return new_entry
 
 
@@ -287,9 +313,11 @@ async def get_daily_context(
     db: AsyncSession,
     organization_id: int,
     for_date: date | None = None,
+    *,
+    workspace_id: int | None = None,
 ) -> list[DailyContext]:
     target = for_date or date.today()
-    result = await db.execute(
+    query = (
         select(DailyContext)
         .where(
             DailyContext.organization_id == organization_id,
@@ -298,11 +326,15 @@ async def get_daily_context(
         .order_by(DailyContext.context_type, DailyContext.created_at)
         .limit(500)
     )
+    if workspace_id is not None:
+        query = query.where(DailyContext.workspace_id == workspace_id)
+    result = await db.execute(query)
     return list(result.scalars().all())
 
 
 async def add_daily_context(
-    db: AsyncSession, data: DailyContextCreate, organization_id: int
+    db: AsyncSession, data: DailyContextCreate, organization_id: int,
+    *, workspace_id: int | None = None,
 ) -> DailyContext:
     entry = DailyContext(
         organization_id=organization_id,
@@ -310,16 +342,26 @@ async def add_daily_context(
         context_type=data.context_type,
         content=data.content,
         related_to=data.related_to,
+        workspace_id=workspace_id,
         created_at=datetime.now(UTC),
     )
     db.add(entry)
     await db.commit()
     await db.refresh(entry)
+
+    from app.services.embedding import format_embedding_text, schedule_embed
+    schedule_embed(
+        organization_id, entry.workspace_id,
+        "daily_context", entry.id,
+        format_embedding_text("daily_context", context_type=data.context_type, content=data.content),
+    )
     return entry
 
 
 # ── Memory Context Cache ─────────────────────────────────────────────────────
-_memory_context_cache: dict[int, tuple[float, str]] = {}
+# Cache key is (organization_id, workspace_id) where workspace_id may be None.
+_CacheKey = tuple[int, int | None]
+_memory_context_cache: dict[_CacheKey, tuple[float, str]] = {}
 _memory_context_cache_stats: dict[str, int] = {
     "hits": 0,
     "misses": 0,
@@ -329,9 +371,17 @@ _memory_context_cache_stats: dict[str, int] = {
 }
 
 
-def invalidate_memory_cache(organization_id: int) -> None:
-    """Clear cached memory context for an org (call after memory writes)."""
-    _memory_context_cache.pop(organization_id, None)
+def invalidate_memory_cache(organization_id: int, workspace_id: int | None = None) -> None:
+    """Clear cached memory context for an org/workspace (call after memory writes).
+
+    If workspace_id is None, clears ALL cache entries for the org.
+    """
+    if workspace_id is None:
+        keys_to_remove = [k for k in _memory_context_cache if k[0] == organization_id]
+        for k in keys_to_remove:
+            _memory_context_cache.pop(k, None)
+    else:
+        _memory_context_cache.pop((organization_id, workspace_id), None)
     _memory_context_cache_stats["size"] = len(_memory_context_cache)
 
 
@@ -342,17 +392,17 @@ def get_memory_cache_stats() -> dict[str, int]:
 
 
 def _prune_memory_cache(now_ts: float, ttl_seconds: int, max_orgs: int) -> None:
-    stale_orgs = [
-        org_id for org_id, (ts, _ctx) in _memory_context_cache.items()
+    stale_keys = [
+        key for key, (ts, _ctx) in _memory_context_cache.items()
         if now_ts - ts >= ttl_seconds
     ]
-    for org_id in stale_orgs:
-        _memory_context_cache.pop(org_id, None)
-    _memory_context_cache_stats["stale_pruned"] += len(stale_orgs)
+    for key in stale_keys:
+        _memory_context_cache.pop(key, None)
+    _memory_context_cache_stats["stale_pruned"] += len(stale_keys)
     # Enforce bounded cache size.
     while len(_memory_context_cache) >= max_orgs and _memory_context_cache:
-        oldest_org = min(_memory_context_cache.items(), key=lambda item: item[1][0])[0]
-        _memory_context_cache.pop(oldest_org, None)
+        oldest_key = min(_memory_context_cache.items(), key=lambda item: item[1][0])[0]
+        _memory_context_cache.pop(oldest_key, None)
         _memory_context_cache_stats["evictions"] += 1
     _memory_context_cache_stats["size"] = len(_memory_context_cache)
 
@@ -364,6 +414,8 @@ async def build_memory_context(
     organization_id: int,
     categories: list[str] | None = None,
     char_limit: int = DEFAULT_CONTEXT_CHAR_LIMIT,
+    *,
+    workspace_id: int | None = None,
 ) -> str:
     """
     Assemble memory into a trimmed string for AI injection.
@@ -372,14 +424,14 @@ async def build_memory_context(
     - Optionally filter profile entries by category
     - Automatically trim to char_limit to prevent context bloat
 
-    This is what makes the clone feel like Nidin — it knows who he is,
-    who his team is, and what's happening today.
+    When workspace_id is provided, only memory scoped to that workspace is included.
     """
     import time as _time
     ttl_seconds = int(settings.MEMORY_CONTEXT_CACHE_TTL_SECONDS)
     max_orgs = int(settings.MEMORY_CONTEXT_CACHE_MAX_ORGS)
+    cache_key: _CacheKey = (organization_id, workspace_id)
     # Return cached context if fresh.
-    cached = _memory_context_cache.get(organization_id)
+    cached = _memory_context_cache.get(cache_key)
     if cached and categories is None and char_limit == DEFAULT_CONTEXT_CHAR_LIMIT:
         ts, ctx = cached
         if _time.time() - ts < ttl_seconds:
@@ -396,9 +448,9 @@ async def build_memory_context(
     from app.services.integration import list_integrations as _list_integrations
 
     profile, members, today_context, integrations = await _asyncio.gather(
-        get_profile_memory(db, organization_id=organization_id),
+        get_profile_memory(db, organization_id=organization_id, workspace_id=workspace_id),
         get_team_members(db, organization_id=organization_id, active_only=True),
-        get_daily_context(db, organization_id=organization_id, for_date=date.today()),
+        get_daily_context(db, organization_id=organization_id, for_date=date.today(), workspace_id=workspace_id),
         _list_integrations(db, organization_id=organization_id),
     )
     integration_statuses: list[Mapping[str, object]] = [
@@ -435,12 +487,15 @@ async def build_memory_context(
             base_context = base_context + "\n\n" + integration_block[:remaining]
 
     # Single query for all external tasks (ClickUp + GitHub PRs + GitHub issues)
+    _task_filters = [
+        _Task.organization_id == organization_id,
+        _Task.external_source.in_(["clickup", "github_pr", "github_issue"]),
+        _Task.is_done.is_(False),
+    ]
+    if workspace_id is not None:
+        _task_filters.append(_Task.workspace_id == workspace_id)
     ext_result = await db.execute(
-        _select(_Task).where(
-            _Task.organization_id == organization_id,
-            _Task.external_source.in_(["clickup", "github_pr", "github_issue"]),
-            _Task.is_done.is_(False),
-        ).order_by(_Task.priority.desc()).limit(45)
+        _select(_Task).where(*_task_filters).order_by(_Task.priority.desc()).limit(45)
     )
     ext_tasks = list(ext_result.scalars().all())
 
@@ -705,7 +760,85 @@ async def build_memory_context(
     if categories is None and char_limit == DEFAULT_CONTEXT_CHAR_LIMIT:
         now_ts = _time.time()
         _prune_memory_cache(now_ts, ttl_seconds=ttl_seconds, max_orgs=max_orgs)
-        _memory_context_cache[organization_id] = (now_ts, base_context)
+        _memory_context_cache[cache_key] = (now_ts, base_context)
         _memory_context_cache_stats["size"] = len(_memory_context_cache)
 
     return base_context
+
+
+# ── Semantic Memory Context Builder ──────────────────────────────────────────
+
+async def build_memory_context_semantic(
+    db: AsyncSession,
+    organization_id: int,
+    query: str,
+    *,
+    workspace_id: int | None = None,
+    categories: list[str] | None = None,
+    char_limit: int = DEFAULT_CONTEXT_CHAR_LIMIT,
+) -> str:
+    """Build memory context using semantic retrieval for the query-relevant portion.
+
+    Retrieves the most relevant memory entries via pgvector cosine similarity,
+    then appends live data blocks (integrations, emails, Slack, etc.) that
+    cannot be pre-embedded. Falls back to the full lexical context builder
+    when semantic search is unavailable or returns no results.
+    """
+    from app.core.config import settings as _settings
+
+    if not _settings.EMBEDDING_ENABLED or not query.strip():
+        return await build_memory_context(
+            db, organization_id, categories, char_limit, workspace_id=workspace_id,
+        )
+
+    try:
+        from app.services.embedding import search_similar
+
+        results = await search_similar(
+            db, organization_id, query,
+            workspace_id=workspace_id, limit=_settings.EMBEDDING_MAX_RESULTS,
+        )
+    except Exception:
+        logger.debug("Semantic search failed, falling back to lexical context", exc_info=True)
+        results = []
+
+    if not results:
+        return await build_memory_context(
+            db, organization_id, categories, char_limit, workspace_id=workspace_id,
+        )
+
+    # Group results by source_type for formatted output
+    profile_lines: list[str] = []
+    daily_lines: list[str] = []
+    clone_lines: list[str] = []
+
+    for r in results:
+        if r.source_type == "profile_memory":
+            profile_lines.append(f"  - {r.content_text}")
+        elif r.source_type == "daily_context":
+            daily_lines.append(f"  {r.content_text}")
+        elif r.source_type == "clone_memory":
+            clone_lines.append(f"  - {r.content_text}")
+
+    sections: list[str] = []
+    if profile_lines:
+        sections.append("PROFILE (relevant):\n" + "\n".join(profile_lines))
+    if daily_lines:
+        sections.append("TODAY'S CONTEXT (relevant):\n" + "\n".join(daily_lines))
+    if clone_lines:
+        sections.append("PAST DECISIONS (relevant):\n" + "\n".join(clone_lines))
+
+    semantic_block = "\n\n".join(sections)
+
+    # Append live data blocks that can't be pre-embedded (integrations, recent emails, etc.)
+    remaining = char_limit - len(semantic_block)
+    if remaining > 200:
+        full_context = await build_memory_context(
+            db, organization_id, categories, remaining, workspace_id=workspace_id,
+        )
+        # Only append the live data blocks (after the base profile/team/daily section)
+        # by using the full context as a supplement
+        semantic_block = semantic_block + "\n\n" + full_context
+
+    from app.memory.retrieval import trim_context_to_limit
+    return trim_context_to_limit(semantic_block, char_limit)

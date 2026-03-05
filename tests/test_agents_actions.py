@@ -195,7 +195,7 @@ async def test_agent_response_includes_memory_source_attribution(client, monkeyp
             "TODAY'S CONTEXT:\n  [PRIORITY] Ship tests\n\n"
             "[GITHUB DEV ACTIVITY]\nOpen PRs (1):\n  - Improve fallback\n[END GITHUB]\n"
         )
-    monkeypatch.setattr(agents_endpoint, "build_memory_context", _fake_memory_context)
+    monkeypatch.setattr(agents_endpoint, "build_memory_context_semantic", _fake_memory_context)
 
     headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
     response = await client.post(

@@ -29,7 +29,7 @@ async def web_agent_chat(
     from app.agents.orchestrator import AgentChatRequest, run_agent
     from app.services import chat_history as chat_history_service
     from app.services import conversation_learning as conversation_learning_service
-    from app.services.memory import build_memory_context
+    from app.services.memory import build_memory_context_semantic
 
     # Only CEO/ADMIN may force a specific role; other roles get keyword routing
     if force_role and user["role"] not in {"CEO", "ADMIN"}:
@@ -52,9 +52,10 @@ async def web_agent_chat(
         actor_role=str(user["role"]),
         request_purpose=str(user.get("purpose") or "professional"),
     )
-    memory_context = await build_memory_context(
+    memory_context = await build_memory_context_semantic(
         db,
         organization_id=org_id,
+        query=message,
         categories=(
             None
             if read_mode == "professional"

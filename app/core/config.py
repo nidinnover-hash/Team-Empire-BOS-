@@ -82,6 +82,7 @@ class Settings(BaseSettings):
     GA4_PROPERTY_ID: str | None = None
     CALENDLY_API_KEY: str | None = None
     ELEVENLABS_API_KEY: str | None = None
+    SLACK_SIGNING_SECRET: str | None = None
     ELEVENLABS_DEFAULT_VOICE_ID: str = "21m00Tcm4TlvDq8ikWAM"  # Rachel
     HUBSPOT_ACCESS_TOKEN: str | None = None
 
@@ -142,6 +143,7 @@ class Settings(BaseSettings):
     LEGAL_DPA_REQUIRED: bool = True
     LEGAL_MARKETING_CONSENT_REQUIRED: bool = True
     ACCOUNT_SSO_REQUIRED: bool = False
+    ACCOUNT_REQUIRE_ORG_SELECTION_ALWAYS: bool = False
     ACCOUNT_MFA_REQUIRED: bool = True
     ACCOUNT_SESSION_MAX_HOURS: int = 12
     DASHBOARD_CACHE_TTL_SECONDS: int = 30
@@ -179,6 +181,8 @@ class Settings(BaseSettings):
     SYNC_ENABLED: bool = True
     SYNC_INTERVAL_MINUTES: int = 30   # how often the scheduler fires
     SYNC_THROTTLE_MINUTES: int = 15   # min gap for on-demand (login/dashboard) syncs
+    SYNC_INTEGRATION_WORKERS: int = 4  # concurrent org workers for integration sync
+    SYNC_AUTOMATION_WORKERS: int = 4   # concurrent org workers for automation/maintenance jobs
     SHUTDOWN_GRACE_SECONDS: int = 15  # max wait for in-flight syncs on shutdown
     LOG_FORMAT: Literal["json", "text"] = "text"
     LOG_LEVEL: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"] = "INFO"
@@ -235,6 +239,14 @@ class Settings(BaseSettings):
     FEATURE_WORKLOAD_BALANCER: bool = True
     FEATURE_DEPARTMENT_OKR_AUTOPROGRESS: bool = True
     FEATURE_SKILL_MATRIX: bool = True
+    # Embedding / pgvector semantic retrieval
+    EMBEDDING_ENABLED: bool = True
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIMENSIONS: int = 1536
+    EMBEDDING_SIMILARITY_THRESHOLD: float = 0.3
+    EMBEDDING_MAX_RESULTS: int = 10
+    EMBEDDING_TIMEOUT_SECONDS: int = 10
+
     CLONE_REQUIRE_CLARIFYING_QUESTION: bool = True
     CLONE_PATTERN_AUTOMATION_ENABLED: bool = False
     CLONE_PATTERN_WINDOW: int = 50
@@ -393,6 +405,14 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("DB_SCHEMA_ENFORCE_HEAD should be true when DEBUG=false")
     if s.SYNC_THROTTLE_MINUTES < 0:
         issues.append("SYNC_THROTTLE_MINUTES must be >= 0")
+    if s.SYNC_INTEGRATION_WORKERS < 1:
+        issues.append("SYNC_INTEGRATION_WORKERS must be >= 1")
+    if s.SYNC_INTEGRATION_WORKERS > 64:
+        issues.append("SYNC_INTEGRATION_WORKERS must be <= 64")
+    if s.SYNC_AUTOMATION_WORKERS < 1:
+        issues.append("SYNC_AUTOMATION_WORKERS must be >= 1")
+    if s.SYNC_AUTOMATION_WORKERS > 64:
+        issues.append("SYNC_AUTOMATION_WORKERS must be <= 64")
     if s.SYNC_STALE_HOURS < 1:
         issues.append("SYNC_STALE_HOURS must be >= 1")
     if s.SYNC_STALE_HOURS > 168:
