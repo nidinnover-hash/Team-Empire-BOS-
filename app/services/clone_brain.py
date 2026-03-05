@@ -16,7 +16,7 @@ from app.services import clone_control
 class CloneDispatchItem(TypedDict):
     employee_id: int
     employee_name: str
-    role: str | None
+    job_title: str | None
     overall_score: float
     readiness_level: str
     fit_reason: str
@@ -219,7 +219,7 @@ async def build_dispatch_plan(
             import json
 
             preferred = [str(x).lower() for x in json.loads(profile.preferred_task_types_json or "[]")]
-        role_text = (emp.role or "").lower()
+        role_text = (emp.job_title or "").lower()
         if "tech" in challenge_text and ("developer" in role_text or "engineer" in role_text):
             reason = "Strong technical fit based on role and performance score."
         elif "sales" in challenge_text and ("sales" in role_text or "counsellor" in role_text):
@@ -230,7 +230,7 @@ async def build_dispatch_plan(
             {
                 "employee_id": emp.id,
                 "employee_name": emp.name,
-                "role": emp.role,
+                "job_title": emp.job_title,
                 "overall_score": row.overall_score,
                 "readiness_level": row.readiness_level,
                 "fit_reason": reason,

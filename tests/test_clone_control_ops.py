@@ -7,7 +7,7 @@ async def test_clone_identity_profile_feedback_training_flow(client):
     headers = _make_auth_headers()
     emp = await client.post(
         "/api/v1/ops/employees",
-        json={"name": "Flow User", "email": "flow@org.com", "role": "Developer"},
+        json={"name": "Flow User", "email": "flow@org.com", "job_title": "Developer"},
         headers=headers,
     )
     assert emp.status_code == 201

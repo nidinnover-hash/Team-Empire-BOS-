@@ -257,6 +257,7 @@ async def run_agent(
         avatar_key = "professional"
 
     # Strategy mode always uses Strategist role + OpenAI provider
+    effective_provider: str | None
     if avatar_key == "strategy":
         role = "Strategist"
         effective_provider = "openai"
@@ -403,6 +404,7 @@ async def run_agent_multi_turn(
             force_role=force_role if force_role in ROLE_PROMPTS else None,
             avatar_mode=request.avatar_mode,
             employee_id=request.employee_id,
+            provider=request.provider,
         )
 
         result = await run_agent(

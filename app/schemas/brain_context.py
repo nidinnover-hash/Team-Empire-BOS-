@@ -16,7 +16,7 @@ class OrgContext(BaseModel):
 class EmployeeContext(BaseModel):
     employee_id: int
     name: str
-    role: str | None = None
+    job_title: str | None = None
     department_id: int | None = None
     employment_status: str | None = None
     profile: dict[str, object] = Field(default_factory=dict)

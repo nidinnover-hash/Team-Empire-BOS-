@@ -117,7 +117,7 @@ def _build_theme_employee_index(
     """Precompute theme -> list of employees whose role matches that theme."""
     index: dict[str, list[Employee]] = defaultdict(list)
     for emp in employees:
-        role_lower = (emp.role or "").lower()
+        role_lower = (emp.job_title or "").lower()
         for theme, keywords in _OPPORTUNITY_THEME_KEYWORDS.items():
             if any(k in role_lower for k in keywords):
                 index[theme].append(emp)
@@ -219,7 +219,7 @@ async def get_clone_training_layer(
             CloneTrainingMember(
                 employee_id=emp.id,
                 name=emp.name,
-                role=emp.role,
+                job_title=emp.job_title,
                 has_identity_map=has_identity,
                 has_clone_profile=has_profile,
                 latest_clone_score=round(score, 2),
@@ -316,7 +316,7 @@ async def get_clone_marketing_sales_layer(
 
     members: list[CloneMarketingSalesMember] = []
     for emp in employees:
-        role_text = (emp.role or "").lower()
+        role_text = (emp.job_title or "").lower()
         if not any(k in role_text for k in ("sales", "marketing", "growth", "business")):
             continue
         perf = latest_perf.get(emp.id)
@@ -335,7 +335,7 @@ async def get_clone_marketing_sales_layer(
             CloneMarketingSalesMember(
                 employee_id=emp.id,
                 name=emp.name,
-                role=emp.role,
+                job_title=emp.job_title,
                 clone_score=round(emp_score, 2),
                 readiness_level=level,
                 lead_focus=focus,
@@ -430,7 +430,7 @@ async def get_opportunity_association_layer(
         for emp in employees:
             if emp.id not in candidates and (emp.name or "").strip().lower() not in text:
                 continue
-            role_text = (emp.role or "").lower()
+            role_text = (emp.job_title or "").lower()
             fit = 40
             if any(k in role_text for k in _OPPORTUNITY_THEME_KEYWORDS.get(theme, ())):
                 fit += 25

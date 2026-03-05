@@ -213,7 +213,7 @@ async def test_staff_prosperity_layer_endpoint_returns_report(client):
 
 
 async def test_clone_training_layer_endpoint_returns_report(client):
-    await client.post("/api/v1/ops/employees", json={"name": "Clone Emp", "email": "clone.emp@test.com", "role": "Developer"})
+    await client.post("/api/v1/ops/employees", json={"name": "Clone Emp", "email": "clone.emp@test.com", "job_title": "Developer"})
     r = await client.get("/api/v1/layers/clone-training")
     assert r.status_code == 200
     body = r.json()
@@ -222,7 +222,7 @@ async def test_clone_training_layer_endpoint_returns_report(client):
 
 
 async def test_clone_marketing_sales_layer_endpoint_returns_report(client):
-    await client.post("/api/v1/ops/employees", json={"name": "Sales Exec", "email": "sales.exec@test.com", "role": "Sales Manager"})
+    await client.post("/api/v1/ops/employees", json={"name": "Sales Exec", "email": "sales.exec@test.com", "job_title": "Sales Manager"})
     await _create_contact(client, "Lead Z", "business", role="buyer", notes="needs conversion support")
     await _create_task(client, "Sales follow up lead z", "business")
     r = await client.get("/api/v1/layers/clone-marketing-sales")
@@ -233,7 +233,7 @@ async def test_clone_marketing_sales_layer_endpoint_returns_report(client):
 
 
 async def test_opportunity_association_layer_endpoint_returns_report(client):
-    await client.post("/api/v1/ops/employees", json={"name": "Ops Owner", "email": "ops.owner@test.com", "role": "Operations Manager"})
+    await client.post("/api/v1/ops/employees", json={"name": "Ops Owner", "email": "ops.owner@test.com", "job_title": "Operations Manager"})
     await _create_contact(client, "University Partner", "business", role="admissions head", notes="student visa pipeline growth")
     r = await client.get("/api/v1/layers/opportunity-association")
     assert r.status_code == 200

@@ -199,7 +199,7 @@ async def generate_role_training_plans(
     created_or_updated = 0
     for score in scores:
         emp = employee_by_id.get(score.employee_id)
-        role_focus = (emp.role if emp and emp.role else "General")
+        role_focus = (emp.job_title if emp and emp.job_title else "General")
         weakness = min(
             [
                 ("productivity", score.productivity_score),

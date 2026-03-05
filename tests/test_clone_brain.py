@@ -56,7 +56,7 @@ async def test_clone_brain_training_and_dispatch(client):
 
     created = await client.post(
         "/api/v1/ops/employees",
-        json={"name": "Clone Dev", "email": "clonedev@org.com", "role": "Developer"},
+        json={"name": "Clone Dev", "email": "clonedev@org.com", "job_title": "Developer"},
     )
     assert created.status_code == 201
     employee_id = created.json()["id"]

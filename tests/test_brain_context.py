@@ -16,7 +16,7 @@ async def test_build_brain_context_includes_employee_profile_and_patterns(db):
     emp = Employee(
         organization_id=1,
         name="Alice",
-        role="Engineer",
+        job_title="Engineer",
         email="alice@org1.com",
         is_active=True,
     )
@@ -73,7 +73,7 @@ async def test_build_brain_context_blocks_cross_org_employee(db):
     foreign_emp = Employee(
         organization_id=2,
         name="Bob",
-        role="Sales",
+        job_title="Sales",
         email="bob@org2.com",
         is_active=True,
     )

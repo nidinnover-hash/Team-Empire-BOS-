@@ -70,7 +70,7 @@ async def _employee_context(
     return EmployeeContext(
         employee_id=int(row.id),
         name=row.name,
-        role=row.role,
+        job_title=row.job_title,
         department_id=row.department_id,
         employment_status=row.employment_status,
         profile=profile_payload,

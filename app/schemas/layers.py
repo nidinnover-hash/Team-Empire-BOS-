@@ -140,7 +140,7 @@ class StaffProsperityLayerReport(BaseModel):
 class CloneTrainingMember(BaseModel):
     employee_id: int
     name: str
-    role: str | None = None
+    job_title: str | None = None
     has_identity_map: bool
     has_clone_profile: bool
     latest_clone_score: float
@@ -164,7 +164,7 @@ class CloneTrainingLayerReport(BaseModel):
 class CloneMarketingSalesMember(BaseModel):
     employee_id: int
     name: str
-    role: str | None = None
+    job_title: str | None = None
     clone_score: float
     readiness_level: str
     lead_focus: str
