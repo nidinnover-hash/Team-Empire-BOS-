@@ -9,7 +9,7 @@ async def test_create_employee_with_department(client):
     dept_id = dept.json()["id"]
 
     resp = await client.post("/api/v1/ops/employees", json={
-        "name": "Alice", "email": "alice@example.com", "role": "Developer",
+        "name": "Alice", "email": "alice@example.com", "job_title": "Developer",
         "department_id": dept_id, "employment_status": "active",
     })
     assert resp.status_code == 201

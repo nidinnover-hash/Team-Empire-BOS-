@@ -26,7 +26,7 @@ async def create_or_update_employee(
 
     if existing:
         existing.name = data.name
-        existing.role = data.role  # type: ignore[assignment]  # SQLAlchemy mapped col
+        existing.job_title = data.job_title  # type: ignore[assignment]  # SQLAlchemy mapped col
         existing.department_id = data.department_id
         existing.github_username = data.github_username
         existing.clickup_user_id = data.clickup_user_id
@@ -40,7 +40,7 @@ async def create_or_update_employee(
     emp = Employee(
         organization_id=org_id,
         name=data.name,
-        role=data.role,
+        job_title=data.job_title,
         email=data.email,
         department_id=data.department_id,
         github_username=data.github_username,
@@ -95,7 +95,7 @@ async def update_employee(
         return None
 
     _ALLOWED_FIELDS = {
-        "name", "role", "email", "department_id",
+        "name", "job_title", "email", "department_id",
         "github_username", "clickup_user_id", "employment_status", "is_active",
     }
     update_data = data.model_dump(exclude_unset=True)

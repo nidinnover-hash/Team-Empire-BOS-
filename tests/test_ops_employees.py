@@ -21,13 +21,13 @@ async def test_create_employee(client):
     await _seed_org()
     response = await client.post(
         "/api/v1/ops/employees",
-        json={"name": "Alice", "email": "alice@test.com", "role": "Developer"},
+        json={"name": "Alice", "email": "alice@test.com", "job_title": "Developer"},
     )
     assert response.status_code == 201
     body = response.json()
     assert body["name"] == "Alice"
     assert body["email"] == "alice@test.com"
-    assert body["role"] == "Developer"
+    assert body["job_title"] == "Developer"
     assert body["is_active"] is True
     assert body["organization_id"] == 1
     assert "id" in body
@@ -37,16 +37,16 @@ async def test_create_employee_upserts_on_same_email(client):
     await _seed_org()
     await client.post(
         "/api/v1/ops/employees",
-        json={"name": "Alice V1", "email": "alice@test.com", "role": "Junior"},
+        json={"name": "Alice V1", "email": "alice@test.com", "job_title": "Junior"},
     )
     response = await client.post(
         "/api/v1/ops/employees",
-        json={"name": "Alice V2", "email": "alice@test.com", "role": "Senior"},
+        json={"name": "Alice V2", "email": "alice@test.com", "job_title": "Senior"},
     )
     assert response.status_code == 201
     body = response.json()
     assert body["name"] == "Alice V2"
-    assert body["role"] == "Senior"
+    assert body["job_title"] == "Senior"
 
     # Only one employee should exist
     list_resp = await client.get("/api/v1/ops/employees")
@@ -95,11 +95,11 @@ async def test_update_employee(client):
 
     resp = await client.patch(
         f"/api/v1/ops/employees/{emp_id}",
-        json={"github_username": "charlie-gh", "role": "Lead"},
+        json={"github_username": "charlie-gh", "job_title": "Lead"},
     )
     assert resp.status_code == 200
     assert resp.json()["github_username"] == "charlie-gh"
-    assert resp.json()["role"] == "Lead"
+    assert resp.json()["job_title"] == "Lead"
     assert resp.json()["name"] == "Charlie"  # unchanged
 
 

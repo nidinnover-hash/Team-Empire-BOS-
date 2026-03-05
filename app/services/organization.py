@@ -119,6 +119,35 @@ def default_policy_config() -> dict[str, Any]:
         "feature_flags": {
             "trend_snapshots_enabled": True,
         },
+        "command_center": {
+            "weights": {
+                "critical_tokens": 3,
+                "warning_tokens": 1,
+                "open_violations_high": 2,
+                "open_violations_low": 1,
+                "pending_approvals": 1,
+                "unread_emails": 1,
+                "unread_high_alerts_high": 2,
+                "unread_high_alerts_low": 1,
+                "sync_errors_high": 2,
+                "sync_errors_low": 1,
+                "webhook_failures_high": 2,
+                "webhook_failures_low": 1,
+            },
+            "thresholds": {
+                "warning_tokens_min": 3,
+                "open_violations_high": 5,
+                "pending_approvals_min": 10,
+                "unread_emails_min": 50,
+                "unread_high_alerts_high": 5,
+                "sync_errors_high": 3,
+                "webhook_failures_high": 10,
+            },
+            "levels": {
+                "amber": 2,
+                "red": 4,
+            },
+        },
     }
 
 

@@ -20,6 +20,7 @@ class Organization(Base):
     slug: Mapped[str] = mapped_column(String(120), nullable=False, unique=True, index=True)
     country_code: Mapped[str | None] = mapped_column(String(2), nullable=True, index=True)
     branch_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    industry_type: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     policy_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     config_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     created_at: Mapped[datetime] = mapped_column(

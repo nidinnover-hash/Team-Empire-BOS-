@@ -16,6 +16,13 @@ class Employee(Base):
     organization_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True,
     )
+    user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
     department_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("departments.id", ondelete="SET NULL"),
@@ -23,7 +30,7 @@ class Employee(Base):
         index=True,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[str] = mapped_column(String(100), nullable=True)
+    job_title: Mapped[str] = mapped_column(String(100), nullable=True)
     email: Mapped[str] = mapped_column(String(320), nullable=False)
     github_username: Mapped[str | None] = mapped_column(String(100), nullable=True)
     clickup_user_id: Mapped[str | None] = mapped_column(String(100), nullable=True)

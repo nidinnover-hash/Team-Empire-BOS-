@@ -192,3 +192,15 @@ class SuperAdminActionResponse(BaseModel):
     ok: bool
     user_id: int
     is_super_admin: bool
+
+
+class CommandCenterConfigRead(BaseModel):
+    weights: dict[str, int]
+    thresholds: dict[str, int]
+    levels: dict[str, int]
+
+
+class CommandCenterConfigUpdate(BaseModel):
+    weights: dict[str, int] | None = None
+    thresholds: dict[str, int] | None = None
+    levels: dict[str, int] | None = None
