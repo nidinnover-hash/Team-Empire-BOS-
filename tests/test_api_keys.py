@@ -237,3 +237,22 @@ async def test_api_key_daily_quota_disabled_allows_requests(client, monkeypatch)
     second = await client.get("/api/v1/auth/me", headers=headers)
     assert first.status_code == 200
     assert second.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_api_key_quota_backend_failure_returns_503(client, monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.API_KEY_QUOTA_ENABLED", True)
+
+    async def _boom(*_args, **_kwargs):
+        raise RuntimeError("quota backend down")
+
+    monkeypatch.setattr("app.services.api_quota.consume_api_request_quota", _boom)
+
+    create_resp = await _create_key(client, scopes="read", headers=ORG2_HEADERS)
+    assert create_resp.status_code == 201
+    full_key = create_resp.json()["key"]
+    headers = {"Authorization": f"Bearer {full_key}"}
+
+    resp = await client.get("/api/v1/auth/me", headers=headers)
+    assert resp.status_code == 503
+    assert "quota service" in resp.json()["detail"].lower()
