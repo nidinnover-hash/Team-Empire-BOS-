@@ -329,9 +329,12 @@ async def dashboard(
     else:
         greeting = "Good evening"
 
+    today_date = datetime.now(UTC).strftime("%A, %B %d")
+
     ctx = {
         "request": request,
         "greeting": greeting,
+        "today_date": today_date,
         "commands": commands,
         "tasks": tasks,
         "notes": notes,

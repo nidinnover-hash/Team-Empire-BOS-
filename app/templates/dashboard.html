@@ -59,6 +59,13 @@
   <!-- VIEW 1: Dashboard (Revenue + Health + Compact Chat + Tasks)      -->
   <!-- ══════════════════════════════════════════════════════════════════ -->
   <div id="view-dashboard" class="dash-view is-active" role="tabpanel" aria-labelledby="tab-dashboard">
+
+    <!-- Greeting -->
+    <section class="greeting-section">
+      <h1 class="greeting-headline">{{ greeting }}, {{ session_user.email.split('@')[0] | title }}</h1>
+      <p class="greeting-date">{{ today_date }}</p>
+    </section>
+
     <div class="dash-grid">
 
       <!-- LEFT COLUMN -->
@@ -66,8 +73,11 @@
 
         <!-- Revenue + Health Score row -->
         <div class="stats-row">
-          <div class="stat-card">
-            <div class="stat-label">REVENUE</div>
+          <div class="stat-card stat-card-revenue">
+            <div class="stat-header">
+              <div class="stat-icon stat-icon-revenue"><i data-lucide="trending-up"></i></div>
+              <div class="stat-label">REVENUE</div>
+            </div>
             <div class="stat-big">${{ (finance.balance or 0) | round(0) | int }}<span class="stat-change positive">+{{ (((finance.total_income or 0) / ((finance.total_expense or 0) or 1)) * 10) | round(0) | int }}%</span></div>
             <div class="stat-bars">
               <div class="stat-bar"></div>
@@ -79,7 +89,10 @@
             </div>
           </div>
           <div class="stat-card stat-card-health">
-            <div class="stat-label">BUSINESS HEALTH</div>
+            <div class="stat-header">
+              <div class="stat-icon stat-icon-health"><i data-lucide="heart-pulse"></i></div>
+              <div class="stat-label">BUSINESS HEALTH</div>
+            </div>
             <div class="health-ring">
               <svg viewBox="0 0 120 120" role="img" aria-label="Business health score">
                 <circle cx="60" cy="60" r="50" fill="none" stroke="var(--line-soft)" stroke-width="8"/>
