@@ -163,7 +163,13 @@
       });
       if (!res.ok) return;
       var data = await res.json();
-      if (!data.results || !data.results.length) return;
+      if (!data.results || !data.results.length) {
+        var noResultEl = document.createElement('div');
+        noResultEl.className = 'cmd-empty';
+        noResultEl.textContent = 'No results for \u201c' + query + '\u201d';
+        resultsEl.appendChild(noResultEl);
+        return;
+      }
 
       // Append search results below nav commands
       var searchItems = data.results.slice(0, 8).map(function (r) {
