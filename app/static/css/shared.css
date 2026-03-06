@@ -3,19 +3,19 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Layout ─────────────────────────────────────────────────────────────── */
-.main-wrap { margin-left: var(--sb-width); padding: 1.5rem 2rem; max-width: 1000px; }
+.main-wrap { margin-left: var(--sb-width); padding: 1.25rem 1.75rem; max-width: 1000px; }
 h1 { font-size: var(--text-lg); font-weight: 700; color: var(--text); }
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-.header-actions { display: flex; gap: .5rem; }
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .75rem; }
+.header-actions { display: flex; gap: .4rem; }
 
 /* ── KPI Row ────────────────────────────────────────────────────────────── */
-.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: .8rem; margin-bottom: 1.2rem; }
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: .6rem; margin-bottom: 1rem; }
 .kpi {
-  background: var(--surface); border: none; border-radius: var(--radius);
-  padding: .65rem .85rem; box-shadow: var(--shadow-sm);
+  background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--radius);
+  padding: .55rem .75rem;
 }
 .kpi .label { font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint); }
-.kpi .val { font-size: var(--text-xl); font-weight: 700; color: var(--text); margin-top: .15rem; font-feature-settings: 'tnum' 1; }
+.kpi .val { font-size: var(--text-xl); font-weight: 700; color: var(--text); margin-top: .1rem; font-feature-settings: 'tnum' 1; }
 
 /* ── Tab Bar ────────────────────────────────────────────────────────────── */
 .tab-bar { display: flex; gap: .4rem; margin-bottom: 1rem; border-bottom: 1px solid var(--line); }
@@ -29,20 +29,20 @@ h1 { font-size: var(--text-lg); font-weight: 700; color: var(--text); }
 
 /* ── Buttons ────────────────────────────────────────────────────────────── */
 .btn-primary {
-  background: var(--brand); color: #fff; border: none; border-radius: var(--radius);
-  padding: .4rem .9rem; font-size: var(--text-sm); font-weight: 600; cursor: pointer;
+  background: var(--brand); color: #fff; border: none; border-radius: var(--radius-sm);
+  padding: .35rem .8rem; font-size: var(--text-sm); font-weight: 600; cursor: pointer;
 }
 .btn-primary:hover { opacity: .9; }
 
 .btn-secondary {
   background: var(--surface); color: var(--text-muted); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: .4rem .9rem; font-size: var(--text-sm); cursor: pointer;
+  border-radius: var(--radius-sm); padding: .35rem .8rem; font-size: var(--text-sm); cursor: pointer;
 }
 .btn-secondary:hover { border-color: var(--text-faint); }
 
 .btn-danger {
-  background: var(--danger, #e53e3e); color: #fff; border: none; border-radius: var(--radius);
-  padding: .3rem .6rem; font-size: var(--text-xs); cursor: pointer;
+  background: var(--danger, #e53e3e); color: #fff; border: none; border-radius: var(--radius-sm);
+  padding: .28rem .55rem; font-size: var(--text-xs); cursor: pointer;
 }
 .btn-danger:hover { opacity: .85; }
 

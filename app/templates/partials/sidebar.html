@@ -2,46 +2,50 @@
   {% set role = (session_user.get('role', '') if session_user is defined and session_user else '') %}
   <div class="sb-brand">
     <div class="sb-brand-icon">N</div>
+    <span class="sb-label sb-brand-text">Nidin BOS</span>
   </div>
   <div class="sb-nav">
-    <a href="/" class="sb-item{{ ' active' if active_page == 'dashboard' }}" data-tooltip="Dashboard" aria-label="Dashboard"><i data-lucide="layout-dashboard"></i></a>
+    <a href="/" class="sb-item{{ ' active' if active_page == 'dashboard' }}" aria-label="Dashboard"><i data-lucide="layout-dashboard"></i><span class="sb-label">Dashboard</span></a>
     {% if role in ['CEO', 'ADMIN', 'MANAGER', 'STAFF'] %}
-    <a href="/web/talk" class="sb-item{{ ' active' if active_page == 'talk' }}" data-tooltip="Agent Chat" aria-label="Agent Chat"><i data-lucide="message-circle"></i></a>
-    <a href="/web/strategy" class="sb-item{{ ' active' if active_page == 'strategy' }}" data-tooltip="Strategy" aria-label="Strategy Workspace"><i data-lucide="lightbulb"></i></a>
+    <a href="/web/talk" class="sb-item{{ ' active' if active_page == 'talk' }}" aria-label="Agent Chat"><i data-lucide="message-circle"></i><span class="sb-label">Agent Chat</span></a>
+    <a href="/web/strategy" class="sb-item{{ ' active' if active_page == 'strategy' }}" aria-label="Strategy"><i data-lucide="lightbulb"></i><span class="sb-label">Strategy</span></a>
     {% endif %}
     {% if role in ['CEO', 'ADMIN', 'MANAGER', 'STAFF'] %}
-    <a href="/web/tasks" class="sb-item{{ ' active' if active_page == 'tasks' }}" data-tooltip="Tasks" aria-label="Tasks"><i data-lucide="check-square"></i></a>
-    <a href="/web/projects" class="sb-item{{ ' active' if active_page == 'projects' }}" data-tooltip="Projects" aria-label="Projects"><i data-lucide="folder-kanban"></i></a>
-    <a href="/web/contacts" class="sb-item{{ ' active' if active_page == 'contacts' }}" data-tooltip="Contacts" aria-label="Contacts"><i data-lucide="contact"></i></a>
+    <a href="/web/tasks" class="sb-item{{ ' active' if active_page == 'tasks' }}" aria-label="Tasks"><i data-lucide="check-square"></i><span class="sb-label">Tasks</span></a>
+    <a href="/web/projects" class="sb-item{{ ' active' if active_page == 'projects' }}" aria-label="Projects"><i data-lucide="folder-kanban"></i><span class="sb-label">Projects</span></a>
+    <a href="/web/contacts" class="sb-item{{ ' active' if active_page == 'contacts' }}" aria-label="Contacts"><i data-lucide="contact"></i><span class="sb-label">Contacts</span></a>
     {% endif %}
     {% if role in ['CEO', 'ADMIN', 'MANAGER'] %}
-    <a href="/web/finance" class="sb-item{{ ' active' if active_page == 'finance' }}" data-tooltip="Finance" aria-label="Finance"><i data-lucide="wallet"></i></a>
+    <a href="/web/finance" class="sb-item{{ ' active' if active_page == 'finance' }}" aria-label="Finance"><i data-lucide="wallet"></i><span class="sb-label">Finance</span></a>
     {% endif %}
     {% if role in ['CEO', 'ADMIN', 'MANAGER'] %}
-    <a href="/web/workspaces" class="sb-item{{ ' active' if active_page == 'workspaces' }}" data-tooltip="Workspaces" aria-label="Workspaces"><i data-lucide="brain"></i></a>
+    <a href="/web/workspaces" class="sb-item{{ ' active' if active_page == 'workspaces' }}" aria-label="Workspaces"><i data-lucide="brain"></i><span class="sb-label">Workspaces</span></a>
     {% endif %}
     {% if role in ['CEO', 'ADMIN'] %}
-    <a href="/web/integrations" class="sb-item{{ ' active' if active_page == 'integrations' }}" data-tooltip="Integrations" aria-label="Integrations"><i data-lucide="plug"></i></a>
+    <a href="/web/integrations" class="sb-item{{ ' active' if active_page == 'integrations' }}" aria-label="Integrations"><i data-lucide="plug"></i><span class="sb-label">Integrations</span></a>
     {% endif %}
     {% if role in ['CEO', 'ADMIN', 'MANAGER', 'EMPLOYEE'] %}
-    <a href="/web/notifications" class="sb-item{{ ' active' if active_page == 'notifications' }}" data-tooltip="Notifications" aria-label="Notifications"><i data-lucide="bell"></i></a>
+    <a href="/web/notifications" class="sb-item{{ ' active' if active_page == 'notifications' }}" aria-label="Notifications"><i data-lucide="bell"></i><span class="sb-label">Notifications</span></a>
     {% endif %}
   </div>
   <div class="sb-footer">
-    <a href="/docs" class="sb-item" target="_blank" rel="noopener noreferrer" data-tooltip="API Docs" aria-label="API Docs">
-      <i data-lucide="book-open"></i>
+    <a href="/docs" class="sb-item" target="_blank" rel="noopener noreferrer" aria-label="API Docs">
+      <i data-lucide="book-open"></i><span class="sb-label">API Docs</span>
     </a>
-    <button class="sb-item theme-toggle" type="button" data-tooltip="Theme" aria-label="Toggle theme">
-      <i data-lucide="moon" class="theme-icon"></i>
+    <button class="sb-item theme-toggle" type="button" aria-label="Toggle theme">
+      <i data-lucide="moon" class="theme-icon"></i><span class="sb-label">Theme</span>
     </button>
     {% if session_user is defined and session_user %}
-    <button class="sb-user-avatar" type="button" aria-label="{{ session_user.email }}" data-tooltip="{{ session_user.email }}">{{ session_user.email[0]|upper }}</button>
-    <button class="sb-item" id="logout-btn" type="button" data-tooltip="Sign out" aria-label="Sign out">
-      <i data-lucide="log-out"></i>
+    <div class="sb-user-row">
+      <button class="sb-user-avatar" type="button" aria-label="{{ session_user.email }}">{{ session_user.email[0]|upper }}</button>
+      <span class="sb-label sb-user-email">{{ session_user.email }}</span>
+    </div>
+    <button class="sb-item" id="logout-btn" type="button" aria-label="Sign out">
+      <i data-lucide="log-out"></i><span class="sb-label">Sign out</span>
     </button>
     {% else %}
-    <a href="/web/login" class="sb-item" data-tooltip="Sign in" aria-label="Sign in">
-      <i data-lucide="log-in"></i>
+    <a href="/web/login" class="sb-item" aria-label="Sign in">
+      <i data-lucide="log-in"></i><span class="sb-label">Sign in</span>
     </a>
     {% endif %}
   </div>
