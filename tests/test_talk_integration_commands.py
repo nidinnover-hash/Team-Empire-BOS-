@@ -21,7 +21,7 @@ async def test_web_chat_handles_github_status_command(client, monkeypatch):
         raise AssertionError("run_agent should not be called for integration command")
 
     monkeypatch.setattr("app.services.github_service.get_github_status", fake_status)
-    monkeypatch.setattr("app.agents.orchestrator.run_agent", should_not_call_ai)
+    monkeypatch.setattr("app.web.chat.run_agent", should_not_call_ai)
 
     response = await client.post(
         "/web/agents/chat",
@@ -41,7 +41,7 @@ async def test_web_chat_can_create_task_from_talk_command(client, monkeypatch):
     async def should_not_call_ai(*_args, **_kwargs):
         raise AssertionError("run_agent should not be called for create task command")
 
-    monkeypatch.setattr("app.agents.orchestrator.run_agent", should_not_call_ai)
+    monkeypatch.setattr("app.web.chat.run_agent", should_not_call_ai)
 
     response = await client.post(
         "/web/agents/chat",
@@ -62,7 +62,7 @@ async def test_web_chat_expense_tracker_summary(client, monkeypatch):
     async def should_not_call_ai(*_args, **_kwargs):
         raise AssertionError("run_agent should not be called for expense tracker command")
 
-    monkeypatch.setattr("app.agents.orchestrator.run_agent", should_not_call_ai)
+    monkeypatch.setattr("app.web.chat.run_agent", should_not_call_ai)
 
     await client.post(
         "/api/v1/finance",

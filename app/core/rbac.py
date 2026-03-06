@@ -6,6 +6,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_api_user, get_db
+from app.core.visibility import (
+    CEO_EXECUTIVE_ROLE_ORDER,
+    CROSS_COMPANY_ROLE_ORDER,
+    SENSITIVE_FINANCIAL_ROLE_ORDER,
+)
 from app.models.user import User
 
 Role = Literal[
@@ -35,6 +40,21 @@ def require_roles(*allowed_roles: Role) -> Callable[..., Awaitable[dict[str, obj
         return user
 
     return dependency
+
+
+def require_sensitive_financial_roles() -> Callable[..., Awaitable[dict[str, object]]]:
+    """Reusable RBAC dependency for finance-like sensitive endpoints."""
+    return require_roles(*SENSITIVE_FINANCIAL_ROLE_ORDER)
+
+
+def require_cross_company_roles() -> Callable[..., Awaitable[dict[str, object]]]:
+    """Cross-company / multi-org rollup data — CEO only."""
+    return require_roles(*CROSS_COMPANY_ROLE_ORDER)
+
+
+def require_ceo_executive_roles() -> Callable[..., Awaitable[dict[str, object]]]:
+    """CEO executive endpoints (board-packet, status, playbook) — CEO + ADMIN."""
+    return require_roles(*CEO_EXECUTIVE_ROLE_ORDER)
 
 
 async def require_super_admin(

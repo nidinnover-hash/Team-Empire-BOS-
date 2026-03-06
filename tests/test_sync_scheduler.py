@@ -17,6 +17,8 @@ from app.services import sync_scheduler
 def _reset_state():
     sync_scheduler._last_synced.clear()
     sync_scheduler._last_ceo_summary_date_by_org.clear()
+    sync_scheduler._last_pending_digest_date_by_org.clear()
+    sync_scheduler._last_empire_flow_digest_date_by_org.clear()
     sync_scheduler._scheduler_retry_telemetry["operations_total"] = 0
     sync_scheduler._scheduler_retry_telemetry["operations_succeeded"] = 0
     sync_scheduler._scheduler_retry_telemetry["operations_failed"] = 0
@@ -285,3 +287,10 @@ async def test_maybe_send_daily_ceo_slack_summary_respects_channel_config(monkey
 
     assert len(calls) == 1
     assert calls[0]["channel_id"] == "C123CEO"
+
+
+def test_automation_jobs_include_daily_empire_flow_digest():
+    import inspect
+
+    source = inspect.getsource(sync_scheduler._run_automation_jobs_for_org)
+    assert "daily_empire_flow_digest" in source

@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.core.request_context import get_current_request_id
+from app.engines.brain.context import build_brain_context
+from app.engines.brain.router import call_ai
 from app.logs.audit import record_action
 from app.schemas.control import (
     BrainTrainRead,
@@ -29,8 +31,6 @@ from app.services import (
     self_learning,
     signal_ingestion,
 )
-from app.services.ai_router import call_ai
-from app.services.context_builder import build_brain_context
 
 from ._shared import _append_limitation, _to_float, _to_int
 

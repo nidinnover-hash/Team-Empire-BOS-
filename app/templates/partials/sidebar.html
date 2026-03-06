@@ -16,6 +16,9 @@
     <a href="/web/contacts" class="sb-item{{ ' active' if active_page == 'contacts' }}" aria-label="Contacts"><i data-lucide="contact"></i><span class="sb-label">Contacts</span></a>
     {% endif %}
     {% if role in ['CEO', 'ADMIN', 'MANAGER'] %}
+    <a href="/web/empire-digital" class="sb-item{{ ' active' if active_page == 'empire_digital' }}" aria-label="Empire Digital"><i data-lucide="target"></i><span class="sb-label">Empire Digital</span></a>
+    {% endif %}
+    {% if role in ['CEO', 'ADMIN', 'MANAGER'] %}
     <a href="/web/finance" class="sb-item{{ ' active' if active_page == 'finance' }}" aria-label="Finance"><i data-lucide="wallet"></i><span class="sb-label">Finance</span></a>
     {% endif %}
     {% if role in ['CEO', 'ADMIN', 'MANAGER'] %}

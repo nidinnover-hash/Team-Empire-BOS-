@@ -18,6 +18,7 @@ from app.api.v1.endpoints import (
     decision_cards,
     departments,
     email,
+    empire_digital,
     executions,
     export,
     finance,
@@ -51,6 +52,7 @@ from app.api.v1.endpoints import (
     tasks,
     users,
     webhooks,
+    workflow_observability,
     workspaces,
 )
 
@@ -66,6 +68,7 @@ api_router.include_router(agents.router)
 api_router.include_router(memory.router)
 api_router.include_router(briefing.router)
 api_router.include_router(email.router)
+api_router.include_router(empire_digital.router)
 api_router.include_router(orgs.router)
 api_router.include_router(commands.router)
 api_router.include_router(tasks.router)
@@ -107,3 +110,4 @@ api_router.include_router(workspaces.router)
 api_router.include_router(share_packets.router)
 api_router.include_router(decision_cards.router)
 api_router.include_router(orchestrator.router)
+api_router.include_router(workflow_observability.router)

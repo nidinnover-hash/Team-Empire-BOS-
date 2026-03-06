@@ -148,6 +148,13 @@ def default_policy_config() -> dict[str, Any]:
                 "red": 4,
             },
         },
+        "empire_digital": {
+            "sla": {
+                "stale_unrouted_days": 3,
+                "warning_stale_count": 3,
+                "warning_unrouted_count": 8,
+            },
+        },
     }
 
 

@@ -37,7 +37,7 @@ async def test_web_chat_auto_learns_preference_memory(client, monkeypatch):
             proposed_actions=[],
         )
 
-    monkeypatch.setattr("app.agents.orchestrator.run_agent", fake_run_agent)
+    monkeypatch.setattr("app.web.chat.run_agent", fake_run_agent)
 
     r = await client.post(
         "/web/agents/chat",

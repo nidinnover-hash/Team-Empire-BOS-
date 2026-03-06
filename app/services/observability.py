@@ -13,6 +13,14 @@ from app.core.idempotency import get_idempotency_stats
 from app.core.middleware import get_rate_limit_stats
 from app.core.resilience import get_retry_stats
 from app.core.tenant import apply_org_scope
+from app.engines.intelligence import projections as signal_projections
+from app.engines.intelligence.projections import (
+    AiReliability,
+    DecisionSummary,
+    DecisionTimelineItem,
+    SchedulerHealth,
+    WebhookReliability,
+)
 from app.models.ai_call_log import AiCallLog
 from app.models.approval import Approval
 from app.models.chat_message import ChatMessage
@@ -22,7 +30,14 @@ from app.models.integration import Integration
 from app.models.memory import DailyContext, ProfileMemory
 from app.models.note import Note
 from app.models.project import Project
+from app.models.signal import Signal
 from app.models.task import Task
+from app.platform.signals.query import (
+    list_recent_signals_by_org,
+    list_recent_signals_by_topic,
+    list_signals_by_correlation,
+    list_signals_by_entity,
+)
 from app.services.signal_ingestion import get_ingestion_stats
 
 
@@ -81,6 +96,50 @@ class StorageSummary(TypedDict):
     total_rows: int
     retention_days_chat: int
     tables: list[StorageTableStat]
+
+
+class RecentSignal(TypedDict):
+    id: int
+    signal_id: str
+    organization_id: int
+    workspace_id: int | None
+    actor_user_id: int | None
+    topic: str
+    category: str
+    source: str
+    entity_type: str | None
+    entity_id: str | None
+    correlation_id: str | None
+    causation_id: str | None
+    request_id: str | None
+    summary_text: str | None
+    payload: dict
+    metadata: dict
+    occurred_at: str | None
+    created_at: str | None
+
+
+def _serialize_signal(row: Signal) -> RecentSignal:
+    return {
+        "id": row.id,
+        "signal_id": row.signal_id,
+        "organization_id": row.organization_id,
+        "workspace_id": row.workspace_id,
+        "actor_user_id": row.actor_user_id,
+        "topic": row.topic,
+        "category": row.category,
+        "source": row.source,
+        "entity_type": row.entity_type,
+        "entity_id": row.entity_id,
+        "correlation_id": row.correlation_id,
+        "causation_id": row.causation_id,
+        "request_id": row.request_id,
+        "summary_text": row.summary_text,
+        "payload": row.payload_json if isinstance(row.payload_json, dict) else {},
+        "metadata": row.metadata_json if isinstance(row.metadata_json, dict) else {},
+        "occurred_at": row.occurred_at.isoformat() if row.occurred_at else None,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
 
 
 async def get_observability_summary(
@@ -197,6 +256,7 @@ async def get_storage_summary(db: AsyncSession, org_id: int) -> StorageSummary:
         ("daily_context", DailyContext),
         ("chat_messages", ChatMessage),
         ("ai_call_logs", AiCallLog),
+        ("signals", Signal),
     ]
 
     stats: list[StorageTableStat] = []
@@ -217,3 +277,127 @@ async def get_storage_summary(db: AsyncSession, org_id: int) -> StorageSummary:
         "retention_days_chat": int(settings.CHAT_HISTORY_RETENTION_DAYS),
         "tables": stats,
     }
+
+
+async def get_recent_signals(
+    db: AsyncSession,
+    *,
+    org_id: int,
+    limit: int = 100,
+    topic: str | None = None,
+    correlation_id: str | None = None,
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+) -> list[RecentSignal]:
+    if correlation_id:
+        rows = await list_signals_by_correlation(
+            db,
+            organization_id=org_id,
+            correlation_id=correlation_id,
+            limit=limit,
+        )
+    elif entity_type and entity_id:
+        rows = await list_signals_by_entity(
+            db,
+            organization_id=org_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            limit=limit,
+        )
+    elif topic:
+        rows = await list_recent_signals_by_topic(
+            db,
+            organization_id=org_id,
+            topic=topic,
+            limit=limit,
+        )
+    else:
+        rows = await list_recent_signals_by_org(
+            db,
+            organization_id=org_id,
+            limit=limit,
+        )
+    return [_serialize_signal(row) for row in rows]
+
+
+async def get_decision_timeline(
+    db: AsyncSession,
+    *,
+    org_id: int,
+    days: int = 7,
+    limit: int = 50,
+    correlation_id: str | None = None,
+    approval_id: int | None = None,
+) -> list[DecisionTimelineItem]:
+    return await signal_projections.get_decision_timeline(
+        db,
+        org_id=org_id,
+        days=days,
+        limit=limit,
+        correlation_id=correlation_id,
+        approval_id=approval_id,
+    )
+
+
+async def get_decision_summary(
+    db: AsyncSession,
+    *,
+    org_id: int,
+    days: int = 7,
+    limit: int = 200,
+    correlation_id: str | None = None,
+    approval_id: int | None = None,
+) -> DecisionSummary:
+    return await signal_projections.get_decision_summary(
+        db,
+        org_id=org_id,
+        days=days,
+        limit=limit,
+        correlation_id=correlation_id,
+        approval_id=approval_id,
+    )
+
+
+async def get_ai_reliability(
+    db: AsyncSession,
+    *,
+    org_id: int,
+    days: int = 7,
+    limit: int = 200,
+) -> AiReliability:
+    return await signal_projections.get_ai_reliability(
+        db,
+        org_id=org_id,
+        days=days,
+        limit=limit,
+    )
+
+
+async def get_scheduler_health(
+    db: AsyncSession,
+    *,
+    org_id: int,
+    days: int = 7,
+    limit: int = 300,
+) -> SchedulerHealth:
+    return await signal_projections.get_scheduler_health(
+        db,
+        org_id=org_id,
+        days=days,
+        limit=limit,
+    )
+
+
+async def get_webhook_reliability(
+    db: AsyncSession,
+    *,
+    org_id: int,
+    days: int = 7,
+    limit: int = 300,
+) -> WebhookReliability:
+    return await signal_projections.get_webhook_reliability(
+        db,
+        org_id=org_id,
+        days=days,
+        limit=limit,
+    )

@@ -1,6 +1,7 @@
 ﻿from datetime import UTC, datetime
 
 from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import event as sa_event
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -34,3 +35,11 @@ class Event(Base):
         default=lambda: datetime.now(UTC),
         index=True,
     )
+    # Audit chain integrity
+    signature: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    prev_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+
+@sa_event.listens_for(Event, "before_delete")
+def _block_event_delete(mapper, connection, target):
+    raise PermissionError("Audit events are immutable and cannot be deleted")

@@ -124,7 +124,9 @@ async def test_successful_login_resets_failure_bucket(client):
     )
     assert created.status_code == 201
 
-    for _ in range(LOGIN_FAIL_MAX - 1):
+    # Stay below both IP lockout (LOGIN_FAIL_MAX) and account lockout threshold (5)
+    safe_failures = min(LOGIN_FAIL_MAX, 5) - 1
+    for _ in range(safe_failures):
         bad = await client.post(
             "/token",
             data={"username": "login-reset@example.com", "password": "wrong-pass"},

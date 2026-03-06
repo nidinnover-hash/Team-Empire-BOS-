@@ -4,8 +4,8 @@
   var workflows = [];
 
   function byId(id) { return document.getElementById(id); }
-  function esc(s) { return window.PCUI ? window.PCUI.escapeHtml(s) : String(s).replace(/[&<>"']/g, function(c) { return "&#"+c.charCodeAt(0)+";"; }); }
-  function fmtDate(d) { if (!d) return "--"; try { return new Date(d).toLocaleString("en-US", { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" }); } catch(_e) { return "--"; } }
+  function esc(s) { return window.PCUI ? window.PCUI.escapeHtml(s) : String(s).replace(/[&<>"']/g, function(c) { return "&#" + c.charCodeAt(0) + ";"; }); }
+  function fmtDate(d) { if (!d) return "--"; try { return new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch (_e) { return "--"; } }
 
   async function apiJson(path, opts) {
     if (window.PCAPI && window.PCAPI.safeFetchJson) {
@@ -34,29 +34,37 @@
     token = (await r.json()).token;
   }
 
-  // ── Tab switching ──────────────────────────────────────────────────────
+  function showTab(tab) {
+    document.querySelectorAll(".tab").forEach(function(btn) {
+      btn.classList.toggle("active", btn.getAttribute("data-tab") === tab);
+    });
+    ["triggers", "workflows", "studio"].forEach(function(name) {
+      var panel = byId("panel-" + name);
+      if (panel) panel.style.display = name === tab ? "" : "none";
+    });
+  }
+
   function initTabs() {
     document.querySelectorAll(".tab").forEach(function(btn) {
       btn.addEventListener("click", function() {
-        document.querySelectorAll(".tab").forEach(function(t) { t.classList.remove("active"); });
-        btn.classList.add("active");
-        var tab = btn.getAttribute("data-tab");
-        byId("panel-triggers").style.display = tab === "triggers" ? "" : "none";
-        byId("panel-workflows").style.display = tab === "workflows" ? "" : "none";
+        showTab(btn.getAttribute("data-tab"));
       });
     });
   }
 
-  // ── Triggers ───────────────────────────────────────────────────────────
   async function fetchTriggers() {
-    try { triggers = await apiJson("/api/v1/automations/triggers"); } catch(_e) { triggers = []; }
+    try { triggers = await apiJson("/api/v1/automations/triggers"); } catch (_e) { triggers = []; }
     renderTriggers();
   }
 
   function renderTriggers() {
     var el = byId("trigger-list");
     if (!el) return;
-    if (!triggers.length) { el.innerHTML = '<div class="empty">No triggers yet. Create one to automate events.</div>'; updateKpis(); return; }
+    if (!triggers.length) {
+      el.innerHTML = '<div class="empty">No triggers yet. Create one to automate events.</div>';
+      updateKpis();
+      return;
+    }
     var html = "";
     triggers.forEach(function(t) {
       var cls = t.is_active ? "" : " inactive";
@@ -81,10 +89,10 @@
     });
     el.innerHTML = html;
     el.querySelectorAll("[data-toggle]").forEach(function(btn) {
-      btn.addEventListener("click", function() { toggleTrigger(parseInt(btn.getAttribute("data-toggle"))); });
+      btn.addEventListener("click", function() { toggleTrigger(parseInt(btn.getAttribute("data-toggle"), 10)); });
     });
     el.querySelectorAll("[data-delete-trigger]").forEach(function(btn) {
-      btn.addEventListener("click", function() { deleteTrigger(parseInt(btn.getAttribute("data-delete-trigger"))); });
+      btn.addEventListener("click", function() { deleteTrigger(parseInt(btn.getAttribute("data-delete-trigger"), 10)); });
     });
     updateKpis();
   }
@@ -99,7 +107,7 @@
         body: JSON.stringify({ is_active: !t.is_active }),
       });
       await fetchTriggers();
-    } catch(e) { alert("Failed to update trigger: " + (e.message || e)); }
+    } catch (e) { alert("Failed to update trigger: " + (e.message || e)); }
   }
 
   async function deleteTrigger(id) {
@@ -107,19 +115,22 @@
     try {
       await apiJson("/api/v1/automations/triggers/" + id, { method: "DELETE" });
       await fetchTriggers();
-    } catch(e) { alert("Failed to delete trigger: " + (e.message || e)); }
+    } catch (e) { alert("Failed to delete trigger: " + (e.message || e)); }
   }
 
-  // ── Workflows ──────────────────────────────────────────────────────────
   async function fetchWorkflows() {
-    try { workflows = await apiJson("/api/v1/automations/workflows"); } catch(_e) { workflows = []; }
+    try { workflows = await apiJson("/api/v1/automations/workflows"); } catch (_e) { workflows = []; }
     renderWorkflows();
   }
 
   function renderWorkflows() {
     var el = byId("workflow-list");
     if (!el) return;
-    if (!workflows.length) { el.innerHTML = '<div class="empty">No workflows yet. Create one to orchestrate multi-step processes.</div>'; updateKpis(); return; }
+    if (!workflows.length) {
+      el.innerHTML = '<div class="empty">No workflows yet. Create one to orchestrate multi-step processes.</div>';
+      updateKpis();
+      return;
+    }
     var html = "";
     workflows.forEach(function(w) {
       var steps = Array.isArray(w.steps_json) ? w.steps_json : [];
@@ -142,7 +153,7 @@
     });
     el.innerHTML = html;
     el.querySelectorAll("[data-run]").forEach(function(btn) {
-      btn.addEventListener("click", function() { runWorkflow(parseInt(btn.getAttribute("data-run"))); });
+      btn.addEventListener("click", function() { runWorkflow(parseInt(btn.getAttribute("data-run"), 10)); });
     });
     updateKpis();
   }
@@ -151,10 +162,9 @@
     try {
       await apiJson("/api/v1/automations/workflows/" + id + "/run", { method: "POST" });
       await fetchWorkflows();
-    } catch(e) { alert("Failed to run workflow: " + (e.message || e)); }
+    } catch (e) { alert("Failed to run workflow: " + (e.message || e)); }
   }
 
-  // ── KPIs ───────────────────────────────────────────────────────────────
   function updateKpis() {
     var activeTriggers = triggers.filter(function(t) { return t.is_active; }).length;
     var totalFires = triggers.reduce(function(s, t) { return s + (t.fire_count || 0); }, 0);
@@ -167,10 +177,10 @@
     k("k-completed", completed);
   }
 
-  // ── Modals ─────────────────────────────────────────────────────────────
   function initModals() {
     var triggerModal = byId("modal-trigger");
     var workflowModal = byId("modal-workflow");
+    if (!triggerModal || !workflowModal) return;
 
     byId("btn-new-trigger").addEventListener("click", function() { triggerModal.style.display = "flex"; });
     byId("modal-trigger-close").addEventListener("click", function() { triggerModal.style.display = "none"; });
@@ -196,7 +206,7 @@
         triggerModal.style.display = "none";
         f.reset();
         await fetchTriggers();
-      } catch(err) { alert("Failed to create trigger: " + (err.message || err)); }
+      } catch (err) { alert("Failed to create trigger: " + (err.message || err)); }
     });
 
     byId("form-workflow").addEventListener("submit", async function(e) {
@@ -204,7 +214,7 @@
       var f = e.target;
       var stepsRaw = f.steps.value.trim();
       var steps;
-      try { steps = JSON.parse(stepsRaw); } catch(_e) { alert("Steps must be valid JSON array"); return; }
+      try { steps = JSON.parse(stepsRaw); } catch (_e) { alert("Steps must be valid JSON array"); return; }
       if (!Array.isArray(steps) || !steps.length) { alert("Steps must be a non-empty array"); return; }
       try {
         await apiJson("/api/v1/automations/workflows", {
@@ -219,17 +229,24 @@
         workflowModal.style.display = "none";
         f.reset();
         await fetchWorkflows();
-      } catch(err) { alert("Failed to create workflow: " + (err.message || err)); }
+      } catch (err) { alert("Failed to create workflow: " + (err.message || err)); }
     });
   }
 
-  // ── Boot ────────────────────────────────────────────────────────────────
   try {
     await bootToken();
+    window.workflowApiJson = apiJson;
+    window.workflowApiToken = function () { return token; };
     initTabs();
     initModals();
     await Promise.all([fetchTriggers(), fetchWorkflows()]);
-  } catch(e) {
+    if (window.WorkflowBuilderPage && window.WorkflowBuilderPage.init) {
+      window.WorkflowBuilderPage.init({ apiJson: apiJson });
+    }
+    if (window.WorkflowRunMonitor && window.WorkflowRunMonitor.init) {
+      window.WorkflowRunMonitor.init({ apiJson: apiJson, fmtDate: fmtDate, esc: esc });
+    }
+  } catch (e) {
     if (String(e.message || "").includes("session_expired")) {
       window.location.href = "/web/login";
     }

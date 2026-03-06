@@ -178,11 +178,10 @@ def test_morning_briefing_uses_ist_date():
 
 def test_scheduler_loop_isolates_sessions():
     """Scheduler loop should open a fresh session per org."""
-    import inspect
+    import pathlib
 
-    from app.services import sync_scheduler
-    source = inspect.getsource(sync_scheduler._scheduler_loop)
-    # Should fetch orgs and run them through isolated pools
+    source = pathlib.Path("app/services/sync_scheduler.py").read_text()
+    # _scheduler_loop should fetch orgs and run them through isolated pools
     assert "list_organizations" in source
     # Each org gets its own session (via pool runner or direct)
     assert source.count("async with") >= 1
@@ -194,11 +193,11 @@ def test_scheduler_loop_isolates_sessions():
 
 def test_chat_retention_cleanup_exists():
     """_cleanup_old_chat_messages function should exist and be called in loop."""
-    import inspect
+    import pathlib
 
     from app.services import sync_scheduler
     assert hasattr(sync_scheduler, "_cleanup_old_chat_messages")
-    loop_source = inspect.getsource(sync_scheduler._scheduler_loop)
+    loop_source = pathlib.Path("app/services/sync_scheduler.py").read_text()
     assert "_cleanup_old_chat_messages" in loop_source
 
 

@@ -1,5 +1,21 @@
 """Tests for CRM pipeline features: create with CRM fields, filter, pipeline summary, follow-up due."""
 
+from app.core.security import create_access_token
+
+
+def _staff_headers() -> dict[str, str]:
+    token = create_access_token(
+        {"id": 4, "email": "staff@org1.com", "role": "STAFF", "org_id": 1, "token_version": 1}
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _admin_headers() -> dict[str, str]:
+    token = create_access_token(
+        {"id": 6, "email": "admin@org1.com", "role": "ADMIN", "org_id": 1, "token_version": 1}
+    )
+    return {"Authorization": f"Bearer {token}"}
+
 # ── Contact CRM Fields ──────────────────────────────────────────────────────
 
 
@@ -108,6 +124,11 @@ async def test_pipeline_summary_empty_org(client):
     assert len(data) == 7  # all 7 stages
 
 
+async def test_pipeline_summary_staff_forbidden(client):
+    resp = await client.get("/api/v1/contacts/pipeline-summary", headers=_staff_headers())
+    assert resp.status_code == 403
+
+
 # ── Follow-Up Due ────────────────────────────────────────────────────────────
 
 
@@ -149,3 +170,27 @@ async def test_follow_up_due_excludes_future(client):
     resp = await client.get("/api/v1/contacts/follow-up-due")
     items = resp.json()
     assert not any(c["name"] == "Future Contact" for c in items)
+
+
+async def test_staff_contacts_list_masks_deal_value(client):
+    await client.post("/api/v1/contacts", json={"name": "Masked Deal", "deal_value": 42000})
+    resp = await client.get("/api/v1/contacts", headers=_staff_headers())
+    assert resp.status_code == 200
+    item = next(c for c in resp.json() if c["name"] == "Masked Deal")
+    assert item["deal_value"] is None
+
+
+async def test_ceo_contacts_list_still_returns_deal_value(client):
+    await client.post("/api/v1/contacts", json={"name": "Visible Deal", "deal_value": 31000})
+    resp = await client.get("/api/v1/contacts")
+    assert resp.status_code == 200
+    item = next(c for c in resp.json() if c["name"] == "Visible Deal")
+    assert item["deal_value"] == 31000.0
+
+
+async def test_admin_contacts_list_still_returns_deal_value(client):
+    await client.post("/api/v1/contacts", json={"name": "Admin Visible Deal", "deal_value": 12000})
+    resp = await client.get("/api/v1/contacts", headers=_admin_headers())
+    assert resp.status_code == 200
+    item = next(c for c in resp.json() if c["name"] == "Admin Visible Deal")
+    assert item["deal_value"] == 12000.0

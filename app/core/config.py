@@ -239,6 +239,20 @@ class Settings(BaseSettings):
     FEATURE_WORKLOAD_BALANCER: bool = True
     FEATURE_DEPARTMENT_OKR_AUTOPROGRESS: bool = True
     FEATURE_SKILL_MATRIX: bool = True
+    FEATURE_WORKFLOW_V2: bool = False
+    FEATURE_WORKFLOW_RUNS: bool = False
+    FEATURE_WORKFLOW_APPROVAL_PIPELINE: bool = False
+    FEATURE_WORKFLOW_BUILDER_SSR: bool = False
+    FEATURE_WORKFLOW_OBSERVABILITY: bool = False
+    FEATURE_WORKFLOW_RELIABILITY: bool = False
+    FEATURE_WORKFLOW_COPILOT: bool = False
+    FEATURE_WORKFLOW_TEMPLATES: bool = False
+    FEATURE_WORKFLOW_EXEC_INSIGHTS: bool = False
+    FEATURE_WORKFLOW_MEMORY_CONTEXT: bool = False
+    WORKFLOW_RETRY_MAX_ATTEMPTS: int = 3
+    WORKFLOW_RETRY_BASE_SECONDS: int = 30
+    WORKFLOW_RETRY_MAX_SECONDS: int = 900
+    WORKFLOW_HEARTBEAT_TIMEOUT_SECONDS: int = 3600
     # Embedding / pgvector semantic retrieval
     EMBEDDING_ENABLED: bool = True
     EMBEDDING_MODEL: str = "text-embedding-3-small"
@@ -246,6 +260,28 @@ class Settings(BaseSettings):
     EMBEDDING_SIMILARITY_THRESHOLD: float = 0.3
     EMBEDDING_MAX_RESULTS: int = 10
     EMBEDDING_TIMEOUT_SECONDS: int = 10
+
+    # Dead-letter queue
+    DEAD_LETTER_ENABLED: bool = True
+    DEAD_LETTER_AUTO_ARCHIVE_DAYS: int = 30
+
+    # Data classification and privacy
+    DATA_CLASSIFICATION_ENABLED: bool = True
+    FIELD_ENCRYPTION_ENABLED: bool = True
+    AI_DATA_MINIMIZATION_ENABLED: bool = True
+    AI_ALLOWED_PII_CATEGORIES: str = ""  # comma-separated opt-in: "email,phone"
+
+    # Account security hardening
+    ACCOUNT_LOCKOUT_THRESHOLD: int = 5
+    ACCOUNT_LOCKOUT_DURATIONS_MINUTES: str = "1,5,15,60"  # exponential tiers
+    ACCOUNT_IDLE_TIMEOUT_MINUTES: int = 30
+    ACCOUNT_MAX_CONCURRENT_SESSIONS: int = 3
+
+    # Audit integrity
+    AUDIT_INTEGRITY_ENABLED: bool = True
+
+    # Signal system
+    SIGNAL_SYSTEM_ENABLED: bool = True
 
     CLONE_REQUIRE_CLARIFYING_QUESTION: bool = True
     CLONE_PATTERN_AUTOMATION_ENABLED: bool = False
@@ -530,6 +566,16 @@ def validate_startup_settings(s: Settings) -> list[str]:
         issues.append("AI_RETRY_MAX_BACKOFF_SECONDS must be between 0 and 60")
     if s.AI_RETRY_MAX_BACKOFF_SECONDS < s.AI_RETRY_BACKOFF_SECONDS:
         issues.append("AI_RETRY_MAX_BACKOFF_SECONDS must be >= AI_RETRY_BACKOFF_SECONDS")
+    if s.WORKFLOW_RETRY_MAX_ATTEMPTS < 1 or s.WORKFLOW_RETRY_MAX_ATTEMPTS > 10:
+        issues.append("WORKFLOW_RETRY_MAX_ATTEMPTS must be between 1 and 10")
+    if s.WORKFLOW_RETRY_BASE_SECONDS < 0 or s.WORKFLOW_RETRY_BASE_SECONDS > 3600:
+        issues.append("WORKFLOW_RETRY_BASE_SECONDS must be between 0 and 3600")
+    if s.WORKFLOW_RETRY_MAX_SECONDS < 0 or s.WORKFLOW_RETRY_MAX_SECONDS > 86_400:
+        issues.append("WORKFLOW_RETRY_MAX_SECONDS must be between 0 and 86400")
+    if s.WORKFLOW_RETRY_MAX_SECONDS < s.WORKFLOW_RETRY_BASE_SECONDS:
+        issues.append("WORKFLOW_RETRY_MAX_SECONDS must be >= WORKFLOW_RETRY_BASE_SECONDS")
+    if s.WORKFLOW_HEARTBEAT_TIMEOUT_SECONDS < 30 or s.WORKFLOW_HEARTBEAT_TIMEOUT_SECONDS > 86_400:
+        issues.append("WORKFLOW_HEARTBEAT_TIMEOUT_SECONDS must be between 30 and 86400")
     if not s.DEBUG and not s.COOKIE_SECURE:
         issues.append("COOKIE_SECURE must be true when DEBUG=false (production mode)")
     token_key = (s.TOKEN_ENCRYPTION_KEY or "").strip()

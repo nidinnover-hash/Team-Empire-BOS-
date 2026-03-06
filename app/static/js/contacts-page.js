@@ -1,5 +1,8 @@
 (async function () {
   var token = await window.__bootPromise;
+  var roleName = "";
+  var canViewDealValues = false;
+  var canViewPipeline = false;
   var esc = function (value) {
     var text = String(value == null ? "" : value);
     if (window.PCUI && window.PCUI.escapeHtml) return window.PCUI.escapeHtml(text);
@@ -16,6 +19,28 @@
   };
   var $ = function (id) { return document.getElementById(id); };
   var debounceTimer = null;
+
+  async function loadRole() {
+    try {
+      if (window.PCUI && window.PCUI.loadRoleCapabilities) {
+        var caps = await window.PCUI.loadRoleCapabilities();
+        roleName = String(caps.roleName || "").toUpperCase();
+        canViewPipeline = !!caps.canViewPipelineSummary;
+        canViewDealValues = !!caps.canViewContactFinancials;
+        return;
+      }
+      var r = await fetch("/web/session");
+      if (!r.ok) return;
+      var d = await r.json();
+      roleName = String(d && d.user && d.user.role ? d.user.role : "").toUpperCase();
+      canViewPipeline = roleName === "CEO" || roleName === "ADMIN" || roleName === "MANAGER";
+      canViewDealValues = canViewPipeline;
+    } catch (_e) {
+      roleName = "";
+      canViewDealValues = false;
+      canViewPipeline = false;
+    }
+  }
 
   function formatCurrency(val) {
     if (val == null) return "--";
@@ -45,6 +70,10 @@
 
   // ── Pipeline Summary ──────────────────────────────────────────────
   async function loadPipelineSummary() {
+    if (!canViewPipeline) {
+      $("k-pipeline-val").textContent = "Restricted";
+      return;
+    }
     try {
       var resp = await fetch("/api/v1/contacts/pipeline-summary", { headers: headers() });
       if (!resp.ok) return;
@@ -120,7 +149,7 @@
         '</td>';
       var stageCell = '<td>' + stageBadge(c.pipeline_stage || "new") + '</td>';
       var scoreCell = '<td>' + scoreBadge(c.lead_score || 0) + '</td>';
-      var dealCell = '<td>' + (c.deal_value ? formatCurrency(c.deal_value) : '--') + '</td>';
+      var dealCell = '<td>' + (canViewDealValues ? (c.deal_value ? formatCurrency(c.deal_value) : '--') : "Restricted") + '</td>';
       var relCell = '<td><span class="badge">' + esc(c.relationship || "unknown") + '</span></td>';
       var followUp = '<td>' + formatDate(c.next_follow_up_at) + '</td>';
       return '<tr>' + nameCell + companyCell + stageCell + scoreCell + dealCell + relCell + followUp + '</tr>';
@@ -159,6 +188,13 @@
   }
 
   // ── Init ──────────────────────────────────────────────────────────
+  await loadRole();
+  if (!canViewPipeline) {
+    var funnel = $("pipeline-funnel");
+    if (funnel) {
+      funnel.innerHTML = '<div class="kpi" style="width:100%"><div class="label">Pipeline</div><div class="val" style="font-size:.95rem">Restricted for your role</div></div>';
+    }
+  }
   await Promise.all([loadContacts(), loadPipelineSummary(), loadFollowUpCount()]);
   if (typeof lucide !== "undefined") lucide.createIcons();
 })();

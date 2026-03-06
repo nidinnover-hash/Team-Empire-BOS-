@@ -10,6 +10,17 @@ from app.schemas.event import EventCreate
 async def log_event(db: AsyncSession, data: EventCreate) -> Event:
     event = Event(**data.model_dump())
     db.add(event)
+    await db.flush()  # get the ID before signing
+    await db.refresh(event)
+
+    # Sign the event for audit chain integrity
+    try:
+        from app.core.audit_integrity import sign_event
+        await sign_event(db, event)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning("Audit signing skipped", exc_info=True)
+
     await db.commit()
     await db.refresh(event)
     return event

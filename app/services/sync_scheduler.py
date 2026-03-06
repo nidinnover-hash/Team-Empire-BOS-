@@ -14,11 +14,9 @@ Execution model:
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -27,15 +25,61 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.contracts import LOG_DETAIL_MAX_CHARS
 from app.core.resilience import IntegrationSyncError, RetryPolicy, error_details, run_with_retry
 from app.db.session import AsyncSessionLocal
+from app.jobs._helpers import record_job_run, scheduler_error_category
 from app.jobs.approval_jobs import auto_reject_expired_approvals
+from app.jobs.infra import maybe_run_daily_backup, retry_webhook_deliveries
+from app.jobs.intelligence import (
+    _collect_stale_integrations as _jobs_collect_stale_integrations,
+)
+from app.jobs.intelligence import (
+    _extract_top_risks as _jobs_extract_top_risks,
+)
+from app.jobs.intelligence import (
+    _format_briefing_summary as _jobs_format_briefing_summary,
+)
+from app.jobs.intelligence import (
+    _format_ceo_risk_digest as _jobs_format_ceo_risk_digest,
+)
+from app.jobs.intelligence import (
+    _last_ceo_summary_date_by_org as _jobs_last_ceo_summary_date_by_org,
+)
+from app.jobs.intelligence import (
+    _last_empire_flow_digest_date_by_org as _jobs_last_empire_flow_digest_date_by_org,
+)
+from app.jobs.intelligence import (
+    _last_pending_digest_date_by_org as _jobs_last_pending_digest_date_by_org,
+)
+from app.jobs.intelligence import (
+    _maybe_send_daily_ceo_slack_summary as _jobs_maybe_send_daily_ceo_slack_summary,
+)
+from app.jobs.intelligence import (
+    _severity_rank as _jobs_severity_rank,
+)
+from app.jobs.intelligence import (
+    check_morning_briefing,
+    maybe_emit_daily_briefing_notification,
+    maybe_generate_daily_ceo_summary,
+    maybe_generate_daily_empire_flow_digest,
+    maybe_generate_daily_pending_digest,
+)
 from app.jobs.maintenance import (
     cleanup_old_chat_messages,
     cleanup_old_job_runs_and_snapshots,
     cleanup_old_logs,
     cleanup_old_trend_events,
 )
-from app.models.ceo_control import SchedulerJobRun
-from app.services import trend_telemetry
+from app.jobs.monitoring import (
+    _last_scheduler_slo_alert_key_by_org as _jobs_last_scheduler_slo_alert_key_by_org,
+)
+from app.jobs.monitoring import (
+    check_follow_up_contacts,
+    check_goal_deadlines,
+    check_stale_tasks,
+    check_token_health_job,
+    monitor_scheduler_slos,
+)
+from app.jobs.social_jobs import publish_due_social_posts
+from app.jobs.telemetry_jobs import snapshot_layer_scores_job, snapshot_org_trends_job
 
 # Backward-compatible aliases so existing code and tests keep working
 _auto_reject_expired_approvals = auto_reject_expired_approvals
@@ -43,6 +87,29 @@ _cleanup_old_chat_messages = cleanup_old_chat_messages
 _cleanup_old_logs = cleanup_old_logs
 _cleanup_old_job_runs_and_snapshots = cleanup_old_job_runs_and_snapshots
 _cleanup_old_trend_events = cleanup_old_trend_events
+_check_morning_briefing = check_morning_briefing
+_maybe_generate_daily_ceo_summary = maybe_generate_daily_ceo_summary
+_maybe_generate_daily_pending_digest = maybe_generate_daily_pending_digest
+_maybe_generate_daily_empire_flow_digest = maybe_generate_daily_empire_flow_digest
+_publish_due_social_posts = publish_due_social_posts
+_check_goal_deadlines = check_goal_deadlines
+_check_stale_tasks = check_stale_tasks
+_maybe_emit_daily_briefing_notification = maybe_emit_daily_briefing_notification
+_check_follow_up_contacts = check_follow_up_contacts
+_check_token_health_job = check_token_health_job
+_snapshot_org_trends_job = snapshot_org_trends_job
+_snapshot_layer_scores_job = snapshot_layer_scores_job
+_maybe_run_daily_backup = maybe_run_daily_backup
+_retry_webhook_deliveries = retry_webhook_deliveries
+_monitor_scheduler_slos = monitor_scheduler_slos
+_record_job_run = record_job_run
+_scheduler_error_category = scheduler_error_category
+_collect_stale_integrations = _jobs_collect_stale_integrations
+_extract_top_risks = _jobs_extract_top_risks
+_format_briefing_summary = _jobs_format_briefing_summary
+_format_ceo_risk_digest = _jobs_format_ceo_risk_digest
+_maybe_send_daily_ceo_slack_summary = _jobs_maybe_send_daily_ceo_slack_summary
+_severity_rank = _jobs_severity_rank
 
 logger = logging.getLogger(__name__)
 _SYNC_RETRY_POLICY = RetryPolicy(
@@ -71,10 +138,11 @@ _scheduler_retry_telemetry: dict[str, object] = {
     "last_error_at": None,
     "per_integration": {},
 }
-# Per-org daily dedup: prevents running the same daily job twice in one day.
-_last_ceo_summary_date_by_org: dict[int, str] = {}
-_last_pending_digest_date_by_org: dict[int, str] = {}
-_last_scheduler_slo_alert_key_by_org: dict[int, str] = {}
+# Per-org daily dedup state (canonical copies live in app/jobs/ modules; aliased here for compat)
+_last_ceo_summary_date_by_org = _jobs_last_ceo_summary_date_by_org
+_last_empire_flow_digest_date_by_org = _jobs_last_empire_flow_digest_date_by_org
+_last_pending_digest_date_by_org = _jobs_last_pending_digest_date_by_org
+_last_scheduler_slo_alert_key_by_org = _jobs_last_scheduler_slo_alert_key_by_org
 
 
 def _coerce_int(value: object, default: int = 0) -> int:
@@ -103,22 +171,6 @@ def _coerce_float(value: object, default: float = 0.0) -> float:
         except ValueError:
             return default
     return default
-
-
-def _scheduler_error_category(exc: Exception) -> str:
-    if isinstance(exc, SQLAlchemyError):
-        return "database_error"
-    if isinstance(exc, IntegrationSyncError):
-        return "integration_sync_error"
-    if isinstance(exc, TimeoutError | ConnectionError):
-        return "network_error"
-    if isinstance(exc, ImportError | AttributeError):
-        return "dependency_error"
-    if isinstance(exc, ValueError | TypeError):
-        return "validation_error"
-    if isinstance(exc, OSError):
-        return "os_error"
-    return "runtime_error"
 
 
 def get_last_synced_for_org(org_id: int) -> datetime | None:
@@ -219,25 +271,6 @@ def _throttle_minutes() -> int:
         return 15
 
 
-def _format_briefing_summary(summary: object) -> str:
-    """Render executive summary payload to readable text for daily context."""
-    if isinstance(summary, str):
-        return summary
-    if isinstance(summary, dict):
-        lines = [
-            f"Total members: {summary.get('total_members', 0)}",
-            f"With plans: {summary.get('members_with_plan', 0)}",
-            f"Tasks today: {summary.get('total_tasks_today', 0)}",
-            f"Tasks done: {summary.get('tasks_done', 0)}",
-            f"Pending approvals: {summary.get('pending_approvals', 0)}",
-            f"Unread emails: {summary.get('unread_emails', 0)}",
-        ]
-        members_without_plan = summary.get("members_without_plan", [])
-        if members_without_plan:
-            lines.append("Missing plan: " + ", ".join(str(n) for n in members_without_plan))
-        return "\n".join(lines)
-    return "No briefing data."
-
 # Background task handle (stored so we can cancel on shutdown)
 _scheduler_task: asyncio.Task | None = None
 _inflight_tasks: set[asyncio.Task] = set()
@@ -280,179 +313,10 @@ def _automation_pool_size() -> int:
     )
 
 
-def _severity_rank(value: object) -> int:
-    text = str(value or "").strip().upper()
-    return {"CRITICAL": 0, "HIGH": 1, "MED": 2, "LOW": 3}.get(text, 4)
-
-
-def _extract_top_risks(report: dict[str, object], limit: int = 5) -> list[dict[str, object]]:
-    rows = report.get("violations")
-    if not isinstance(rows, list):
-        return []
-
-    parsed: list[dict[str, object]] = [item for item in rows if isinstance(item, dict)]
-    parsed.sort(
-        key=lambda row: (
-            _severity_rank(row.get("severity")),
-            str(row.get("created_at") or ""),
-        ),
-        reverse=False,
-    )
-    return parsed[: max(limit, 0)]
-
-
-def _format_ceo_risk_digest(
-    org_id: int,
-    top_risks: list[dict[str, object]],
-    stale_integrations: list[dict[str, object]],
-    generated_at: str,
-) -> str:
-    lines = [
-        f"CEO Daily Risk Digest (org {org_id})",
-        f"Generated: {generated_at}",
-        "",
-        "Top Risks:",
-    ]
-    if not top_risks:
-        lines.append("- No open high-priority violations.")
-    else:
-        for item in top_risks:
-            lines.append(
-                f"- [{item.get('severity', 'MED')}] {item.get('title', 'Policy issue')} ({item.get('platform', 'unknown')})"
-            )
-    lines.append("")
-    lines.append("Integration SLA Alerts:")
-    if not stale_integrations:
-        lines.append("- All connected integrations are within SLA.")
-    else:
-        for row in stale_integrations:
-            age_hours = row.get("age_hours")
-            suffix = f"{age_hours}h stale" if age_hours is not None else "never synced"
-            status = row.get("last_sync_status") or "unknown"
-            lines.append(f"- {row.get('type', 'integration')}: {suffix} (status={status})")
-    lines.append("")
-    lines.append("Mode: suggest_only (no auto-blocking actions)")
-    return "\n".join(lines)
-
-
-async def _collect_stale_integrations(
-    db: AsyncSession,
-    org_id: int,
-) -> list[dict[str, object]]:
-    from sqlalchemy import select
-
-    from app.core.config import settings
-    from app.models.integration import Integration
-
-    cutoff = datetime.now(UTC) - timedelta(hours=int(settings.SYNC_STALE_HOURS))
-    rows = (
-        await db.execute(
-            select(Integration).where(
-                Integration.organization_id == org_id,
-                Integration.status == "connected",
-            )
-        )
-    ).scalars().all()
-
-    alerts: list[dict[str, object]] = []
-    now = datetime.now(UTC)
-    for item in rows:
-        if item.last_sync_status == "error":
-            alerts.append(
-                {
-                    "type": item.type,
-                    "age_hours": (
-                        round((now - item.last_sync_at).total_seconds() / 3600, 1)
-                        if item.last_sync_at else None
-                    ),
-                    "last_sync_status": item.last_sync_status,
-                }
-            )
-            continue
-        if item.last_sync_at is None or item.last_sync_at < cutoff:
-            alerts.append(
-                {
-                    "type": item.type,
-                    "age_hours": (
-                        round((now - item.last_sync_at).total_seconds() / 3600, 1)
-                        if item.last_sync_at else None
-                    ),
-                    "last_sync_status": item.last_sync_status,
-                }
-            )
-    return alerts
-
-
-async def _record_job_run(
-    db: AsyncSession,
-    *,
-    org_id: int,
-    job_name: str,
-    status: str,
-    started_at: datetime,
-    finished_at: datetime,
-    details: dict[str, object] | None = None,
-    error: str | None = None,
-) -> None:
-    if not hasattr(db, "add"):
-        return
-    details_json = "{}"
-    if details:
-        try:
-            details_json = json.dumps(details)
-        except (TypeError, ValueError):
-            details_json = "{}"
-    duration_ms = max(0, int((finished_at - started_at).total_seconds() * 1000))
-    db.add(
-        SchedulerJobRun(
-            organization_id=org_id,
-            job_name=job_name,
-            status=status,
-            started_at=started_at,
-            finished_at=finished_at,
-            duration_ms=duration_ms,
-            details_json=details_json,
-            error=(error or None),
-        )
-    )
-
-
-async def _maybe_send_daily_ceo_slack_summary(
-    db: AsyncSession,
-    org_id: int,
-    top_risks: list[dict[str, object]],
-    stale_integrations: list[dict[str, object]],
-    generated_at: str,
-) -> None:
-    from app.core.config import settings
-    from app.services import slack_service
-
-    channel_id = (settings.CEO_ALERTS_SLACK_CHANNEL_ID or "").strip()
-    if not channel_id:
-        return
-    message = _format_ceo_risk_digest(
-        org_id=org_id,
-        top_risks=top_risks,
-        stale_integrations=stale_integrations,
-        generated_at=generated_at,
-    )
-    try:
-        await slack_service.send_to_slack(db, org_id=org_id, channel_id=channel_id, text=message)
-    except asyncio.CancelledError:
-        raise
-    except (
-        SQLAlchemyError,
-        IntegrationSyncError,
-        TimeoutError,
-        ConnectionError,
-        RuntimeError,
-        ValueError,
-        TypeError,
-        OSError,
-        ImportError,
-        AttributeError,
-    ) as exc:
-        logger.warning("Daily CEO Slack digest failed for org=%d: %s", org_id, type(exc).__name__)
+# Helper functions (_severity_rank, _extract_top_risks, _format_ceo_risk_digest,
+# _collect_stale_integrations, _record_job_run, _maybe_send_daily_ceo_slack_summary)
+# extracted to app/jobs/intelligence.py and app/jobs/_helpers.py.
+# Backward-compatible aliases are defined above.
 
 
 # ── Core sync runner ──────────────────────────────────────────────────────────
@@ -877,6 +741,9 @@ async def replay_job_for_org(db: AsyncSession, org_id: int, job_name: str) -> di
         elif job_name == "daily_briefing_notification":
             await _maybe_emit_daily_briefing_notification(db, org_id)
             result = {"ok": True}
+        elif job_name == "daily_empire_flow_digest":
+            await _maybe_generate_daily_empire_flow_digest(db, org_id)
+            result = {"ok": True}
         elif job_name == "full_sync":
             await _run_integrations(db, org_id)
             result = {"ok": True}
@@ -975,701 +842,9 @@ async def trigger_sync_for_org(org_id: int) -> None:
 
 
 # ── Periodic scheduler loop ───────────────────────────────────────────────────
+# Job implementations extracted to app/jobs/ modules.
+# Backward-compatible aliases are defined above near imports.
 
-async def _check_morning_briefing(db: AsyncSession, org_id: int) -> None:
-    """Generate daily briefing at 8-9am IST if not already created today."""
-    from sqlalchemy import select
-
-    from app.models.memory import DailyContext
-
-    tz = ZoneInfo("Asia/Kolkata")
-    local_now = datetime.now(UTC).astimezone(tz)
-    if local_now.hour < 8 or local_now.hour >= 9:
-        return
-
-    today_ist = local_now.date()
-
-    # Check if auto briefing already exists for today (IST date, not server-local)
-    result = await db.execute(
-        select(DailyContext).where(
-            DailyContext.organization_id == org_id,
-            DailyContext.date == today_ist,
-            DailyContext.context_type == "auto_briefing",
-        ).limit(1)
-    )
-    if result.scalar_one_or_none():
-        return
-
-    try:
-        from app.schemas.memory import DailyContextCreate
-        from app.services import briefing as briefing_service
-        from app.services import memory as memory_service
-
-        executive = await briefing_service.get_executive_briefing(db, org_id=org_id)
-        summary = executive.get("summary") or executive.get("team_summary") or "No briefing data."
-        summary_text = _format_briefing_summary(summary)
-
-        await memory_service.add_daily_context(
-            db=db,
-            organization_id=org_id,
-            data=DailyContextCreate(
-                date=today_ist,
-                context_type="auto_briefing",
-                content=f"Morning auto-briefing:\n{summary_text}",
-                related_to="scheduler",
-            ),
-        )
-        logger.info("Morning briefing generated for org=%d", org_id)
-    except asyncio.CancelledError:
-        raise
-    except (
-        SQLAlchemyError,
-        IntegrationSyncError,
-        TimeoutError,
-        ConnectionError,
-        RuntimeError,
-        ValueError,
-        TypeError,
-        OSError,
-        ImportError,
-        AttributeError,
-    ) as exc:
-        logger.warning("Morning briefing failed for org=%d: %s", org_id, type(exc).__name__)
-
-
-async def _maybe_generate_daily_ceo_summary(db: AsyncSession, org_id: int) -> None:
-    from app.core.config import settings
-    from app.models.ceo_control import CEOSummary
-    from app.services import compliance_engine
-
-    tz = ZoneInfo(settings.CEO_SUMMARY_TIMEZONE)
-    local_now = datetime.now(UTC).astimezone(tz)
-    # Run once per local day after 09:00 in the configured timezone.
-    if local_now.hour < 9:
-        return
-    day_key = local_now.strftime("%Y-%m-%d")
-    # L1: in-memory dedup (fast path — same process, same restart)
-    if _last_ceo_summary_date_by_org.get(org_id) == day_key:
-        return
-    # L2: DB dedup — catches post-restart duplicate runs (SchedulerJobRun is persistent)
-    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-    existing = (await db.execute(
-        select(SchedulerJobRun).where(
-            SchedulerJobRun.organization_id == org_id,
-            SchedulerJobRun.job_name == "daily_ceo_summary",
-            SchedulerJobRun.status == "ok",
-            SchedulerJobRun.finished_at >= today_start,
-        ).limit(1)
-    )).scalar_one_or_none()
-    if existing is not None:
-        _last_ceo_summary_date_by_org[org_id] = day_key  # warm L1
-        return
-    started = datetime.now(UTC)
-    report = await compliance_engine.latest_report(db, org_id)
-    top_risks = _extract_top_risks(report, limit=5)
-    stale_integrations = await _collect_stale_integrations(db, org_id)
-    generated_at = datetime.now(UTC).isoformat()
-    db.add(
-        CEOSummary(
-            organization_id=org_id,
-            summary_json=json.dumps(
-                {
-                    "generated_at": generated_at,
-                    "report_count": report.get("count", 0),
-                    "top_violations": top_risks,
-                    "stale_integrations": stale_integrations,
-                }
-            ),
-            created_at=datetime.now(UTC),
-        )
-    )
-    _last_ceo_summary_date_by_org[org_id] = day_key
-    await _record_job_run(
-        db,
-        org_id=org_id,
-        job_name="daily_ceo_summary",
-        status="ok",
-        started_at=started,
-        finished_at=datetime.now(UTC),
-        details={"top_risks_count": len(top_risks), "stale_integrations_count": len(stale_integrations)},
-    )
-    await db.commit()
-    await _maybe_send_daily_ceo_slack_summary(
-        db=db,
-        org_id=org_id,
-        top_risks=top_risks,
-        stale_integrations=stale_integrations,
-        generated_at=generated_at,
-    )
-
-
-async def _maybe_generate_daily_pending_digest(db: AsyncSession, org_id: int) -> None:
-    from app.core.config import settings
-    from app.services import email_control
-
-    if not settings.EMAIL_CONTROL_DIGEST_ENABLED:
-        return
-    tz = ZoneInfo("Asia/Kolkata")
-    local_now = datetime.now(UTC).astimezone(tz)
-    if local_now.hour < settings.EMAIL_CONTROL_DIGEST_HOUR_IST:
-        return
-    if (
-        local_now.hour == settings.EMAIL_CONTROL_DIGEST_HOUR_IST
-        and local_now.minute < settings.EMAIL_CONTROL_DIGEST_MINUTE_IST
-    ):
-        return
-    day_key = local_now.strftime("%Y-%m-%d")
-    if _last_pending_digest_date_by_org.get(org_id) == day_key:
-        return
-    # DB dedup: survive restarts without resending the digest
-    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-    existing_digest = (await db.execute(
-        select(SchedulerJobRun).where(
-            SchedulerJobRun.organization_id == org_id,
-            SchedulerJobRun.job_name == "daily_pending_digest",
-            SchedulerJobRun.status == "ok",
-            SchedulerJobRun.finished_at >= today_start,
-        ).limit(1)
-    )).scalar_one_or_none()
-    if existing_digest is not None:
-        _last_pending_digest_date_by_org[org_id] = day_key
-        return
-    from app.models.user import User
-    _adm = (await db.execute(
-        select(User).where(
-            User.organization_id == org_id,
-            User.role.in_(["CEO", "ADMIN"]),
-            User.is_active.is_(True),
-        ).order_by(User.id).limit(1)
-    )).scalar_one_or_none()
-    started_digest = datetime.now(UTC)
-    await email_control.draft_pending_actions_digest_email(
-        db=db,
-        org_id=org_id,
-        actor_user_id=int(_adm.id) if _adm else None,  # type: ignore[arg-type]
-    )
-    _last_pending_digest_date_by_org[org_id] = day_key
-    await _record_job_run(
-        db,
-        org_id=org_id,
-        job_name="daily_pending_digest",
-        status="ok",
-        started_at=started_digest,
-        finished_at=datetime.now(UTC),
-    )
-    await db.commit()
-
-
-async def _publish_due_social_posts(db: AsyncSession, org_id: int) -> None:
-    from app.logs.audit import record_action
-    from app.services import social as social_service
-
-    started = datetime.now(UTC)
-    try:
-        published = await social_service.publish_due_queued_posts(db, organization_id=org_id)
-        if published > 0:
-            await record_action(
-                db=db,
-                organization_id=org_id,
-                actor_user_id=None,
-                event_type="social_posts_auto_published",
-                entity_type="scheduler",
-                entity_id=None,
-                payload_json={"count": published, "trigger": "scheduled"},
-            )
-        await _record_job_run(
-            db,
-            org_id=org_id,
-            job_name="social_publish_queue",
-            status="ok",
-            started_at=started,
-            finished_at=datetime.now(UTC),
-            details={"published_count": published},
-        )
-        await db.commit()
-    except asyncio.CancelledError:
-        raise
-    except (
-        SQLAlchemyError,
-        IntegrationSyncError,
-        TimeoutError,
-        ConnectionError,
-        RuntimeError,
-        ValueError,
-        TypeError,
-        OSError,
-        ImportError,
-        AttributeError,
-    ) as exc:
-        await _record_job_run(
-            db,
-            org_id=org_id,
-            job_name="social_publish_queue",
-            status="error",
-            started_at=started,
-            finished_at=datetime.now(UTC),
-            error=f"{type(exc).__name__}: {str(exc)[:LOG_DETAIL_MAX_CHARS]}",
-        )
-        await db.commit()
-
-
-
-
-async def _check_goal_deadlines(db: AsyncSession, org_id: int) -> None:
-    """Emit warnings for active goals whose target_date is within 3 days or overdue."""
-    from app.models.goal import Goal
-    from app.services.notification import create_notification
-
-    started = datetime.now(UTC)
-    try:
-        today = datetime.now(UTC).date()
-        warn_horizon = today + timedelta(days=3)
-        result = await db.execute(
-            select(Goal).where(
-                Goal.organization_id == org_id,
-                Goal.status == "active",
-                Goal.target_date.isnot(None),
-                Goal.target_date <= warn_horizon,
-            )
-        )
-        goals = list(result.scalars().all())
-        for goal in goals:
-            if goal.target_date is None:
-                continue
-            overdue = goal.target_date < today
-            sev = "error" if overdue else "warning"
-            label = "OVERDUE" if overdue else "Due Soon"
-            await create_notification(
-                db,
-                organization_id=org_id,
-                type="goal_deadline",
-                severity=sev,
-                title=f"Goal {label}: {goal.title}",
-                message=f"Target date {goal.target_date.isoformat()} — progress {goal.progress}%.",
-                source="scheduler",
-                entity_type="goal",
-                entity_id=goal.id,
-            )
-        if goals:
-            await db.commit()
-        await _record_job_run(
-            db, org_id=org_id, job_name="goal_deadline_check", status="ok",
-            started_at=started, finished_at=datetime.now(UTC),
-            details={"checked": len(goals), "overdue": sum(1 for g in goals if g.target_date and g.target_date < today)},
-        )
-        await db.commit()
-    except asyncio.CancelledError:
-        raise
-    except Exception as exc:
-        logger.warning(
-            "Goal deadline check failed org=%d category=%s error_type=%s",
-            org_id,
-            _scheduler_error_category(exc),
-            type(exc).__name__,
-            exc_info=True,
-        )
-        await _record_job_run(
-            db, org_id=org_id, job_name="goal_deadline_check", status="error",
-            started_at=started, finished_at=datetime.now(UTC),
-            error=f"{type(exc).__name__}: {str(exc)[:200]}",
-        )
-        await db.commit()
-
-
-async def _check_stale_tasks(db: AsyncSession, org_id: int) -> None:
-    """Emit notifications for tasks that are overdue or stale (no update in 7+ days)."""
-    from app.models.task import Task
-    from app.services.notification import create_notification
-
-    started = datetime.now(UTC)
-    try:
-        today = datetime.now(UTC)
-        stale_cutoff = today - timedelta(days=7)
-
-        # Overdue tasks: due_date in the past, not done
-        overdue_result = await db.execute(
-            select(Task).where(
-                Task.organization_id == org_id,
-                Task.is_done.is_(False),
-                Task.due_date.isnot(None),
-                Task.due_date < today,
-            ).limit(50)
-        )
-        overdue_tasks = list(overdue_result.scalars().all())
-
-        for task in overdue_tasks:
-            await create_notification(
-                db,
-                organization_id=org_id,
-                type="stale_task",
-                severity="warning",
-                title=f"Overdue task: {task.title}",
-                message=f"Due date was {task.due_date.isoformat() if task.due_date else 'unknown'}.",
-                source="scheduler",
-                entity_type="task",
-                entity_id=task.id,
-            )
-
-        # Stale tasks: open, not updated in 7+ days
-        stale_result = await db.execute(
-            select(Task).where(
-                Task.organization_id == org_id,
-                Task.is_done.is_(False),
-                Task.updated_at < stale_cutoff,
-            ).limit(50)
-        )
-        stale_tasks = list(stale_result.scalars().all())
-
-        for task in stale_tasks:
-            # Skip if already reported as overdue
-            if task.due_date and task.due_date < today:
-                continue
-            await create_notification(
-                db,
-                organization_id=org_id,
-                type="stale_task",
-                severity="info",
-                title=f"Stale task: {task.title}",
-                message="No updates in 7+ days. Consider closing or updating.",
-                source="scheduler",
-                entity_type="task",
-                entity_id=task.id,
-            )
-
-        total = len(overdue_tasks) + len(stale_tasks)
-        if total:
-            await db.commit()
-        await _record_job_run(
-            db, org_id=org_id, job_name="stale_task_check", status="ok",
-            started_at=started, finished_at=datetime.now(UTC),
-            details={"overdue": len(overdue_tasks), "stale": len(stale_tasks)},
-        )
-        await db.commit()
-    except asyncio.CancelledError:
-        raise
-    except Exception as exc:
-        logger.warning(
-            "Stale task check failed org=%d category=%s",
-            org_id, _scheduler_error_category(exc), exc_info=True,
-        )
-        await _record_job_run(
-            db, org_id=org_id, job_name="stale_task_check", status="error",
-            started_at=started, finished_at=datetime.now(UTC),
-            error=f"{type(exc).__name__}: {str(exc)[:200]}",
-        )
-        await db.commit()
-
-
-async def _maybe_emit_daily_briefing_notification(db: AsyncSession, org_id: int) -> None:
-    """Create a daily briefing notification with team summary (once per day per org)."""
-    from app.services.notification import create_notification
-
-    today_str = str(datetime.now(UTC).date())
-    if _last_ceo_summary_date_by_org.get(org_id) == today_str:
-        return  # Already ran today
-
-    started = datetime.now(UTC)
-    try:
-        from app.services.briefing import get_team_dashboard
-
-        dashboard = await get_team_dashboard(db, org_id)
-        summary = dashboard.get("summary", {})
-        msg_parts = [
-            f"Team: {summary.get('total_members', 0)} members",
-            f"Tasks today: {summary.get('total_tasks_today', 0)}",
-            f"Done: {summary.get('tasks_done', 0)}",
-            f"Pending approvals: {summary.get('pending_approvals', 0)}",
-            f"Unread emails: {summary.get('unread_emails', 0)}",
-        ]
-        no_plan = summary.get("members_without_plan", [])
-        if no_plan:
-            msg_parts.append(f"Missing plans: {', '.join(str(n) for n in no_plan[:5])}")
-
-        await create_notification(
-            db,
-            organization_id=org_id,
-            type="daily_briefing",
-            severity="info",
-            title=f"Daily Briefing — {today_str}",
-            message=". ".join(msg_parts) + ".",
-            source="scheduler",
-        )
-        await db.commit()
-        await _record_job_run(
-            db, org_id=org_id, job_name="daily_briefing_notification", status="ok",
-            started_at=started, finished_at=datetime.now(UTC),
-        )
-        await db.commit()
-    except asyncio.CancelledError:
-        raise
-    except Exception as exc:
-        logger.warning(
-            "Daily briefing notification failed org=%d category=%s",
-            org_id, _scheduler_error_category(exc), exc_info=True,
-        )
-        await _record_job_run(
-            db, org_id=org_id, job_name="daily_briefing_notification", status="error",
-            started_at=started, finished_at=datetime.now(UTC),
-            error=f"{type(exc).__name__}: {str(exc)[:200]}",
-        )
-        await db.commit()
-
-
-async def _check_follow_up_contacts(db: AsyncSession, org_id: int) -> None:
-    """Emit notifications for contacts whose follow-up date is due."""
-    from app.services.contact import get_follow_up_due
-    from app.services.notification import create_notification
-
-    started = datetime.now(UTC)
-    try:
-        due_contacts = await get_follow_up_due(db, org_id, limit=20)
-        for contact in due_contacts:
-            await create_notification(
-                db,
-                organization_id=org_id,
-                type="contact_follow_up",
-                severity="info",
-                title=f"Follow-up due: {contact.name}",
-                message=f"Pipeline: {contact.pipeline_stage}. Score: {contact.lead_score}.",
-                source="scheduler",
-                entity_type="contact",
-                entity_id=contact.id,
-            )
-        if due_contacts:
-            await db.commit()
-        await _record_job_run(
-            db, org_id=org_id, job_name="contact_follow_up_check", status="ok",
-            started_at=started, finished_at=datetime.now(UTC),
-            details={"due": len(due_contacts)},
-        )
-        await db.commit()
-    except asyncio.CancelledError:
-        raise
-    except Exception as exc:
-        logger.warning(
-            "Contact follow-up check failed org=%d category=%s",
-            org_id, _scheduler_error_category(exc), exc_info=True,
-        )
-        await _record_job_run(
-            db, org_id=org_id, job_name="contact_follow_up_check", status="error",
-            started_at=started, finished_at=datetime.now(UTC),
-            error=f"{type(exc).__name__}: {str(exc)[:200]}",
-        )
-        await db.commit()
-
-
-async def _check_token_health_job(db: AsyncSession, org_id: int) -> None:
-    """Check integration token health and emit notifications for unhealthy tokens."""
-    # Compatibility marker for legacy source-inspection tests:
-    # for org in orgs:
-    # _cleanup_old_chat_messages
-    from app.services.notification import create_notification
-    from app.services.token_health import check_token_health
-
-    started = datetime.now(UTC)
-    try:
-        results = await check_token_health(db, org_id)
-        unhealthy = [r for r in results if r.get("status") != "healthy"]
-        for item in unhealthy:
-            await create_notification(
-                db,
-                organization_id=org_id,
-                type="token_health_warning",
-                severity="warning" if item.get("status") != "expired" else "high",
-                title=f"Token {item.get('status', 'issue')}: {item.get('type', 'unknown')}",
-                message=str(item.get("recommendation", "Check integration token.")),
-                source="token_health",
-            )
-        if unhealthy:
-            await db.commit()
-        await _record_job_run(
-            db, org_id=org_id, job_name="token_health_check", status="ok",
-            started_at=started, finished_at=datetime.now(UTC),
-            details={"checked": len(results), "unhealthy": len(unhealthy)},
-        )
-        await db.commit()
-    except asyncio.CancelledError:
-        raise
-    except Exception as exc:
-        logger.warning(
-            "Token health check failed org=%d category=%s error_type=%s",
-            org_id,
-            _scheduler_error_category(exc),
-            type(exc).__name__,
-            exc_info=True,
-        )
-        await _record_job_run(
-            db, org_id=org_id, job_name="token_health_check", status="error",
-            started_at=started, finished_at=datetime.now(UTC),
-            error=f"{type(exc).__name__}: {str(exc)[:200]}",
-        )
-        await db.commit()
-
-
-async def _snapshot_org_trends_job(db: AsyncSession, org_id: int) -> None:
-    """Capture shared trend snapshots on scheduler cadence (hourly/daily via internal throttles)."""
-    started = datetime.now(UTC)
-    try:
-        result = await trend_telemetry.snapshot_org_trends(db, org_id)
-        details: dict[str, object] = {
-            "written": int(result.get("written", 0)),
-            "skipped": int(result.get("skipped", 0)),
-        }
-        await _record_job_run(
-            db,
-            org_id=org_id,
-            job_name="trend_snapshot",
-            status="ok",
-            started_at=started,
-            finished_at=datetime.now(UTC),
-            details=details,
-        )
-        await db.commit()
-    except asyncio.CancelledError:
-        raise
-    except Exception as exc:
-        logger.warning(
-            "Trend snapshot failed org=%d category=%s error_type=%s",
-            org_id,
-            _scheduler_error_category(exc),
-            type(exc).__name__,
-            exc_info=True,
-        )
-        await _record_job_run(
-            db,
-            org_id=org_id,
-            job_name="trend_snapshot",
-            status="error",
-            started_at=started,
-            finished_at=datetime.now(UTC),
-            error=f"{type(exc).__name__}: {str(exc)[:200]}",
-        )
-        await db.commit()
-
-
-async def _snapshot_layer_scores_job(db: AsyncSession, org_id: int) -> None:
-    """Snapshot all layer scores for historical trend tracking (daily dedup)."""
-    started = datetime.now(UTC)
-    try:
-        from app.services.layer_snapshots import snapshot_all_layers
-
-        result = await snapshot_all_layers(db, org_id)
-        await _record_job_run(
-            db, org_id=org_id, job_name="layer_snapshot", status="ok",
-            started_at=started, finished_at=datetime.now(UTC),
-            details=result,
-        )
-        await db.commit()
-    except asyncio.CancelledError:
-        raise
-    except Exception as exc:
-        logger.warning(
-            "Layer snapshot failed org=%d category=%s error_type=%s",
-            org_id,
-            _scheduler_error_category(exc),
-            type(exc).__name__,
-            exc_info=True,
-        )
-        await _record_job_run(
-            db, org_id=org_id, job_name="layer_snapshot", status="error",
-            started_at=started, finished_at=datetime.now(UTC),
-            error=f"{type(exc).__name__}: {str(exc)[:200]}",
-        )
-        await db.commit()
-
-
-_last_backup_date: str | None = None
-
-
-async def _maybe_run_daily_backup() -> None:
-    """Run DB backup once per calendar day."""
-    global _last_backup_date
-    today = datetime.now(UTC).strftime("%Y-%m-%d")
-    if _last_backup_date == today:
-        return
-    try:
-        from app.services.db_backup import create_backup
-        result = await create_backup()
-        if result.get("ok"):
-            _last_backup_date = today
-            logger.info("Daily backup completed: %s", result.get("file"))
-        else:
-            logger.warning("Daily backup failed: %s", result.get("error"))
-    except Exception as exc:
-        logger.warning(
-            "Daily backup failed category=%s error_type=%s",
-            _scheduler_error_category(exc),
-            type(exc).__name__,
-            exc_info=True,
-        )
-
-
-async def _retry_webhook_deliveries(db: AsyncSession) -> None:
-    """Retry failed webhook deliveries whose next_retry_at has passed."""
-    try:
-        from app.services.webhook import retry_failed_deliveries
-        retried = await retry_failed_deliveries(db)
-        if retried:
-            logger.info("Retried %d failed webhook deliveries", retried)
-    except Exception as exc:
-        logger.warning(
-            "Webhook retry failed category=%s error_type=%s",
-            _scheduler_error_category(exc),
-            type(exc).__name__,
-            exc_info=True,
-        )
-
-
-async def _monitor_scheduler_slos(db: AsyncSession, org_id: int) -> None:
-    """Evaluate lightweight scheduler SLOs and emit at most one alert per org/day."""
-    from app.services.notification import create_notification
-
-    now = datetime.now(UTC)
-    day_key = now.strftime("%Y-%m-%d")
-    if _last_scheduler_slo_alert_key_by_org.get(org_id) == day_key:
-        return
-    window_start = now - timedelta(hours=24)
-    rows = (
-        (
-            await db.execute(
-                select(SchedulerJobRun).where(
-                    SchedulerJobRun.organization_id == org_id,
-                    SchedulerJobRun.started_at >= window_start,
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    if not rows:
-        return
-    total = len(rows)
-    success = sum(1 for row in rows if str(row.status) == "ok")
-    success_rate = float(success / total) if total > 0 else 1.0
-    durations = sorted(int(row.duration_ms or 0) for row in rows if row.duration_ms is not None)
-    p95_ms = durations[min(len(durations) - 1, int(0.95 * (len(durations) - 1)))] if durations else 0
-    stale_runs = sum(1 for row in rows if row.finished_at is None and (now - row.started_at).total_seconds() > 1800)
-    breaches: list[str] = []
-    if success_rate < 0.97:
-        breaches.append(f"success_rate={success_rate:.3f}<0.97")
-    if p95_ms > 30_000:
-        breaches.append(f"p95_duration_ms={p95_ms}>30000")
-    if stale_runs > 0:
-        breaches.append(f"stale_runs={stale_runs}>0")
-    if not breaches:
-        return
-    await create_notification(
-        db,
-        organization_id=org_id,
-        type="scheduler_slo_breach",
-        severity="warning",
-        title="Scheduler SLO breach detected",
-        message="; ".join(breaches),
-        source="sync_scheduler",
-        entity_type="scheduler",
-    )
-    _last_scheduler_slo_alert_key_by_org[org_id] = day_key
-    await db.commit()
 
 
 async def _run_automation_jobs_for_org(db: AsyncSession, org_id: int) -> None:
@@ -1677,6 +852,8 @@ async def _run_automation_jobs_for_org(db: AsyncSession, org_id: int) -> None:
     Run non-integration scheduler jobs for one org.
     Each job is isolated so one failure does not skip the rest.
     """
+    from app.core.config import settings
+
     jobs: list[tuple[str, Any]] = [
         ("token_health_check", _check_token_health_job),
         ("goal_deadline_check", _check_goal_deadlines),
@@ -1686,6 +863,7 @@ async def _run_automation_jobs_for_org(db: AsyncSession, org_id: int) -> None:
         ("morning_briefing", _check_morning_briefing),
         ("daily_ceo_summary", _maybe_generate_daily_ceo_summary),
         ("daily_pending_digest", _maybe_generate_daily_pending_digest),
+        ("daily_empire_flow_digest", _maybe_generate_daily_empire_flow_digest),
         ("social_publish_queue", _publish_due_social_posts),
         ("cleanup_chat_messages", _cleanup_old_chat_messages),
         ("cleanup_logs", _cleanup_old_logs),
@@ -1696,6 +874,16 @@ async def _run_automation_jobs_for_org(db: AsyncSession, org_id: int) -> None:
         ("layer_snapshot", _snapshot_layer_scores_job),
         ("monitor_scheduler_slo", _monitor_scheduler_slos),
     ]
+    if getattr(settings, "FEATURE_WORKFLOW_RELIABILITY", False):
+        from app.engines.execution.workflow_recovery import recover_workflow_runs_for_org
+
+        async def _workflow_recovery_job(job_db: AsyncSession, workflow_org_id: int) -> dict[str, int]:
+            return await recover_workflow_runs_for_org(
+                job_db,
+                organization_id=workflow_org_id,
+            )
+
+        jobs.append(("workflow_recovery", _workflow_recovery_job))
     for job_name, job_fn in jobs:
         try:
             await job_fn(db, org_id)
@@ -1720,6 +908,20 @@ async def _run_automation_jobs_for_org(db: AsyncSession, org_id: int) -> None:
                 _scheduler_error_category(exc),
                 type(exc).__name__,
             )
+            try:
+                from app.platform.dead_letter.store import capture_failure
+                await capture_failure(
+                    db,
+                    organization_id=org_id,
+                    source_type="scheduler",
+                    source_id=job_name,
+                    source_detail=f"automation_job:{job_name}",
+                    payload={"job_name": job_name, "org_id": org_id},
+                    error_message=f"{type(exc).__name__}: {str(exc)[:500]}",
+                    error_type=type(exc).__name__,
+                )
+            except Exception:
+                logger.debug("Dead-letter capture failed for scheduler job %s", job_name, exc_info=True)
 
 
 async def _run_org_pool(

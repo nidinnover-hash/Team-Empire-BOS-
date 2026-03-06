@@ -4,22 +4,22 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.action_types import CANONICAL_AGENT_ACTIONS, normalize_action_type
-from app.agents.orchestrator import (
+from app.core.deps import get_current_workspace_id, get_db
+from app.core.rbac import require_roles
+from app.engines.brain.context import build_brain_context
+from app.engines.brain.drafting import (
     AgentChatRequest,
     AgentChatResponse,
     MultiTurnResponse,
     run_agent,
     run_agent_multi_turn,
 )
-from app.core.deps import get_current_workspace_id, get_db
-from app.core.rbac import require_roles
+from app.engines.brain.policy import evaluate_agent_policy
 from app.logs.audit import record_action
 from app.schemas.task import TaskCreate
 from app.services import email_service
 from app.services import memory as memory_service
 from app.services import task as task_service
-from app.services.agent_policy import evaluate_agent_policy
-from app.services.context_builder import build_brain_context
 from app.services.memory import build_memory_context_semantic
 
 router = APIRouter(prefix="/agents", tags=["Agents"])

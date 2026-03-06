@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
-from app.core.rbac import require_roles
+from app.core.rbac import require_ceo_executive_roles, require_cross_company_roles
 from app.models.ceo_control import (
     ClickUpTaskSnapshot,
     DigitalOceanCostSnapshot,
@@ -153,7 +153,7 @@ async def _fetch_ceo_status_data(db: AsyncSession, org_id: int) -> CEOStatusRead
 @router.get("/ceo/status", response_model=CEOStatusRead)
 async def ceo_status(
     db: AsyncSession = Depends(get_db),
-    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+    actor: dict = Depends(require_ceo_executive_roles()),
 ) -> CEOStatusRead:
     return await _fetch_ceo_status_data(db, int(actor["org_id"]))
 
@@ -161,7 +161,7 @@ async def ceo_status(
 @router.get("/weekly-board-packet", response_model=WeeklyBoardPacketRead)
 async def weekly_board_packet(
     db: AsyncSession = Depends(get_db),
-    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+    actor: dict = Depends(require_ceo_executive_roles()),
 ) -> WeeklyBoardPacketRead:
     org_id = int(actor["org_id"])
     now = datetime.now(UTC)
@@ -198,7 +198,7 @@ async def weekly_board_packet(
 @router.get("/cockpit/multi-org", response_model=MultiOrgCockpitRead)
 async def multi_org_cockpit(
     db: AsyncSession = Depends(get_db),
-    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+    actor: dict = Depends(require_cross_company_roles()),
 ) -> MultiOrgCockpitRead:
     org = await organization_service.get_organization_by_id(db, int(actor["org_id"]))
     orgs = [org] if org else []
@@ -225,7 +225,7 @@ async def multi_org_cockpit(
 @router.get("/founder-playbook/today", response_model=FounderPlaybookRead)
 async def founder_playbook_today(
     db: AsyncSession = Depends(get_db),
-    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+    actor: dict = Depends(require_ceo_executive_roles()),
 ) -> FounderPlaybookRead:
     org_id = int(actor["org_id"])
     now = datetime.now(UTC)
@@ -290,7 +290,7 @@ async def founder_playbook_today(
 @router.get("/ceo/morning-brief", response_model=CEOMorningBriefRead)
 async def ceo_morning_brief(
     db: AsyncSession = Depends(get_db),
-    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+    actor: dict = Depends(require_ceo_executive_roles()),
 ) -> CEOMorningBriefRead:
     org_id = int(actor["org_id"])
     now = datetime.now(UTC)

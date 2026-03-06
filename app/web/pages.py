@@ -13,6 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.deps import get_current_web_user, get_db
+from app.core.visibility import (
+    can_view_contact_financial_fields,
+    can_view_contacts_pipeline_summary,
+    can_view_sensitive_financials,
+)
 from app.services import briefing as briefing_service
 from app.services import command as command_service
 from app.services import contact as contact_service
@@ -32,6 +37,27 @@ templates = Jinja2Templates(directory="app/templates")
 _dashboard_cache: dict[int, tuple[float, dict]] = {}
 _DASHBOARD_CACHE_MAX_ORGS = 200
 _ALL_WEB_ROLES = {"CEO", "ADMIN", "MANAGER", "STAFF", "EMPLOYEE"}
+
+
+def _build_visibility_context(user: dict | None) -> dict[str, bool]:
+    role = str((user or {}).get("role") or "")
+    can_view_financials = can_view_sensitive_financials(role)
+    return {
+        "can_view_sensitive_financials": can_view_financials,
+        "can_view_contact_financials": can_view_contact_financial_fields(role),
+        "can_view_contacts_pipeline_summary": can_view_contacts_pipeline_summary(role),
+        "can_manage_security": str(role).upper() in {"CEO", "ADMIN"},
+    }
+
+
+def _build_feature_flags() -> dict[str, bool]:
+    return {
+        "workflow_v2": bool(settings.FEATURE_WORKFLOW_V2),
+        "workflow_runs": bool(settings.FEATURE_WORKFLOW_RUNS),
+        "workflow_builder_ssr": bool(settings.FEATURE_WORKFLOW_BUILDER_SSR),
+        "workflow_observability": bool(settings.FEATURE_WORKFLOW_OBSERVABILITY),
+        "workflow_copilot": bool(settings.FEATURE_WORKFLOW_COPILOT),
+    }
 
 
 def _get_cached_dashboard(org_id: int) -> dict | None:
@@ -87,7 +113,15 @@ def _web_page(template_name: str, allowed_roles: set[str] | None = None):
             raise HTTPException(status_code=403, detail="You do not have access to this page")
         nonce = getattr(request.state, "csp_nonce", "")
         return templates.TemplateResponse(
-            request, template_name, {"request": request, "session_user": user, "csp_nonce": nonce},
+            request,
+            template_name,
+            {
+                "request": request,
+                "session_user": user,
+                "csp_nonce": nonce,
+                "visibility": _build_visibility_context(user),
+                "feature_flags": _build_feature_flags(),
+            },
         )
     return handler
 
@@ -117,6 +151,7 @@ router.get("/web/coaching", response_class=HTMLResponse, include_in_schema=False
 router.get("/web/projects", response_class=HTMLResponse, include_in_schema=False)(_web_page("projects.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
 router.get("/web/goals", response_class=HTMLResponse, include_in_schema=False)(_web_page("goals.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
 router.get("/web/contacts", response_class=HTMLResponse, include_in_schema=False)(_web_page("contacts.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
+router.get("/web/empire-digital", response_class=HTMLResponse, include_in_schema=False)(_web_page("empire_digital.html", {"CEO", "ADMIN", "MANAGER"}))
 router.get("/web/finance", response_class=HTMLResponse, include_in_schema=False)(_web_page("finance.html", {"CEO", "ADMIN", "MANAGER"}))
 router.get("/web/maps", response_class=HTMLResponse, include_in_schema=False)(_web_page("maps.html", _ALL_WEB_ROLES))
 router.get("/web/strategy", response_class=HTMLResponse, include_in_schema=False)(_web_page("strategy.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
@@ -270,6 +305,7 @@ async def dashboard(
         cached["session_user"] = user
         cached["csp_nonce"] = getattr(request.state, "csp_nonce", "")
         cached["last_synced_at"] = last_synced_at
+        cached["visibility"] = _build_visibility_context(user)
         return templates.TemplateResponse(request, "dashboard.html", cached)
 
     _DASHBOARD_DEFAULTS: list[Any] = [
@@ -288,7 +324,13 @@ async def dashboard(
                 note_service.list_notes(db, limit=10, organization_id=org_id),
                 project_service.list_projects(db, limit=10, organization_id=org_id),
                 goal_service.list_goals(db, limit=10, organization_id=org_id),
-                contact_service.list_contacts(db, limit=8, organization_id=org_id),
+                contact_service.list_contacts(
+                    db,
+                    limit=8,
+                    organization_id=org_id,
+                    actor_org_id=org_id,
+                    actor_role=str(user.get("role", "")),
+                ),
                 finance_service.get_summary(db, organization_id=org_id),
                 finance_service.get_expenditure_efficiency(db, organization_id=org_id, window_days=30),
                 layers_service.get_marketing_layer(db, organization_id=org_id, window_days=30),
@@ -356,6 +398,7 @@ async def dashboard(
         "intelligence_diff": intelligence_diff,
         "ceo_action": ceo_action,
         "session_user": user,
+        "visibility": _build_visibility_context(user),
         "last_synced_at": last_synced_at,
         "csp_nonce": getattr(request.state, "csp_nonce", ""),
     }

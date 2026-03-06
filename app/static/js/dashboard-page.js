@@ -779,6 +779,7 @@
     const countBadge = document.getElementById("approvals-pending-count");
     const refreshBtn = document.getElementById("approvals-refresh-btn");
     if (!list) return;
+    var canManageApprovals = false;
 
     var esc = window.PCUI.escapeHtml;
 
@@ -867,6 +868,11 @@
     }
 
     async function loadApprovals() {
+      if (!canManageApprovals) {
+        setApprovalsEmpty("Restricted for your role.");
+        if (countBadge) countBadge.textContent = "--";
+        return;
+      }
       var token = window.__apiToken;
       if (!token) { setApprovalsEmpty("Sign in to see approvals."); return; }
       setApprovalsEmpty("Loading...");
@@ -890,6 +896,7 @@
 
     // Event delegation for approval action buttons (CSP-safe)
     document.getElementById("approvals-list").addEventListener("click", function(e) {
+      if (!canManageApprovals) return;
       var approveBtn = e.target.closest("[data-approval-id]");
       if (approveBtn) {
         approvalAction(parseInt(approveBtn.dataset.approvalId, 10), approveBtn.dataset.approvalExecute === "true");
@@ -964,6 +971,10 @@
 
     // Bootstrap: wait for shared auth token then load approvals
     (async function init() {
+      if (window.PCUI && window.PCUI.loadRoleCapabilities) {
+        var caps = await window.PCUI.loadRoleCapabilities();
+        canManageApprovals = !!caps.canManageApprovals;
+      }
       var token = await window.__bootPromise;
       if (!token) { setApprovalsEmpty("Sign in to see approvals."); return; }
       if (!window.__apiToken) window.__apiToken = token;
@@ -971,7 +982,9 @@
     })();
 
     // Auto-refresh every 60 seconds (tracked for cleanup)
-    var _approvalTimer = setInterval(function() { if (window.__apiToken) loadApprovals(); }, 60000);
+    var _approvalTimer = setInterval(function() {
+      if (window.__apiToken && canManageApprovals) loadApprovals();
+    }, 60000);
     window.addEventListener("beforeunload", function() { clearInterval(_approvalTimer); });
   })();
 
@@ -1455,12 +1468,36 @@ window.showToast = function(msg, type) {
   (function () {
     var KPI_POLL_INTERVAL = 60000;
     var paused = false;
+    var canUseKpis = null;
 
     async function refreshKPIs() {
       if (paused) return;
       try {
         var token = await window.__bootPromise;
         if (!token) return;
+        if (canUseKpis === null) {
+          try {
+            if (window.PCUI && window.PCUI.loadRoleCapabilities) {
+              var caps = await window.PCUI.loadRoleCapabilities();
+              canUseKpis = !!caps.canViewSensitiveFinancials;
+            } else {
+              var sessionRes = await fetch("/web/session");
+              if (!sessionRes.ok) return;
+              var sessionData = await sessionRes.json();
+              var role = String(
+                sessionData &&
+                sessionData.user &&
+                sessionData.user.role
+                  ? sessionData.user.role
+                  : ""
+              ).toUpperCase();
+              canUseKpis = role === "CEO" || role === "ADMIN" || role === "MANAGER";
+            }
+          } catch (_sessionErr) {
+            return;
+          }
+        }
+        if (!canUseKpis) return;
         var data = await fetch("/api/v1/dashboard/kpis", {
           headers: { "Authorization": "Bearer " + token },
         }).then(function (r) { return r.ok ? r.json() : null; });
@@ -1491,19 +1528,29 @@ window.showToast = function(msg, type) {
       var token = await window.__bootPromise;
       if (!token) return;
       var authHeaders = { Authorization: "Bearer " + token };
+      var canViewPipelineSummary = false;
+      if (window.PCUI && window.PCUI.loadRoleCapabilities) {
+        var caps = await window.PCUI.loadRoleCapabilities();
+        canViewPipelineSummary = !!caps.canViewPipelineSummary;
+      }
 
       // Load pipeline summary
-      var pipeResp = await fetch("/api/v1/contacts/pipeline-summary", { headers: authHeaders });
-      if (pipeResp.ok) {
-        var stages = await pipeResp.json();
-        var totalVal = 0;
-        stages.forEach(function (s) {
-          var el = document.getElementById("dash-pf-" + s.stage);
-          if (el) el.textContent = String(s.count);
-          totalVal += s.total_deal_value || 0;
-        });
+      if (canViewPipelineSummary) {
+        var pipeResp = await fetch("/api/v1/contacts/pipeline-summary", { headers: authHeaders });
+        if (pipeResp.ok) {
+          var stages = await pipeResp.json();
+          var totalVal = 0;
+          stages.forEach(function (s) {
+            var el = document.getElementById("dash-pf-" + s.stage);
+            if (el) el.textContent = String(s.count);
+            totalVal += s.total_deal_value || 0;
+          });
+          var valEl = document.getElementById("dash-pipeline-val");
+          if (valEl) valEl.textContent = "$" + totalVal.toLocaleString();
+        }
+      } else {
         var valEl = document.getElementById("dash-pipeline-val");
-        if (valEl) valEl.textContent = "$" + totalVal.toLocaleString();
+        if (valEl) valEl.textContent = "Restricted";
       }
 
       // Load follow-up due count
@@ -1529,13 +1576,16 @@ window.showToast = function(msg, type) {
     }
   })();
 
-  // Revenue sparkline + live health ring (real data, no hardcoded values)
+  // Revenue sparkline + live health ring + dashboard trends (real data)
   (async function () {
     var sparkHost = document.getElementById("dash-revenue-spark");
     var ring = document.querySelector(".health-progress");
     var healthValueEl = document.getElementById("dash-health-value");
     var healthLabelEl = document.getElementById("dash-health-label");
-    var roleName = "";
+    var tasksSpark = document.getElementById("dash-tasks-spark");
+    var eventsSpark = document.getElementById("dash-events-spark");
+    var trendsChart = document.getElementById("dash-trends-chart");
+    var canUse = false;
     if (!sparkHost && !ring) return;
 
     function clamp(n, lo, hi) {
@@ -1574,62 +1624,119 @@ window.showToast = function(msg, type) {
       if (!token) return;
       var authHeaders = { Authorization: "Bearer " + token };
       try {
-        var sessionRes = await fetch("/web/session");
-        if (sessionRes.ok) {
-          var sessionData = await sessionRes.json();
-          roleName = String(
-            sessionData &&
-            sessionData.user &&
-            sessionData.user.role
-              ? sessionData.user.role
-              : ""
-          ).toUpperCase();
+        if (window.PCUI && window.PCUI.loadRoleCapabilities) {
+          var caps = await window.PCUI.loadRoleCapabilities();
+          canUse = !!caps.canViewSensitiveFinancials;
+        } else {
+          var sessionRes = await fetch("/web/session");
+          if (sessionRes.ok) {
+            var sessionData = await sessionRes.json();
+            var roleName = String(
+              sessionData &&
+              sessionData.user &&
+              sessionData.user.role
+                ? sessionData.user.role
+                : ""
+            ).toUpperCase();
+            canUse = roleName === "CEO" || roleName === "ADMIN" || roleName === "MANAGER";
+          }
         }
       } catch (_sessionErr) { /* non-fatal */ }
 
-      // Revenue sparkline from real finance transactions (fallback to summary trio).
-      try {
-        var txResp = await fetch("/api/v1/finance?limit=30", { headers: authHeaders });
-        if (txResp.ok && window.PCChartsLite && sparkHost) {
-          var txItems = await txResp.json();
-          var ordered = (Array.isArray(txItems) ? txItems : []).slice().sort(function (a, b) {
-            return new Date(a.entry_date || a.created_at).getTime() - new Date(b.entry_date || b.created_at).getTime();
-          });
-          var running = 0;
-          var series = [];
-          for (var i = 0; i < ordered.length; i++) {
-            var amount = Number(ordered[i].amount || 0);
-            if (!Number.isFinite(amount)) amount = 0;
-            running += (String(ordered[i].type || "").toLowerCase() === "income") ? amount : -amount;
-            series.push(running);
-          }
-          if (!series.length) {
-            var summaryRes = await fetch("/api/v1/finance/summary", { headers: authHeaders });
-            if (summaryRes.ok) {
-              var sum = await summaryRes.json();
-              series = [Number(sum.total_income || 0), Number(sum.total_expense || 0), Number(sum.balance || 0)];
+      // Fetch 14-day trends from the aggregated endpoint
+      if (canUse && window.PCChartsLite) {
+        try {
+          var trendsRes = await fetch("/api/v1/dashboard/trends?days=14", { headers: authHeaders });
+          if (trendsRes.ok) {
+            var trends = await trendsRes.json();
+
+            // Revenue sparkline (daily net revenue)
+            if (sparkHost && trends.revenue) {
+              window.PCChartsLite.renderSparkline(sparkHost, trends.revenue, {
+                ariaLabel: "Revenue trend (14 days)",
+                stroke: "var(--brand,#0a84ff)",
+                fill: "rgba(10,132,255,0.14)"
+              });
+            }
+
+            // Tasks completed sparkline
+            if (tasksSpark && trends.tasks_completed) {
+              window.PCChartsLite.renderSparkline(tasksSpark, trends.tasks_completed, {
+                ariaLabel: "Tasks completed (14 days)",
+                stroke: "var(--ok,#34c759)",
+                fill: "rgba(52,199,89,0.12)",
+                height: 44
+              });
+            }
+
+            // Events sparkline
+            if (eventsSpark && trends.events) {
+              window.PCChartsLite.renderSparkline(eventsSpark, trends.events, {
+                ariaLabel: "Events (14 days)",
+                stroke: "var(--warn,#ff9f0a)",
+                fill: "rgba(255,159,10,0.10)",
+                height: 44
+              });
+            }
+
+            // Multi-series line chart
+            if (trendsChart && trends.income) {
+              window.PCChartsLite.renderLineChart(trendsChart, {
+                caption: "Income vs Expenses",
+                ariaLabel: "Income and expense trends over 14 days",
+                height: 140,
+                series: [
+                  { name: "Income", color: "var(--ok,#34c759)", values: trends.income },
+                  { name: "Expenses", color: "var(--danger,#ff3b30)", values: trends.expenses }
+                ]
+              });
             }
           }
-          if (series.length) {
-            window.PCChartsLite.renderSparkline(sparkHost, series, {
-              ariaLabel: "Revenue balance trend",
-              stroke: "var(--brand,#0a84ff)",
-              fill: "rgba(10,132,255,0.14)"
+        } catch (_trendsErr) { /* silent */ }
+      }
+
+      // Fallback: if trends didn't populate the revenue sparkline, use transaction list
+      if (sparkHost && !sparkHost.querySelector("svg") && canUse) {
+        try {
+          var txResp = await fetch("/api/v1/finance?limit=30", { headers: authHeaders });
+          if (txResp.ok) {
+            var txItems = await txResp.json();
+            var ordered = (Array.isArray(txItems) ? txItems : []).slice().sort(function (a, b) {
+              return new Date(a.entry_date || a.created_at).getTime() - new Date(b.entry_date || b.created_at).getTime();
             });
-          } else {
-            sparkHost.innerHTML = '<div class="empty" style="padding:.4rem 0;color:var(--text-faint);font-size:.72rem">No trend data</div>';
+            var running = 0;
+            var series = [];
+            for (var i = 0; i < ordered.length; i++) {
+              var amount = Number(ordered[i].amount || 0);
+              if (!Number.isFinite(amount)) amount = 0;
+              running += (String(ordered[i].type || "").toLowerCase() === "income") ? amount : -amount;
+              series.push(running);
+            }
+            if (series.length) {
+              window.PCChartsLite.renderSparkline(sparkHost, series, {
+                ariaLabel: "Revenue balance trend",
+                stroke: "var(--brand,#0a84ff)",
+                fill: "rgba(10,132,255,0.14)"
+              });
+            }
           }
+        } catch (_sparkError) { /* silent */ }
+      }
+
+      if (!canUse) {
+        var revenueBig = document.querySelector(".stat-card-revenue .stat-big");
+        if (revenueBig) revenueBig.textContent = "Restricted";
+        if (sparkHost && !sparkHost.querySelector("svg")) {
+          sparkHost.textContent = "Restricted";
         }
-      } catch (_sparkError) {
-        if (sparkHost) {
-          sparkHost.innerHTML = '<div class="empty" style="padding:.4rem 0;color:var(--text-faint);font-size:.72rem">Trend unavailable</div>';
-        }
+        if (tasksSpark) tasksSpark.textContent = "";
+        if (eventsSpark) eventsSpark.textContent = "";
+        if (trendsChart) trendsChart.textContent = "";
       }
 
       // Health score from live control health endpoints; fallback to public /health.
       var computedScore = null;
-      var canUseControlHealth = roleName === "CEO" || roleName === "ADMIN" || roleName === "MANAGER";
-      if (canUseControlHealth) {
+      if (canUse) {
         try {
           var systemRes = await fetch("/api/v1/control/system-health", { headers: authHeaders });
           if (systemRes.ok) {

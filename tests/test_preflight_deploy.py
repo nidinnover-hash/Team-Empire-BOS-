@@ -15,6 +15,7 @@ from scripts import preflight_deploy
         ("ADMIN_EMAIL",),
         ("ADMIN_PASSWORD",),
         ("TOKEN_ENCRYPTION_KEY",),
+        ("OAUTH_STATE_KEY",),
     ],
 )
 def test_check_required_env_vars_reports_missing(monkeypatch: pytest.MonkeyPatch, missing_key: str):
@@ -24,6 +25,7 @@ def test_check_required_env_vars_reports_missing(monkeypatch: pytest.MonkeyPatch
         "ADMIN_EMAIL": "owner@example.com",
         "ADMIN_PASSWORD": "StrongPassword123!",
         "TOKEN_ENCRYPTION_KEY": "abcdef0123456789abcdef0123456789",
+        "OAUTH_STATE_KEY": "fedcba9876543210fedcba9876543210",
     }
     for key, value in base_env.items():
         monkeypatch.setenv(key, value)
@@ -40,6 +42,7 @@ def test_main_runs_expected_subprocesses_with_skip_db(monkeypatch: pytest.Monkey
         "ADMIN_EMAIL": "owner@example.com",
         "ADMIN_PASSWORD": "StrongPassword123!",
         "TOKEN_ENCRYPTION_KEY": "abcdef0123456789abcdef0123456789",
+        "OAUTH_STATE_KEY": "fedcba9876543210fedcba9876543210",
     }.items():
         monkeypatch.setenv(key, value)
 
@@ -49,6 +52,7 @@ def test_main_runs_expected_subprocesses_with_skip_db(monkeypatch: pytest.Monkey
         calls.append((label, cmd))
 
     monkeypatch.setattr(preflight_deploy, "_run_subprocess", fake_run_subprocess)
+    monkeypatch.setattr(preflight_deploy, "_check_python_runtime", lambda: [])
     monkeypatch.setattr(preflight_deploy, "_check_db_connectivity", lambda: None)
     monkeypatch.setattr(preflight_deploy, "_check_git_hygiene", lambda: [])
     monkeypatch.setattr(os, "environ", os.environ.copy())
@@ -67,11 +71,13 @@ def test_check_env_quality_flags_weak_values(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///./local.db")
     monkeypatch.setenv("SECRET_KEY", "short")
     monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", "short")
+    monkeypatch.setenv("OAUTH_STATE_KEY", "short")
     monkeypatch.setenv("ADMIN_PASSWORD", "admin")
 
     issues = preflight_deploy._check_env_quality()
     assert any("SECRET_KEY" in issue for issue in issues)
     assert any("TOKEN_ENCRYPTION_KEY" in issue for issue in issues)
+    assert any("OAUTH_STATE_KEY" in issue for issue in issues)
     assert any("ADMIN_PASSWORD" in issue for issue in issues)
     assert any("DATABASE_URL" in issue for issue in issues)
 
@@ -80,6 +86,7 @@ def test_check_env_quality_allows_sqlite_when_skip_db(monkeypatch: pytest.Monkey
     monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///./local.db")
     monkeypatch.setenv("SECRET_KEY", "0123456789abcdef0123456789abcdef")
     monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", "abcdef0123456789abcdef0123456789")
+    monkeypatch.setenv("OAUTH_STATE_KEY", "fedcba9876543210fedcba9876543210")
     monkeypatch.setenv("ADMIN_PASSWORD", "StrongPassword123!")
 
     issues = preflight_deploy._check_env_quality(skip_db=True)
@@ -93,9 +100,21 @@ def test_main_fails_when_dotenv_is_tracked(monkeypatch: pytest.MonkeyPatch):
         "ADMIN_EMAIL": "owner@example.com",
         "ADMIN_PASSWORD": "StrongPassword123!",
         "TOKEN_ENCRYPTION_KEY": "abcdef0123456789abcdef0123456789",
+        "OAUTH_STATE_KEY": "fedcba9876543210fedcba9876543210",
     }.items():
         monkeypatch.setenv(key, value)
     monkeypatch.setattr(preflight_deploy, "_check_git_hygiene", lambda: [".env is tracked by git"])
     monkeypatch.setattr("sys.argv", ["preflight_deploy.py", "--skip-db"])
 
     assert preflight_deploy.main() == 1
+
+
+def test_check_env_quality_rejects_reused_oauth_state_key(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/test")
+    monkeypatch.setenv("SECRET_KEY", "0123456789abcdef0123456789abcdef")
+    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", "abcdef0123456789abcdef0123456789")
+    monkeypatch.setenv("OAUTH_STATE_KEY", "0123456789abcdef0123456789abcdef")
+    monkeypatch.setenv("ADMIN_PASSWORD", "StrongPassword123!")
+
+    issues = preflight_deploy._check_env_quality()
+    assert any("OAUTH_STATE_KEY must differ from SECRET_KEY" in issue for issue in issues)

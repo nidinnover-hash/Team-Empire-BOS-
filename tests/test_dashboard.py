@@ -8,6 +8,13 @@ def _set_dashboard_session(client) -> None:
     client.cookies.set("pc_session", token)
 
 
+def _set_dashboard_staff_session(client) -> None:
+    token = create_access_token(
+        {"id": 4, "email": "staff@org1.com", "role": "STAFF", "org_id": 1}
+    )
+    client.cookies.set("pc_session", token)
+
+
 async def test_dashboard_returns_200(client):
     _set_dashboard_session(client)
     response = await client.get("/")
@@ -57,3 +64,11 @@ async def test_dashboard_shows_task_done_badge(client):
 
     response = await client.get("/")
     assert "done" in response.text
+
+
+async def test_dashboard_staff_revenue_card_is_restricted(client):
+    _set_dashboard_staff_session(client)
+    response = await client.get("/")
+    assert response.status_code == 200
+    assert "Restricted" in response.text
+    assert 'aria-label="Revenue trend restricted"' in response.text

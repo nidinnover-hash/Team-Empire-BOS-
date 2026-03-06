@@ -1186,6 +1186,13 @@
 
   // ── Boot ───────────────────────────────────────────────────────────────────
   try {
+    if (window.PCUI && window.PCUI.loadRoleCapabilities) {
+      var caps = await window.PCUI.loadRoleCapabilities();
+      if (!caps.canManageIntegrations) {
+        setStatus("integrations-status", "Integrations access is restricted for your role.", "warn");
+        return;
+      }
+    }
     loadAutoRefreshPreference();
     await bootToken();
     await refreshIntegrationPanels();

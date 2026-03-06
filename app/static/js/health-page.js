@@ -10,6 +10,21 @@
     .then(function (d) { return d.token; });
 
   function $(id) { return document.getElementById(id); }
+  var userRole = "";
+  var canManageTokens = false;
+
+  async function loadRoleCaps() {
+    try {
+      var r = await fetch("/web/session");
+      if (!r.ok) return;
+      var d = await r.json();
+      userRole = String(d && d.user && d.user.role ? d.user.role : "").toUpperCase();
+      canManageTokens = userRole === "CEO" || userRole === "ADMIN";
+    } catch (_e) {
+      userRole = "";
+      canManageTokens = false;
+    }
+  }
 
   function fmtTime(iso) {
     if (!iso) return "never";
@@ -61,6 +76,10 @@
   // ── Load Token Health ──────────────────────────────────────────────
   async function loadTokenHealth() {
     var container = $("token-list");
+    if (!canManageTokens) {
+      container.innerHTML = '<div class="empty">Token health is restricted to CEO/ADMIN.</div>';
+      return;
+    }
     try {
       var token = await window.__bootPromise;
       if (!token) throw new Error("Session expired");
@@ -146,6 +165,10 @@
 
   // ── Rotate Token ──────────────────────────────────────────────────
   async function rotateToken(type) {
+    if (!canManageTokens) {
+      if (window.showToast) window.showToast("Token rotation is restricted to CEO/ADMIN.", "warn");
+      return;
+    }
     if (!window.confirm("Rotate OAuth token for " + type + "? The current token will be invalidated.")) return;
     try {
       var token = await window.__bootPromise;
@@ -169,6 +192,6 @@
   $("refresh-btn").addEventListener("click", loadAll);
 
   // ── Init ──────────────────────────────────────────────────────────
-  loadAll();
+  loadRoleCaps().then(loadAll);
   if (typeof lucide !== "undefined") lucide.createIcons();
 })();

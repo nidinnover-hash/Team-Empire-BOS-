@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -8,6 +9,30 @@ from app.core.sensitive_keys import is_sensitive_key
 from app.core.token_crypto import decrypt_config, encrypt_config
 from app.models.integration import Integration
 from app.services.notification import create_notification
+
+_logger = logging.getLogger(__name__)
+
+
+async def _emit_integration_signal(
+    db: AsyncSession, topic: str, org_id: int, item: Integration,
+) -> None:
+    try:
+        from app.platform.signals import SignalCategory, SignalEnvelope, publish_signal
+
+        await publish_signal(
+            SignalEnvelope(
+                topic=topic,
+                category=SignalCategory.SYSTEM,
+                organization_id=org_id,
+                source="integration.service",
+                entity_type="integration",
+                entity_id=str(item.id),
+                payload={"integration_type": item.type, "status": item.status},
+            ),
+            db=db,
+        )
+    except Exception:
+        _logger.debug("Signal emission failed for %s integration=%s", topic, item.id, exc_info=True)
 
 
 def _validate_token_fields(config_json: dict) -> None:
@@ -109,6 +134,7 @@ async def connect_integration(
     )
     await db.commit()
     await db.refresh(item)
+    await _emit_integration_signal(db, "integration.connected", organization_id, item)
     return _decrypted(item)
 
 
@@ -134,6 +160,7 @@ async def disconnect_integration(
     )
     await db.commit()
     await db.refresh(item)
+    await _emit_integration_signal(db, "integration.disconnected", organization_id, item)
     return _decrypted(item)
 
 

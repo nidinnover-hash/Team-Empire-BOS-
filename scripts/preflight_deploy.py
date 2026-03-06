@@ -16,6 +16,26 @@ if str(ROOT) not in sys.path:
 
 from app.core.config import settings
 
+_REQUIRED_PYTHON_VERSION = (3, 12)
+
+
+def _current_python_version() -> tuple[int, int]:
+    info = sys.version_info
+    major = getattr(info, "major", info[0])
+    minor = getattr(info, "minor", info[1])
+    return (int(major), int(minor))
+
+
+def _check_python_runtime() -> list[str]:
+    current = _current_python_version()
+    if current == _REQUIRED_PYTHON_VERSION:
+        return []
+    return [
+        "Python runtime mismatch for deploy preflight "
+        f"(required {_REQUIRED_PYTHON_VERSION[0]}.{_REQUIRED_PYTHON_VERSION[1]}, "
+        f"detected {current[0]}.{current[1]})"
+    ]
+
 
 def _check_required_env_vars() -> list[str]:
     missing: list[str] = []
@@ -25,6 +45,7 @@ def _check_required_env_vars() -> list[str]:
         "ADMIN_EMAIL",
         "ADMIN_PASSWORD",
         "TOKEN_ENCRYPTION_KEY",
+        "OAUTH_STATE_KEY",
     ]
     for key in required:
         value = os.environ.get(key)
@@ -39,6 +60,7 @@ def _check_env_quality(*, skip_db: bool = False) -> list[str]:
 
     secret_key = (os.environ.get("SECRET_KEY") or "").strip()
     token_key = (os.environ.get("TOKEN_ENCRYPTION_KEY") or "").strip()
+    oauth_state_key = (os.environ.get("OAUTH_STATE_KEY") or "").strip()
     admin_password = (os.environ.get("ADMIN_PASSWORD") or "").strip()
     database_url = (os.environ.get("DATABASE_URL") or "").strip().lower()
 
@@ -46,8 +68,14 @@ def _check_env_quality(*, skip_db: bool = False) -> list[str]:
         issues.append("SECRET_KEY is weak/placeholder (must be random, 32+ chars)")
     if token_key in weak_values or len(token_key) < 32:
         issues.append("TOKEN_ENCRYPTION_KEY is weak/placeholder (must be random, 32+ chars)")
+    if oauth_state_key in weak_values or len(oauth_state_key) < 32:
+        issues.append("OAUTH_STATE_KEY is weak/placeholder (must be random, 32+ chars)")
     if secret_key and token_key and secret_key == token_key:
         issues.append("TOKEN_ENCRYPTION_KEY must differ from SECRET_KEY")
+    if oauth_state_key and oauth_state_key == secret_key:
+        issues.append("OAUTH_STATE_KEY must differ from SECRET_KEY")
+    if oauth_state_key and oauth_state_key == token_key:
+        issues.append("OAUTH_STATE_KEY must differ from TOKEN_ENCRYPTION_KEY")
     if admin_password in {"", "demo", "password", "admin", "123456", "changeme"} or len(admin_password) < 12:
         issues.append("ADMIN_PASSWORD is weak/too short (must be 12+ chars)")
     if database_url.startswith("sqlite") and not skip_db:
@@ -97,6 +125,13 @@ def main() -> int:
         help="Skip DB connectivity check.",
     )
     args = parser.parse_args()
+
+    runtime_issues = _check_python_runtime()
+    if runtime_issues:
+        print("Preflight failed: unsupported Python runtime:")
+        for issue in runtime_issues:
+            print(f"- {issue}")
+        return 1
 
     missing = _check_required_env_vars()
     if missing:

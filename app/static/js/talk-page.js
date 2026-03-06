@@ -46,6 +46,8 @@ function getCookie(name) {
     var csrfToken = null;
     var avatarMode = "professional";
     var loginPurpose = "professional";
+    var userRole = "";
+    var canForgetLearned = false;
     var isMicOn = false;
     var recognition = null;
     var aiModelsCache = null;
@@ -100,7 +102,8 @@ function getCookie(name) {
       if (meta) {
         var badges = [];
         if (meta.confidence_level) {
-          var cCls = meta.confidence_level === "high" ? "badge-ok" : meta.confidence_level === "low" ? "badge-warn" : "badge-info";
+          var levelMap = {"high": "badge-ok", "low": "badge-warn", "medium": "badge-info"};
+          var cCls = levelMap[meta.confidence_level] || "badge-info";
           badges.push('<span class="chat-badge ' + cCls + '">Confidence: ' + esc(meta.confidence_score) + ' (' + esc(meta.confidence_level) + ')</span>');
         }
         if (meta.policy_score !== undefined) {
@@ -168,10 +171,15 @@ function getCookie(name) {
           '<div class="item" id="learned-' + esc(m.id) + '">' +
             '<strong>' + esc(m.key || "preference") + "</strong>" +
             '<small>' + esc(m.value || "") + "</small>" +
-            '<button class="btn" type="button" data-forget="' + esc(m.id) + '" style="margin-top:.35rem">Forget</button>' +
+            (canForgetLearned
+              ? '<button class="btn" type="button" data-forget="' + esc(m.id) + '" style="margin-top:.35rem">Forget</button>'
+              : "") +
           "</div>"
         );
       }).join("");
+      if (!canForgetLearned) {
+        root.insertAdjacentHTML("beforeend", '<div class="item"><small>Memory management is restricted to CEO role.</small></div>');
+      }
       Array.from(root.querySelectorAll("button[data-forget]")).forEach(function (btn) {
         btn.addEventListener("click", async function () {
           var id = btn.getAttribute("data-forget");
@@ -212,6 +220,19 @@ function getCookie(name) {
         apiToken = data.token || null;
       } catch (_e) {
         apiToken = null;
+      }
+    }
+
+    async function loadRoleCaps() {
+      try {
+        var r = await fetch("/web/session");
+        if (!r.ok) return;
+        var d = await r.json();
+        userRole = String(d && d.user && d.user.role ? d.user.role : "").toUpperCase();
+        canForgetLearned = userRole === "CEO";
+      } catch (_e) {
+        userRole = "";
+        canForgetLearned = false;
       }
     }
 
@@ -509,6 +530,7 @@ function getCookie(name) {
       var fallbackAvatar = getCookie("pc_avatar_default") || "professional";
       avatarMode = localStorage.getItem("pc_avatar_mode:" + scope) || fallbackAvatar;
       csrfToken = getCsrfToken();
+      await loadRoleCaps();
       enforcePurposeBarrier();
       renderAvatarMode();
       setupSpeech();

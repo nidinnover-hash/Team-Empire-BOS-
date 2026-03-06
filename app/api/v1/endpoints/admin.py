@@ -52,7 +52,7 @@ router = APIRouter(prefix="/admin", tags=["Super Admin"])
 def _actor_user_id(actor: dict) -> int | None:
     raw = actor.get("id")
     if isinstance(raw, bool):
-        return int(raw)
+        return None
     if isinstance(raw, int):
         return raw
     if isinstance(raw, float):
@@ -697,3 +697,52 @@ async def reset_command_center_config(
 
     merged = await _get_command_center_config(db, org_id)
     return CommandCenterConfigRead(**merged)
+
+
+# ── Audit integrity verification ─────────────────────────────────────────────
+
+
+@router.get("/audit/verify")
+async def verify_audit_chain(
+    limit: int = Query(1000, ge=1, le=10_000),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_super_admin),
+) -> dict:
+    """Verify the HMAC chain integrity of audit events."""
+    from app.core.audit_integrity import verify_chain
+
+    org_id = int(actor["org_id"])
+    result = await verify_chain(db, org_id, limit=limit)
+    return result
+
+
+# ── Account unlock ───────────────────────────────────────────────────────────
+
+
+@router.post("/unlock-account/{user_id}")
+async def unlock_account(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_super_admin),
+) -> dict:
+    """Unlock a locked user account (clears failed login counter)."""
+    from app.core.account_security import unlock_account as do_unlock
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await do_unlock(db, user)
+    await db.commit()
+
+    await record_action(
+        db,
+        event_type="account_unlocked",
+        actor_user_id=_actor_user_id(actor),
+        organization_id=int(actor["org_id"]),
+        entity_type="user",
+        entity_id=user_id,
+        payload_json={"unlocked_by": _actor_user_id(actor)},
+    )
+    return {"status": "unlocked", "user_id": user_id}

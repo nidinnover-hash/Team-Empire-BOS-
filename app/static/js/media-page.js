@@ -9,6 +9,21 @@
   const token = await window.__bootPromise;
   const H = { Authorization: "Bearer " + token };
   const HJ = { Authorization: "Bearer " + token, "Content-Type": "application/json" };
+  var userRole = "";
+  var canManageMedia = false;
+
+  async function loadRoleCaps() {
+    try {
+      var r = await fetch("/web/session");
+      if (!r.ok) return;
+      var d = await r.json();
+      userRole = String(d && d.user && d.user.role ? d.user.role : "").toUpperCase();
+      canManageMedia = userRole === "CEO" || userRole === "ADMIN";
+    } catch (_e) {
+      userRole = "";
+      canManageMedia = false;
+    }
+  }
 
   async function api(p, o) {
     const r = await fetch("/api/v1" + p, { headers: HJ, ...o });
@@ -103,13 +118,19 @@
               : '') +
           '</div>' +
           '<div class="media-card-actions">' +
-            '<button class="btn-analyze" title="AI Analyze">Analyze</button>' +
-            '<button class="btn-delete" title="Delete">Delete</button>' +
+            (canManageMedia
+              ? '<button class="btn-analyze" title="AI Analyze">Analyze</button>' +
+                '<button class="btn-delete" title="Delete">Delete</button>'
+              : '<span class="media-card-meta">View only</span>') +
           '</div>' +
         '</div>';
       }).join("");
 
       // Event handlers
+      if (!canManageMedia) {
+        if (typeof lucide !== "undefined") lucide.createIcons();
+        return;
+      }
       grid.querySelectorAll(".btn-analyze").forEach(function(btn) {
         btn.addEventListener("click", async function(e) {
           e.stopPropagation();
@@ -156,25 +177,33 @@
   document.getElementById("filter-type").addEventListener("change", function() { loadMedia(); });
 
   /* ── Upload Modal ────────────────────────────────────────────────── */
+  await loadRoleCaps();
   var modal = document.getElementById("modal-upload");
   var zone = document.getElementById("upload-zone");
   var fileInput = document.getElementById("file-input");
+  var uploadBtn = document.getElementById("btn-upload");
 
-  document.getElementById("btn-upload").addEventListener("click", function() { modal.style.display = "flex"; });
-  document.getElementById("modal-upload-close").addEventListener("click", function() { modal.style.display = "none"; });
-  modal.addEventListener("click", function(e) { if (e.target === modal) modal.style.display = "none"; });
+  if (canManageMedia) {
+    uploadBtn.addEventListener("click", function() { modal.style.display = "flex"; });
+    document.getElementById("modal-upload-close").addEventListener("click", function() { modal.style.display = "none"; });
+    modal.addEventListener("click", function(e) { if (e.target === modal) modal.style.display = "none"; });
 
-  zone.addEventListener("click", function() { fileInput.click(); });
-  zone.addEventListener("dragover", function(e) { e.preventDefault(); zone.classList.add("dragover"); });
-  zone.addEventListener("dragleave", function() { zone.classList.remove("dragover"); });
-  zone.addEventListener("drop", function(e) {
-    e.preventDefault();
-    zone.classList.remove("dragover");
-    if (e.dataTransfer.files.length > 0) uploadFiles(e.dataTransfer.files);
-  });
-  fileInput.addEventListener("change", function() {
-    if (fileInput.files.length > 0) uploadFiles(fileInput.files);
-  });
+    zone.addEventListener("click", function() { fileInput.click(); });
+    zone.addEventListener("dragover", function(e) { e.preventDefault(); zone.classList.add("dragover"); });
+    zone.addEventListener("dragleave", function() { zone.classList.remove("dragover"); });
+    zone.addEventListener("drop", function(e) {
+      e.preventDefault();
+      zone.classList.remove("dragover");
+      if (e.dataTransfer.files.length > 0) uploadFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener("change", function() {
+      if (fileInput.files.length > 0) uploadFiles(fileInput.files);
+    });
+  } else {
+    uploadBtn.disabled = true;
+    uploadBtn.title = "Upload is restricted to CEO/ADMIN";
+    modal.style.display = "none";
+  }
 
   async function uploadFiles(files) {
     var progress = document.getElementById("upload-progress");

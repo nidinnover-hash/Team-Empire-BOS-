@@ -73,6 +73,15 @@ async def authenticate_user(
         )
     user = await user_service.get_user_by_email(db, username)
 
+    # Per-account lockout check (supplements per-IP check above)
+    if user is not None:
+        from app.core.account_security import check_account_locked
+        if await check_account_locked(db, user):
+            raise HTTPException(
+                status_code=423,
+                detail="Account temporarily locked due to repeated failed login attempts. Try again later.",
+            )
+
     # Constant-time: always run PBKDF2 so response time doesn't leak
     # whether the username exists.  Use the real hash when available,
     # otherwise the dummy hash, so the crypto work is always performed.
@@ -99,6 +108,10 @@ async def authenticate_user(
 
     if not valid:
         record_login_failure(client_ip)
+        # Per-account failure tracking
+        if user is not None:
+            from app.core.account_security import record_account_login_failure
+            await record_account_login_failure(db, user)
         username_fp = _username_fingerprint(username)
         logger.warning("Failed login from %s on %s", client_ip, endpoint)
         await record_action(
@@ -143,6 +156,9 @@ async def authenticate_user(
             )
 
     clear_login_failures(client_ip)
+    # Clear per-account lockout on success
+    from app.core.account_security import reset_account_login_failures
+    await reset_account_login_failures(db, user)
     await record_action(
         db,
         event_type="login_success",

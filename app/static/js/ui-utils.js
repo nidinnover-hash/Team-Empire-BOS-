@@ -295,6 +295,53 @@
     return pair ? decodeURIComponent(pair.split("=").slice(1).join("=") || "") : "";
   }
 
+  var _roleCapabilitiesPromise = null;
+  function _buildRoleCapabilities(user) {
+    var roleName = String(user && user.role ? user.role : "").toUpperCase();
+    var orgId = Number(user && user.org_id ? user.org_id : 0);
+    var canViewSensitiveFinancials = roleName === "CEO" || roleName === "ADMIN" || roleName === "MANAGER";
+    var isSecurityAdmin = roleName === "CEO" || roleName === "ADMIN";
+    var canManageApprovals = roleName === "CEO" || roleName === "ADMIN";
+    var canAccessEmpireCockpit = roleName === "CEO" || roleName === "ADMIN" || roleName === "MANAGER";
+    var canManageEmpireRouting = orgId === 1 && (roleName === "CEO" || roleName === "ADMIN");
+    var canReviewEmpireIntelligence = orgId === 1 && (roleName === "CEO" || roleName === "ADMIN" || roleName === "MANAGER");
+    return {
+      roleName: roleName,
+      orgId: orgId,
+      canViewSensitiveFinancials: canViewSensitiveFinancials,
+      canViewContactFinancials: canViewSensitiveFinancials,
+      canViewPipelineSummary: canViewSensitiveFinancials,
+      canCollectData: canViewSensitiveFinancials,
+      canViewStorage: isSecurityAdmin,
+      canExportData: roleName === "CEO",
+      canManageTokens: isSecurityAdmin,
+      canManageMedia: isSecurityAdmin,
+      canManageSecurity: isSecurityAdmin,
+      canManageIntegrations: isSecurityAdmin,
+      canManageApprovals: canManageApprovals,
+      canForgetLearned: roleName === "CEO",
+      canAccessEmpireCockpit: canAccessEmpireCockpit,
+      canManageEmpireRouting: canManageEmpireRouting,
+      canReviewEmpireIntelligence: canReviewEmpireIntelligence,
+    };
+  }
+
+  async function loadRoleCapabilities() {
+    if (_roleCapabilitiesPromise) return _roleCapabilitiesPromise;
+    _roleCapabilitiesPromise = (async function () {
+      try {
+        var response = await fetch("/web/session");
+        if (!response.ok) return _buildRoleCapabilities(null);
+        var payload = await response.json();
+        var user = payload && payload.user ? payload.user : null;
+        return _buildRoleCapabilities(user);
+      } catch (_err) {
+        return _buildRoleCapabilities(null);
+      }
+    })();
+    return _roleCapabilitiesPromise;
+  }
+
   // Global error handlers — capture unhandled JS errors for debugging
   var _errThrottle = 0;
   window.onerror = function(msg, src, line, col, err) {
@@ -361,6 +408,7 @@
     setSectionState: setSectionState,
     getCsrfToken: getCsrfToken,
     showRetryToast: showRetryToast,
+    loadRoleCapabilities: loadRoleCapabilities,
   };
 
   if (document.readyState === "loading") {

@@ -10,6 +10,8 @@ if str(ROOT) not in sys.path:
 
 from app.core.config import format_startup_issues, settings, validate_startup_settings
 
+_REQUIRED_PYTHON_VERSION = (3, 12)
+
 
 def _prod_like_settings():
     return settings.model_copy(
@@ -18,6 +20,22 @@ def _prod_like_settings():
             "ENFORCE_STARTUP_VALIDATION": True,
         }
     )
+
+
+def _require_supported_runtime_for_import() -> int:
+    info = sys.version_info
+    current = (
+        int(getattr(info, "major", info[0])),
+        int(getattr(info, "minor", info[1])),
+    )
+    if current == _REQUIRED_PYTHON_VERSION:
+        return 0
+    print(
+        "Production startup import smoke requires Python "
+        f"{_REQUIRED_PYTHON_VERSION[0]}.{_REQUIRED_PYTHON_VERSION[1]}. "
+        f"Detected {current[0]}.{current[1]}."
+    )
+    return 1
 
 
 def main() -> int:
@@ -46,6 +64,9 @@ def main() -> int:
     print("Production-like startup validation passed.")
 
     if args.import_app:
+        runtime_rc = _require_supported_runtime_for_import()
+        if runtime_rc != 0:
+            return runtime_rc
         import app.main  # noqa: F401
 
         print("Imported app.main successfully.")

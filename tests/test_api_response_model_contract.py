@@ -8,6 +8,9 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/notifications/stream",  # SSE stream
     "/api/v1/export",  # file export/streaming
     "/api/v1/media/{attachment_id}/download",  # file response
+    "/api/v1/admin/audit/verify",  # internal audit integrity check
+    "/api/v1/admin/unlock-account/{user_id}",  # internal admin action
+    "/api/v1/empire-digital/leads/export",  # file/streaming export
 }
 
 

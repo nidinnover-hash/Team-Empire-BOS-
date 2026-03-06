@@ -7,9 +7,10 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_web_user, get_db, verify_csrf
+from app.engines.brain.context import build_brain_context
+from app.engines.brain.drafting import AgentChatRequest, run_agent
 from app.services import memory as memory_service
 from app.services import talk_commands as talk_command_service
-from app.services.context_builder import build_brain_context
 from app.web._helpers import read_avatar_scope, write_avatar_scope
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,6 @@ async def web_agent_chat(
     user: dict = Depends(get_current_web_user),
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
-    from app.agents.orchestrator import AgentChatRequest, run_agent
     from app.services import chat_history as chat_history_service
     from app.services import conversation_learning as conversation_learning_service
     from app.services.memory import build_memory_context_semantic

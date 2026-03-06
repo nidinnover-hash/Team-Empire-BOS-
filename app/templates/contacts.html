@@ -22,19 +22,23 @@
       <div class="kpi"><div class="label">Total</div><div class="val" id="k-total" data-count-to="0">0</div></div>
       <div class="kpi"><div class="label">Business</div><div class="val" id="k-biz" data-count-to="0">0</div></div>
       <div class="kpi"><div class="label">Personal</div><div class="val" id="k-per" data-count-to="0">0</div></div>
-      <div class="kpi"><div class="label">Pipeline Value</div><div class="val" id="k-pipeline-val" data-count-to="0" data-count-prefix="$">0</div></div>
+      <div class="kpi"><div class="label">Pipeline Value</div><div class="val" id="k-pipeline-val" data-count-to="0" data-count-prefix="$">{% if visibility.can_view_contact_financials %}0{% else %}Restricted{% endif %}</div></div>
       <div class="kpi"><div class="label">Follow-ups Due</div><div class="val" id="k-followup" data-count-to="0">0</div></div>
     </div>
 
     <div class="section-label" style="margin-top:1.2rem">Pipeline Funnel</div>
     <div class="kpi-row" id="pipeline-funnel" style="flex-wrap:wrap;gap:.5rem">
-      <div class="kpi" style="flex:1;min-width:80px"><div class="label">New</div><div class="val" id="pf-new">0</div></div>
-      <div class="kpi" style="flex:1;min-width:80px"><div class="label">Contacted</div><div class="val" id="pf-contacted">0</div></div>
-      <div class="kpi" style="flex:1;min-width:80px"><div class="label">Qualified</div><div class="val" id="pf-qualified">0</div></div>
-      <div class="kpi" style="flex:1;min-width:80px"><div class="label">Proposal</div><div class="val" id="pf-proposal">0</div></div>
-      <div class="kpi" style="flex:1;min-width:80px"><div class="label">Negotiation</div><div class="val" id="pf-negotiation">0</div></div>
-      <div class="kpi" style="flex:1;min-width:80px"><div class="label">Won</div><div class="val" id="pf-won">0</div></div>
-      <div class="kpi" style="flex:1;min-width:80px"><div class="label">Lost</div><div class="val" id="pf-lost">0</div></div>
+      {% if visibility.can_view_contacts_pipeline_summary %}
+        <div class="kpi" style="flex:1;min-width:80px"><div class="label">New</div><div class="val" id="pf-new">0</div></div>
+        <div class="kpi" style="flex:1;min-width:80px"><div class="label">Contacted</div><div class="val" id="pf-contacted">0</div></div>
+        <div class="kpi" style="flex:1;min-width:80px"><div class="label">Qualified</div><div class="val" id="pf-qualified">0</div></div>
+        <div class="kpi" style="flex:1;min-width:80px"><div class="label">Proposal</div><div class="val" id="pf-proposal">0</div></div>
+        <div class="kpi" style="flex:1;min-width:80px"><div class="label">Negotiation</div><div class="val" id="pf-negotiation">0</div></div>
+        <div class="kpi" style="flex:1;min-width:80px"><div class="label">Won</div><div class="val" id="pf-won">0</div></div>
+        <div class="kpi" style="flex:1;min-width:80px"><div class="label">Lost</div><div class="val" id="pf-lost">0</div></div>
+      {% else %}
+        <div class="kpi" style="width:100%"><div class="label">Pipeline</div><div class="val" style="font-size:.95rem">Restricted for your role</div></div>
+      {% endif %}
     </div>
 
     <div class="filter-bar" style="margin-top:1rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">

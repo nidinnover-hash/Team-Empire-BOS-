@@ -23,6 +23,13 @@ from app.core.config import settings
 from app.core.token_crypto import decrypt_token, encrypt_token
 from app.db.session import AsyncSessionLocal as _AsyncSessionLocal
 from app.models.webhook import WebhookDelivery, WebhookEndpoint
+from app.platform.signals import (
+    WEBHOOK_DELIVERY_FAILED,
+    WEBHOOK_DELIVERY_SUCCEEDED,
+    SignalCategory,
+    SignalEnvelope,
+    publish_signal,
+)
 from app.schemas.webhook import VALID_WEBHOOK_EVENTS
 
 logger = logging.getLogger(__name__)
@@ -163,6 +170,37 @@ def delivery_error_details(error_message: str | None, status_code: int | None = 
     category = classify_delivery_error(error_message, status_code)
     retryable = category in {"timeout", "network_error", "remote_server_error"} or status_code == 429
     return category, retryable
+
+
+async def _publish_webhook_delivery_signal(
+    db: AsyncSession,
+    delivery: WebhookDelivery,
+    *,
+    source: str,
+) -> None:
+    topic = WEBHOOK_DELIVERY_SUCCEEDED if delivery.status == "success" else WEBHOOK_DELIVERY_FAILED
+    await publish_signal(
+        SignalEnvelope(
+            topic=topic,
+            category=SignalCategory.EXECUTION,
+            organization_id=delivery.organization_id,
+            source=source,
+            entity_type="webhook_delivery",
+            entity_id=str(delivery.id),
+            summary_text=f"{delivery.event}:{delivery.status}",
+            payload={
+                "delivery_id": delivery.id,
+                "endpoint_id": delivery.webhook_endpoint_id,
+                "event": delivery.event,
+                "status": delivery.status,
+                "attempt_count": delivery.attempt_count,
+                "response_status_code": delivery.response_status_code,
+                "duration_ms": delivery.duration_ms,
+                "error_message": delivery.error_message,
+            },
+        ),
+        db=db,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -466,11 +504,32 @@ async def _dispatch_to_endpoint(
     await db.commit()
     await db.refresh(delivery)
 
+    # Capture permanently failed deliveries into the dead-letter queue
+    if delivery.status == "dead_letter":
+        try:
+            from app.platform.dead_letter.store import capture_failure
+            await capture_failure(
+                db,
+                organization_id=endpoint.organization_id,
+                source_type="webhook",
+                source_id=str(delivery.id),
+                source_detail=endpoint.url[:200],
+                payload={"event": event, "endpoint_id": endpoint.id, "delivery_id": delivery.id},
+                error_message=final_error,
+                error_type="webhook_delivery_exhausted",
+                attempts=delivery.attempt_count,
+                max_attempts=delivery.max_retries,
+            )
+        except Exception:
+            logger.debug("Dead-letter capture failed for webhook delivery %d", delivery.id, exc_info=True)
+
     try:
         await _prune_old_deliveries(db, endpoint.id)
         await db.commit()
     except (SQLAlchemyError, RuntimeError, TypeError, ValueError, AttributeError):
         logger.debug("Delivery pruning failed endpoint_id=%d", endpoint.id, exc_info=True)
+
+    await _publish_webhook_delivery_signal(db, delivery, source="webhook.dispatch")
 
     return delivery
 
@@ -711,6 +770,7 @@ async def retry_failed_deliveries(db: AsyncSession) -> int:
             )
 
         await db.commit()
+        await _publish_webhook_delivery_signal(db, delivery, source="webhook.retry")
         retried += 1
 
     return retried

@@ -200,6 +200,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.services.ai_router import load_ai_keys_from_db
     await load_ai_keys_from_db()
 
+    # Register signal consumers (audit bridge, metrics counter)
+    from app.platform.signals.consumers import register_default_consumers
+    register_default_consumers()
+
     from app.services.sync_scheduler import start_scheduler, stop_scheduler
     run_scheduler = settings.RUN_SCHEDULER
     if settings.SYNC_ENABLED and run_scheduler:

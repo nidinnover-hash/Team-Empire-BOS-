@@ -153,6 +153,17 @@
   });
 
   // ── Init ────────────────────────────────────────────────────────────
-  loadMFAStatus();
-  if (typeof lucide !== "undefined") lucide.createIcons();
+  (async function initSecurityPage() {
+    if (window.PCUI && window.PCUI.loadRoleCapabilities) {
+      var caps = await window.PCUI.loadRoleCapabilities();
+      if (!caps.canManageSecurity) {
+        $("mfa-status-badge").textContent = "Restricted";
+        $("mfa-actions").innerHTML = '<p class="hint">Security controls are restricted for your role.</p>';
+        if (typeof lucide !== "undefined") lucide.createIcons();
+        return;
+      }
+    }
+    loadMFAStatus();
+    if (typeof lucide !== "undefined") lucide.createIcons();
+  })();
 })();

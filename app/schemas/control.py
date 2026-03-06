@@ -405,3 +405,47 @@ class CloneSelfDevelopRead(BaseModel):
     development_plan: str
     next_actions: list[str]
     diagnostics: dict
+
+
+# ── Platform observability ───────────────────────────────────────────────────
+
+
+class SignalItem(BaseModel):
+    signal_id: str
+    topic: str
+    category: str
+    source: str
+    entity_type: str | None = None
+    entity_id: str | None = None
+    occurred_at: datetime
+    summary_text: str | None = None
+
+
+class SignalDashboardRead(BaseModel):
+    generated_at: datetime
+    count: int
+    items: list[SignalItem]
+
+
+class DecisionTraceItem(BaseModel):
+    id: int
+    trace_type: str
+    title: str
+    summary: str
+    confidence_score: float
+    actor_user_id: int | None = None
+    created_at: datetime
+
+
+class DecisionLogRead(BaseModel):
+    generated_at: datetime
+    count: int
+    items: list[DecisionTraceItem]
+
+
+class PlatformCountersRead(BaseModel):
+    generated_at: datetime
+    signals_24h: int
+    decisions_24h: int
+    topic_counts_24h: dict[str, int] = Field(default_factory=dict)
+    in_process_signal_counts: dict[str, int] = Field(default_factory=dict)

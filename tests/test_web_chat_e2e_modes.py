@@ -26,7 +26,7 @@ async def test_web_chat_e2e_avatar_and_integration_command(client, monkeypatch):
     async def fake_github_status(*_args, **_kwargs):
         return {"connected": True, "last_sync_at": None, "login": "EmpireO", "repos_tracked": 3}
 
-    monkeypatch.setattr("app.agents.orchestrator.run_agent", fake_run_agent)
+    monkeypatch.setattr("app.web.chat.run_agent", fake_run_agent)
     monkeypatch.setattr("app.services.github_service.get_github_status", fake_github_status)
 
     personal_msg = await client.post(

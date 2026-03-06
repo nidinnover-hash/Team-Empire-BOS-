@@ -25,14 +25,29 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.util import typing as sa_typing
 
-from app.core.deps import get_db
-from app.core.security import create_access_token
-from app.db.base import Base
-from app.main import app as fastapi_app
-from app.models.organization import Organization
-from app.models.registry import load_all_models
-from app.models.user import User
+
+# Python 3.14 compatibility shim for SQLAlchemy's Union helper during
+# declarative annotation scanning in tests.
+def _sa_make_union_type_py314_compat(*types):
+    if not types:
+        return object
+    union_value = types[0]
+    for typ in types[1:]:
+        union_value = union_value | typ
+    return union_value
+
+
+sa_typing.make_union_type = _sa_make_union_type_py314_compat
+
+from app.core.deps import get_db  # noqa: E402
+from app.core.security import create_access_token  # noqa: E402
+from app.db.base import Base  # noqa: E402
+from app.main import app as fastapi_app  # noqa: E402
+from app.models.organization import Organization  # noqa: E402
+from app.models.registry import load_all_models  # noqa: E402
+from app.models.user import User  # noqa: E402
 
 # Register all models so Base.metadata knows about every table.
 load_all_models()
@@ -66,7 +81,6 @@ def _reset_redis_module_state():
     from app.core import middleware as middleware_mod
     from app.core import oauth_nonce as nonce_mod
     from app.core.config import settings
-    from app.services import ai_router as ai_router_mod
 
     # --- 1. Blank Redis URL settings ---
     saved_settings = {
@@ -86,8 +100,6 @@ def _reset_redis_module_state():
         "mw_client": middleware_mod._redis_client,
         "email_init": email_mod._compose_redis_initialized,
         "email_client": email_mod._compose_redis_client,
-        "ai_key_init": ai_router_mod._ai_key_redis_initialized,
-        "ai_key_client": ai_router_mod._ai_key_redis_client,
     }
 
     nonce_mod._redis_initialized = False
@@ -98,8 +110,6 @@ def _reset_redis_module_state():
     middleware_mod._redis_client = None
     email_mod._compose_redis_initialized = False
     email_mod._compose_redis_client = None
-    ai_router_mod._ai_key_redis_initialized = False
-    ai_router_mod._ai_key_redis_client = None
 
     yield
 
@@ -115,8 +125,6 @@ def _reset_redis_module_state():
     middleware_mod._redis_client = saved_modules["mw_client"]
     email_mod._compose_redis_initialized = saved_modules["email_init"]
     email_mod._compose_redis_client = saved_modules["email_client"]
-    ai_router_mod._ai_key_redis_initialized = saved_modules["ai_key_init"]
-    ai_router_mod._ai_key_redis_client = saved_modules["ai_key_client"]
 
 
 @pytest.fixture(autouse=True)
@@ -164,6 +172,9 @@ async def _seed_db(session_factory, *, full: bool = True):
             s.add(User(id=4, organization_id=1, name="Test Staff",
                         email="staff@org1.com", password_hash="unused",
                         role="STAFF", is_active=True, token_version=1))
+            s.add(User(id=6, organization_id=1, name="Test Admin",
+                        email="admin@org1.com", password_hash="unused",
+                        role="ADMIN", is_active=True, token_version=1))
             s.add(User(id=5, organization_id=1, name="Personal CEO",
                         email="nidinnover@gmail.com", password_hash="unused",
                         role="CEO", is_active=True, token_version=1))
@@ -239,8 +250,8 @@ async def client(_test_engine):
     ) as ac:
         yield ac
 
-    # Teardown: remove overrides and wipe the test database
-    fastapi_app.dependency_overrides.clear()
+    # Teardown: remove only *our* override (not other fixtures' overrides)
+    fastapi_app.dependency_overrides.pop(get_db, None)
 
 
 def _make_auth_headers(

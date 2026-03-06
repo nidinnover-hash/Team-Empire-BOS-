@@ -38,6 +38,72 @@
       </div>
 
       <div class="card">
+        <div class="card-head">AI Reliability</div>
+        <div class="card-body">
+          <div class="kpi-row decision-kpi-row">
+            <div class="kpi"><div class="label">Success Rate</div><div class="val" id="k-ai-success">0%</div><div class="sub">signal-derived</div></div>
+            <div class="kpi"><div class="label">Failed Calls</div><div class="val" id="k-ai-failed">0</div><div class="sub">last 7 days</div></div>
+            <div class="kpi"><div class="label">Fallbacks</div><div class="val" id="k-ai-fallbacks">0</div><div class="sub">provider switches</div></div>
+            <div class="kpi"><div class="label">Avg Latency</div><div class="val" id="k-ai-avg-latency">n/a</div><div class="sub">signal envelope</div></div>
+          </div>
+          <div class="summary-grid ai-reliability-grid">
+            <div class="summary-panel">
+              <div class="summary-head">Provider Reliability</div>
+              <div id="ai-reliability-providers" class="summary-list empty">No AI reliability data yet.</div>
+            </div>
+            <div class="summary-panel">
+              <div class="summary-head">Recent AI Failures</div>
+              <div id="ai-reliability-failures" class="summary-list empty">No recent AI failures.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">Scheduler Health</div>
+        <div class="card-body">
+          <div class="kpi-row decision-kpi-row">
+            <div class="kpi"><div class="label">Runs</div><div class="val" id="k-scheduler-runs">0</div><div class="sub">last 7 days</div></div>
+            <div class="kpi"><div class="label">Failed Runs</div><div class="val" id="k-scheduler-failed">0</div><div class="sub">signal-derived</div></div>
+            <div class="kpi"><div class="label">Success Rate</div><div class="val" id="k-scheduler-success">0%</div><div class="sub">job outcomes</div></div>
+            <div class="kpi"><div class="label">Avg Duration</div><div class="val" id="k-scheduler-duration">n/a</div><div class="sub">per run</div></div>
+          </div>
+          <div class="summary-grid ai-reliability-grid">
+            <div class="summary-panel">
+              <div class="summary-head">Job Reliability</div>
+              <div id="scheduler-health-jobs" class="summary-list empty">No scheduler activity yet.</div>
+            </div>
+            <div class="summary-panel">
+              <div class="summary-head">Recent Scheduler Failures</div>
+              <div id="scheduler-health-failures" class="summary-list empty">No recent scheduler failures.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">Webhook Reliability</div>
+        <div class="card-body">
+          <div class="kpi-row decision-kpi-row">
+            <div class="kpi"><div class="label">Deliveries</div><div class="val" id="k-webhook-total">0</div><div class="sub">last 7 days</div></div>
+            <div class="kpi"><div class="label">Failed</div><div class="val" id="k-webhook-failed">0</div><div class="sub">signal-derived</div></div>
+            <div class="kpi"><div class="label">Success Rate</div><div class="val" id="k-webhook-success">0%</div><div class="sub">delivery outcomes</div></div>
+            <div class="kpi"><div class="label">Avg Duration</div><div class="val" id="k-webhook-duration">n/a</div><div class="sub">per delivery</div></div>
+          </div>
+          <div class="summary-grid ai-reliability-grid">
+            <div class="summary-panel">
+              <div class="summary-head">Endpoint Reliability</div>
+              <div id="webhook-reliability-endpoints" class="summary-list empty">No webhook activity yet.</div>
+            </div>
+            <div class="summary-panel">
+              <div class="summary-head">Recent Webhook Failures</div>
+              <div id="webhook-reliability-failures" class="summary-list empty">No recent webhook failures.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
         <div class="card-head">Recent AI Calls</div>
         <div class="card-body" style="overflow-x:auto">
           <table>
@@ -54,6 +120,85 @@
             <thead><tr><th>Type</th><th>Title</th><th>Confidence</th><th>Time</th></tr></thead>
             <tbody id="decisions-body"><tr><td colspan="4" class="empty">No decisions yet</td></tr></tbody>
           </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">Decision Control Summary</div>
+        <div class="card-body">
+          <div class="kpi-row decision-kpi-row">
+            <div class="kpi"><div class="label">Requests</div><div class="val" id="k-decision-total">0</div><div class="sub">last 7 days</div></div>
+            <div class="kpi"><div class="label">Approved</div><div class="val" id="k-decision-approved">0</div><div class="sub">decisions cleared</div></div>
+            <div class="kpi"><div class="label">Stalled</div><div class="val" id="k-decision-stalled">0</div><div class="sub">approved, not executed</div></div>
+            <div class="kpi"><div class="label">Execution Failed</div><div class="val" id="k-decision-failed">0</div><div class="sub">after approval</div></div>
+          </div>
+          <div class="summary-grid">
+            <div class="summary-panel">
+              <div class="summary-head">Latency</div>
+              <div class="summary-stat" id="decision-median-latency">No executions yet</div>
+              <div class="summary-sub">Median approval to execution start</div>
+            </div>
+            <div class="summary-panel">
+              <div class="summary-head">Recent Stalled</div>
+              <div id="decision-stalled-list" class="summary-list empty">No stalled approvals.</div>
+            </div>
+            <div class="summary-panel">
+              <div class="summary-head">Recent Failed</div>
+              <div id="decision-failed-list" class="summary-list empty">No failed executions.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">Decision Timeline</div>
+        <div class="card-body" style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Approval</th><th>Status</th><th>Execution</th><th>Lead Time</th><th>Timeline</th></tr></thead>
+            <tbody id="decision-timeline-body"><tr><td colspan="5" class="empty">No approval timeline yet</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">Signal Feed</div>
+        <div class="card-body">
+          <form id="signal-filter-form" class="signal-filters">
+            <label class="filter-field">
+              <span>Topic</span>
+              <input id="signal-topic" name="topic" type="text" placeholder="approval.approved" />
+            </label>
+            <label class="filter-field">
+              <span>Correlation</span>
+              <input id="signal-correlation" name="correlation_id" type="text" placeholder="request or chain id" />
+            </label>
+            <label class="filter-field">
+              <span>Entity Type</span>
+              <input id="signal-entity-type" name="entity_type" type="text" placeholder="approval" />
+            </label>
+            <label class="filter-field">
+              <span>Entity Id</span>
+              <input id="signal-entity-id" name="entity_id" type="text" placeholder="123" />
+            </label>
+            <div class="filter-actions">
+              <button type="submit" class="filter-btn">Apply</button>
+              <button type="button" id="signal-filter-reset" class="filter-btn secondary">Reset</button>
+            </div>
+          </form>
+          <div class="filter-hint">Tip: click a timeline row or signal row to inspect the underlying payload.</div>
+        </div>
+        <div class="card-body" style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Topic</th><th>Entity</th><th>Source</th><th>Summary</th><th>Time</th></tr></thead>
+            <tbody id="signals-body"><tr><td colspan="5" class="empty">No signals yet</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">Details</div>
+        <div class="card-body">
+          <div id="observe-detail-panel" class="detail-panel empty">Select a timeline row or signal row to inspect details.</div>
         </div>
       </div>
     </div>

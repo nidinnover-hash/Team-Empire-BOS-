@@ -5,6 +5,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.execution import Execution
+from app.platform.signals import (
+    EXECUTION_COMPLETED,
+    EXECUTION_FAILED,
+    EXECUTION_STARTED,
+    SignalCategory,
+    SignalEnvelope,
+    publish_signal,
+)
 
 
 async def create_execution(
@@ -26,6 +34,24 @@ async def create_execution(
         db.add(execution)
         await db.commit()
         await db.refresh(execution)
+        await publish_signal(
+            SignalEnvelope(
+                topic=EXECUTION_STARTED,
+                category=SignalCategory.EXECUTION,
+                organization_id=organization_id,
+                actor_user_id=triggered_by,
+                source="execution.service",
+                entity_type="execution",
+                entity_id=str(execution.id),
+                payload={
+                    "execution_id": execution.id,
+                    "approval_id": approval_id,
+                    "status": execution.status,
+                    "execute_idempotency_key": execute_idempotency_key,
+                },
+            ),
+            db=db,
+        )
         return execution, True
     except IntegrityError:
         await db.rollback()
@@ -86,6 +112,25 @@ async def complete_execution(
     execution.finished_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(execution)
+    await publish_signal(
+        SignalEnvelope(
+            topic=EXECUTION_FAILED if status == "failed" else EXECUTION_COMPLETED,
+            category=SignalCategory.EXECUTION,
+            organization_id=execution.organization_id,
+            actor_user_id=execution.triggered_by,
+            source="execution.service",
+            entity_type="execution",
+            entity_id=str(execution.id),
+            payload={
+                "execution_id": execution.id,
+                "approval_id": execution.approval_id,
+                "status": execution.status,
+                "output": execution.output_json or {},
+                "error_text": execution.error_text,
+            },
+        ),
+        db=db,
+    )
     return execution
 
 

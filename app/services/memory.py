@@ -28,6 +28,34 @@ from app.schemas.memory import (
 
 logger = logging.getLogger(__name__)
 
+
+async def _emit_memory_signal(
+    db: AsyncSession, org_id: int, source_type: str, source_id: int, key: str = "",
+) -> None:
+    try:
+        from app.platform.signals import (
+            MEMORY_UPDATED,
+            SignalCategory,
+            SignalEnvelope,
+            publish_signal,
+        )
+
+        await publish_signal(
+            SignalEnvelope(
+                topic=MEMORY_UPDATED,
+                category=SignalCategory.DOMAIN,
+                organization_id=org_id,
+                source="memory.service",
+                entity_type=source_type,
+                entity_id=str(source_id),
+                payload={"source_type": source_type, "key": key},
+            ),
+            db=db,
+        )
+    except Exception:
+        logger.debug("Signal emission failed for memory %s/%s", source_type, source_id, exc_info=True)
+
+
 # ── Profile Memory ────────────────────────────────────────────────────────────
 
 async def get_profile_memory(
@@ -209,6 +237,7 @@ async def upsert_profile_memory(
         "profile_memory", new_entry.id,
         format_embedding_text("profile_memory", key=key, value=value),
     )
+    await _emit_memory_signal(db, organization_id, "profile_memory", new_entry.id, key)
     return new_entry
 
 
@@ -355,6 +384,7 @@ async def add_daily_context(
         "daily_context", entry.id,
         format_embedding_text("daily_context", context_type=data.context_type, content=data.content),
     )
+    await _emit_memory_signal(db, organization_id, "daily_context", entry.id, data.context_type)
     return entry
 
 

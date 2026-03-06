@@ -2,12 +2,32 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
-from app.core.rbac import require_roles
+from app.core.rbac import require_roles, require_sensitive_financial_roles
 from app.logs.audit import record_action
-from app.schemas.contact import ContactCreate, ContactRead, ContactUpdate, PipelineSummary
+from app.schemas.contact import (
+    ContactCreate,
+    ContactRead,
+    ContactUpdate,
+    LeadQualificationUpdate,
+    LeadRouteRequest,
+    LeadRouteResponse,
+    PipelineSummary,
+)
 from app.services import contact as contact_service
 
 router = APIRouter(prefix="/contacts", tags=["Contacts"])
+
+
+def _mask_contact_for_role(contact: ContactRead, role: object) -> ContactRead:
+    from app.core.data_classification import sanitize_dict_for_role
+    role_str = str(role or "STAFF")
+    raw = contact.model_dump()
+    sanitized = sanitize_dict_for_role(raw, "contacts", role_str)
+    return ContactRead.model_validate(sanitized)
+
+
+def _mask_contacts_for_role(contacts: list[ContactRead], role: object) -> list[ContactRead]:
+    return [_mask_contact_for_role(c, role) for c in contacts]
 
 
 @router.post("", response_model=ContactRead, status_code=201)
@@ -27,16 +47,21 @@ async def create_contact(
         entity_id=contact.id,
         payload_json={"name": data.name},
     )
-    return contact
+    return _mask_contact_for_role(ContactRead.model_validate(contact, from_attributes=True), actor.get("role"))
 
 
 @router.get("/pipeline-summary", response_model=list[PipelineSummary])
 async def pipeline_summary(
     db: AsyncSession = Depends(get_db),
-    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+    actor: dict = Depends(require_sensitive_financial_roles()),
 ) -> list[PipelineSummary]:
     """Aggregate count + deal value per pipeline stage."""
-    return await contact_service.get_pipeline_summary(db, organization_id=actor["org_id"])
+    return await contact_service.get_pipeline_summary(
+        db,
+        organization_id=actor["org_id"],
+        actor_org_id=actor["org_id"],
+        actor_role=str(actor.get("role", "")),
+    )
 
 
 @router.get("/follow-up-due", response_model=list[ContactRead])
@@ -46,7 +71,15 @@ async def follow_up_due(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> list[ContactRead]:
     """Contacts whose next_follow_up_at is in the past or today."""
-    return await contact_service.get_follow_up_due(db, organization_id=actor["org_id"], limit=limit)
+    contacts = await contact_service.get_follow_up_due(
+        db,
+        organization_id=actor["org_id"],
+        limit=limit,
+        actor_org_id=actor["org_id"],
+        actor_role=str(actor.get("role", "")),
+    )
+    payload = [ContactRead.model_validate(c, from_attributes=True) for c in contacts]
+    return _mask_contacts_for_role(payload, actor.get("role"))
 
 
 @router.get("", response_model=list[ContactRead])
@@ -62,9 +95,11 @@ async def list_contacts(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> list[ContactRead]:
     """List contacts with optional CRM filters."""
-    return await contact_service.list_contacts(
+    contacts = await contact_service.list_contacts(
         db,
         organization_id=actor["org_id"],
+        actor_org_id=actor["org_id"],
+        actor_role=str(actor.get("role", "")),
         limit=limit,
         offset=offset,
         pipeline_stage=pipeline_stage,
@@ -73,6 +108,8 @@ async def list_contacts(
         relationship=relationship,
         search=search,
     )
+    payload = [ContactRead.model_validate(c, from_attributes=True) for c in contacts]
+    return _mask_contacts_for_role(payload, actor.get("role"))
 
 
 @router.get("/{contact_id}", response_model=ContactRead)
@@ -81,10 +118,17 @@ async def get_contact(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> ContactRead:
-    contact = await contact_service.get_contact(db, contact_id, organization_id=actor["org_id"])
+    contact = await contact_service.get_contact(
+        db,
+        contact_id,
+        organization_id=actor["org_id"],
+        actor_org_id=actor["org_id"],
+        actor_role=str(actor.get("role", "")),
+    )
     if contact is None:
         raise HTTPException(status_code=404, detail="Contact not found")
-    return contact
+    payload = ContactRead.model_validate(contact, from_attributes=True)
+    return _mask_contact_for_role(payload, actor.get("role"))
 
 
 @router.patch("/{contact_id}", response_model=ContactRead)
@@ -100,8 +144,9 @@ async def update_contact(
     await record_action(
         db, event_type="contact_updated", actor_user_id=actor["id"],
         organization_id=actor["org_id"], entity_type="contact", entity_id=contact_id,
+        payload_json=data.model_dump(exclude_unset=True, mode="json"),
     )
-    return contact
+    return _mask_contact_for_role(ContactRead.model_validate(contact, from_attributes=True), actor.get("role"))
 
 
 @router.delete("/{contact_id}", status_code=204)
@@ -116,4 +161,101 @@ async def delete_contact(
     await record_action(
         db, event_type="contact_deleted", actor_user_id=actor["id"],
         organization_id=actor["org_id"], entity_type="contact", entity_id=contact_id,
+        payload_json={"contact_id": contact_id},
     )
+
+
+@router.post("/{contact_id}/route", response_model=LeadRouteResponse)
+async def route_contact(
+    contact_id: int,
+    data: LeadRouteRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> LeadRouteResponse:
+    try:
+        routed = await contact_service.route_contact(
+            db,
+            contact_id=contact_id,
+            organization_id=actor["org_id"],
+            actor_user_id=actor["id"],
+            actor_org_id=actor["org_id"],
+            actor_role=str(actor.get("role", "")),
+            lead_type=data.lead_type,
+            routed_company_id=data.routed_company_id,
+            routing_reason=data.routing_reason,
+        )
+    except ValueError as exc:
+        if str(exc) == "invalid_routing_transition":
+            raise HTTPException(status_code=409, detail="Invalid routing status transition") from exc
+        raise
+    if routed is None:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    await record_action(
+        db,
+        event_type="contact_routed",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="contact",
+        entity_id=contact_id,
+        payload_json={
+            "lead_type": routed.lead_type,
+            "routing_status": routed.routing_status,
+            "routed_company_id": routed.routed_company_id,
+            "routing_source": routed.routing_source,
+            "routing_rule_id": routed.routing_rule_id,
+        },
+    )
+    return LeadRouteResponse(
+        contact_id=routed.id,
+        lead_owner_company_id=routed.lead_owner_company_id,
+        routed_company_id=routed.routed_company_id,
+        lead_type=routed.lead_type,
+        routing_status=routed.routing_status,
+        routing_reason=routed.routing_reason,
+        routing_source=routed.routing_source,
+        routing_rule_id=routed.routing_rule_id,
+        routed_at=routed.routed_at,
+        routed_by_user_id=routed.routed_by_user_id,
+    )
+
+
+@router.post("/{contact_id}/qualify", response_model=ContactRead)
+async def qualify_contact(
+    contact_id: int,
+    data: LeadQualificationUpdate,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> ContactRead:
+    try:
+        qualified = await contact_service.qualify_contact(
+            db,
+            contact_id=contact_id,
+            organization_id=actor["org_id"],
+            actor_org_id=actor["org_id"],
+            actor_role=str(actor.get("role", "")),
+            lead_type=data.lead_type,
+            qualified_score=data.qualified_score,
+            qualified_status=data.qualified_status,
+            qualification_notes=data.qualification_notes,
+            routing_status=data.routing_status,
+        )
+    except ValueError as exc:
+        if str(exc) == "invalid_routing_transition":
+            raise HTTPException(status_code=409, detail="Invalid routing status transition") from exc
+        raise
+    if qualified is None:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    await record_action(
+        db,
+        event_type="contact_qualified",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="contact",
+        entity_id=contact_id,
+        payload_json={
+            "qualified_score": qualified.qualified_score,
+            "qualified_status": qualified.qualified_status,
+            "routing_status": qualified.routing_status,
+        },
+    )
+    return _mask_contact_for_role(ContactRead.model_validate(qualified, from_attributes=True), actor.get("role"))

@@ -31,6 +31,148 @@ td { padding: .5rem; border-bottom: 1px solid var(--line-soft); color: var(--tex
 .tag { display: inline-block; font-size: var(--text-2xs); padding: .12rem .4rem; border-radius: 6px; border: 1px solid var(--line); color: var(--text-muted); }
 .tag.err { border-color: var(--danger-border); color: var(--danger); background: var(--danger-soft); }
 .tag.fb { border-color: var(--warn-border); color: var(--warn); background: var(--warn-soft); }
+.tag.warn { border-color: var(--warn-border); color: var(--warn); background: var(--warn-soft); }
+.tag.ok { border-color: var(--ok-border, rgba(52,199,89,.35)); color: var(--ok, #34c759); background: rgba(52,199,89,.12); }
+.tag.muted { border-color: var(--line-soft); color: var(--text-faint); background: var(--surface-alt); }
+
+.decision-kpi-row { margin-bottom: 1rem; }
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr 1fr;
+  gap: .9rem;
+}
+.ai-reliability-grid {
+  grid-template-columns: 1.1fr .9fr;
+}
+.summary-panel {
+  background: var(--surface-alt);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  padding: .9rem 1rem;
+}
+.summary-head {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-faint);
+  margin-bottom: .45rem;
+}
+.summary-stat {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.summary-sub {
+  margin-top: .2rem;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+.summary-list {
+  display: grid;
+  gap: .55rem;
+}
+.summary-item {
+  display: grid;
+  gap: .15rem;
+  padding: .55rem .65rem;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+}
+.summary-item strong {
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.summary-item span,
+.cell-sub,
+.timeline-text {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+.signal-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  gap: .8rem;
+  align-items: end;
+}
+.filter-field {
+  display: grid;
+  gap: .3rem;
+}
+.filter-field span {
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-faint);
+}
+.filter-field input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--surface-alt);
+  color: var(--text);
+  padding: .6rem .7rem;
+  font-size: var(--text-sm);
+}
+.filter-actions {
+  display: flex;
+  gap: .5rem;
+}
+.filter-btn,
+.detail-trigger {
+  appearance: none;
+  border: 1px solid var(--line-soft);
+  background: var(--surface-alt);
+  color: var(--text);
+  border-radius: 10px;
+  padding: .6rem .8rem;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.filter-btn.secondary {
+  color: var(--text-muted);
+}
+.detail-trigger {
+  width: 100%;
+  text-align: left;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.filter-hint {
+  margin-top: .7rem;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.timeline-text {
+  min-width: 18rem;
+  white-space: normal;
+}
+.detail-panel {
+  background: var(--surface-alt);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  padding: 1rem;
+}
+.detail-head {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--text);
+}
+.detail-meta {
+  margin-top: .25rem;
+  margin-bottom: .8rem;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+.detail-json {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
 
 .empty { color: var(--text-faint); text-align: center; padding: 2rem; font-size: var(--text-base); }
 #loading { color: var(--text-faint); text-align: center; padding: 3rem; font-size: var(--text-base); }
@@ -38,6 +180,9 @@ td { padding: .5rem; border-bottom: 1px solid var(--line-soft); color: var(--tex
 @media (max-width: 768px) {
   .main-wrap { padding: 1rem; padding-top: 3.5rem; }
   .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .signal-filters { grid-template-columns: 1fr; }
+  .summary-grid { grid-template-columns: 1fr; }
   table { font-size: var(--text-sm); }
   th, td { padding: .4rem .35rem; }
+  .timeline-text { min-width: 0; }
 }

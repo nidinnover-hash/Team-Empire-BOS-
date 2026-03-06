@@ -28,7 +28,7 @@ async def test_check_stale_tasks_records_job_run(mock_db):
     mock_result.scalars.return_value.all.return_value = []
     mock_db.execute.return_value = mock_result
 
-    with patch("app.services.sync_scheduler._record_job_run", new_callable=AsyncMock) as mock_record:
+    with patch("app.jobs.monitoring.record_job_run", new_callable=AsyncMock) as mock_record:
         await _check_stale_tasks(mock_db, org_id=1)
         mock_record.assert_called()
         call_kwargs = mock_record.call_args
@@ -40,7 +40,7 @@ async def test_check_follow_up_contacts_records_job_run(mock_db):
     """_check_follow_up_contacts should record a successful run."""
     with (
         patch("app.services.contact.get_follow_up_due", new_callable=AsyncMock, return_value=[]) as mock_get,
-        patch("app.services.sync_scheduler._record_job_run", new_callable=AsyncMock) as mock_record,
+        patch("app.jobs.monitoring.record_job_run", new_callable=AsyncMock) as mock_record,
     ):
         await _check_follow_up_contacts(mock_db, org_id=1)
         mock_get.assert_called_once_with(mock_db, 1, limit=20)
@@ -65,7 +65,7 @@ async def test_daily_briefing_notification_creates_notification(mock_db):
     with (
         patch("app.services.briefing.get_team_dashboard", new_callable=AsyncMock, return_value=fake_dashboard),
         patch("app.services.notification.create_notification", new_callable=AsyncMock) as mock_notif,
-        patch("app.services.sync_scheduler._record_job_run", new_callable=AsyncMock),
+        patch("app.jobs.intelligence.record_job_run", new_callable=AsyncMock),
     ):
         await _maybe_emit_daily_briefing_notification(mock_db, org_id=99)
         mock_notif.assert_called_once()
@@ -79,7 +79,7 @@ async def test_stale_task_check_handles_exception(mock_db):
     """_check_stale_tasks should handle exceptions gracefully and record error."""
     mock_db.execute.side_effect = RuntimeError("DB gone")
 
-    with patch("app.services.sync_scheduler._record_job_run", new_callable=AsyncMock) as mock_record:
+    with patch("app.jobs.monitoring.record_job_run", new_callable=AsyncMock) as mock_record:
         await _check_stale_tasks(mock_db, org_id=1)
         mock_record.assert_called()
         assert mock_record.call_args.kwargs["status"] == "error"
@@ -95,3 +95,4 @@ async def test_scheduler_new_jobs_in_dispatch():
     assert "stale_task_check" in source
     assert "contact_follow_up_check" in source
     assert "daily_briefing_notification" in source
+    assert "daily_empire_flow_digest" in source

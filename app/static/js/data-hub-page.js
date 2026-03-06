@@ -14,6 +14,10 @@
     var storageSummaryEl = document.getElementById("storage-summary");
     var storageTableListEl = document.getElementById("storage-table-list");
     var apiToken = null;
+    var roleName = "";
+    var canCollect = false;
+    var canViewStorage = false;
+    var canExport = false;
 
     function setStatus(text, cls) {
       statusEl.textContent = text || "";
@@ -28,6 +32,31 @@
       if (!storageStatusEl) return;
       storageStatusEl.textContent = text || "";
       storageStatusEl.className = "status" + (cls ? " " + cls : "");
+    }
+
+    async function loadRoleCapabilities() {
+      try {
+        if (window.PCUI && window.PCUI.loadRoleCapabilities) {
+          var caps = await window.PCUI.loadRoleCapabilities();
+          roleName = String(caps.roleName || "").toUpperCase();
+          canCollect = !!caps.canCollectData;
+          canViewStorage = !!caps.canViewStorage;
+          canExport = !!caps.canExportData;
+          return;
+        }
+        var r = await fetch("/web/session");
+        if (!r.ok) return;
+        var d = await r.json();
+        roleName = String(d && d.user && d.user.role ? d.user.role : "").toUpperCase();
+        canCollect = roleName === "CEO" || roleName === "ADMIN" || roleName === "MANAGER";
+        canViewStorage = roleName === "CEO" || roleName === "ADMIN";
+        canExport = roleName === "CEO";
+      } catch (_e) {
+        roleName = "";
+        canCollect = false;
+        canViewStorage = false;
+        canExport = false;
+      }
     }
 
     function renderStorage(payload) {
@@ -49,6 +78,12 @@
 
     async function loadStorageSummary() {
       if (!apiToken) return;
+      if (!canViewStorage) {
+        setStorageStatus("Storage visibility is restricted to CEO/ADMIN.", "warn");
+        if (storageSummaryEl) storageSummaryEl.textContent = "Limited access for your role.";
+        if (storageTableListEl) storageTableListEl.innerHTML = '<div class="item">No table metrics available for this role.</div>';
+        return;
+      }
       setStorageStatus("Loading storage snapshot...");
       try {
         var r = await fetch("/api/v1/observability/storage", {
@@ -74,6 +109,10 @@
     collectBtn.addEventListener("click", async function () {
       if (!apiToken) {
         setStatus("No API token available. Refresh the page.", "err");
+        return;
+      }
+      if (!canCollect) {
+        setStatus("Data collection is restricted to CEO/ADMIN/MANAGER.", "warn");
         return;
       }
       var source = (sourceEl.value || "manual").trim();
@@ -164,14 +203,32 @@
 
     try {
       await loadApiToken();
+      await loadRoleCapabilities();
       setStatus("Data Hub ready.");
       await loadStorageSummary();
+      if (!canCollect) {
+        collectBtn.disabled = true;
+        if (samplePriorityBtn) samplePriorityBtn.disabled = true;
+        if (sampleMemoryBtn) sampleMemoryBtn.disabled = true;
+        setStatus("Collection disabled for your role.", "warn");
+      }
+      if (storageRefreshBtn && !canViewStorage) {
+        storageRefreshBtn.disabled = true;
+      }
 
       // Export button
       var exportBtn = document.getElementById("export-btn");
       var exportStatus = document.getElementById("export-status");
       if (exportBtn) {
+        if (!canExport) {
+          exportBtn.disabled = true;
+          if (exportStatus) {
+            exportStatus.textContent = "Export is restricted to CEO role.";
+            exportStatus.className = "status warn";
+          }
+        }
         exportBtn.addEventListener("click", async function () {
+          if (!canExport) return;
           exportStatus.textContent = "Exporting...";
           exportStatus.className = "status";
           try {

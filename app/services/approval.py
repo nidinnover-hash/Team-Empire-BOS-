@@ -4,8 +4,51 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.approval import Approval
+from app.platform.signals import (
+    APPROVAL_APPROVED,
+    APPROVAL_REJECTED,
+    APPROVAL_REQUESTED,
+    SignalCategory,
+    SignalEnvelope,
+    publish_signal,
+)
 from app.schemas.approval import ApprovalRequestCreate
 from app.services.notification import create_notification
+
+
+async def _publish_approval_signal(
+    signal_type: str,
+    approval: Approval,
+    *,
+    actor_user_id: int | None,
+    db: AsyncSession | None = None,
+) -> None:
+    """Publish a best-effort approval lifecycle signal."""
+    try:
+        await publish_signal(
+            SignalEnvelope(
+                topic=signal_type,
+                category=SignalCategory.DECISION,
+                organization_id=approval.organization_id,
+                actor_user_id=actor_user_id,
+                source="approval.service",
+                entity_type="approval",
+                entity_id=str(approval.id),
+                payload={
+                    "approval_id": approval.id,
+                    "approval_type": approval.approval_type,
+                    "status": approval.status,
+                    "requested_by": approval.requested_by,
+                    "approved_by": approval.approved_by,
+                    "approved_at": approval.approved_at.isoformat() if approval.approved_at else None,
+                    "expires_at": approval.expires_at.isoformat() if approval.expires_at else None,
+                },
+            ),
+            db=db,
+        )
+    except Exception:
+        # Approval completion must not fail because signal fanout failed.
+        return
 
 
 async def request_approval(
@@ -37,6 +80,12 @@ async def request_approval(
     )
     await db.commit()
     await db.refresh(approval)
+    await _publish_approval_signal(
+        APPROVAL_REQUESTED,
+        approval,
+        actor_user_id=requested_by,
+        db=db,
+    )
     return approval
 
 
@@ -107,6 +156,13 @@ async def approve_approval(
             user_id=approved.requested_by,
         )
     await db.commit()
+    if approved:
+        await _publish_approval_signal(
+            APPROVAL_APPROVED,
+            approved,
+            actor_user_id=approver_id,
+            db=db,
+        )
     return approved
 
 
@@ -149,4 +205,11 @@ async def reject_approval(
             user_id=rejected.requested_by,
         )
     await db.commit()
+    if rejected:
+        await _publish_approval_signal(
+            APPROVAL_REJECTED,
+            rejected,
+            actor_user_id=approver_id,
+            db=db,
+        )
     return rejected

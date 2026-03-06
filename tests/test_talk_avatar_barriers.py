@@ -33,7 +33,7 @@ async def test_web_chat_avatar_mode_is_forwarded(client, monkeypatch):
             proposed_actions=[],
         )
 
-    monkeypatch.setattr("app.agents.orchestrator.run_agent", fake_run_agent)
+    monkeypatch.setattr("app.web.chat.run_agent", fake_run_agent)
 
     response = await client.post(
         "/web/agents/chat",
@@ -55,7 +55,7 @@ async def test_web_chat_history_isolated_by_avatar_mode(client, monkeypatch):
             proposed_actions=[],
         )
 
-    monkeypatch.setattr("app.agents.orchestrator.run_agent", fake_run_agent)
+    monkeypatch.setattr("app.web.chat.run_agent", fake_run_agent)
 
     await client.post(
         "/web/agents/chat",
@@ -90,7 +90,7 @@ async def test_web_chat_injects_only_matching_avatar_memory(client, monkeypatch)
             proposed_actions=[],
         )
 
-    monkeypatch.setattr("app.agents.orchestrator.run_agent", fake_run_agent)
+    monkeypatch.setattr("app.web.chat.run_agent", fake_run_agent)
 
     # Seed avatar-scoped memory directly.
     override = fastapi_app.dependency_overrides[get_db]
@@ -136,7 +136,7 @@ async def test_personal_login_can_read_professional_but_writes_personal_lane(cli
             proposed_actions=[],
         )
 
-    monkeypatch.setattr("app.agents.orchestrator.run_agent", fake_run_agent)
+    monkeypatch.setattr("app.web.chat.run_agent", fake_run_agent)
 
     # Force a personal-purpose login token.
     token = create_access_token(

@@ -98,10 +98,18 @@
               <div class="stat-icon stat-icon-revenue"><i data-lucide="trending-up"></i></div>
               <div class="stat-label">REVENUE</div>
             </div>
-            <div class="stat-big"><span data-count-to="{{ (finance.balance or 0) | round(0) | int }}" data-count-prefix="$">0</span><span class="stat-change positive">+{{ (((finance.total_income or 0) / ((finance.total_expense or 0) or 1)) * 10) | round(0) | int }}%</span></div>
-            <div class="stat-sparkline" id="dash-revenue-spark" role="img" aria-label="Revenue trend sparkline">
-              <div class="empty" style="padding:.4rem 0;color:var(--text-faint);font-size:.72rem">Loading trend...</div>
-            </div>
+            {% set can_view_revenue = session_user and session_user.get('role') in ['CEO', 'ADMIN', 'MANAGER'] %}
+            {% if can_view_revenue %}
+              <div class="stat-big"><span data-count-to="{{ (finance.balance or 0) | round(0) | int }}" data-count-prefix="$">0</span><span class="stat-change positive">+{{ (((finance.total_income or 0) / ((finance.total_expense or 0) or 1)) * 10) | round(0) | int }}%</span></div>
+              <div class="stat-sparkline" id="dash-revenue-spark" role="img" aria-label="Revenue trend sparkline">
+                <div class="empty" style="padding:.4rem 0;color:var(--text-faint);font-size:.72rem">Loading trend...</div>
+              </div>
+            {% else %}
+              <div class="stat-big"><span>Restricted</span></div>
+              <div class="stat-sparkline" id="dash-revenue-spark" role="img" aria-label="Revenue trend restricted">
+                <div class="empty" style="padding:.4rem 0;color:var(--text-faint);font-size:.72rem">Restricted</div>
+              </div>
+            {% endif %}
           </div>
           <div class="stat-card stat-card-health">
             <div class="stat-header">
@@ -129,6 +137,35 @@
               <div class="health-val" id="dash-health-value">--</div>
             </div>
             <div class="health-label" id="dash-health-label">Loading health...</div>
+          </div>
+        </div>
+
+        <!-- Trends Overview -->
+        <div class="panel-card" id="dash-trends-panel">
+          <div class="panel-head">
+            <div class="panel-head-left">
+              <i data-lucide="bar-chart-3" class="panel-icon"></i>
+              <span class="panel-title">14-Day Trends</span>
+            </div>
+          </div>
+          <div class="dash-trends-body">
+            <div class="dash-trend-row">
+              <div class="dash-trend-mini">
+                <span class="dash-trend-label">Tasks Completed</span>
+                <div id="dash-tasks-spark" class="dash-trend-spark">
+                  <div class="empty" style="padding:.3rem 0;color:var(--text-faint);font-size:.72rem">Loading...</div>
+                </div>
+              </div>
+              <div class="dash-trend-mini">
+                <span class="dash-trend-label">Events</span>
+                <div id="dash-events-spark" class="dash-trend-spark">
+                  <div class="empty" style="padding:.3rem 0;color:var(--text-faint);font-size:.72rem">Loading...</div>
+                </div>
+              </div>
+            </div>
+            <div id="dash-trends-chart" class="dash-trends-chart">
+              <div class="empty" style="padding:.6rem 0;color:var(--text-faint);font-size:.72rem">Loading chart...</div>
+            </div>
           </div>
         </div>
 

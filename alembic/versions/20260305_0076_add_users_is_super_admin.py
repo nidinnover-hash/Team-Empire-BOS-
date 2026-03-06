@@ -1,12 +1,12 @@
 """add users.is_super_admin column
 
-Revision ID: 20260305_0072_users_super_admin
+Revision ID: 20260305_0076
 Revises: 20260305_0071
 """
 import sqlalchemy as sa
 from alembic import op
 
-revision = "20260305_0072_users_super_admin"
+revision = "20260305_0076"
 down_revision = "20260305_0071"
 branch_labels = None
 depends_on = None

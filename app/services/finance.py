@@ -24,6 +24,30 @@ async def create_entry(
     db.add(entry)
     await db.commit()
     await db.refresh(entry)
+    try:
+        from app.platform.signals import (
+            FINANCE_EXPENSE_RECORDED,
+            FINANCE_INVOICE_CREATED,
+            SignalCategory,
+            SignalEnvelope,
+            publish_signal,
+        )
+
+        topic = FINANCE_INVOICE_CREATED if entry.entry_type == "income" else FINANCE_EXPENSE_RECORDED
+        await publish_signal(
+            SignalEnvelope(
+                topic=topic,
+                category=SignalCategory.DOMAIN,
+                organization_id=organization_id,
+                source="finance.service",
+                entity_type="finance_entry",
+                entity_id=str(entry.id),
+                payload={"entry_id": entry.id, "entry_type": entry.entry_type, "amount": str(entry.amount)},
+            ),
+            db=db,
+        )
+    except Exception:
+        logger.debug("Signal emission failed for finance entry %s", entry.id, exc_info=True)
     return entry
 
 
