@@ -1,0 +1,33 @@
+<section class="workflow-studio-card">
+  <div class="studio-header">
+    <div>
+      <h2>Workflow Runs</h2>
+      <p class="studio-copy">Monitor current runs, approval backlog, retries, and recent failures.</p>
+    </div>
+    <a class="btn-secondary" href="/web/observe">Open Observe</a>
+  </div>
+
+  <div class="builder-grid metrics-grid">
+    <div class="metric-card"><span>Runs</span><strong id="wf-m-total">0</strong></div>
+    <div class="metric-card"><span>Awaiting Approval</span><strong id="wf-m-awaiting">0</strong></div>
+    <div class="metric-card"><span>Success Rate</span><strong id="wf-m-success">0%</strong></div>
+    <div class="metric-card"><span>Stuck</span><strong id="wf-m-stuck">0</strong></div>
+  </div>
+
+  <div class="run-toolbar">
+    <select id="workflow-run-filter">
+      <option value="">All statuses</option>
+      <option value="awaiting_approval">Awaiting approval</option>
+      <option value="running">Running</option>
+      <option value="completed">Completed</option>
+      <option value="failed">Failed</option>
+      <option value="paused">Paused</option>
+      <option value="retry_wait">Retry wait</option>
+    </select>
+    <button id="workflow-runs-refresh" class="btn-secondary" type="button">Refresh</button>
+  </div>
+
+  <div id="workflow-run-list" class="item-list">
+    <div class="empty loading">Loading workflow runs...</div>
+  </div>
+</section>

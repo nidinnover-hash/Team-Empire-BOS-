@@ -20,3 +20,168 @@
 .auto-card-desc { font-size: var(--text-sm); color: var(--text-muted); margin-top: .15rem; }
 .auto-card-meta { font-size: var(--text-xs); color: var(--text-faint); margin-top: .2rem; display: flex; gap: .8rem; flex-wrap: wrap; }
 .auto-card-actions { display: flex; gap: .4rem; flex-shrink: 0; align-items: flex-start; }
+
+.studio-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, .9fr);
+  gap: 1rem;
+}
+
+.studio-main,
+.studio-side {
+  display: grid;
+  gap: 1rem;
+}
+
+.workflow-studio-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 1rem;
+}
+
+.studio-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: .9rem;
+}
+
+.studio-header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.studio-copy {
+  margin: .3rem 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.studio-badges {
+  display: flex;
+  gap: .35rem;
+  flex-wrap: wrap;
+}
+
+.builder-form,
+.builder-steps,
+.builder-step {
+  display: grid;
+  gap: .75rem;
+}
+
+.builder-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+.builder-form label {
+  display: grid;
+  gap: .35rem;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.builder-form input,
+.builder-form textarea,
+.builder-form select {
+  width: 100%;
+  border: 1px solid var(--border, #d6d6d6);
+  border-radius: 12px;
+  padding: .7rem .8rem;
+  background: var(--bg, #fff);
+  color: var(--text);
+}
+
+.builder-steps-head,
+.run-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .75rem;
+}
+
+.builder-step {
+  border: 1px solid var(--border, #d6d6d6);
+  border-radius: 16px;
+  padding: .9rem;
+  background: color-mix(in srgb, var(--surface) 88%, #0b7285 12%);
+}
+
+.builder-step-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .75rem;
+}
+
+.builder-actions {
+  display: flex;
+  gap: .6rem;
+  flex-wrap: wrap;
+}
+
+.builder-preview-output,
+.run-detail-empty,
+.run-detail-card {
+  margin-top: .8rem;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 84%, #111827 16%);
+  padding: .9rem;
+}
+
+.metrics-grid {
+  margin-bottom: .9rem;
+}
+
+.metric-card {
+  border: 1px solid var(--border, #d6d6d6);
+  border-radius: 14px;
+  padding: .75rem;
+  background: color-mix(in srgb, var(--surface) 90%, #0f172a 10%);
+}
+
+.metric-card span {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.metric-card strong {
+  display: block;
+  margin-top: .3rem;
+  font-size: 1.15rem;
+}
+
+.workflow-run-drawer {
+  position: sticky;
+  top: 1rem;
+}
+
+.step-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  margin-top: .6rem;
+}
+
+.step-chip {
+  border-radius: 999px;
+  padding: .28rem .55rem;
+  font-size: .76rem;
+  background: color-mix(in srgb, var(--surface) 80%, #2563eb 20%);
+}
+
+@media (max-width: 1080px) {
+  .studio-layout,
+  .builder-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-run-drawer {
+    position: static;
+  }
+}

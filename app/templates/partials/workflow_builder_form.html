@@ -1,0 +1,45 @@
+<section class="workflow-studio-card">
+  <div class="studio-header">
+    <div>
+      <h2>Workflow Builder</h2>
+      <p class="studio-copy">Create draft definitions, add typed steps, preview approval requirements, then publish.</p>
+    </div>
+    <div class="studio-badges">
+      <span class="pill">SSR</span>
+      <span class="pill">Approval-safe</span>
+    </div>
+  </div>
+
+  <form id="workflow-builder-form" class="builder-form">
+    <div class="builder-grid">
+      <label>
+        Definition Name
+        <input id="builder-name" name="name" type="text" maxlength="200" placeholder="Lead follow-up sequence" required />
+      </label>
+      <label>
+        Trigger Mode
+        <select id="builder-trigger-mode" name="trigger_mode">
+          <option value="manual">Manual</option>
+          <option value="signal">Signal</option>
+          <option value="scheduled">Scheduled</option>
+        </select>
+      </label>
+    </div>
+    <label>
+      Description
+      <textarea id="builder-description" name="description" rows="2" maxlength="2000" placeholder="What this workflow is responsible for"></textarea>
+    </label>
+
+    <div class="builder-steps-head">
+      <h3>Steps</h3>
+      <button id="builder-add-step" class="btn-secondary" type="button">Add Step</button>
+    </div>
+    <div id="builder-steps" class="builder-steps"></div>
+
+    <div class="builder-actions">
+      <button id="builder-preview" class="btn-secondary" type="button">Preview Approval Path</button>
+      <button id="builder-save" class="btn-primary" type="submit">Save Draft</button>
+    </div>
+    <div id="builder-preview-output" class="builder-preview-output"></div>
+  </form>
+</section>

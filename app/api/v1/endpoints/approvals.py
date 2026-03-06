@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.core.request_context import get_current_request_id
+from app.engines.execution import workflow_runtime
 from app.logs.audit import record_action
 from app.models.approval import Approval
 from app.models.employee import Employee
@@ -357,6 +358,13 @@ async def approve(
             actor_org_id=actor["org_id"],
             execute_idempotency_key=idempotency_key,
         )
+    elif approval.approval_type == "workflow_step_execute":
+        await workflow_runtime.resume_workflow_run_from_approval(
+            db,
+            organization_id=int(actor["org_id"]),
+            actor_user_id=int(actor["id"]),
+            approval=approval,
+        )
     # Record pattern decision
     try:
         p = await pattern_service.get_or_create(
@@ -434,6 +442,13 @@ async def reject(
     )
     if approval is None:
         raise HTTPException(status_code=404, detail="Pending approval not found")
+    if approval.approval_type == "workflow_step_execute":
+        await workflow_runtime.reject_workflow_run_from_approval(
+            db,
+            organization_id=int(actor["org_id"]),
+            actor_user_id=int(actor["id"]),
+            approval=approval,
+        )
     await record_action(
         db,
         event_type="approval_rejected",

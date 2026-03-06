@@ -6,6 +6,21 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.workflow_definition import (
+    WorkflowDefinitionCreate,
+    WorkflowDefinitionRead,
+    WorkflowDefinitionStep,
+    WorkflowDefinitionUpdate,
+)
+from app.schemas.workflow_run import (
+    WorkflowApprovalPreviewRead,
+    WorkflowRunListItem,
+    WorkflowRunRead,
+    WorkflowRunRequest,
+    WorkflowStepRunRead,
+)
+from app.schemas.workflow_template import WorkflowTemplateInstantiateRequest, WorkflowTemplateRead
+
 # ── Automation Triggers ──────────────────────────────────────────────────────
 
 
@@ -83,3 +98,24 @@ class WorkflowRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+__all__ = [
+    "TriggerCreate",
+    "TriggerRead",
+    "TriggerUpdate",
+    "WorkflowApprovalPreviewRead",
+    "WorkflowCreate",
+    "WorkflowDefinitionCreate",
+    "WorkflowDefinitionRead",
+    "WorkflowDefinitionStep",
+    "WorkflowDefinitionUpdate",
+    "WorkflowRead",
+    "WorkflowRunListItem",
+    "WorkflowRunRead",
+    "WorkflowRunRequest",
+    "WorkflowStepDef",
+    "WorkflowStepRunRead",
+    "WorkflowTemplateInstantiateRequest",
+    "WorkflowTemplateRead",
+]

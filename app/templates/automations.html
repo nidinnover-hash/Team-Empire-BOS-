@@ -34,6 +34,7 @@
     <div class="tab-bar">
       <button class="tab active" data-tab="triggers" type="button" aria-label="Show triggers">Triggers</button>
       <button class="tab" data-tab="workflows" type="button" aria-label="Show workflows">Workflows</button>
+      <button class="tab" data-tab="studio" type="button" aria-label="Show workflow studio">Workflow Studio</button>
     </div>
 
     <!-- Triggers Panel -->
@@ -50,6 +51,40 @@
         <button class="btn-primary" id="btn-new-workflow" type="button" aria-label="Create new workflow">New Workflow</button>
       </div>
       <div id="workflow-list" class="item-list"><div class="empty loading">Loading workflows...</div></div>
+    </div>
+
+    <div id="panel-studio" class="panel" style="display:none">
+      <div class="studio-layout">
+        <div class="studio-main">
+          {% include "partials/workflow_builder_form.html" %}
+          {% include "partials/workflow_run_table.html" %}
+        </div>
+        <div class="studio-side">
+          {% include "partials/workflow_run_drawer.html" %}
+          <section class="workflow-studio-card" {% if not feature_flags.workflow_copilot %}hidden{% endif %}>
+            <div class="studio-header">
+              <div>
+                <h2>Workflow Copilot</h2>
+                <p class="studio-copy">Draft a workflow plan without executing anything.</p>
+              </div>
+            </div>
+            <form id="workflow-copilot-form" class="builder-form">
+              <label>
+                Intent
+                <textarea id="copilot-intent" rows="3" maxlength="4000" placeholder="Build a workflow to triage inbound leads and request approval before assignment."></textarea>
+              </label>
+              <label>
+                Available Integrations
+                <input id="copilot-integrations" type="text" placeholder="hubspot, slack, calendar" />
+              </label>
+              <div class="builder-actions">
+                <button id="copilot-generate" class="btn-primary" type="submit">Generate Draft</button>
+              </div>
+            </form>
+            <div id="copilot-output" class="builder-preview-output"></div>
+          </section>
+        </div>
+      </div>
     </div>
 
     <!-- Trigger Create Modal -->
@@ -96,6 +131,8 @@
   <script nonce="{{ csp_nonce }}" src="/static/js/theme.js"></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/api-client.js"></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/automations-page.js"></script>
-<script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/workflow-builder-page.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/workflow-run-monitor.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
 </body>
 </html>

@@ -15,7 +15,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.automation import use_cases as workflow_use_cases
 from app.models.automation import AutomationTrigger, Workflow
+from app.models.workflow_definition import WorkflowDefinition
+from app.models.workflow_run import WorkflowRun
 
 logger = logging.getLogger(__name__)
 
@@ -400,3 +403,200 @@ async def run_workflow(
         wf = await execute_current_step(db, workflow_id, organization_id)
 
     return wf
+
+
+# Workflow v2 compatibility facade
+
+
+async def create_workflow_definition(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    workspace_id: int | None,
+    actor_user_id: int,
+    data,
+) -> WorkflowDefinition:
+    return await workflow_use_cases.create_workflow_definition(
+        db,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+        actor_user_id=actor_user_id,
+        data=data,
+    )
+
+
+async def list_workflow_definitions(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    status: str | None = None,
+    limit: int = 100,
+) -> list[WorkflowDefinition]:
+    return await workflow_use_cases.list_workflow_definitions(
+        db,
+        organization_id=organization_id,
+        status=status,
+        limit=limit,
+    )
+
+
+async def get_workflow_definition(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    workflow_definition_id: int,
+) -> WorkflowDefinition | None:
+    return await workflow_use_cases.automation_domain.get_workflow_definition(
+        db,
+        organization_id=organization_id,
+        workflow_definition_id=workflow_definition_id,
+    )
+
+
+async def update_workflow_definition(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    workflow_definition_id: int,
+    actor_user_id: int,
+    data,
+) -> WorkflowDefinition | None:
+    return await workflow_use_cases.update_workflow_definition(
+        db,
+        organization_id=organization_id,
+        workflow_definition_id=workflow_definition_id,
+        actor_user_id=actor_user_id,
+        data=data,
+    )
+
+
+async def publish_workflow_definition(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    workflow_definition_id: int,
+    actor_user_id: int,
+) -> WorkflowDefinition | None:
+    return await workflow_use_cases.publish_workflow_definition(
+        db,
+        organization_id=organization_id,
+        workflow_definition_id=workflow_definition_id,
+        actor_user_id=actor_user_id,
+    )
+
+
+async def preview_workflow_run(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    workspace_id: int | None,
+    actor_user_id: int,
+    workflow_definition_id: int,
+    input_json: dict | None = None,
+) -> dict[str, object] | None:
+    return await workflow_use_cases.preview_workflow_run(
+        db,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+        actor_user_id=actor_user_id,
+        workflow_definition_id=workflow_definition_id,
+        input_json=input_json,
+    )
+
+
+async def run_workflow_definition(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    workspace_id: int | None,
+    actor_user_id: int,
+    workflow_definition_id: int,
+    trigger_source: str,
+    input_json: dict | None = None,
+    trigger_signal_id: str | None = None,
+    idempotency_key: str | None = None,
+) -> WorkflowRun | None:
+    return await workflow_use_cases.run_workflow_definition(
+        db,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+        actor_user_id=actor_user_id,
+        workflow_definition_id=workflow_definition_id,
+        trigger_source=trigger_source,
+        input_json=input_json,
+        trigger_signal_id=trigger_signal_id,
+        idempotency_key=idempotency_key,
+    )
+
+
+async def list_workflow_runs_v2(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    status: str | None = None,
+    limit: int = 100,
+) -> list[WorkflowRun]:
+    return await workflow_use_cases.list_workflow_runs(
+        db,
+        organization_id=organization_id,
+        status=status,
+        limit=limit,
+    )
+
+
+async def get_workflow_run_detail(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    workflow_run_id: int,
+) -> dict[str, object] | None:
+    return await workflow_use_cases.get_workflow_run_detail(
+        db,
+        organization_id=organization_id,
+        workflow_run_id=workflow_run_id,
+    )
+
+
+async def retry_workflow_run_v2(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    actor_user_id: int,
+    workflow_run_id: int,
+) -> WorkflowRun | None:
+    return await workflow_use_cases.retry_workflow_run(
+        db,
+        organization_id=organization_id,
+        actor_user_id=actor_user_id,
+        workflow_run_id=workflow_run_id,
+    )
+
+
+async def pause_workflow_run_v2(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    actor_user_id: int,
+    workflow_run_id: int,
+) -> WorkflowRun | None:
+    return await workflow_use_cases.pause_workflow_run(
+        db,
+        organization_id=organization_id,
+        actor_user_id=actor_user_id,
+        workflow_run_id=workflow_run_id,
+    )
+
+
+async def resume_workflow_run_v2(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    actor_user_id: int,
+    workflow_run_id: int,
+) -> WorkflowRun | None:
+    return await workflow_use_cases.resume_workflow_run(
+        db,
+        organization_id=organization_id,
+        actor_user_id=actor_user_id,
+        workflow_run_id=workflow_run_id,
+    )
