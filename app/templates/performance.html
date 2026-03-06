@@ -47,6 +47,12 @@
 
     <!-- Org Panel -->
     <div id="panel-org" class="panel">
+      <div class="card" style="margin-bottom:.9rem">
+        <div class="card-head">Performance Trend</div>
+        <div class="card-body">
+          <div id="perf-trend-chart"><div class="empty">Loading trend chart...</div></div>
+        </div>
+      </div>
       <div id="dept-cards" class="dept-grid"><div class="empty loading">Loading...</div></div>
     </div>
 
@@ -73,6 +79,7 @@
 
   <script nonce="{{ csp_nonce }}" src="/static/js/theme.js"></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/api-client.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/charts-lite.js"></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/performance-page.js"></script>
 </body>
 </html>

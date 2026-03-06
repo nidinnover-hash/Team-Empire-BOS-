@@ -18,19 +18,20 @@
       <h1>Projects</h1>
       <button class="btn-primary" id="add-btn" type="button">+ New Project</button>
     </div>
-    <div class="kpi-row">
-      <div class="kpi"><div class="label">Total</div><div class="val" id="k-total">0</div></div>
-      <div class="kpi"><div class="label">Active</div><div class="val" id="k-active">0</div></div>
-      <div class="kpi"><div class="label">Completed</div><div class="val" id="k-done">0</div></div>
+    <div class="kpi-row stagger-enter">
+      <div class="kpi"><div class="label">Total</div><div class="val" id="k-total" data-count-to="0">0</div></div>
+      <div class="kpi"><div class="label">Active</div><div class="val" id="k-active" data-count-to="0">0</div></div>
+      <div class="kpi"><div class="label">Completed</div><div class="val" id="k-done" data-count-to="0">0</div></div>
     </div>
     <div class="card" style="margin-top:1.5rem">
       <table class="data-table">
         <thead><tr><th>Title</th><th>Category</th><th>Status</th><th>Due Date</th><th>Actions</th></tr></thead>
-        <tbody id="tbody"><tr><td colspan="5" style="text-align:center;opacity:.5">Loading...</td></tr></tbody>
+        <tbody id="tbody"></tbody>
       </table>
     </div>
   </div>
   <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/micro.js"></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/projects-page.js"></script>
 </body>
 </html>

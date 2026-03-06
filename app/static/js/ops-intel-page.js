@@ -79,6 +79,8 @@ window.__bootPromise = fetch('/web/api-token')
     });
 
     let TOKEN = '';
+    const CURRENT_ROLE = String(document.body && document.body.dataset ? (document.body.dataset.role || '') : '').toUpperCase();
+    const CAN_USE_ADMIN_OPS = CURRENT_ROLE === 'CEO' || CURRENT_ROLE === 'ADMIN';
 
     async function api(method, path, body) {
       const opts = { method, headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' } };
@@ -87,6 +89,21 @@ window.__bootPromise = fetch('/web/api-token')
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.detail || `Request failed (${r.status})`);
       return d;
+    }
+
+    function applyLimitedOpsView() {
+      const note = document.getElementById('ops-access-note');
+      if (note) {
+        note.textContent = 'Limited access: your role can view incident command status, but employee/policy/sync/report controls are restricted to CEO or ADMIN.';
+        note.style.display = 'block';
+      }
+      const kpiRow = document.querySelector('.kpi-row');
+      if (kpiRow) kpiRow.style.display = 'none';
+      const tabs = document.querySelector('.tabs');
+      if (tabs) tabs.style.display = 'none';
+      document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.style.display = 'none';
+      });
     }
 
     async function loadIncidentCommandMode() {
@@ -101,6 +118,24 @@ window.__bootPromise = fetch('/web/api-token')
         const trigger = data.triggers || {};
         const score = Number(data.score || 0);
         const trend = normalizeTrendPoints(trendResp && trendResp.points);
+        const incidentChart = document.getElementById("incident-chart");
+        if (incidentChart && window.PCChartsLite) {
+          if (trend.length) {
+            window.PCChartsLite.renderLineChart(incidentChart, {
+              caption: "Incident score timeline",
+              ariaLabel: "Incident timeline chart",
+              series: [
+                {
+                  name: "Incident Score",
+                  values: trend.map(function (p) { return Number(p.value || 0); }),
+                  color: safeLevel === "red" ? "var(--danger,#ff3b30)" : (safeLevel === "amber" ? "var(--warn,#ff9f0a)" : "var(--ok,#34c759)")
+                }
+              ]
+            });
+          } else {
+            incidentChart.innerHTML = '<div class="empty">No incident trend snapshots available</div>';
+          }
+        }
         meta.innerHTML =
           '<span class="incident-badge ' + safeLevel + '">' + esc(safeLevel) + '</span> ' +
           'Score ' + esc(String(score)) +
@@ -122,7 +157,12 @@ window.__bootPromise = fetch('/web/api-token')
             : '<div class="incident-action">No active incident actions.</div>');
       } catch (e) {
         const meta = document.getElementById('incident-meta');
-        if (meta) meta.textContent = 'Failed to load incident command status.';
+        if (meta) {
+          const msg = String(e && e.message ? e.message : '');
+          meta.textContent = msg.includes('403')
+            ? 'You do not have permission to view incident command status.'
+            : 'Failed to load incident command status.';
+        }
       }
     }
 
@@ -336,6 +376,17 @@ window.__bootPromise = fetch('/web/api-token')
     // Boot
     async function boot() {
       TOKEN = await window.__bootPromise;
+      if (!CAN_USE_ADMIN_OPS) {
+        applyLimitedOpsView();
+        try {
+          await loadIncidentCommandMode();
+          document.getElementById('loading').style.display = 'none';
+          document.getElementById('content').style.display = 'block';
+        } catch (_e) {
+          document.getElementById('loading').textContent = 'Failed to load incident data.';
+        }
+        return;
+      }
       try {
         await Promise.all([loadEmployees(), loadDecisions(), loadPolicies(), loadIncidentCommandMode()]);
         document.getElementById('loading').style.display = 'none';

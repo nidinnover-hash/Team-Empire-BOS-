@@ -8,6 +8,9 @@ const mapUiError = window.PCUI.mapApiError;
 
     async function loadTasks() {
       const container = document.getElementById('task-list');
+      const removeSkeleton = window.Micro
+        ? window.Micro.skeletonLoad(container, { rows: 5, style: 'list' })
+        : function () { container.innerHTML = ''; };
       try {
         const token = await window.__bootPromise;
         if (!token) throw new Error('Session expired');
@@ -15,18 +18,29 @@ const mapUiError = window.PCUI.mapApiError;
           auth: true,
           token: token,
         });
+        removeSkeleton();
         updateKPIs();
         renderTasks();
       } catch (e) {
+        removeSkeleton();
         container.innerHTML = '<div class="empty">' + escHtml(mapUiError(e)) + '</div>';
       }
     }
 
     function updateKPIs() {
-      document.getElementById('k-open').textContent = allTasks.length;
-      document.getElementById('k-high').textContent = allTasks.filter(t=>t.priority>=4).length;
+      const openEl = document.getElementById('k-open');
+      const highEl = document.getElementById('k-high');
+      const openCount = allTasks.length;
+      const highCount = allTasks.filter(t=>t.priority>=4).length;
       const sources = new Set(allTasks.map(t=>t.external_source||'internal'));
+
+      openEl.dataset.countTo = openCount;
+      openEl.dataset.counted = '';
+      highEl.dataset.countTo = highCount;
+      highEl.dataset.counted = '';
       document.getElementById('k-src').textContent = sources.size;
+
+      if (window.Micro) window.Micro.countUp(document.querySelector('.kpi-row'));
     }
 
     function renderTasks() {
@@ -36,7 +50,18 @@ const mapUiError = window.PCUI.mapApiError;
       else if (currentFilter !== 'all') filtered = allTasks.filter(t=>t.external_source===currentFilter);
 
       const container = document.getElementById('task-list');
-      if (!filtered.length) { container.innerHTML = '<div class="empty">No tasks match this filter</div>'; return; }
+      if (!filtered.length) {
+        if (window.Micro) {
+          window.Micro.emptyState(container, {
+            icon: 'check-square',
+            title: 'No tasks match this filter',
+            desc: 'Try a different filter or create a new task.'
+          });
+        } else {
+          container.innerHTML = '<div class="empty">No tasks match this filter</div>';
+        }
+        return;
+      }
       container.innerHTML = filtered.map(t => {
         const pClass = t.priority >= 4 ? 'p-high' : t.priority >= 3 ? 'p-med' : t.priority >= 2 ? 'p-low' : 'p-none';
         const src = t.external_source ? `<span class="task-source">${escHtml(t.external_source)}</span>` : '';
@@ -49,6 +74,7 @@ const mapUiError = window.PCUI.mapApiError;
           </div>
         </div>`;
       }).join('');
+      if (window.Micro) window.Micro.staggerIn(container);
     }
 
     function escHtml(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }

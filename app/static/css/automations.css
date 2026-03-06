@@ -16,7 +16,7 @@
 .auto-card.status-paused { border-left-color: #ecc94b; }
 
 .auto-card-body { flex: 1; min-width: 0; }
-.auto-card-name { font-size: .82rem; font-weight: 600; color: var(--text); }
-.auto-card-desc { font-size: .72rem; color: var(--text-muted); margin-top: .15rem; }
-.auto-card-meta { font-size: .65rem; color: var(--text-faint); margin-top: .2rem; display: flex; gap: .8rem; flex-wrap: wrap; }
+.auto-card-name { font-size: var(--text-base); font-weight: 600; color: var(--text); }
+.auto-card-desc { font-size: var(--text-sm); color: var(--text-muted); margin-top: .15rem; }
+.auto-card-meta { font-size: var(--text-xs); color: var(--text-faint); margin-top: .2rem; display: flex; gap: .8rem; flex-wrap: wrap; }
 .auto-card-actions { display: flex; gap: .4rem; flex-shrink: 0; align-items: flex-start; }

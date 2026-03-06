@@ -25,6 +25,31 @@ window.__bootPromise = fetch('/web/api-token')
         document.getElementById('k-err').textContent = summary.error_rate + '%';
         document.getElementById('k-rej').textContent = summary.rejection_rate + '%';
 
+        var latencyChart = document.getElementById("observe-latency-chart");
+        if (latencyChart && window.PCChartsLite && summary.provider_stats && summary.provider_stats.length) {
+          var sortedProviders = summary.provider_stats.slice().sort(function (a, b) {
+            return Number(a.call_count || 0) > Number(b.call_count || 0) ? -1 : 1;
+          }).slice(0, 6);
+          window.PCChartsLite.renderLineChart(latencyChart, {
+            caption: "Average latency and call volume by provider",
+            ariaLabel: "Observability provider latency chart",
+            series: [
+              {
+                name: "Avg Latency (ms)",
+                values: sortedProviders.map(function (p) { return Number(p.avg_latency_ms || 0); }),
+                color: "var(--brand, #0a84ff)"
+              },
+              {
+                name: "Call Count",
+                values: sortedProviders.map(function (p) { return Number(p.call_count || 0); }),
+                color: "var(--ok, #34c759)"
+              }
+            ]
+          });
+        } else if (latencyChart) {
+          latencyChart.innerHTML = '<p class="empty">No latency trend available</p>';
+        }
+
         // Provider bars
         const ps = document.getElementById('provider-stats');
         if (summary.provider_stats && summary.provider_stats.length) {

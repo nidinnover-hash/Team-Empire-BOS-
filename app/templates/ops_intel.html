@@ -14,7 +14,7 @@
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
 
 </head>
-<body>
+<body data-role="{{ (session_user.get('role') if session_user else '') | upper }}">
   {% set active_page = "ops-intel" %}
   {% include "partials/sidebar.html" %}
 
@@ -22,6 +22,11 @@
     <h1>Operations Intelligence</h1>
     <div id="loading">Loading ops data...</div>
     <div id="content" style="display:none">
+      <div
+        id="ops-access-note"
+        class="empty"
+        style="display:none;margin-bottom:.75rem;text-align:left"
+      ></div>
       <div class="incident-strip" id="incident-strip">
         <div class="incident-head">
           <div>
@@ -30,6 +35,7 @@
           </div>
           <button class="btn" id="btn-refresh-incident">Refresh</button>
         </div>
+        <div id="incident-chart" style="margin-top:.55rem"><div class="empty">Loading incident timeline...</div></div>
         <div class="incident-actions" id="incident-actions"></div>
       </div>
 
@@ -179,6 +185,7 @@
   <script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/charts-lite.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/ops-intel-page.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
 </body>

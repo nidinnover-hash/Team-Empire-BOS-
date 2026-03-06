@@ -3,7 +3,7 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .main-wrap { margin-left: var(--sb-width); padding: 1.5rem 2rem; max-width: 700px; }
-h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+h1 { font-size: var(--text-lg); font-weight: 700; color: var(--text); }
 .page-header { margin-bottom: 1.2rem; }
 
 /* ── Settings Card ─────────────────────────────────────────────────────── */
@@ -12,12 +12,12 @@ h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
   box-shadow: var(--shadow-sm);
 }
 .settings-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
-.settings-header h2 { font-size: .92rem; font-weight: 700; color: var(--text); margin: 0 0 .2rem; }
-.hint { font-size: .72rem; color: var(--text-faint); margin: .2rem 0; }
+.settings-header h2 { font-size: var(--text-base); font-weight: 700; color: var(--text); margin: 0 0 .2rem; }
+.hint { font-size: var(--text-sm); color: var(--text-faint); margin: .2rem 0; }
 
 /* ── Status Badge ──────────────────────────────────────────────────────── */
 .status-badge {
-  font-size: .68rem; font-weight: 600; padding: .2rem .6rem; border-radius: 10px;
+  font-size: var(--text-xs); font-weight: 600; padding: .2rem .6rem; border-radius: 10px;
   white-space: nowrap; flex-shrink: 0;
 }
 .status-badge.enabled { background: #d4edda; color: #155724; }
@@ -29,14 +29,14 @@ h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
 /* ── Buttons ───────────────────────────────────────────────────────────── */
 .btn-primary {
   background: var(--brand); color: #fff; border: none; border-radius: var(--radius);
-  padding: .4rem .9rem; font-size: .78rem; font-weight: 600; cursor: pointer; transition: opacity .15s;
+  padding: .4rem .9rem; font-size: var(--text-sm); font-weight: 600; cursor: pointer; transition: opacity .15s;
 }
 .btn-primary:hover { opacity: .85; }
 .btn-primary.danger { background: var(--danger, #dc3545); }
 .btn-primary.danger:hover { opacity: .85; }
 .btn-secondary {
   background: var(--surface); color: var(--text-muted); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: .4rem .9rem; font-size: .78rem; cursor: pointer;
+  border-radius: var(--radius); padding: .4rem .9rem; font-size: var(--text-sm); cursor: pointer;
 }
 .btn-secondary:hover { border-color: var(--text-faint); }
 
@@ -52,8 +52,8 @@ h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
 }
 .modal-narrow { max-width: 380px; }
 .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-.modal-header h2 { font-size: .95rem; font-weight: 700; color: var(--text); margin: 0; }
-.modal-close { background: none; border: none; font-size: 1.3rem; color: var(--text-muted); cursor: pointer; padding: .2rem; }
+.modal-header h2 { font-size: var(--text-base); font-weight: 700; color: var(--text); margin: 0; }
+.modal-close { background: none; border: none; font-size: var(--text-xl); color: var(--text-muted); cursor: pointer; padding: .2rem; }
 .modal-close:hover { color: var(--text); }
 
 /* ── QR Code ───────────────────────────────────────────────────────────── */
@@ -63,14 +63,14 @@ h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
 /* ── Secret Display ────────────────────────────────────────────────────── */
 .secret-display {
   display: block; word-break: break-all; background: var(--bg); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: .6rem; font-size: .75rem; color: var(--text);
+  border-radius: var(--radius); padding: .6rem; font-size: var(--text-sm); color: var(--text);
   margin: .5rem 0; font-family: monospace;
 }
 
 /* ── Form ──────────────────────────────────────────────────────────────── */
-label { display: block; font-size: .72rem; font-weight: 600; color: var(--text-muted); margin-top: .7rem; margin-bottom: .25rem; }
+label { display: block; font-size: var(--text-sm); font-weight: 600; color: var(--text-muted); margin-top: .7rem; margin-bottom: .25rem; }
 input[type="text"] {
-  width: 100%; padding: .45rem .6rem; font-size: .82rem; border: 1px solid var(--line);
+  width: 100%; padding: .45rem .6rem; font-size: var(--text-base); border: 1px solid var(--line);
   border-radius: var(--radius); background: var(--bg); color: var(--text); box-sizing: border-box;
   letter-spacing: .15em; text-align: center; font-weight: 600;
 }

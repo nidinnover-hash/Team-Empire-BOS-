@@ -31,7 +31,10 @@
 
       <div class="card">
         <div class="card-head">Provider Latency</div>
-        <div class="card-body" id="provider-stats"><p class="empty">No data yet</p></div>
+        <div class="card-body">
+          <div id="observe-latency-chart"><p class="empty">No data yet</p></div>
+          <div id="provider-stats" style="margin-top:.7rem"><p class="empty">No data yet</p></div>
+        </div>
       </div>
 
       <div class="card">
@@ -61,6 +64,7 @@
   <script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/charts-lite.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/observe-page.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
 </body>

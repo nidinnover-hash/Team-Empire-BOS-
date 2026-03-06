@@ -60,10 +60,10 @@
   <aside class="panel">
     <div class="panel-head">Today Snapshot</div>
     <div class="meta">
-      <div class="kpi-grid">
-        <div class="kpi"><div class="label">Open Tasks</div><div class="value" id="kpi-tasks">0</div></div>
-        <div class="kpi"><div class="label">Approvals</div><div class="value" id="kpi-approvals">0</div></div>
-        <div class="kpi"><div class="label">Unread Email</div><div class="value" id="kpi-emails">0</div></div>
+      <div class="kpi-grid stagger-enter">
+        <div class="kpi"><div class="label">Open Tasks</div><div class="value" id="kpi-tasks" data-count-to="0">0</div></div>
+        <div class="kpi"><div class="label">Approvals</div><div class="value" id="kpi-approvals" data-count-to="0">0</div></div>
+        <div class="kpi"><div class="label">Unread Email</div><div class="value" id="kpi-emails" data-count-to="0">0</div></div>
       </div>
       <div>
         <div class="section-title">Learned About You</div>
@@ -87,7 +87,7 @@
 </main>
 
 <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
-
+<script nonce="{{ csp_nonce }}" src="/static/js/micro.js"></script>
 
 <div id="toast-container"></div>
 

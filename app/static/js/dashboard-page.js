@@ -1529,5 +1529,142 @@ window.showToast = function(msg, type) {
     }
   })();
 
+  // Revenue sparkline + live health ring (real data, no hardcoded values)
+  (async function () {
+    var sparkHost = document.getElementById("dash-revenue-spark");
+    var ring = document.querySelector(".health-progress");
+    var healthValueEl = document.getElementById("dash-health-value");
+    var healthLabelEl = document.getElementById("dash-health-label");
+    var roleName = "";
+    if (!sparkHost && !ring) return;
+
+    function clamp(n, lo, hi) {
+      return Math.max(lo, Math.min(hi, n));
+    }
+    function scoreFromStatus(status) {
+      var s = String(status || "").toLowerCase();
+      if (s === "ok" || s === "healthy") return 100;
+      if (s === "degraded" || s === "stale") return 62;
+      if (s === "down" || s === "error") return 25;
+      if (s === "not_configured") return 70;
+      return 75;
+    }
+    function applyHealth(score) {
+      var s = clamp(Number(score) || 0, 0, 100);
+      var color = s >= 70 ? "var(--ok,#34c759)" : (s >= 45 ? "var(--warn,#ff9f0a)" : "var(--danger,#ff3b30)");
+      if (healthValueEl) healthValueEl.textContent = String(Math.round(s));
+      if (healthLabelEl) {
+        healthLabelEl.textContent = s >= 85 ? "OPTIMAL PERFORMANCE" : (s >= 70 ? "STABLE" : (s >= 45 ? "AT RISK" : "CRITICAL"));
+        healthLabelEl.style.color = color;
+      }
+      if (ring) {
+        var offset = Math.round(314 - (s / 100) * 314);
+        ring.setAttribute("data-target-offset", String(offset));
+        ring.style.stroke = color;
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            ring.setAttribute("stroke-dashoffset", String(offset));
+          });
+        });
+      }
+    }
+
+    try {
+      var token = await window.__bootPromise;
+      if (!token) return;
+      var authHeaders = { Authorization: "Bearer " + token };
+      try {
+        var sessionRes = await fetch("/web/session");
+        if (sessionRes.ok) {
+          var sessionData = await sessionRes.json();
+          roleName = String(
+            sessionData &&
+            sessionData.user &&
+            sessionData.user.role
+              ? sessionData.user.role
+              : ""
+          ).toUpperCase();
+        }
+      } catch (_sessionErr) { /* non-fatal */ }
+
+      // Revenue sparkline from real finance transactions (fallback to summary trio).
+      try {
+        var txResp = await fetch("/api/v1/finance?limit=30", { headers: authHeaders });
+        if (txResp.ok && window.PCChartsLite && sparkHost) {
+          var txItems = await txResp.json();
+          var ordered = (Array.isArray(txItems) ? txItems : []).slice().sort(function (a, b) {
+            return new Date(a.entry_date || a.created_at).getTime() - new Date(b.entry_date || b.created_at).getTime();
+          });
+          var running = 0;
+          var series = [];
+          for (var i = 0; i < ordered.length; i++) {
+            var amount = Number(ordered[i].amount || 0);
+            if (!Number.isFinite(amount)) amount = 0;
+            running += (String(ordered[i].type || "").toLowerCase() === "income") ? amount : -amount;
+            series.push(running);
+          }
+          if (!series.length) {
+            var summaryRes = await fetch("/api/v1/finance/summary", { headers: authHeaders });
+            if (summaryRes.ok) {
+              var sum = await summaryRes.json();
+              series = [Number(sum.total_income || 0), Number(sum.total_expense || 0), Number(sum.balance || 0)];
+            }
+          }
+          if (series.length) {
+            window.PCChartsLite.renderSparkline(sparkHost, series, {
+              ariaLabel: "Revenue balance trend",
+              stroke: "var(--brand,#0a84ff)",
+              fill: "rgba(10,132,255,0.14)"
+            });
+          } else {
+            sparkHost.innerHTML = '<div class="empty" style="padding:.4rem 0;color:var(--text-faint);font-size:.72rem">No trend data</div>';
+          }
+        }
+      } catch (_sparkError) {
+        if (sparkHost) {
+          sparkHost.innerHTML = '<div class="empty" style="padding:.4rem 0;color:var(--text-faint);font-size:.72rem">Trend unavailable</div>';
+        }
+      }
+
+      // Health score from live control health endpoints; fallback to public /health.
+      var computedScore = null;
+      var canUseControlHealth = roleName === "CEO" || roleName === "ADMIN" || roleName === "MANAGER";
+      if (canUseControlHealth) {
+        try {
+          var systemRes = await fetch("/api/v1/control/system-health", { headers: authHeaders });
+          if (systemRes.ok) {
+            var systemData = await systemRes.json();
+            var deps = Array.isArray(systemData.dependencies) ? systemData.dependencies : [];
+            if (deps.length) {
+              var depScore = deps.reduce(function (acc, dep) { return acc + scoreFromStatus(dep.status); }, 0) / deps.length;
+              computedScore = depScore;
+            }
+            var intItems = systemData.integrations && Array.isArray(systemData.integrations.items)
+              ? systemData.integrations.items
+              : [];
+            if (intItems.length) {
+              var intScore = intItems.reduce(function (acc, item) { return acc + scoreFromStatus(item.state); }, 0) / intItems.length;
+              computedScore = computedScore == null ? intScore : ((computedScore * 0.6) + (intScore * 0.4));
+            }
+          }
+        } catch (_healthErr) { /* fall through */ }
+      } else if (healthLabelEl) {
+        healthLabelEl.textContent = "SERVICE HEALTH (LIMITED ROLE)";
+      }
+      if (computedScore == null) {
+        try {
+          var healthRes = await fetch("/health");
+          if (healthRes.ok) {
+            var healthData = await healthRes.json();
+            computedScore = String(healthData.status) === "ok" ? 88 : 54;
+          }
+        } catch (_healthPublicErr) { /* ignore */ }
+      }
+      if (computedScore != null) applyHealth(computedScore);
+    } catch (_error) {
+      // no-op
+    }
+  })();
+
   // Init Lucide icons
   if (typeof lucide !== "undefined") lucide.createIcons();

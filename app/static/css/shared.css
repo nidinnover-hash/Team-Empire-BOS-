@@ -4,7 +4,7 @@
 
 /* ── Layout ─────────────────────────────────────────────────────────────── */
 .main-wrap { margin-left: var(--sb-width); padding: 1.5rem 2rem; max-width: 1000px; }
-h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+h1 { font-size: var(--text-lg); font-weight: 700; color: var(--text); }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
 .header-actions { display: flex; gap: .5rem; }
 
@@ -14,13 +14,13 @@ h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
   background: var(--surface); border: none; border-radius: var(--radius);
   padding: .65rem .85rem; box-shadow: var(--shadow-sm);
 }
-.kpi .label { font-size: .62rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint); }
-.kpi .val { font-size: 1.2rem; font-weight: 700; color: var(--text); margin-top: .15rem; font-feature-settings: 'tnum' 1; }
+.kpi .label { font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint); }
+.kpi .val { font-size: var(--text-xl); font-weight: 700; color: var(--text); margin-top: .15rem; font-feature-settings: 'tnum' 1; }
 
 /* ── Tab Bar ────────────────────────────────────────────────────────────── */
 .tab-bar { display: flex; gap: .4rem; margin-bottom: 1rem; border-bottom: 1px solid var(--line); }
 .tab {
-  padding: .45rem .9rem; font-size: .78rem; font-weight: 600; cursor: pointer;
+  padding: .45rem .9rem; font-size: var(--text-sm); font-weight: 600; cursor: pointer;
   background: none; border: none; color: var(--text-muted);
   border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
@@ -30,19 +30,19 @@ h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
 /* ── Buttons ────────────────────────────────────────────────────────────── */
 .btn-primary {
   background: var(--brand); color: #fff; border: none; border-radius: var(--radius);
-  padding: .4rem .9rem; font-size: .75rem; font-weight: 600; cursor: pointer;
+  padding: .4rem .9rem; font-size: var(--text-sm); font-weight: 600; cursor: pointer;
 }
 .btn-primary:hover { opacity: .9; }
 
 .btn-secondary {
   background: var(--surface); color: var(--text-muted); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: .4rem .9rem; font-size: .75rem; cursor: pointer;
+  border-radius: var(--radius); padding: .4rem .9rem; font-size: var(--text-sm); cursor: pointer;
 }
 .btn-secondary:hover { border-color: var(--text-faint); }
 
 .btn-danger {
   background: var(--danger, #e53e3e); color: #fff; border: none; border-radius: var(--radius);
-  padding: .3rem .6rem; font-size: .68rem; cursor: pointer;
+  padding: .3rem .6rem; font-size: var(--text-xs); cursor: pointer;
 }
 .btn-danger:hover { opacity: .85; }
 
@@ -52,7 +52,7 @@ h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
 
 /* ── Pill / Badge ───────────────────────────────────────────────────────── */
 .pill {
-  font-size: .6rem; padding: .12rem .4rem; border-radius: 4px;
+  font-size: var(--text-2xs); padding: .12rem .4rem; border-radius: 4px;
   background: var(--bg); color: var(--text-muted); display: inline-block;
   font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
 }
@@ -63,7 +63,7 @@ h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
 .pill.drift-high { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-border); }
 
 /* ── Empty / Loading ────────────────────────────────────────────────────── */
-.empty { font-size: .78rem; color: var(--text-faint); padding: 1.5rem 0; text-align: center; }
+.empty { font-size: var(--text-sm); color: var(--text-faint); padding: 1.5rem 0; text-align: center; }
 
 @keyframes pulse-loading {
   0%, 100% { opacity: .4; }
@@ -84,12 +84,12 @@ h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
   padding: .8rem 1rem; display: flex; justify-content: space-between; align-items: center;
   border-bottom: 1px solid var(--line);
 }
-.modal-header h2 { font-size: .9rem; font-weight: 700; color: var(--text); margin: 0; }
-.modal-close { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-muted); }
+.modal-header h2 { font-size: var(--text-base); font-weight: 700; color: var(--text); margin: 0; }
+.modal-close { background: none; border: none; font-size: var(--text-xl); cursor: pointer; color: var(--text-muted); }
 
 .modal-body { padding: 1rem; }
 .modal-body label {
-  display: block; font-size: .72rem; font-weight: 600; color: var(--text-muted);
+  display: block; font-size: var(--text-sm); font-weight: 600; color: var(--text-muted);
   margin-bottom: .6rem;
 }
 .modal-body input[type="text"],
@@ -97,7 +97,7 @@ h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
 .modal-body textarea,
 .modal-body select {
   display: block; width: 100%; margin-top: .2rem; padding: .35rem .5rem;
-  font-size: .78rem; border: 1px solid var(--line); border-radius: var(--radius);
+  font-size: var(--text-sm); border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--bg); color: var(--text); font-family: inherit;
 }
 .modal-body textarea { resize: vertical; }
@@ -116,17 +116,17 @@ h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
 }
 .mini-trend__head {
   display: flex; justify-content: space-between; align-items: center; gap: .5rem;
-  font-size: .64rem; color: var(--text-faint); text-transform: uppercase;
+  font-size: var(--text-2xs); color: var(--text-faint); text-transform: uppercase;
   letter-spacing: .05em; margin-bottom: .3rem;
 }
 .mini-trend__subhead {
   display: flex; justify-content: space-between; align-items: center; gap: .5rem;
-  font-size: .68rem; color: var(--text-muted); margin-bottom: .3rem;
+  font-size: var(--text-xs); color: var(--text-muted); margin-bottom: .3rem;
 }
 .trend-controls { display: inline-flex; gap: .25rem; }
 .trend-btn {
   border: 1px solid var(--line-soft); background: var(--surface); color: var(--text-faint);
-  border-radius: 999px; font-size: .62rem; padding: .08rem .38rem; cursor: pointer;
+  border-radius: 999px; font-size: var(--text-2xs); padding: .08rem .38rem; cursor: pointer;
 }
 .trend-btn.active { color: var(--brand); border-color: var(--brand); }
 .mini-trend__svg { width: 100%; height: 56px; display: block; }
@@ -137,4 +137,4 @@ h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
 .mini-trend__line.ok { stroke: var(--ok); }
 .mini-trend__line.warn { stroke: var(--warn); }
 .mini-trend__line.danger { stroke: var(--danger); }
-.mini-trend__empty { font-size: .7rem; color: var(--text-faint); }
+.mini-trend__empty { font-size: var(--text-xs); color: var(--text-faint); }

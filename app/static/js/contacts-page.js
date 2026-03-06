@@ -79,17 +79,35 @@
     if (rel) params += "&relationship=" + encodeURIComponent(rel);
     if (search) params += "&search=" + encodeURIComponent(search);
 
-    var response = await fetch("/api/v1/contacts" + params, { headers: headers() });
-    if (!response.ok) return;
-    var items = await response.json();
-
-    $("k-total").textContent = String(items.length);
-    $("k-biz").textContent = String(items.filter(function (c) { return c.relationship === "business"; }).length);
-    $("k-per").textContent = String(items.filter(function (c) { return c.relationship === "personal"; }).length);
-
     var body = $("tbody");
+    var removeSkeleton = window.Micro
+      ? window.Micro.skeletonLoad(body, { rows: 6, style: 'table' })
+      : function () {};
+
+    var response = await fetch("/api/v1/contacts" + params, { headers: headers() });
+    if (!response.ok) { removeSkeleton(); return; }
+    var items = await response.json();
+    removeSkeleton();
+
+    // Update KPIs with count-up
+    var totalCount = items.length;
+    var bizCount = items.filter(function (c) { return c.relationship === "business"; }).length;
+    var perCount = items.filter(function (c) { return c.relationship === "personal"; }).length;
+    var kTotal = $("k-total"); kTotal.dataset.countTo = totalCount; kTotal.dataset.counted = '';
+    var kBiz = $("k-biz"); kBiz.dataset.countTo = bizCount; kBiz.dataset.counted = '';
+    var kPer = $("k-per"); kPer.dataset.countTo = perCount; kPer.dataset.counted = '';
+    if (window.Micro) window.Micro.countUp(document.querySelector('.kpi-row'));
+
     if (!items.length) {
-      body.innerHTML = '<tr><td colspan="7" style="text-align:center;opacity:.5">No contacts found</td></tr>';
+      if (window.Micro) {
+        window.Micro.emptyState(body.parentNode.parentNode, {
+          icon: 'contact',
+          title: 'No contacts found',
+          desc: 'Add your first contact to start building your network.'
+        });
+      } else {
+        body.innerHTML = '<tr><td colspan="7" style="text-align:center;opacity:.5">No contacts found</td></tr>';
+      }
       return;
     }
 
@@ -107,6 +125,7 @@
       var followUp = '<td>' + formatDate(c.next_follow_up_at) + '</td>';
       return '<tr>' + nameCell + companyCell + stageCell + scoreCell + dealCell + relCell + followUp + '</tr>';
     }).join("");
+    if (window.Micro) window.Micro.staggerIn(body);
   }
 
   // ── Filter Events ─────────────────────────────────────────────────

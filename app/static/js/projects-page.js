@@ -27,16 +27,37 @@
   };
 
   async function loadProjects() {
-    var response = await fetch("/api/v1/projects?limit=100", { headers: headers() });
-    if (!response.ok) return;
-    var items = await response.json();
-    document.getElementById("k-total").textContent = String(items.length);
-    document.getElementById("k-active").textContent = String(items.filter(function (item) { return item.status === "active"; }).length);
-    document.getElementById("k-done").textContent = String(items.filter(function (item) { return item.status === "completed"; }).length);
-
     var body = document.getElementById("tbody");
+    var removeSkeleton = window.Micro
+      ? window.Micro.skeletonLoad(body, { rows: 4, style: 'table' })
+      : function () {};
+
+    var response = await fetch("/api/v1/projects?limit=100", { headers: headers() });
+    if (!response.ok) { removeSkeleton(); return; }
+    var items = await response.json();
+    removeSkeleton();
+
+    // Update KPIs with count-up
+    var totalEl = document.getElementById("k-total");
+    var activeEl = document.getElementById("k-active");
+    var doneEl = document.getElementById("k-done");
+    var activeCount = items.filter(function (item) { return item.status === "active"; }).length;
+    var doneCount = items.filter(function (item) { return item.status === "completed"; }).length;
+    totalEl.dataset.countTo = items.length; totalEl.dataset.counted = '';
+    activeEl.dataset.countTo = activeCount; activeEl.dataset.counted = '';
+    doneEl.dataset.countTo = doneCount; doneEl.dataset.counted = '';
+    if (window.Micro) window.Micro.countUp(document.querySelector('.kpi-row'));
+
     if (!items.length) {
-      body.innerHTML = '<tr><td colspan="5" style="text-align:center;opacity:.5">No projects yet</td></tr>';
+      if (window.Micro) {
+        window.Micro.emptyState(body.parentNode.parentNode, {
+          icon: 'folder-kanban',
+          title: 'No projects yet',
+          desc: 'Create your first project to start tracking work.'
+        });
+      } else {
+        body.innerHTML = '<tr><td colspan="5" style="text-align:center;opacity:.5">No projects yet</td></tr>';
+      }
       return;
     }
 

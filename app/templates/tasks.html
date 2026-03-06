@@ -20,9 +20,9 @@
 
   <div class="main-wrap">
     <h1>Task Inbox</h1>
-    <div class="kpi-row">
-      <div class="kpi"><div class="label">Open</div><div class="val" id="k-open">0</div></div>
-      <div class="kpi"><div class="label">High Priority</div><div class="val" id="k-high">0</div></div>
+    <div class="kpi-row stagger-enter">
+      <div class="kpi"><div class="label">Open</div><div class="val" id="k-open" data-count-to="0">0</div></div>
+      <div class="kpi"><div class="label">High Priority</div><div class="val" id="k-high" data-count-to="0">0</div></div>
       <div class="kpi"><div class="label">Sources</div><div class="val" id="k-src">-</div></div>
     </div>
     <div class="filters">
@@ -33,11 +33,11 @@
       <button class="filter-btn" data-filter="internal">Internal</button>
       <button class="filter-btn" data-filter="high">High Priority</button>
     </div>
-    <div id="task-list" class="task-list"><div class="empty loading">Loading tasks...</div></div>
+    <div id="task-list" class="task-list"></div>
   </div>
 
   <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
-
+  <script nonce="{{ csp_nonce }}" src="/static/js/micro.js"></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
   <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>

@@ -61,8 +61,37 @@
       const grid = document.getElementById("dept-cards");
       if (!d.departments || d.departments.length === 0) {
         grid.innerHTML = '<div class="empty">No departments with data</div>';
+        var emptyChart = document.getElementById("perf-trend-chart");
+        if (emptyChart) emptyChart.innerHTML = '<div class="empty">No trend data yet</div>';
         return;
       }
+
+      var chartHost = document.getElementById("perf-trend-chart");
+      if (chartHost && window.PCChartsLite) {
+        var byDept = d.departments.slice(0, 10);
+        window.PCChartsLite.renderLineChart(chartHost, {
+          caption: "Department-level averages (current window)",
+          ariaLabel: "Organization performance trend",
+          series: [
+            {
+              name: "Focus %",
+              values: byDept.map(function (dep) { return Number(dep.avg_focus_ratio || 0) * 100; }),
+              color: "var(--brand, #0a84ff)"
+            },
+            {
+              name: "Tasks/Day",
+              values: byDept.map(function (dep) { return Number(dep.avg_tasks_per_day || 0); }),
+              color: "var(--ok, #34c759)"
+            },
+            {
+              name: "Hours/Day",
+              values: byDept.map(function (dep) { return Number(dep.avg_hours || 0); }),
+              color: "var(--warn, #ff9f0a)"
+            }
+          ]
+        });
+      }
+
       grid.innerHTML = d.departments.map(dept => `
         <div class="dept-card" data-dept-id="${dept.department_id}">
           <div class="dept-card-name">${esc(dept.department_name)}</div>
