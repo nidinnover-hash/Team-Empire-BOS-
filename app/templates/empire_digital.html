@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Empire Digital - Nidin BOS</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
+  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+</head>
+<body>
+  {% set active_page = "empire_digital" %}
+  {% include "partials/sidebar.html" %}
+
+  <div class="main-wrap">
+    <div class="page-header">
+      <h1>Empire Digital Cockpit</h1>
+    </div>
+    <div id="cockpit-warning" class="card" style="display:none;margin-bottom:1rem;border-left:4px solid #b45309;background:rgba(245,158,11,.08)"></div>
+
+    <div class="kpi-row">
+      <div class="kpi"><div class="label">Visible Leads</div><div class="val" id="k-total-leads">0</div></div>
+      <div class="kpi"><div class="label">Unrouted <span class="badge" id="k-unrouted-badge">--</span></div><div class="val" id="k-unrouted">0</div></div>
+      <div class="kpi"><div class="label">Stale Unrouted <span class="badge" id="k-stale-badge">--</span></div><div class="val" id="k-stale">0</div></div>
+      <div class="kpi"><div class="label">Avg Routing (hrs)</div><div class="val" id="k-routing-hours">--</div></div>
+      <div class="kpi"><div class="label">Pending Intelligence</div><div class="val" id="k-pending-intel">0</div></div>
+    </div>
+
+    <div class="grid-2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin-top:1rem">
+      <div class="card">
+        <h3 style="margin-top:0">Aging Buckets</h3>
+        <div id="aging-buckets" class="empty">Loading...</div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Lead Types</h3>
+        <div id="lead-types" class="empty">Loading...</div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Routed Companies</h3>
+        <div id="routed-companies" class="empty">Loading...</div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Top Sources</h3>
+        <div id="top-sources" class="empty">Loading...</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:1rem">
+      <div style="display:flex;justify-content:space-between;gap:.7rem;align-items:center;flex-wrap:wrap">
+        <h3 style="margin:0">Marketing Intelligence</h3>
+        <button id="submit-intel-btn" class="btn-primary" type="button">Submit Insight</button>
+      </div>
+      <div id="intel-list" class="empty" style="margin-top:.7rem">Loading...</div>
+    </div>
+
+    <div class="card" style="margin-top:1rem">
+      <div style="display:flex;justify-content:space-between;gap:.7rem;align-items:center;flex-wrap:wrap">
+        <h3 style="margin:0">Routing Rules</h3>
+        <button id="add-rule-btn" class="btn-primary" type="button">Add Rule</button>
+      </div>
+      <div id="routing-rules-list" class="empty" style="margin-top:.7rem">Loading...</div>
+    </div>
+
+    <div class="card" style="margin-top:1rem">
+      <div style="display:flex;justify-content:space-between;gap:.7rem;align-items:center;flex-wrap:wrap">
+        <h3 style="margin:0">Lead Queue</h3>
+        <div style="display:flex;gap:.45rem;flex-wrap:wrap">
+          <select id="lead-filter-status">
+            <option value="">All statuses</option>
+            <option value="unrouted">Unrouted</option>
+            <option value="under_review">Under review</option>
+            <option value="routed">Routed</option>
+          </select>
+          <select id="lead-filter-type">
+            <option value="">All types</option>
+            <option value="general">General</option>
+            <option value="study_abroad">Study abroad</option>
+            <option value="recruitment">Recruitment</option>
+          </select>
+          <button id="lead-refresh-btn" class="btn-primary" type="button">Refresh</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:.45rem;flex-wrap:wrap;margin:.7rem 0">
+        <button id="bulk-route-btn" class="btn-primary" type="button">Bulk Route</button>
+        <button id="bulk-qualify-btn" class="btn-primary" type="button">Bulk Qualify</button>
+        <button id="bulk-escalate-btn" class="btn-primary" type="button">Escalate Stale</button>
+        <button id="export-json-btn" class="btn-primary" type="button">Export JSON</button>
+        <button id="export-csv-btn" class="btn-primary" type="button">Export CSV</button>
+      </div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,420px);gap:1rem;align-items:start">
+        <div id="lead-queue-list" class="empty">Loading...</div>
+        <div id="lead-detail-panel" class="empty">Select a lead to view details and actions.</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:1rem">
+      <div style="display:flex;justify-content:space-between;gap:.7rem;align-items:center;flex-wrap:wrap">
+        <h3 style="margin:0">Founder Daily Flow</h3>
+        <button id="founder-report-refresh-btn" class="btn-primary" type="button">Refresh Report</button>
+      </div>
+      <div id="founder-report-list" class="empty" style="margin-top:.7rem">Loading...</div>
+    </div>
+  </div>
+
+  <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/empire-digital-page.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+</body>
+</html>
