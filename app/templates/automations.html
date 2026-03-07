@@ -30,6 +30,15 @@
       <div class="kpi"><div class="label">Completed</div><div class="val" id="k-completed">0</div></div>
     </div>
 
+    <!-- Copilot Bar -->
+    <div class="copilot-bar">
+      <div class="copilot-input-row">
+        <input type="text" id="copilot-input" placeholder="Describe what you want to automate... e.g. 'Follow up with new leads every 3 days via email'" maxlength="2000" />
+        <button class="btn-primary" id="copilot-btn" type="button">Generate Plan</button>
+      </div>
+      <div id="copilot-result"></div>
+    </div>
+
     <!-- Tabs -->
     <div class="tab-bar">
       <button class="tab active" data-tab="triggers" type="button" aria-label="Show triggers">Triggers</button>

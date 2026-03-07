@@ -48,6 +48,81 @@ def _handler_spend(payload: dict[str, Any]) -> dict[str, Any]:
     return {"action": "spend", "approved_amount": amount}
 
 
+async def _handler_send_email(payload: dict[str, Any]) -> dict[str, Any]:
+    """Draft an email send (actual send still requires approval flow)."""
+    return {
+        "action": "send_email",
+        "to": payload.get("to", ""),
+        "subject": payload.get("subject", ""),
+        "body": payload.get("body", ""),
+        "status": "drafted",
+    }
+
+
+async def _handler_send_slack(payload: dict[str, Any]) -> dict[str, Any]:
+    """Draft a Slack message (actual send requires approval)."""
+    return {
+        "action": "send_slack",
+        "channel": payload.get("channel", ""),
+        "message": payload.get("message", ""),
+        "status": "drafted",
+    }
+
+
+def _handler_create_task(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "action": "create_task",
+        "title": payload.get("title", "Untitled task"),
+        "priority": payload.get("priority", 2),
+        "status": "created",
+    }
+
+
+async def _handler_ai_generate(payload: dict[str, Any]) -> dict[str, Any]:
+    """Use AI to generate text based on a prompt."""
+    from app.engines.brain.router import call_ai
+
+    prompt = str(payload.get("prompt") or "Summarize the current context.")
+    result = await call_ai(
+        system_prompt="You are a helpful business assistant. Be concise and actionable.",
+        user_message=prompt,
+        provider="openai",
+        max_tokens=500,
+    )
+    return {"action": "ai_generate", "prompt": prompt, "output": result}
+
+
+async def _handler_http_request(payload: dict[str, Any]) -> dict[str, Any]:
+    """Make an HTTP request (GET/POST)."""
+    import httpx
+
+    url = str(payload.get("url", ""))
+    method = str(payload.get("method", "GET")).upper()
+    if not url:
+        raise ValueError("http_request requires a 'url' param")
+    async with httpx.AsyncClient(timeout=15) as client:
+        if method == "POST":
+            resp = await client.post(url, json=payload.get("body"))
+        else:
+            resp = await client.get(url)
+    return {
+        "action": "http_request",
+        "url": url,
+        "method": method,
+        "status_code": resp.status_code,
+        "body_preview": resp.text[:500],
+    }
+
+
+async def _handler_wait(payload: dict[str, Any]) -> dict[str, Any]:
+    """Wait for a specified duration (capped at 5 min for safety)."""
+    import asyncio as _asyncio
+
+    minutes = min(float(payload.get("duration_minutes", 1)), 5)
+    await _asyncio.sleep(minutes * 60)
+    return {"action": "wait", "waited_minutes": minutes}
+
+
 HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "assign_leads": _handler_assign_leads,
     "spend": _handler_spend,
@@ -55,6 +130,13 @@ HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "fetch_calendar_digest": build_calendar_digest,
     "assign_task": lambda payload: {"action": "assign_task", "task_id": payload.get("task_id")},
     "change_crm_status": lambda payload: {"action": "change_crm_status", "lead_id": payload.get("lead_id")},
+    "send_email": _handler_send_email,
+    "send_slack": _handler_send_slack,
+    "create_task": _handler_create_task,
+    "ai_generate": _handler_ai_generate,
+    "http_request": _handler_http_request,
+    "wait": _handler_wait,
+    "noop": lambda payload: {"action": "noop"},
 }
 
 

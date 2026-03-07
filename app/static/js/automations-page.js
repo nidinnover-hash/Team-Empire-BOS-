@@ -233,12 +233,71 @@
     });
   }
 
+  function initCopilot() {
+    var copilotInput = byId("copilot-input");
+    var copilotBtn = byId("copilot-btn");
+    var copilotResult = byId("copilot-result");
+    if (!copilotInput || !copilotBtn) return;
+
+    copilotBtn.addEventListener("click", async function() {
+      var intent = copilotInput.value.trim();
+      if (!intent) return;
+      copilotBtn.disabled = true;
+      copilotBtn.textContent = "Generating...";
+      if (copilotResult) copilotResult.innerHTML = '<div class="empty">Thinking...</div>';
+      try {
+        var plan = await apiJson("/api/v1/automations/copilot/plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ intent: intent }),
+        });
+        if (copilotResult) {
+          var html = '<div class="copilot-plan">' +
+            '<h4>' + esc(plan.name) + '</h4>' +
+            '<p>' + esc(plan.summary) + '</p>' +
+            '<div class="auto-card-meta"><span>Risk: ' + esc(plan.risk_level) + '</span>' +
+            '<span>Confidence: ' + Math.round((plan.confidence || 0) * 100) + '%</span></div>' +
+            '<div class="copilot-steps">';
+          (plan.steps || []).forEach(function(s, i) {
+            var badge = s.requires_approval ? ' <span class="pill inactive">APPROVAL</span>' : '';
+            html += '<div class="copilot-step">' +
+              '<span class="step-num">' + (i + 1) + '</span> ' +
+              esc(s.name) + ' <code>' + esc(s.action_type) + '</code>' + badge +
+            '</div>';
+          });
+          html += '</div>' +
+            '<button class="btn-primary" id="copilot-save-btn" type="button">Save as Draft Workflow</button>' +
+          '</div>';
+          copilotResult.innerHTML = html;
+          byId("copilot-save-btn").addEventListener("click", async function() {
+            try {
+              var saved = await apiJson("/api/v1/automations/copilot/plan-and-save", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ intent: intent }),
+              });
+              copilotResult.innerHTML = '<div class="empty">Workflow "' + esc(saved.name) + '" saved as draft (#' + saved.id + '). Switch to the Workflows tab to review and publish.</div>';
+              copilotInput.value = "";
+              showTab("workflows");
+              await fetchWorkflows();
+            } catch (err) { alert("Failed to save: " + (err.message || err)); }
+          });
+        }
+      } catch (err) {
+        if (copilotResult) copilotResult.innerHTML = '<div class="empty" style="color:var(--danger)">' + esc(err.message || "Failed to generate plan") + '</div>';
+      }
+      copilotBtn.disabled = false;
+      copilotBtn.textContent = "Generate Plan";
+    });
+  }
+
   try {
     await bootToken();
     window.workflowApiJson = apiJson;
     window.workflowApiToken = function () { return token; };
     initTabs();
     initModals();
+    initCopilot();
     await Promise.all([fetchTriggers(), fetchWorkflows()]);
     if (window.WorkflowBuilderPage && window.WorkflowBuilderPage.init) {
       window.WorkflowBuilderPage.init({ apiJson: apiJson });

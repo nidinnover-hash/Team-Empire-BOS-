@@ -185,3 +185,38 @@
     position: static;
   }
 }
+
+/* ── Copilot Bar ──────────────────────────────────────────────────────── */
+.copilot-bar {
+  background: var(--surface); border-radius: var(--radius); padding: .8rem 1rem;
+  box-shadow: var(--shadow-sm); margin-bottom: 1rem;
+  border-left: 3px solid var(--brand, #3182ce);
+}
+.copilot-input-row {
+  display: flex; gap: .6rem; align-items: center;
+}
+.copilot-input-row input {
+  flex: 1; font-size: var(--text-base); padding: .5rem .7rem;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg); color: var(--text);
+}
+.copilot-input-row input:focus {
+  outline: none; border-color: var(--brand, #3182ce);
+  box-shadow: 0 0 0 2px rgba(49, 130, 206, .15);
+}
+#copilot-result { margin-top: .6rem; }
+.copilot-plan h4 { margin: 0 0 .3rem; font-size: var(--text-base); }
+.copilot-plan p { margin: 0 0 .4rem; color: var(--text-muted); font-size: var(--text-sm); }
+.copilot-steps { margin: .5rem 0; }
+.copilot-step {
+  padding: .3rem .5rem; font-size: var(--text-sm); color: var(--text);
+  border-left: 2px solid var(--border); margin-left: .3rem; margin-bottom: .2rem;
+}
+.copilot-step code {
+  font-size: var(--text-xs); background: var(--bg); padding: .1rem .3rem;
+  border-radius: 3px; color: var(--brand, #3182ce);
+}
+.copilot-step .step-num {
+  display: inline-block; width: 1.3em; text-align: center;
+  font-weight: 600; color: var(--brand, #3182ce);
+}

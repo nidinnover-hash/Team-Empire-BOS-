@@ -546,3 +546,59 @@ async def workflow_copilot_plan(
         available_integrations=data.available_integrations,
     )
     return WorkflowPlanDraftRead.model_validate(payload)
+
+
+@router.post("/copilot/plan-and-save", response_model=WorkflowDefinitionRead)
+async def workflow_copilot_plan_and_save(
+    data: WorkflowPlanRequest,
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+    db: AsyncSession = Depends(get_db),
+    workspace_id: int = Depends(get_current_workspace_id),
+) -> WorkflowDefinitionRead:
+    """Generate a workflow plan from natural language AND save it as a draft definition."""
+    _require_workflow_copilot()
+    org_id = int(actor["org_id"])
+    effective_ws = data.workspace_id if data.workspace_id is not None else workspace_id
+    payload = await build_workflow_copilot_plan(
+        actor=actor,
+        organization_id=org_id,
+        workspace_id=effective_ws,
+        intent=data.intent,
+        constraints=data.constraints,
+        available_integrations=data.available_integrations,
+    )
+    from app.schemas.workflow_definition import WorkflowDefinitionStep
+
+    create_data = WorkflowDefinitionCreate(
+        name=str(payload.get("name") or f"Copilot: {data.intent[:60]}"),
+        description=str(payload.get("summary") or data.intent[:200]),
+        trigger_mode=str(payload.get("trigger_mode") or "manual"),
+        steps=[
+            WorkflowDefinitionStep(
+                key=str(s.get("key") or f"step-{i}"),
+                name=str(s.get("name") or f"Step {i + 1}"),
+                action_type=str(s.get("action_type") or "noop"),
+                params=dict(s.get("params") or {}),
+                requires_approval=bool(s.get("requires_approval")),
+            )
+            for i, s in enumerate(payload.get("steps") or [])
+        ],
+        risk_level=str(payload.get("risk_level") or "medium"),
+    )
+    row = await automation_service.create_workflow_definition(
+        db,
+        organization_id=org_id,
+        workspace_id=effective_ws,
+        actor_user_id=int(actor["id"]),
+        data=create_data,
+    )
+    await record_action(
+        db,
+        event_type="workflow_copilot_generated",
+        actor_user_id=int(actor["id"]),
+        organization_id=org_id,
+        entity_type="workflow_definition",
+        entity_id=row.id,
+        payload_json={"intent": data.intent[:500], "confidence": payload.get("confidence")},
+    )
+    return WorkflowDefinitionRead.model_validate(row)

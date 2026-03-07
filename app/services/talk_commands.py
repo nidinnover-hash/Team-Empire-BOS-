@@ -245,4 +245,65 @@ async def maybe_handle_talk_command(
             requires_approval=True,
         )
 
+    # ── Build automation / workflow copilot ───────────────────────────────────
+    automation_intent = _extract_after(
+        message,
+        ("build automation", "create automation", "build workflow", "create workflow", "automate"),
+    )
+    if automation_intent:
+        if actor_role not in _PRIVILEGED_ROLES:
+            return TalkCommandResult(handled=True, response="Workflow creation requires MANAGER role or above.")
+        return await _build_automation_from_intent(db, org_id, automation_intent, default_workspace_id)
+
     return TalkCommandResult(handled=False)
+
+
+async def _build_automation_from_intent(
+    db: AsyncSession,
+    org_id: int,
+    intent: str,
+    workspace_id: int,
+) -> TalkCommandResult:
+    """Use the workflow copilot to generate and save a draft workflow."""
+    from app.application.automation.copilot import build_workflow_copilot_plan
+    from app.services import integration as integration_service
+
+    try:
+        integrations = await integration_service.list_integrations(db, organization_id=org_id)
+        available = [i.platform for i in integrations if getattr(i, "is_connected", False)]
+    except Exception:
+        available = []
+
+    try:
+        plan = await build_workflow_copilot_plan(
+            actor={"role": "CEO"},
+            organization_id=org_id,
+            workspace_id=workspace_id,
+            intent=intent,
+            constraints={},
+            available_integrations=available,
+        )
+    except Exception:
+        return TalkCommandResult(
+            handled=True,
+            response="Failed to generate workflow plan. Try again or use the Automations page.",
+        )
+
+    steps = plan.get("steps") or []
+    step_lines = []
+    for i, s in enumerate(steps, 1):
+        approval = " (needs approval)" if s.get("requires_approval") else ""
+        step_lines.append(f"  {i}. {s.get('name', 'Step')} [{s.get('action_type', '?')}]{approval}")
+
+    confidence = plan.get("confidence", 0)
+    risk = plan.get("risk_level", "medium")
+
+    response = (
+        f"Workflow draft: **{plan.get('name', 'Untitled')}**\n"
+        f"Risk: {risk} | Confidence: {confidence:.0%}\n\n"
+        f"Steps:\n" + "\n".join(step_lines) + "\n\n"
+        f"Go to the Automations page to review, edit, and publish this workflow. "
+        f"Or say 'create workflow {intent}' with more details to refine."
+    )
+
+    return TalkCommandResult(handled=True, response=response, requires_approval=False)
