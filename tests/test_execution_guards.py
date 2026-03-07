@@ -169,7 +169,11 @@ async def test_run_handler_works_with_sync_handler():
 
 
 def test_handlers_registry_has_expected_keys():
-    expected = {"assign_leads", "spend", "spend_money", "fetch_calendar_digest", "assign_task", "change_crm_status"}
+    expected = {
+        "assign_leads", "spend", "spend_money", "fetch_calendar_digest",
+        "assign_task", "change_crm_status", "send_email", "send_slack",
+        "create_task", "ai_generate", "http_request", "wait", "noop",
+    }
     assert expected == set(HANDLERS.keys())
 
 

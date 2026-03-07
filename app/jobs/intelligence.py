@@ -411,6 +411,75 @@ async def maybe_generate_daily_empire_flow_digest(db: AsyncSession, org_id: int)
     await db.commit()
 
 
+async def maybe_run_knowledge_consolidation(db: AsyncSession, org_id: int) -> None:
+    """Nightly knowledge consolidation: merge duplicate memories, backfill embeddings, extract knowledge."""
+    tz = ZoneInfo("Asia/Kolkata")
+    local_now = datetime.now(UTC).astimezone(tz)
+    # Run between 2-3 AM IST (low activity window)
+    if local_now.hour != 2:
+        return
+
+    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    existing = (await db.execute(
+        select(SchedulerJobRun).where(
+            SchedulerJobRun.organization_id == org_id,
+            SchedulerJobRun.job_name == "knowledge_consolidation",
+            SchedulerJobRun.status == "ok",
+            SchedulerJobRun.finished_at >= today_start,
+        ).limit(1)
+    )).scalar_one_or_none()
+    if existing is not None:
+        return
+
+    started = datetime.now(UTC)
+    details: dict[str, object] = {}
+    try:
+        # 1. Consolidate duplicate memories
+        from app.engines.intelligence.knowledge import consolidate_memories
+        consolidation = await consolidate_memories(db, organization_id=org_id)
+        details["consolidation"] = dict(consolidation)
+        logger.info(
+            "Knowledge consolidation org=%d: scanned=%d merged=%d deleted=%d",
+            org_id, consolidation["scanned"], consolidation["merged"], consolidation["deleted"],
+        )
+
+        # 2. Backfill embeddings for entries without them
+        from app.services.embedding import backfill_embeddings
+        backfill = await backfill_embeddings(db, organization_id=org_id, batch_size=50)
+        details["backfill"] = backfill
+        logger.info("Embedding backfill org=%d: %s", org_id, backfill)
+
+        # 3. Decay old clone memories
+        from app.services.clone_memory import decay_old_memories
+        decayed = await decay_old_memories(db, org_id=org_id, days_since_retrieval=90)
+        details["decayed_memories"] = decayed
+
+        await record_job_run(
+            db, org_id=org_id, job_name="knowledge_consolidation", status="ok",
+            started_at=started, finished_at=datetime.now(UTC), details=details,
+        )
+        await db.commit()
+    except asyncio.CancelledError:
+        raise
+    except (
+        SQLAlchemyError, IntegrationSyncError, TimeoutError, ConnectionError,
+        RuntimeError, ValueError, TypeError, OSError, ImportError, AttributeError,
+    ) as exc:
+        logger.warning(
+            "Knowledge consolidation failed org=%d category=%s",
+            org_id, scheduler_error_category(exc), exc_info=True,
+        )
+        await record_job_run(
+            db, org_id=org_id, job_name="knowledge_consolidation", status="error",
+            started_at=started, finished_at=datetime.now(UTC),
+            error=f"{type(exc).__name__}: {str(exc)[:200]}",
+        )
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+
+
 async def maybe_emit_daily_briefing_notification(db: AsyncSession, org_id: int) -> None:
     """Create a daily briefing notification with team summary (once per day per org)."""
     from app.services.notification import create_notification

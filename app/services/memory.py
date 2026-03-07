@@ -837,6 +837,31 @@ async def build_memory_context_semantic(
             db, organization_id, categories, char_limit, workspace_id=workspace_id,
         )
 
+    # Optionally boost results using knowledge graph connectivity
+    try:
+        from app.engines.intelligence.knowledge import build_knowledge_graph, rank_memories_by_relevance
+
+        graph = await build_knowledge_graph(db, organization_id, workspace_id=workspace_id)
+        # Get profile memories referenced by semantic results for re-ranking
+        profile_source_ids = [r.source_id for r in results if r.source_type == "profile_memory"]
+        if profile_source_ids and graph["edges"]:
+            from app.models.memory import ProfileMemory as _PM
+            pm_result = await db.execute(
+                select(_PM).where(_PM.id.in_(profile_source_ids))
+            )
+            profile_mems = list(pm_result.scalars().all())
+            ranked = await rank_memories_by_relevance(
+                db, organization_id, query, profile_mems, graph=graph,
+            )
+            # Rebuild results order based on graph ranking
+            ranked_ids = [m.id for m in ranked]
+            id_order = {sid: i for i, sid in enumerate(ranked_ids)}
+            results.sort(
+                key=lambda r: id_order.get(r.source_id, 999) if r.source_type == "profile_memory" else 999
+            )
+    except Exception:
+        logger.debug("Knowledge graph ranking failed, using default order", exc_info=True)
+
     # Group results by source_type for formatted output
     profile_lines: list[str] = []
     daily_lines: list[str] = []

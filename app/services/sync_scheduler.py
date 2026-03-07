@@ -61,6 +61,7 @@ from app.jobs.intelligence import (
     maybe_generate_daily_ceo_summary,
     maybe_generate_daily_empire_flow_digest,
     maybe_generate_daily_pending_digest,
+    maybe_run_knowledge_consolidation,
 )
 from app.jobs.maintenance import (
     cleanup_old_chat_messages,
@@ -95,6 +96,7 @@ _publish_due_social_posts = publish_due_social_posts
 _check_goal_deadlines = check_goal_deadlines
 _check_stale_tasks = check_stale_tasks
 _maybe_emit_daily_briefing_notification = maybe_emit_daily_briefing_notification
+_maybe_run_knowledge_consolidation = maybe_run_knowledge_consolidation
 _check_follow_up_contacts = check_follow_up_contacts
 _check_token_health_job = check_token_health_job
 _snapshot_org_trends_job = snapshot_org_trends_job
@@ -744,6 +746,9 @@ async def replay_job_for_org(db: AsyncSession, org_id: int, job_name: str) -> di
         elif job_name == "daily_empire_flow_digest":
             await _maybe_generate_daily_empire_flow_digest(db, org_id)
             result = {"ok": True}
+        elif job_name == "knowledge_consolidation":
+            await _maybe_run_knowledge_consolidation(db, org_id)
+            result = {"ok": True}
         elif job_name == "full_sync":
             await _run_integrations(db, org_id)
             result = {"ok": True}
@@ -872,6 +877,7 @@ async def _run_automation_jobs_for_org(db: AsyncSession, org_id: int) -> None:
         ("trend_snapshot", _snapshot_org_trends_job),
         ("cleanup_trend_events", _cleanup_old_trend_events),
         ("layer_snapshot", _snapshot_layer_scores_job),
+        ("knowledge_consolidation", _maybe_run_knowledge_consolidation),
         ("monitor_scheduler_slo", _monitor_scheduler_slos),
     ]
     if getattr(settings, "FEATURE_WORKFLOW_RELIABILITY", False):

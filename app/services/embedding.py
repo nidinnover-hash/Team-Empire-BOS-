@@ -175,6 +175,162 @@ def schedule_embed(
 
 # ── Retrieval ────────────────────────────────────────────────────────────────
 
+async def backfill_embeddings(
+    db: AsyncSession,
+    organization_id: int,
+    *,
+    batch_size: int = 50,
+    source_types: list[str] | None = None,
+) -> dict[str, int]:
+    """Backfill embeddings for historical memory data that doesn't have embeddings yet.
+
+    Scans profile_memory, daily_context, and clone_memory tables and generates
+    embeddings for any rows not yet in memory_embeddings.
+    Returns counts per source_type.
+    """
+    if not settings.EMBEDDING_ENABLED:
+        return {"skipped": 0, "reason": "EMBEDDING_ENABLED=false"}
+
+    # pgvector requires PostgreSQL
+    try:
+        dialect = db.bind.dialect.name if db.bind else ""
+    except Exception:
+        dialect = ""
+    if dialect == "sqlite":
+        return {"skipped": 0, "reason": "sqlite"}
+
+    types_to_process = source_types or ["profile_memory", "daily_context", "clone_memory"]
+    counts: dict[str, int] = {}
+
+    if "profile_memory" in types_to_process:
+        counts["profile_memory"] = await _backfill_profile_memory(db, organization_id, batch_size)
+
+    if "daily_context" in types_to_process:
+        counts["daily_context"] = await _backfill_daily_context(db, organization_id, batch_size)
+
+    if "clone_memory" in types_to_process:
+        counts["clone_memory"] = await _backfill_clone_memory(db, organization_id, batch_size)
+
+    return counts
+
+
+async def _backfill_profile_memory(db: AsyncSession, org_id: int, batch_size: int) -> int:
+    """Backfill embeddings for profile memory entries without embeddings."""
+    from app.models.memory import ProfileMemory
+
+    # Find profile memory IDs that don't have embeddings yet
+    existing_ids_query = (
+        select(MemoryEmbedding.source_id)
+        .where(
+            MemoryEmbedding.organization_id == org_id,
+            MemoryEmbedding.source_type == "profile_memory",
+        )
+    )
+    existing_result = await db.execute(existing_ids_query)
+    existing_ids = {row[0] for row in existing_result.all()}
+
+    entries_query = (
+        select(ProfileMemory)
+        .where(ProfileMemory.organization_id == org_id)
+        .order_by(ProfileMemory.updated_at.desc())
+        .limit(batch_size * 2)
+    )
+    entries = list((await db.execute(entries_query)).scalars().all())
+
+    count = 0
+    for entry in entries:
+        if entry.id in existing_ids:
+            continue
+        if count >= batch_size:
+            break
+        text = format_embedding_text("profile_memory", key=entry.key, value=entry.value or "")
+        result = await embed_memory(
+            db, org_id, entry.workspace_id, "profile_memory", entry.id, text,
+        )
+        if result is not None:
+            count += 1
+    return count
+
+
+async def _backfill_daily_context(db: AsyncSession, org_id: int, batch_size: int) -> int:
+    """Backfill embeddings for daily context entries without embeddings."""
+    from app.models.memory import DailyContext
+
+    existing_ids_query = (
+        select(MemoryEmbedding.source_id)
+        .where(
+            MemoryEmbedding.organization_id == org_id,
+            MemoryEmbedding.source_type == "daily_context",
+        )
+    )
+    existing_result = await db.execute(existing_ids_query)
+    existing_ids = {row[0] for row in existing_result.all()}
+
+    entries_query = (
+        select(DailyContext)
+        .where(DailyContext.organization_id == org_id)
+        .order_by(DailyContext.created_at.desc())
+        .limit(batch_size * 2)
+    )
+    entries = list((await db.execute(entries_query)).scalars().all())
+
+    count = 0
+    for entry in entries:
+        if entry.id in existing_ids:
+            continue
+        if count >= batch_size:
+            break
+        text = format_embedding_text("daily_context", context_type=entry.context_type, content=entry.content or "")
+        result = await embed_memory(
+            db, org_id, entry.workspace_id, "daily_context", entry.id, text,
+        )
+        if result is not None:
+            count += 1
+    return count
+
+
+async def _backfill_clone_memory(db: AsyncSession, org_id: int, batch_size: int) -> int:
+    """Backfill embeddings for clone memory entries without embeddings."""
+    from app.models.clone_memory import CloneMemoryEntry
+
+    existing_ids_query = (
+        select(MemoryEmbedding.source_id)
+        .where(
+            MemoryEmbedding.organization_id == org_id,
+            MemoryEmbedding.source_type == "clone_memory",
+        )
+    )
+    existing_result = await db.execute(existing_ids_query)
+    existing_ids = {row[0] for row in existing_result.all()}
+
+    entries_query = (
+        select(CloneMemoryEntry)
+        .where(CloneMemoryEntry.organization_id == org_id)
+        .order_by(CloneMemoryEntry.updated_at.desc())
+        .limit(batch_size * 2)
+    )
+    entries = list((await db.execute(entries_query)).scalars().all())
+
+    count = 0
+    for entry in entries:
+        if entry.id in existing_ids:
+            continue
+        if count >= batch_size:
+            break
+        text = format_embedding_text(
+            "clone_memory",
+            situation=entry.situation or "",
+            action_taken=entry.action_taken or "",
+            outcome=entry.outcome or "",
+        )
+        result = await embed_memory(
+            db, org_id, entry.workspace_id, "clone_memory", entry.id, text,
+        )
+        if result is not None:
+            count += 1
+    return count
+
+
 async def search_similar(
     db: AsyncSession,
     organization_id: int,
