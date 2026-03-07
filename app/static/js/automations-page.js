@@ -38,10 +38,15 @@
     document.querySelectorAll(".tab").forEach(function(btn) {
       btn.classList.toggle("active", btn.getAttribute("data-tab") === tab);
     });
-    ["triggers", "workflows", "studio"].forEach(function(name) {
+    ["triggers", "workflows", "studio", "insights"].forEach(function(name) {
       var panel = byId("panel-" + name);
       if (panel) panel.style.display = name === tab ? "" : "none";
     });
+    if (tab === "insights" && !insightsLoaded) {
+      insightsLoaded = true;
+      var periodSel = byId("insights-period");
+      fetchInsights(periodSel ? parseInt(periodSel.value, 10) : 30);
+    }
   }
 
   function initTabs() {
@@ -291,6 +296,106 @@
     });
   }
 
+  // ── Insights ──────────────────────────────────────────────────────────────
+  var insightsLoaded = false;
+
+  async function fetchInsights(days) {
+    days = days || 30;
+    try {
+      var data = await apiJson("/api/v1/automations/insights?days=" + days);
+      renderInsights(data);
+    } catch (_e) {
+      var el = byId("insights-kpis");
+      if (el) el.innerHTML = '<div class="empty">Insights not available.</div>';
+    }
+  }
+
+  function renderInsights(data) {
+    var s = data.summary || {};
+    var k = function(id, v) { var e = byId(id); if (e) e.textContent = String(v); };
+    k("ik-total", s.total_runs || 0);
+    k("ik-completed", s.completed || 0);
+    k("ik-failed", s.failed || 0);
+    k("ik-rate", s.total_runs ? Math.round(s.success_rate * 100) + "%" : "N/A");
+    k("ik-running", s.running || 0);
+    k("ik-pending", s.pending || 0);
+
+    renderDailyChart(data.daily_counts || []);
+    renderRankings(data.workflow_rankings || []);
+    renderStepPerf(data.step_performance || []);
+    renderFailures(data.failure_patterns || []);
+  }
+
+  function renderDailyChart(daily) {
+    var el = byId("insights-daily-chart");
+    if (!el) return;
+    if (!daily.length) { el.innerHTML = '<div class="empty">No run data yet.</div>'; return; }
+    var maxVal = Math.max.apply(null, daily.map(function(d) { return d.total; })) || 1;
+    var html = '<div class="daily-bars">';
+    daily.forEach(function(d) {
+      var pctOk = Math.round((d.completed / maxVal) * 100);
+      var pctFail = Math.round((d.failed / maxVal) * 100);
+      html += '<div class="daily-bar-col" title="' + esc(d.date) + ': ' + d.total + ' runs">' +
+        '<div class="daily-bar-stack">' +
+          '<div class="daily-bar ok" style="height:' + pctOk + '%"></div>' +
+          '<div class="daily-bar fail" style="height:' + pctFail + '%"></div>' +
+        '</div>' +
+        '<span>' + esc(d.date.slice(5)) + '</span>' +
+      '</div>';
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  }
+
+  function renderRankings(rankings) {
+    var el = byId("insights-rankings");
+    if (!el) return;
+    if (!rankings.length) { el.innerHTML = '<div class="empty">No workflow runs yet.</div>'; return; }
+    var html = '<table class="insights-table"><thead><tr><th>Workflow</th><th>Runs</th><th>Success</th></tr></thead><tbody>';
+    rankings.forEach(function(r) {
+      html += '<tr><td>' + esc(r.workflow_name) + '</td><td>' + r.total_runs +
+        '</td><td>' + Math.round(r.success_rate * 100) + '%</td></tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  }
+
+  function renderStepPerf(steps) {
+    var el = byId("insights-steps");
+    if (!el) return;
+    if (!steps.length) { el.innerHTML = '<div class="empty">No step data yet.</div>'; return; }
+    var html = '<table class="insights-table"><thead><tr><th>Action</th><th>Count</th><th>Avg ms</th><th>Fail %</th></tr></thead><tbody>';
+    steps.forEach(function(s) {
+      html += '<tr><td><code>' + esc(s.action_type) + '</code></td><td>' + s.total_executions +
+        '</td><td>' + (s.avg_latency_ms != null ? s.avg_latency_ms : '--') +
+        '</td><td>' + Math.round(s.failure_rate * 100) + '%</td></tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  }
+
+  function renderFailures(failures) {
+    var el = byId("insights-failures");
+    if (!el) return;
+    if (!failures.length) { el.innerHTML = '<div class="empty">No failures recorded.</div>'; return; }
+    var html = '';
+    failures.forEach(function(f) {
+      html += '<div class="failure-row">' +
+        '<div class="failure-error">' + esc((f.error_summary || "Unknown").substring(0, 120)) + '</div>' +
+        '<div class="failure-meta">' + esc(f.workflow_name) + ' &middot; ' + f.count + 'x &middot; Last: ' + fmtDate(f.last_seen) + '</div>' +
+      '</div>';
+    });
+    el.innerHTML = html;
+  }
+
+  function initInsights() {
+    var periodSel = byId("insights-period");
+    if (!periodSel) return;
+    periodSel.addEventListener("change", function() {
+      fetchInsights(parseInt(periodSel.value, 10));
+    });
+  }
+
   try {
     await bootToken();
     window.workflowApiJson = apiJson;
@@ -298,6 +403,7 @@
     initTabs();
     initModals();
     initCopilot();
+    initInsights();
     await Promise.all([fetchTriggers(), fetchWorkflows()]);
     if (window.WorkflowBuilderPage && window.WorkflowBuilderPage.init) {
       window.WorkflowBuilderPage.init({ apiJson: apiJson });

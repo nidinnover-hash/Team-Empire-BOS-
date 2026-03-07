@@ -480,6 +480,74 @@ async def maybe_run_knowledge_consolidation(db: AsyncSession, org_id: int) -> No
             await db.rollback()
 
 
+async def maybe_run_weekly_coaching(db: AsyncSession, org_id: int) -> None:
+    """Weekly coaching report generation — runs on Mondays at 10 AM IST.
+
+    Auto-generates org-level coaching report if none generated this week.
+    Also re-scores contacts for contact intelligence.
+    """
+    tz = ZoneInfo("Asia/Kolkata")
+    local_now = datetime.now(UTC).astimezone(tz)
+    # Only run on Mondays between 10-11 AM IST
+    if local_now.weekday() != 0 or local_now.hour != 10:
+        return
+
+    # Dedup: check if already ran this week
+    week_start = datetime.now(UTC) - timedelta(days=local_now.weekday())
+    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    existing = (await db.execute(
+        select(SchedulerJobRun).where(
+            SchedulerJobRun.organization_id == org_id,
+            SchedulerJobRun.job_name == "weekly_coaching",
+            SchedulerJobRun.status == "ok",
+            SchedulerJobRun.finished_at >= week_start,
+        ).limit(1)
+    )).scalar_one_or_none()
+    if existing is not None:
+        return
+
+    started = datetime.now(UTC)
+    details: dict[str, object] = {}
+    try:
+        # 1. Generate org-level coaching report
+        from app.services import ai_coaching
+        result = await ai_coaching.generate_org_improvement_plan(db, org_id=org_id)
+        details["coaching_report_id"] = result.get("report_id")
+        details["coaching_status"] = result.get("status")
+
+        # 2. Re-score contacts
+        from app.services.contact_intelligence import batch_score_contacts
+        score_result = await batch_score_contacts(db, organization_id=org_id)
+        details["contacts_scored"] = score_result.get("total_scored", 0)
+        details["contacts_updated"] = score_result.get("updated", 0)
+
+        await record_job_run(
+            db, org_id=org_id, job_name="weekly_coaching", status="ok",
+            started_at=started, finished_at=datetime.now(UTC), details=details,
+        )
+        await db.commit()
+        logger.info("Weekly coaching completed org=%d: %s", org_id, details)
+    except asyncio.CancelledError:
+        raise
+    except (
+        SQLAlchemyError, IntegrationSyncError, TimeoutError, ConnectionError,
+        RuntimeError, ValueError, TypeError, OSError, ImportError, AttributeError,
+    ) as exc:
+        logger.warning(
+            "Weekly coaching failed org=%d category=%s",
+            org_id, scheduler_error_category(exc), exc_info=True,
+        )
+        await record_job_run(
+            db, org_id=org_id, job_name="weekly_coaching", status="error",
+            started_at=started, finished_at=datetime.now(UTC),
+            error=f"{type(exc).__name__}: {str(exc)[:200]}",
+        )
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+
+
 async def maybe_emit_daily_briefing_notification(db: AsyncSession, org_id: int) -> None:
     """Create a daily briefing notification with team summary (once per day per org)."""
     from app.services.notification import create_notification

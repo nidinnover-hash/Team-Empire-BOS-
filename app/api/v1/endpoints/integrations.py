@@ -388,3 +388,17 @@ async def test_integration(
         status=status,  # type: ignore[arg-type]
         message=message,
     )
+
+
+# ── Integration Health Dashboard ────────────────────────────────────────────
+
+
+@router.get("/health-dashboard")
+async def integration_health_dashboard(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Unified health overview: per-integration status, sync freshness, error counts."""
+    from app.services.integration_health import get_full_integration_health
+
+    return await get_full_integration_health(db, organization_id=int(actor["org_id"]))

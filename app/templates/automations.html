@@ -44,6 +44,9 @@
       <button class="tab active" data-tab="triggers" type="button" aria-label="Show triggers">Triggers</button>
       <button class="tab" data-tab="workflows" type="button" aria-label="Show workflows">Workflows</button>
       <button class="tab" data-tab="studio" type="button" aria-label="Show workflow studio">Workflow Studio</button>
+      {% if feature_flags.workflow_exec_insights %}
+      <button class="tab" data-tab="insights" type="button" aria-label="Show execution insights">Insights</button>
+      {% endif %}
     </div>
 
     <!-- Triggers Panel -->
@@ -95,6 +98,51 @@
         </div>
       </div>
     </div>
+
+    <!-- Insights Panel -->
+    {% if feature_flags.workflow_exec_insights %}
+    <div id="panel-insights" class="panel" style="display:none">
+      <div class="insights-header">
+        <h2>Execution Insights</h2>
+        <select id="insights-period" class="insights-select">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+      </div>
+
+      <div class="insights-kpi-row" id="insights-kpis">
+        <div class="insights-kpi"><span>Total Runs</span><strong id="ik-total">--</strong></div>
+        <div class="insights-kpi success"><span>Completed</span><strong id="ik-completed">--</strong></div>
+        <div class="insights-kpi danger"><span>Failed</span><strong id="ik-failed">--</strong></div>
+        <div class="insights-kpi"><span>Success Rate</span><strong id="ik-rate">--</strong></div>
+        <div class="insights-kpi"><span>Running</span><strong id="ik-running">--</strong></div>
+        <div class="insights-kpi"><span>Pending</span><strong id="ik-pending">--</strong></div>
+      </div>
+
+      <div class="insights-grid">
+        <section class="insights-card">
+          <h3>Daily Run Volume</h3>
+          <div id="insights-daily-chart" class="insights-chart"></div>
+        </section>
+        <section class="insights-card">
+          <h3>Top Workflows</h3>
+          <div id="insights-rankings"></div>
+        </section>
+      </div>
+
+      <div class="insights-grid">
+        <section class="insights-card">
+          <h3>Step Performance</h3>
+          <div id="insights-steps"></div>
+        </section>
+        <section class="insights-card">
+          <h3>Failure Patterns</h3>
+          <div id="insights-failures"></div>
+        </section>
+      </div>
+    </div>
+    {% endif %}
 
     <!-- Trigger Create Modal -->
     <div id="modal-trigger" class="modal-overlay" style="display:none">

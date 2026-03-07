@@ -57,6 +57,7 @@ def _build_feature_flags() -> dict[str, bool]:
         "workflow_builder_ssr": bool(settings.FEATURE_WORKFLOW_BUILDER_SSR),
         "workflow_observability": bool(settings.FEATURE_WORKFLOW_OBSERVABILITY),
         "workflow_copilot": bool(settings.FEATURE_WORKFLOW_COPILOT),
+        "workflow_exec_insights": bool(settings.FEATURE_WORKFLOW_EXEC_INSIGHTS),
     }
 
 

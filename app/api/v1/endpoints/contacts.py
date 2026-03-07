@@ -112,6 +112,44 @@ async def list_contacts(
     return _mask_contacts_for_role(payload, actor.get("role"))
 
 
+# ── Contact Intelligence (must be before /{contact_id} parametric routes) ───
+
+
+@router.get("/intelligence")
+async def contact_intelligence(
+    stale_days: int = Query(30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Contact intelligence: pipeline analytics, stale contacts, follow-up suggestions."""
+    from app.services.contact_intelligence import get_contact_intelligence_summary
+
+    return await get_contact_intelligence_summary(
+        db, organization_id=int(actor["org_id"]), stale_days=stale_days,
+    )
+
+
+@router.post("/intelligence/rescore")
+async def rescore_contacts(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Re-score all contacts based on current attributes and activity."""
+    from app.services.contact_intelligence import batch_score_contacts
+
+    result = await batch_score_contacts(db, organization_id=int(actor["org_id"]))
+    await record_action(
+        db,
+        event_type="contacts_rescored",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="contact",
+        entity_id=None,
+        payload_json=result,
+    )
+    return result
+
+
 @router.get("/{contact_id}", response_model=ContactRead)
 async def get_contact(
     contact_id: int,

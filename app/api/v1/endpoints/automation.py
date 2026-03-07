@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.automation.bootstrap import (
     workflow_approval_pipeline_enabled,
+    workflow_exec_insights_enabled,
     workflow_runs_enabled,
     workflow_v2_enabled,
 )
@@ -52,6 +53,11 @@ def _require_workflow_approval_pipeline() -> None:
 
 def _require_workflow_copilot() -> None:
     if not settings.FEATURE_WORKFLOW_COPILOT:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+def _require_workflow_exec_insights() -> None:
+    if not workflow_exec_insights_enabled():
         raise HTTPException(status_code=404, detail="Not found")
 
 
@@ -602,3 +608,21 @@ async def workflow_copilot_plan_and_save(
         payload_json={"intent": data.intent[:500], "confidence": payload.get("confidence")},
     )
     return WorkflowDefinitionRead.model_validate(row)
+
+
+# ── Execution Insights ──────────────────────────────────────────────────────
+
+
+@router.get("/insights")
+async def get_workflow_insights(
+    days: int = Query(30, ge=1, le=365),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Workflow execution analytics: success rates, step timings, failure patterns."""
+    _require_workflow_exec_insights()
+    org_id = int(actor["org_id"])
+
+    from app.services.workflow_insights import get_full_insights
+
+    return await get_full_insights(db, organization_id=org_id, days=days)

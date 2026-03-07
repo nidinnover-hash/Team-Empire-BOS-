@@ -17,3 +17,11 @@ def workflow_approval_pipeline_enabled() -> bool:
         and settings.FEATURE_WORKFLOW_RUNS
         and settings.FEATURE_WORKFLOW_APPROVAL_PIPELINE
     )
+
+
+def workflow_exec_insights_enabled() -> bool:
+    return bool(
+        settings.FEATURE_WORKFLOW_V2
+        and settings.FEATURE_WORKFLOW_RUNS
+        and settings.FEATURE_WORKFLOW_EXEC_INSIGHTS
+    )
