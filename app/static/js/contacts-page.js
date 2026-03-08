@@ -187,6 +187,86 @@
     };
   }
 
+  // ── Contact Intelligence ─────────────────────────────────────────
+  async function loadIntelligence() {
+    var loading = $("intel-loading");
+    var content = $("intel-content");
+    if (!loading || !content) return;
+    try {
+      var data = await fetch("/api/v1/contacts/intelligence", { headers: headers() });
+      if (!data.ok) { loading.textContent = "Could not load intelligence."; return; }
+      var intel = await data.json();
+      loading.style.display = "none";
+      content.style.display = "";
+      renderIntelKpis(intel);
+      renderStaleContacts(intel.stale_contacts || []);
+      renderFollowUpSuggestions(intel.follow_up_suggestions || []);
+    } catch (_e) {
+      loading.textContent = "Could not load intelligence.";
+    }
+  }
+
+  function renderIntelKpis(d) {
+    var grid = $("intel-grid");
+    if (!grid) return;
+    var p = d.pipeline || {};
+    var items = [
+      { label: "Total Contacts", val: p.total_contacts || 0, cls: "" },
+      { label: "Avg Score", val: p.avg_score != null ? Math.round(p.avg_score) : 0, cls: (p.avg_score || 0) >= 50 ? "ok" : "warn" },
+      { label: "Total Value", val: "$" + Number(p.total_deal_value || 0).toLocaleString(), cls: "" },
+      { label: "Stale", val: d.stale_count || 0, cls: (d.stale_count || 0) > 0 ? "warn" : "" },
+      { label: "Follow-ups", val: d.follow_up_count || 0, cls: (d.follow_up_count || 0) > 0 ? "bad" : "ok" },
+    ];
+    grid.innerHTML = items.map(function (it) {
+      return '<div class="intel-kpi ' + it.cls + '">' +
+        '<div class="ik-val">' + esc(it.val) + '</div>' +
+        '<div class="ik-label">' + esc(it.label) + '</div></div>';
+    }).join("");
+  }
+
+  function renderStaleContacts(stale) {
+    var el = $("intel-stale");
+    if (!el) return;
+    if (!stale.length) { el.innerHTML = '<span class="small" style="color:var(--text-faint)">No stale contacts</span>'; return; }
+    el.innerHTML = '<ul class="intel-list">' + stale.slice(0, 10).map(function (c) {
+      return '<li><span class="il-name">' + esc(c.name) + '</span>' +
+        '<span class="il-meta">' + esc(c.pipeline_stage) + ' &middot; score ' + (c.lead_score || 0) +
+        ' &middot; ' + (c.days_since_contact || '?') + 'd ago</span></li>';
+    }).join("") + '</ul>';
+  }
+
+  function renderFollowUpSuggestions(items) {
+    var el = $("intel-followups");
+    if (!el) return;
+    if (!items.length) { el.innerHTML = '<span class="small" style="color:var(--text-faint)">No follow-up suggestions</span>'; return; }
+    el.innerHTML = '<ul class="intel-list">' + items.slice(0, 10).map(function (c) {
+      var reasonCls = c.reason === "overdue_follow_up" ? "overdue" : "high_score";
+      var reasonLabel = c.reason === "overdue_follow_up" ? "overdue" : "high score";
+      return '<li><span class="il-name">' + esc(c.name) + '</span>' +
+        '<span><span class="il-reason ' + reasonCls + '">' + reasonLabel + '</span> ' +
+        '<span class="il-meta">score ' + (c.lead_score || 0) + '</span></span></li>';
+    }).join("") + '</ul>';
+  }
+
+  async function rescoreContacts() {
+    var btn = $("intel-rescore-btn");
+    if (btn) btn.disabled = true;
+    try {
+      var resp = await fetch("/api/v1/contacts/intelligence/rescore", { method: "POST", headers: headers() });
+      if (resp.ok) {
+        var data = await resp.json();
+        if (window.showToast) window.showToast("Rescored " + data.total_scored + " contacts", "toast-success");
+        await Promise.all([loadContacts(), loadIntelligence()]);
+      }
+    } catch (_e) { /* ignore */ }
+    if (btn) btn.disabled = false;
+  }
+
+  var rescoreBtn = $("intel-rescore-btn");
+  if (rescoreBtn) rescoreBtn.onclick = rescoreContacts;
+  var intelRefresh = $("intel-refresh-btn");
+  if (intelRefresh) intelRefresh.onclick = loadIntelligence;
+
   // ── Init ──────────────────────────────────────────────────────────
   await loadRole();
   if (!canViewPipeline) {
@@ -195,6 +275,6 @@
       funnel.innerHTML = '<div class="kpi" style="width:100%"><div class="label">Pipeline</div><div class="val" style="font-size:.95rem">Restricted for your role</div></div>';
     }
   }
-  await Promise.all([loadContacts(), loadPipelineSummary(), loadFollowUpCount()]);
+  await Promise.all([loadContacts(), loadPipelineSummary(), loadFollowUpCount(), loadIntelligence()]);
   if (typeof lucide !== "undefined") lucide.createIcons();
 })();

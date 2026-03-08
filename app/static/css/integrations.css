@@ -179,6 +179,39 @@
 .auto-refresh-toggle { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--text-xs); color: var(--text-muted); user-select: none; }
 .auto-refresh-toggle input { accent-color: var(--brand); }
 
+/* ── Health Dashboard ─────────────────────────────────────────────────── */
+.health-kpi-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.6rem; margin-bottom: 0.8rem;
+}
+.health-kpi {
+  border: none; border-radius: var(--radius);
+  padding: 0.6rem 0.7rem; background: var(--surface-alt);
+  box-shadow: var(--shadow-sm); text-align: center;
+}
+.health-kpi .hk-val { font-size: var(--text-lg); font-weight: 700; color: var(--text); }
+.health-kpi .hk-label { font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); margin-top: 0.15rem; }
+.health-kpi.ok .hk-val { color: var(--ok); }
+.health-kpi.warn .hk-val { color: var(--warn); }
+.health-kpi.bad .hk-val { color: var(--danger); }
+.health-score-bar { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
+.health-score-bar .hsb-track {
+  flex: 1; height: 8px; border-radius: 999px;
+  background: var(--surface-alt); overflow: hidden;
+}
+.health-score-bar .hsb-fill { height: 100%; border-radius: 999px; transition: width 0.5s ease; }
+.health-score-bar .hsb-label { font-size: var(--text-sm); font-weight: 600; min-width: 3.5rem; text-align: right; }
+.health-pill {
+  display: inline-block; border-radius: 999px; padding: 0.1rem 0.45rem;
+  font-size: var(--text-2xs); font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; border: 1px solid;
+}
+.health-pill.healthy { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
+.health-pill.degraded { color: var(--warn); border-color: var(--warn-border); background: var(--warn-soft); }
+.health-pill.error { color: var(--danger); border-color: var(--danger-border); background: var(--danger-soft); }
+.health-pill.disconnected { color: var(--text-faint); border-color: var(--line); background: var(--surface-alt); }
+.health-pill.never_synced { color: var(--text-muted); border-color: var(--line); background: var(--surface-alt); }
+
 /* ── Toast ─────────────────────────────────────────────────────────────── */
 #toast-container {
   position: fixed; top: 1.1rem; right: 1.2rem; z-index: 9999;

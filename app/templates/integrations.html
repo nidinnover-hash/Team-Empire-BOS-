@@ -223,7 +223,38 @@
     </div>
   </section>
 
-  <!-- Row 3: AI Provider Readiness -->
+  <!-- Row 3: Integration Health Dashboard -->
+  <section style="margin-top:1rem">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">Health Dashboard</div>
+        <button class="btn subtle" type="button" id="refresh-health-btn">Refresh</button>
+      </div>
+      <div class="card-body">
+        <div id="health-dashboard-loading" class="small">Loading health dashboard...</div>
+        <div id="health-dashboard" style="display:none">
+          <div class="health-kpi-row" id="health-kpis"></div>
+          <div class="health-score-bar" id="health-score-bar"></div>
+          <div style="margin-top:0.8rem">
+            <div class="card-title" style="margin-bottom:0.5rem">Per-Integration Health</div>
+            <table class="table" id="health-detail-table">
+              <thead><tr>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Health</th>
+                <th>Last Sync</th>
+                <th>Errors</th>
+                <th>Age (hrs)</th>
+              </tr></thead>
+              <tbody id="health-detail-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Row 4: AI Provider Readiness -->
   <section style="margin-top:1rem">
     <div class="card">
       <div class="card-head">

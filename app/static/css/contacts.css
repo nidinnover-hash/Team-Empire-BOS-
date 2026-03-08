@@ -1,0 +1,62 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Contacts — Intelligence Panel
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Intelligence Panel ──────────────────────────────────────────────────── */
+.intel-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--line-soft);
+}
+.intel-actions { display: flex; gap: 0.4rem; }
+.intel-body { padding: 0.8rem 0.9rem; }
+
+.intel-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.55rem; margin-bottom: 0.6rem;
+}
+.intel-kpi {
+  border: none; border-radius: var(--radius);
+  padding: 0.55rem 0.6rem; background: var(--surface-alt);
+  box-shadow: var(--shadow-sm); text-align: center;
+}
+.intel-kpi .ik-val { font-size: var(--text-lg); font-weight: 700; color: var(--text); }
+.intel-kpi .ik-label { font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); margin-top: 0.1rem; }
+.intel-kpi.ok .ik-val { color: var(--ok); }
+.intel-kpi.warn .ik-val { color: var(--warn); }
+.intel-kpi.bad .ik-val { color: var(--danger); }
+
+.intel-section { margin-top: 0.8rem; }
+.intel-section-title {
+  font-size: var(--text-xs); text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text-faint); margin-bottom: 0.4rem;
+}
+
+.intel-list { list-style: none; padding: 0; margin: 0; }
+.intel-list li {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--line-soft);
+  font-size: var(--text-sm); color: var(--text);
+}
+.intel-list li:last-child { border-bottom: none; }
+.intel-list .il-name { font-weight: 500; }
+.intel-list .il-meta { font-size: var(--text-xs); color: var(--text-muted); }
+.intel-list .il-reason {
+  display: inline-block; border-radius: 999px; padding: 0.08rem 0.4rem;
+  font-size: var(--text-2xs); font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.il-reason.overdue { color: var(--danger); border: 1px solid var(--danger-border); background: var(--danger-soft); }
+.il-reason.stale { color: var(--warn); border: 1px solid var(--warn-border); background: var(--warn-soft); }
+.il-reason.high_score { color: var(--ok); border: 1px solid var(--ok-border); background: var(--ok-soft); }
+
+/* ── Pipeline Stage Colors ───────────────────────────────────────────────── */
+.stage-bar { display: flex; gap: 0.3rem; margin-bottom: 0.3rem; }
+.stage-bar .sb-seg {
+  height: 6px; border-radius: 999px; min-width: 4px;
+  transition: width 0.4s ease;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .intel-grid { grid-template-columns: repeat(2, 1fr); }
+}

@@ -1184,6 +1184,81 @@
     }
   });
 
+  // ── Health Dashboard ─────────────────────────────────────────────────────
+  async function fetchHealthDashboard() {
+    var loading = byId("health-dashboard-loading");
+    var dashboard = byId("health-dashboard");
+    if (!loading || !dashboard) return;
+    try {
+      var data = await apiJson("/api/v1/integrations/health-dashboard");
+      if (!data || !data.summary) return;
+      loading.style.display = "none";
+      dashboard.style.display = "";
+      renderHealthKpis(data.summary);
+      renderHealthScore(data.summary.health_score);
+      renderHealthDetails(data.integrations || []);
+    } catch (_e) {
+      loading.textContent = "Could not load health dashboard.";
+    }
+  }
+
+  function renderHealthKpis(s) {
+    var kpis = byId("health-kpis");
+    if (!kpis) return;
+    var items = [
+      { label: "Total", val: s.total, cls: "" },
+      { label: "Connected", val: s.connected, cls: "" },
+      { label: "Healthy", val: s.healthy, cls: "ok" },
+      { label: "Degraded", val: s.degraded, cls: s.degraded > 0 ? "warn" : "" },
+      { label: "Errors", val: s.errored, cls: s.errored > 0 ? "bad" : "" },
+      { label: "Disconnected", val: s.disconnected, cls: s.disconnected > 0 ? "bad" : "" },
+    ];
+    kpis.innerHTML = items.map(function (it) {
+      return '<div class="health-kpi ' + it.cls + '">' +
+        '<div class="hk-val">' + it.val + '</div>' +
+        '<div class="hk-label">' + it.label + '</div></div>';
+    }).join("");
+  }
+
+  function renderHealthScore(score) {
+    var bar = byId("health-score-bar");
+    if (!bar) return;
+    var pct = Math.round(score * 100);
+    var color = pct >= 80 ? "var(--ok)" : pct >= 50 ? "var(--warn)" : "var(--danger)";
+    bar.innerHTML =
+      '<span class="hsb-label" style="color:' + color + '">' + pct + '%</span>' +
+      '<div class="hsb-track"><div class="hsb-fill" style="width:' + pct + '%;background:' + color + '"></div></div>';
+  }
+
+  function renderHealthDetails(integrations) {
+    var tbody = byId("health-detail-tbody");
+    if (!tbody) return;
+    if (!integrations.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;opacity:.5">No integrations</td></tr>';
+      return;
+    }
+    tbody.innerHTML = integrations.map(function (it) {
+      var healthCls = it.health || "disconnected";
+      return '<tr>' +
+        '<td>' + esc(it.type) + '</td>' +
+        '<td><span class="pill ' + (it.status === "connected" ? "connected" : "disconnected") + '">' + esc(it.status) + '</span></td>' +
+        '<td><span class="health-pill ' + healthCls + '">' + esc(it.health) + '</span></td>' +
+        '<td>' + (it.last_sync_at ? new Date(it.last_sync_at).toLocaleString() : '--') + '</td>' +
+        '<td>' + (it.sync_error_count || 0) + '</td>' +
+        '<td>' + (it.age_hours != null ? it.age_hours : '--') + '</td>' +
+        '</tr>';
+    }).join("");
+  }
+
+  function esc(val) {
+    var s = String(val == null ? "" : val);
+    return s.replace(/[&<>"']/g, function (c) {
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  bindClick("refresh-health-btn", function () { fetchHealthDashboard(); });
+
   // ── Boot ───────────────────────────────────────────────────────────────────
   try {
     if (window.PCUI && window.PCUI.loadRoleCapabilities) {
@@ -1197,6 +1272,7 @@
     await bootToken();
     await refreshIntegrationPanels();
     await fetchAiStatus();
+    await fetchHealthDashboard();
     startAutoRefresh();
     // Show success toast if redirected from Gmail OAuth callback
     var params = new URLSearchParams(window.location.search);

@@ -7,6 +7,7 @@
   <title>Contacts - Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
   <link rel="stylesheet" href="/static/css/shared.css" />
+  <link rel="stylesheet" href="/static/css/contacts.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
 </head>
 <body>
@@ -39,6 +40,31 @@
       {% else %}
         <div class="kpi" style="width:100%"><div class="label">Pipeline</div><div class="val" style="font-size:.95rem">Restricted for your role</div></div>
       {% endif %}
+    </div>
+
+    <!-- Contact Intelligence Panel -->
+    <div class="card intel-panel" style="margin-top:1rem" id="intel-panel">
+      <div class="intel-head">
+        <div class="card-title">Contact Intelligence</div>
+        <div class="intel-actions">
+          <button class="btn subtle" type="button" id="intel-rescore-btn">Rescore All</button>
+          <button class="btn subtle" type="button" id="intel-refresh-btn">Refresh</button>
+        </div>
+      </div>
+      <div class="intel-body">
+        <div id="intel-loading" class="small">Loading intelligence...</div>
+        <div id="intel-content" style="display:none">
+          <div class="intel-grid" id="intel-grid"></div>
+          <div class="intel-section" id="intel-stale-section">
+            <div class="intel-section-title">Stale Contacts (no activity 30+ days)</div>
+            <div id="intel-stale" class="small">None</div>
+          </div>
+          <div class="intel-section" id="intel-followups-section">
+            <div class="intel-section-title">Follow-up Suggestions</div>
+            <div id="intel-followups" class="small">None</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="filter-bar" style="margin-top:1rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
