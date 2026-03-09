@@ -58,3 +58,51 @@ async def handle_batch_score_contacts(
     async with factory() as db:
         result = await batch_score_contacts(db, organization_id=organization_id, limit=limit)
         logger.info("Batch score contacts result for org %d: %s", organization_id, result)
+
+
+@handler("run_scheduled_workflows")
+async def handle_run_scheduled_workflows(
+    organization_id: int,
+) -> None:
+    """Check for published scheduled workflows that are due and run them."""
+    from app.services.automation_scheduler import run_due_scheduled_workflows
+
+    count = await run_due_scheduled_workflows(organization_id)
+    if count:
+        logger.info("Ran %d scheduled workflows for org %d", count, organization_id)
+
+
+@handler("run_workflow")
+async def handle_run_workflow(
+    organization_id: int,
+    workflow_definition_id: int,
+    input_json: dict | None = None,
+    trigger_source: str = "scheduled",
+    actor_user_id: int = 0,
+) -> None:
+    """Execute a single published workflow definition via the job queue."""
+    from app.db.session import get_session_factory
+    from app.services import automation as automation_service
+
+    factory = get_session_factory()
+    async with factory() as db:
+        # Use actor_user_id=0 for system-triggered runs (scheduler, signals)
+        run = await automation_service.run_workflow_definition(
+            db,
+            organization_id=organization_id,
+            workspace_id=None,
+            actor_user_id=actor_user_id or 0,
+            workflow_definition_id=workflow_definition_id,
+            trigger_source=trigger_source,
+            input_json=input_json or {},
+        )
+        if run:
+            logger.info(
+                "Workflow run #%d started for definition %d (org %d)",
+                run.id, workflow_definition_id, organization_id,
+            )
+        else:
+            logger.warning(
+                "Failed to start workflow definition %d for org %d",
+                workflow_definition_id, organization_id,
+            )

@@ -295,3 +295,84 @@
   .insights-grid { grid-template-columns: 1fr; }
   .insights-kpi-row { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ── Toast Notifications ─────────────────────────────────────────────── */
+.auto-toast {
+  position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999;
+  padding: .6rem 1rem; border-radius: var(--radius, 8px);
+  font-size: var(--text-sm); color: #fff; max-width: 360px;
+  opacity: 0; transform: translateY(10px);
+  transition: opacity .2s, transform .2s;
+  pointer-events: none;
+}
+.auto-toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.auto-toast.success { background: var(--ok, #38a169); }
+.auto-toast.error { background: var(--danger, #e53e3e); }
+.auto-toast.info { background: var(--brand, #3182ce); }
+
+/* ── Empty State ─────────────────────────────────────────────────────── */
+.empty-state {
+  text-align: center; padding: 2rem 1rem; color: var(--text-muted);
+}
+.empty-state .empty-icon { font-size: 2rem; margin-bottom: .4rem; }
+.empty-state p { margin: 0 0 .2rem; font-weight: 600; font-size: var(--text-base); color: var(--text); }
+.empty-state span { font-size: var(--text-sm); }
+
+/* ── Section Title ───────────────────────────────────────────────────── */
+.section-title {
+  font-size: .95rem; font-weight: 600; margin: .8rem 0 .5rem;
+  color: var(--text); border-bottom: 1px solid var(--border, #d6d6d6);
+  padding-bottom: .3rem;
+}
+
+/* ── Template Gallery ────────────────────────────────────────────────── */
+.template-gallery-section { margin-top: 1rem; }
+.template-gallery-section h3 { font-size: .95rem; margin: 0 0 .6rem; }
+.template-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: .6rem;
+}
+.template-card {
+  background: var(--surface); border-radius: var(--radius); padding: .7rem .9rem;
+  box-shadow: var(--shadow-sm); cursor: pointer; border: 1px solid transparent;
+  transition: border-color .15s, box-shadow .15s;
+}
+.template-card:hover {
+  border-color: var(--brand, #3182ce);
+  box-shadow: 0 0 0 2px rgba(49, 130, 206, .12);
+}
+.template-category {
+  font-size: .65rem; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--brand, #3182ce); font-weight: 600; margin-bottom: .2rem;
+}
+.template-name { font-weight: 600; font-size: var(--text-sm); color: var(--text); }
+.template-desc { font-size: var(--text-xs); color: var(--text-muted); margin: .15rem 0 .3rem; }
+
+/* ── Risk Pills ──────────────────────────────────────────────────────── */
+.pill-risk-high { background: color-mix(in srgb, var(--danger, #e53e3e) 15%, transparent); color: var(--danger, #e53e3e); }
+.pill-risk-med { background: color-mix(in srgb, #ecc94b 15%, transparent); color: #b7791f; }
+.pill-risk-low { background: color-mix(in srgb, var(--ok, #38a169) 15%, transparent); color: var(--ok, #38a169); }
+
+/* ── Step Chip Variants ──────────────────────────────────────────────── */
+.step-chip-ok { background: color-mix(in srgb, var(--ok, #38a169) 18%, var(--surface)); }
+.step-chip-fail { background: color-mix(in srgb, var(--danger, #e53e3e) 18%, var(--surface)); }
+.step-chip-run { background: color-mix(in srgb, var(--brand, #3182ce) 18%, var(--surface)); }
+
+/* ── Job Queue Status Bar ────────────────────────────────────────────── */
+.jq-status-bar {
+  display: flex; align-items: center; gap: .5rem;
+  font-size: var(--text-xs); color: var(--text-faint);
+  padding: .3rem .6rem; margin-bottom: .6rem;
+}
+.jq-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.jq-dot.jq-running { background: var(--ok, #38a169); }
+.jq-dot.jq-stopped { background: var(--text-faint, #999); }
+.jq-dead { color: var(--danger, #e53e3e); font-weight: 600; }
+
+/* ── Published status card variant ───────────────────────────────────── */
+.auto-card.status-published { border-left-color: var(--brand, #3182ce); }
+.auto-card.status-archived { border-left-color: var(--text-faint); opacity: .6; }
+.auto-card.status-awaiting_approval { border-left-color: #ecc94b; }
+.auto-card.status-pending { border-left-color: var(--text-faint); }

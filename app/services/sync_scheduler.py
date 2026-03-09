@@ -896,6 +896,14 @@ async def _run_automation_jobs_for_org(db: AsyncSession, org_id: int) -> None:
             )
 
         jobs.append(("workflow_recovery", _workflow_recovery_job))
+
+    if getattr(settings, "FEATURE_WORKFLOW_V2", False):
+        from app.services.automation_scheduler import run_due_scheduled_workflows
+
+        async def _scheduled_workflows_job(_job_db: AsyncSession, sched_org_id: int) -> int:
+            return await run_due_scheduled_workflows(sched_org_id)
+
+        jobs.append(("scheduled_workflows", _scheduled_workflows_job))
     for job_name, job_fn in jobs:
         try:
             await job_fn(db, org_id)

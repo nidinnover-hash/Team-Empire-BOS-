@@ -2,10 +2,21 @@
   var token = null;
   var triggers = [];
   var workflows = [];
+  var definitions = [];
 
   function byId(id) { return document.getElementById(id); }
   function esc(s) { return window.PCUI ? window.PCUI.escapeHtml(s) : String(s).replace(/[&<>"']/g, function(c) { return "&#" + c.charCodeAt(0) + ";"; }); }
   function fmtDate(d) { if (!d) return "--"; try { return new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch (_e) { return "--"; } }
+
+  // ── Toast Notification ────────────────────────────────────────────────────
+  function toast(msg, type) {
+    var el = document.createElement("div");
+    el.className = "auto-toast " + (type || "info");
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(function() { el.classList.add("show"); }, 10);
+    setTimeout(function() { el.classList.remove("show"); setTimeout(function() { el.remove(); }, 300); }, 3000);
+  }
 
   async function apiJson(path, opts) {
     if (window.PCAPI && window.PCAPI.safeFetchJson) {
@@ -47,6 +58,10 @@
       var periodSel = byId("insights-period");
       fetchInsights(periodSel ? parseInt(periodSel.value, 10) : 30);
     }
+    if (tab === "workflows" && !definitionsLoaded) {
+      definitionsLoaded = true;
+      fetchDefinitions();
+    }
   }
 
   function initTabs() {
@@ -57,6 +72,8 @@
     });
   }
 
+  // ── Triggers ────────────────────────────────────────────────────────────
+
   async function fetchTriggers() {
     try { triggers = await apiJson("/api/v1/automations/triggers"); } catch (_e) { triggers = []; }
     renderTriggers();
@@ -66,7 +83,7 @@
     var el = byId("trigger-list");
     if (!el) return;
     if (!triggers.length) {
-      el.innerHTML = '<div class="empty">No triggers yet. Create one to automate events.</div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#9889;</div><p>No triggers yet</p><span>Triggers fire automatically when events happen — like a new contact or task completion.</span></div>';
       updateKpis();
       return;
     }
@@ -111,17 +128,21 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_active: !t.is_active }),
       });
+      toast(t.is_active ? "Trigger disabled" : "Trigger enabled", "success");
       await fetchTriggers();
-    } catch (e) { alert("Failed to update trigger: " + (e.message || e)); }
+    } catch (e) { toast("Failed to update trigger: " + (e.message || e), "error"); }
   }
 
   async function deleteTrigger(id) {
     if (!confirm("Delete this trigger?")) return;
     try {
       await apiJson("/api/v1/automations/triggers/" + id, { method: "DELETE" });
+      toast("Trigger deleted", "success");
       await fetchTriggers();
-    } catch (e) { alert("Failed to delete trigger: " + (e.message || e)); }
+    } catch (e) { toast("Failed to delete trigger: " + (e.message || e), "error"); }
   }
+
+  // ── V1 Workflows ────────────────────────────────────────────────────────
 
   async function fetchWorkflows() {
     try { workflows = await apiJson("/api/v1/automations/workflows"); } catch (_e) { workflows = []; }
@@ -132,7 +153,7 @@
     var el = byId("workflow-list");
     if (!el) return;
     if (!workflows.length) {
-      el.innerHTML = '<div class="empty">No workflows yet. Create one to orchestrate multi-step processes.</div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128736;</div><p>No legacy workflows</p><span>Use the Workflow Studio tab to build modern multi-step automations with approval gates.</span></div>';
       updateKpis();
       return;
     }
@@ -166,8 +187,133 @@
   async function runWorkflow(id) {
     try {
       await apiJson("/api/v1/automations/workflows/" + id + "/run", { method: "POST" });
+      toast("Workflow started", "success");
       await fetchWorkflows();
-    } catch (e) { alert("Failed to run workflow: " + (e.message || e)); }
+    } catch (e) { toast("Failed to run workflow: " + (e.message || e), "error"); }
+  }
+
+  // ── V2 Definitions ────────────────────────────────────────────────────────
+
+  var definitionsLoaded = false;
+
+  async function fetchDefinitions() {
+    try { definitions = await apiJson("/api/v1/automations/workflow-definitions"); } catch (_e) { definitions = []; }
+    renderDefinitions();
+  }
+
+  function renderDefinitions() {
+    var el = byId("definitions-list");
+    if (!el) return;
+    if (!definitions.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128221;</div><p>No workflow definitions</p><span>Create one using the Studio builder, copilot, or start from a template below.</span></div>';
+      return;
+    }
+    var html = "";
+    definitions.forEach(function(d) {
+      var steps = Array.isArray(d.steps_json) ? d.steps_json : [];
+      var riskCls = d.risk_level === "high" ? "pill-risk-high" : d.risk_level === "low" ? "pill-risk-low" : "pill-risk-med";
+      html += '<div class="auto-card status-' + esc(d.status) + '">' +
+        '<div class="auto-card-body">' +
+          '<div class="auto-card-name">' + esc(d.name) +
+            ' <span class="pill">' + esc(d.status.toUpperCase()) + '</span>' +
+            ' <span class="pill ' + riskCls + '">' + esc(d.risk_level) + '</span>' +
+          '</div>' +
+          (d.description ? '<div class="auto-card-desc">' + esc(d.description) + '</div>' : '') +
+          '<div class="auto-card-meta">' +
+            '<span>v' + (d.version || 1) + '</span>' +
+            '<span>' + steps.length + ' steps</span>' +
+            '<span>Trigger: ' + esc(d.trigger_mode) + '</span>' +
+            (d.published_at ? '<span>Published: ' + fmtDate(d.published_at) + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="auto-card-actions">' +
+          (d.status === "draft" ? '<button class="btn-primary" data-publish-def="' + d.id + '" type="button">Publish</button>' : '') +
+          (d.status === "published" ? '<button class="btn-primary" data-run-def="' + d.id + '" type="button">Run</button>' : '') +
+        '</div>' +
+      '</div>';
+    });
+    el.innerHTML = html;
+
+    el.querySelectorAll("[data-publish-def]").forEach(function(btn) {
+      btn.addEventListener("click", function() { publishDefinition(parseInt(btn.getAttribute("data-publish-def"), 10)); });
+    });
+    el.querySelectorAll("[data-run-def]").forEach(function(btn) {
+      btn.addEventListener("click", function() { runDefinition(parseInt(btn.getAttribute("data-run-def"), 10)); });
+    });
+  }
+
+  async function publishDefinition(id) {
+    try {
+      await apiJson("/api/v1/automations/workflow-definitions/" + id + "/publish", { method: "POST" });
+      toast("Workflow published successfully", "success");
+      await fetchDefinitions();
+    } catch (e) { toast("Failed to publish: " + (e.message || e), "error"); }
+  }
+
+  async function runDefinition(id) {
+    try {
+      await apiJson("/api/v1/automations/workflow-definitions/" + id + "/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input_json: {}, trigger_source: "manual" }),
+      });
+      toast("Workflow run started", "success");
+      showTab("studio");
+    } catch (e) { toast("Failed to start run: " + (e.message || e), "error"); }
+  }
+
+  // ── Templates ─────────────────────────────────────────────────────────────
+
+  async function fetchTemplates() {
+    var el = byId("template-gallery");
+    if (!el) return;
+    try {
+      var templates = await apiJson("/api/v1/automations/templates");
+      if (!templates.length) { el.style.display = "none"; return; }
+      var html = '<div class="template-grid">';
+      templates.forEach(function(t) {
+        html += '<div class="template-card" data-use-template="' + esc(t.id) + '">' +
+          '<div class="template-category">' + esc(t.category) + '</div>' +
+          '<div class="template-name">' + esc(t.name) + '</div>' +
+          '<div class="template-desc">' + esc(t.description) + '</div>' +
+          '<div class="auto-card-meta">' +
+            '<span>' + t.step_count + ' steps</span>' +
+            '<span>' + esc(t.trigger_mode) + '</span>' +
+            '<span class="pill ' + (t.risk_level === "high" ? "pill-risk-high" : t.risk_level === "low" ? "pill-risk-low" : "pill-risk-med") + '">' + esc(t.risk_level) + '</span>' +
+          '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+      el.innerHTML = '<h3>Quick Start Templates</h3>' + html;
+      el.querySelectorAll("[data-use-template]").forEach(function(card) {
+        card.addEventListener("click", function() { useTemplate(card.getAttribute("data-use-template")); });
+      });
+    } catch (_e) { el.style.display = "none"; }
+  }
+
+  async function useTemplate(templateId) {
+    try {
+      var saved = await apiJson("/api/v1/automations/templates/" + templateId + "/create", { method: "POST" });
+      toast('Draft "' + saved.name + '" created from template', "success");
+      definitionsLoaded = false;
+      showTab("workflows");
+      await fetchDefinitions();
+    } catch (e) { toast("Failed to create from template: " + (e.message || e), "error"); }
+  }
+
+  // ── Job Queue Status ──────────────────────────────────────────────────────
+
+  async function fetchJobQueueStats() {
+    var el = byId("jq-status");
+    if (!el) return;
+    try {
+      var stats = await apiJson("/api/v1/automations/job-queue-stats");
+      var workerStatus = stats.worker_running ? "running" : "stopped";
+      el.innerHTML =
+        '<span class="jq-dot jq-' + workerStatus + '"></span>' +
+        '<span>Queue: ' + (stats.pending || 0) + ' pending, ' + (stats.running || 0) + ' running</span>' +
+        (stats.dead > 0 ? '<span class="jq-dead">' + stats.dead + ' dead</span>' : '');
+    } catch (_e) { el.innerHTML = '<span class="jq-dot jq-stopped"></span><span>Queue unavailable</span>'; }
   }
 
   function updateKpis() {
@@ -175,10 +321,11 @@
     var totalFires = triggers.reduce(function(s, t) { return s + (t.fire_count || 0); }, 0);
     var running = workflows.filter(function(w) { return w.status === "running"; }).length;
     var completed = workflows.filter(function(w) { return w.status === "completed"; }).length;
+    var publishedDefs = definitions.filter(function(d) { return d.status === "published"; }).length;
     var k = function(id, v) { var e = byId(id); if (e) e.textContent = String(v); };
     k("k-triggers", activeTriggers);
     k("k-fires", totalFires);
-    k("k-running", running);
+    k("k-running", running + publishedDefs);
     k("k-completed", completed);
   }
 
@@ -210,8 +357,9 @@
         });
         triggerModal.style.display = "none";
         f.reset();
+        toast("Trigger created", "success");
         await fetchTriggers();
-      } catch (err) { alert("Failed to create trigger: " + (err.message || err)); }
+      } catch (err) { toast("Failed to create trigger: " + (err.message || err), "error"); }
     });
 
     byId("form-workflow").addEventListener("submit", async function(e) {
@@ -219,8 +367,8 @@
       var f = e.target;
       var stepsRaw = f.steps.value.trim();
       var steps;
-      try { steps = JSON.parse(stepsRaw); } catch (_e) { alert("Steps must be valid JSON array"); return; }
-      if (!Array.isArray(steps) || !steps.length) { alert("Steps must be a non-empty array"); return; }
+      try { steps = JSON.parse(stepsRaw); } catch (_e) { toast("Steps must be valid JSON array", "error"); return; }
+      if (!Array.isArray(steps) || !steps.length) { toast("Steps must be a non-empty array", "error"); return; }
       try {
         await apiJson("/api/v1/automations/workflows", {
           method: "POST",
@@ -233,8 +381,9 @@
         });
         workflowModal.style.display = "none";
         f.reset();
+        toast("Workflow created", "success");
         await fetchWorkflows();
-      } catch (err) { alert("Failed to create workflow: " + (err.message || err)); }
+      } catch (err) { toast("Failed to create workflow: " + (err.message || err), "error"); }
     });
   }
 
@@ -249,7 +398,7 @@
       if (!intent) return;
       copilotBtn.disabled = true;
       copilotBtn.textContent = "Generating...";
-      if (copilotResult) copilotResult.innerHTML = '<div class="empty">Thinking...</div>';
+      if (copilotResult) copilotResult.innerHTML = '<div class="empty loading">AI is analyzing your intent...</div>';
       try {
         var plan = await apiJson("/api/v1/automations/copilot/plan", {
           method: "POST",
@@ -281,11 +430,13 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ intent: intent }),
               });
-              copilotResult.innerHTML = '<div class="empty">Workflow "' + esc(saved.name) + '" saved as draft (#' + saved.id + '). Switch to the Workflows tab to review and publish.</div>';
+              copilotResult.innerHTML = '<div class="empty">Workflow "' + esc(saved.name) + '" saved as draft (#' + saved.id + ').</div>';
               copilotInput.value = "";
+              toast("Draft workflow saved", "success");
+              definitionsLoaded = false;
               showTab("workflows");
-              await fetchWorkflows();
-            } catch (err) { alert("Failed to save: " + (err.message || err)); }
+              await fetchDefinitions();
+            } catch (err) { toast("Failed to save: " + (err.message || err), "error"); }
           });
         }
       } catch (err) {
@@ -404,7 +555,7 @@
     initModals();
     initCopilot();
     initInsights();
-    await Promise.all([fetchTriggers(), fetchWorkflows()]);
+    await Promise.all([fetchTriggers(), fetchWorkflows(), fetchTemplates(), fetchJobQueueStats()]);
     if (window.WorkflowBuilderPage && window.WorkflowBuilderPage.init) {
       window.WorkflowBuilderPage.init({ apiJson: apiJson });
     }

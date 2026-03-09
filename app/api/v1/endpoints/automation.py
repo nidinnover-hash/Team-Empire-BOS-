@@ -626,3 +626,69 @@ async def get_workflow_insights(
     from app.services.workflow_insights import get_full_insights
 
     return await get_full_insights(db, organization_id=org_id, days=days)
+
+
+# ── Workflow Templates ─────────────────────────────────────────────────────
+
+
+@router.get("/templates")
+async def list_workflow_templates(
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> list[dict]:
+    """Return built-in workflow template presets."""
+    _require_workflow_v2()
+    from app.services.workflow_templates import get_templates
+    return get_templates()
+
+
+@router.post("/templates/{template_id}/create", response_model=WorkflowDefinitionRead, status_code=201)
+async def create_from_template(
+    template_id: str,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+    workspace_id: int = Depends(get_current_workspace_id),
+) -> WorkflowDefinitionRead:
+    """Create a draft workflow definition from a built-in template."""
+    _require_workflow_v2()
+    from app.services.workflow_templates import get_template_by_id
+    tpl = get_template_by_id(template_id)
+    if tpl is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    create_data = WorkflowDefinitionCreate(
+        name=tpl["name"],
+        description=tpl["description"],
+        trigger_mode=tpl.get("trigger_mode", "manual"),
+        steps=tpl["steps"],
+        risk_level=tpl.get("risk_level", "medium"),
+    )
+    row = await automation_service.create_workflow_definition(
+        db,
+        organization_id=int(actor["org_id"]),
+        workspace_id=workspace_id,
+        actor_user_id=int(actor["id"]),
+        data=create_data,
+    )
+    await record_action(
+        db,
+        event_type="workflow_template_used",
+        actor_user_id=int(actor["id"]),
+        organization_id=int(actor["org_id"]),
+        entity_type="workflow_definition",
+        entity_id=row.id,
+        payload_json={"template_id": template_id, "template_name": tpl["name"]},
+    )
+    return WorkflowDefinitionRead.model_validate(row)
+
+
+# ── Job Queue Status ───────────────────────────────────────────────────────
+
+
+@router.get("/job-queue-stats")
+async def get_job_queue_stats(
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return job queue health metrics."""
+    from app.services.job_queue import get_queue_stats
+    return await get_queue_stats(db)
