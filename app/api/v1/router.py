@@ -17,6 +17,7 @@ from app.api.v1.endpoints import (
     control,
     dashboard_kpi,
     data_collection,
+    deal_forecast,
     deals,
     decision_cards,
     departments,
@@ -39,6 +40,7 @@ from app.api.v1.endpoints import (
     memory,
     mfa,
     notes,
+    notification_rules,
     notifications,
     observability,
     ops,
@@ -48,7 +50,9 @@ from app.api.v1.endpoints import (
     performance,
     personas,
     projects,
+    report_schedules,
     search,
+    scoring_rules,
     share_packets,
     slack_commands,
     social,
@@ -57,6 +61,7 @@ from app.api.v1.endpoints import (
     users,
     webhooks,
     workflow_observability,
+    workspace_permissions,
     workspaces,
 )
 
@@ -117,5 +122,10 @@ api_router.include_router(decision_cards.router)
 api_router.include_router(orchestrator.router)
 api_router.include_router(deals.router)
 api_router.include_router(campaigns.router)
+api_router.include_router(deal_forecast.router)
+api_router.include_router(scoring_rules.router)
+api_router.include_router(notification_rules.router)
+api_router.include_router(report_schedules.router)
+api_router.include_router(workspace_permissions.router)
 api_router.include_router(workflow_observability.router)
 api_router.include_router(stripe_webhooks.router)

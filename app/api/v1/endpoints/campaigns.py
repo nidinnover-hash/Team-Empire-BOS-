@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
+from app.services import campaign_analytics as analytics_service
 from app.services import email_campaign as campaign_service
 
 router = APIRouter(prefix="/campaigns", tags=["Email Campaigns"])
@@ -175,3 +176,43 @@ async def list_enrollments(
 ) -> list[EnrollmentRead]:
     items = await campaign_service.list_enrollments(db, campaign_id=campaign_id, status=status)
     return [EnrollmentRead.model_validate(e, from_attributes=True) for e in items]
+
+
+# ---------------------------------------------------------------------------
+# Campaign analytics & A/B tracking
+# ---------------------------------------------------------------------------
+
+
+class CampaignEventCreate(BaseModel):
+    event_type: str = Field(..., pattern=r"^(sent|opened|clicked|bounced|unsubscribed)$")
+    step_id: int | None = None
+    enrollment_id: int | None = None
+    contact_id: int | None = None
+    variant: str | None = Field(None, pattern=r"^[AB]$")
+
+
+@router.post("/{campaign_id}/events", status_code=201)
+async def record_campaign_event(
+    campaign_id: int,
+    data: CampaignEventCreate,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> dict:
+    event = await analytics_service.record_event(
+        db, organization_id=actor["org_id"], campaign_id=campaign_id,
+        event_type=data.event_type, step_id=data.step_id,
+        enrollment_id=data.enrollment_id, contact_id=data.contact_id,
+        variant=data.variant,
+    )
+    return {"id": event.id, "event_type": event.event_type, "created_at": event.created_at.isoformat()}
+
+
+@router.get("/{campaign_id}/analytics")
+async def get_campaign_analytics(
+    campaign_id: int,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> dict:
+    return await analytics_service.get_campaign_analytics(
+        db, organization_id=actor["org_id"], campaign_id=campaign_id,
+    )

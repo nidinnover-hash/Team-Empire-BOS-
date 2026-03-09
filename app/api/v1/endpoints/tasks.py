@@ -9,6 +9,7 @@ from app.core.rbac import require_roles
 from app.logs.audit import record_action
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
 from app.services import task as task_service
+from app.services import task_priority as priority_service
 from app.services import task_template as template_service
 
 
@@ -88,6 +89,16 @@ async def list_tasks(
         category=category, is_done=is_done, limit=limit, offset=offset,
         workspace_id=workspace_id,
     )
+
+
+@router.get("/prioritized")
+async def get_prioritized_tasks(
+    limit: int = Query(20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+) -> list[dict]:
+    """Return incomplete tasks ranked by computed priority score."""
+    return await priority_service.get_prioritized_tasks(db, organization_id=actor["org_id"], limit=limit)
 
 
 @router.get("/templates", response_model=list[TaskTemplateRead])

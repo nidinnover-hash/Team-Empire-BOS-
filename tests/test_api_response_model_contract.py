@@ -23,6 +23,17 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/tasks/templates/generate",  # recurring task generation result
     "/api/v1/bulk/import/deals",  # bulk import result dict
     "/api/v1/dashboard/layout",  # widget layout dict (GET)
+    "/api/v1/tasks/prioritized",  # scored task list
+    "/api/v1/scoring-rules/score/{contact_id}",  # scoring result dict
+    "/api/v1/deals/forecast/pipeline",  # pipeline forecast dict
+    "/api/v1/deals/forecast/win-rates",  # win rate trends dict
+    "/api/v1/campaigns/{campaign_id}/events",  # event creation result
+    "/api/v1/campaigns/{campaign_id}/analytics",  # campaign analytics dict
+    "/api/v1/notification-rules/evaluate",  # rule evaluation result
+    "/api/v1/workspace-perms",  # workspace list dict
+    "/api/v1/workspace-perms/my",  # user workspaces dict
+    "/api/v1/workspace-perms/{workspace_id}/members",  # member list dict
+    "/api/v1/workspace-perms/{workspace_id}/check-access/{user_id}",  # access check dict
 }
 
 
