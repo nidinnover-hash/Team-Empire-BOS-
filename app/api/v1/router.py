@@ -14,6 +14,7 @@ from app.api.v1.endpoints import (
     bulk_action_logs,
     activity_timeline,
     campaigns,
+    contact_relationships,
     coaching,
     commands,
     contact_lifecycle,
@@ -26,13 +27,16 @@ from app.api.v1.endpoints import (
     data_collection,
     data_retention,
     deal_forecast,
+    deal_risks,
     deal_velocity,
     deal_requirements,
     deals,
     decision_cards,
     departments,
+    document_templates,
     duplicate_detection,
     email,
+    email_sequences,
     email_templates,
     empire_digital,
     enrichment_queue,
@@ -41,6 +45,7 @@ from app.api.v1.endpoints import (
     field_audit,
     finance,
     github,
+    goal_cascades,
     goals,
     governance,
     health,
@@ -66,6 +71,7 @@ from app.api.v1.endpoints import (
     orgs,
     performance,
     personas,
+    pipeline_snapshots,
     projects,
     rate_limit_configs,
     recurring_invoices,
@@ -83,6 +89,7 @@ from app.api.v1.endpoints import (
     tags,
     tasks,
     team_quotas,
+    user_activity_heatmap,
     users,
     webhook_deliveries,
     webhook_retries,
@@ -183,3 +190,10 @@ api_router.include_router(team_quotas.router)
 api_router.include_router(webhook_retries.router)
 api_router.include_router(field_audit.router)
 api_router.include_router(rate_limit_configs.router)
+api_router.include_router(email_sequences.router)
+api_router.include_router(deal_risks.router)
+api_router.include_router(contact_relationships.router)
+api_router.include_router(pipeline_snapshots.router)
+api_router.include_router(user_activity_heatmap.router)
+api_router.include_router(document_templates.router)
+api_router.include_router(goal_cascades.router)

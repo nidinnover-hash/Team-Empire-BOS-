@@ -64,6 +64,13 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/team-quotas/progress",  # team progress list dict
     "/api/v1/webhook-retries/stats",  # retry stats dict
     "/api/v1/rate-limits/usage",  # usage summary list dict
+    "/api/v1/email-sequences/stats",  # sequence stats dict
+    "/api/v1/deal-risks/summary",  # risk summary dict
+    "/api/v1/pipeline-snapshots/trend",  # pipeline trend list dict
+    "/api/v1/user-activity/heatmap",  # activity heatmap grid dict
+    "/api/v1/user-activity/top-features",  # top features list dict
+    "/api/v1/document-templates/{template_id}/render",  # rendered template dict
+    "/api/v1/goal-cascades/tree",  # cascade tree dict
 }
 
 
