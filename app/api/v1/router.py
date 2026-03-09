@@ -24,7 +24,9 @@ from app.api.v1.endpoints import (
     dashboard_kpi,
     dashboard_widgets,
     data_collection,
+    data_retention,
     deal_forecast,
+    deal_velocity,
     deal_requirements,
     deals,
     decision_cards,
@@ -36,6 +38,7 @@ from app.api.v1.endpoints import (
     enrichment_queue,
     executions,
     export,
+    field_audit,
     finance,
     github,
     goals,
@@ -64,10 +67,12 @@ from app.api.v1.endpoints import (
     performance,
     personas,
     projects,
+    rate_limit_configs,
     recurring_invoices,
     report_schedules,
     role_dashboards,
     saved_filters,
+    score_decay,
     search,
     scoring_rules,
     share_packets,
@@ -77,8 +82,10 @@ from app.api.v1.endpoints import (
     stripe_webhooks,
     tags,
     tasks,
+    team_quotas,
     users,
     webhook_deliveries,
+    webhook_retries,
     webhooks,
     workflow_observability,
     workspace_permissions,
@@ -169,3 +176,10 @@ api_router.include_router(webhook_deliveries.router)
 api_router.include_router(contact_lifecycle.router)
 api_router.include_router(saved_filters.router)
 api_router.include_router(bulk_action_logs.router)
+api_router.include_router(data_retention.router)
+api_router.include_router(score_decay.router)
+api_router.include_router(deal_velocity.router)
+api_router.include_router(team_quotas.router)
+api_router.include_router(webhook_retries.router)
+api_router.include_router(field_audit.router)
+api_router.include_router(rate_limit_configs.router)

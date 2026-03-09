@@ -57,6 +57,13 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/contact-lifecycle/current/{contact_id}",  # current stage dict
     "/api/v1/contact-lifecycle/counts",  # stage counts dict
     "/api/v1/bulk-action-logs/summary",  # bulk action summary dict
+    "/api/v1/data-retention/{policy_id}/evaluate",  # retention evaluation dict
+    "/api/v1/score-decay/{rule_id}/simulate",  # decay simulation dict
+    "/api/v1/deal-velocity/velocity",  # stage velocity dict
+    "/api/v1/deal-velocity/bottlenecks",  # bottleneck list dict
+    "/api/v1/team-quotas/progress",  # team progress list dict
+    "/api/v1/webhook-retries/stats",  # retry stats dict
+    "/api/v1/rate-limits/usage",  # usage summary list dict
 }
 
 
