@@ -153,13 +153,31 @@ def schedule_embed(
     source_id: int,
     content_text: str,
 ) -> None:
-    """Schedule embedding as a fire-and-forget asyncio task. Safe to call from sync context."""
+    """Schedule embedding via job queue (persistent) or fire-and-forget (fallback).
+
+    When JOB_QUEUE_ENABLED is True, jobs are enqueued to the Postgres-backed queue
+    for reliable processing with retries. Otherwise falls back to asyncio tasks.
+    """
     if not settings.EMBEDDING_ENABLED:
         return
     # Skip on SQLite (tests) — pgvector requires PostgreSQL
     db_url = (settings.DATABASE_URL or "").strip().lower()
     if db_url.startswith("sqlite"):
         return
+
+    # Prefer job queue for persistence and retry
+    if settings.JOB_QUEUE_ENABLED:
+        from app.services.job_queue import enqueue_sync
+        enqueue_sync("embed_memory", {
+            "organization_id": organization_id,
+            "workspace_id": workspace_id,
+            "source_type": source_type,
+            "source_id": source_id,
+            "content_text": content_text,
+        })
+        return
+
+    # Fallback to fire-and-forget asyncio task
     try:
         loop = asyncio.get_running_loop()
         task = loop.create_task(

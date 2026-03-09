@@ -280,6 +280,20 @@ class Settings(BaseSettings):
     # Audit integrity
     AUDIT_INTEGRITY_ENABLED: bool = True
 
+    # Error monitoring — Sentry
+    SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+    SENTRY_PROFILES_SAMPLE_RATE: float = 0.1
+    SENTRY_ENVIRONMENT: str = "development"
+
+    # Job queue — Postgres-backed persistent task queue
+    JOB_QUEUE_ENABLED: bool = True
+    JOB_QUEUE_POLL_SECONDS: int = 5
+    JOB_QUEUE_MAX_WORKERS: int = 4
+    JOB_QUEUE_MAX_RETRIES: int = 3
+    JOB_QUEUE_RETRY_BACKOFF_SECONDS: int = 30
+    JOB_QUEUE_STALE_TIMEOUT_SECONDS: int = 600
+
     # Signal system
     SIGNAL_SYSTEM_ENABLED: bool = True
 

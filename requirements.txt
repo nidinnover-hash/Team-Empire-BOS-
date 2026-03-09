@@ -47,6 +47,9 @@ redis==5.2.1
 prometheus-fastapi-instrumentator==7.0.2
 prometheus-client==0.21.1
 
+# Error monitoring — Sentry (optional; no-op when SENTRY_DSN is unset)
+sentry-sdk[fastapi]==2.19.2
+
 # MFA — TOTP (RFC 6238 / Google Authenticator compatible)
 pyotp==2.9.0
 qrcode[pil]==8.0

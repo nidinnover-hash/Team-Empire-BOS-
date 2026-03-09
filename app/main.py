@@ -189,6 +189,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if settings.ACCOUNT_MFA_REQUIRED:
         logger.info("ACCOUNT_MFA_REQUIRED=true — TOTP MFA is enforced on login.")
 
+    # Optional Sentry error monitoring (no-op when SENTRY_DSN is unset)
+    if settings.SENTRY_DSN:
+        try:
+            import sentry_sdk
+            sentry_sdk.init(
+                dsn=settings.SENTRY_DSN,
+                environment=settings.SENTRY_ENVIRONMENT,
+                traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+                profiles_sample_rate=settings.SENTRY_PROFILES_SAMPLE_RATE,
+                send_default_pii=False,
+            )
+            logger.info("Sentry initialized (env=%s)", settings.SENTRY_ENVIRONMENT)
+        except Exception:
+            logger.warning("Sentry SDK init failed", exc_info=True)
+
     # Optional OpenTelemetry tracing (no-op when OTEL_EXPORTER_OTLP_ENDPOINT is unset)
     from app.core.telemetry import setup as setup_telemetry
     setup_telemetry(app=app)
@@ -208,7 +223,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     run_scheduler = settings.RUN_SCHEDULER
     if settings.SYNC_ENABLED and run_scheduler:
         start_scheduler(interval_minutes=settings.SYNC_INTERVAL_MINUTES)
+
+    # Start persistent job queue worker (Postgres-backed)
+    from app.services.job_queue import start_worker as _start_jq, stop_worker as _stop_jq
+    if settings.JOB_QUEUE_ENABLED and run_scheduler:
+        import app.jobs.job_handlers  # noqa: F401 — registers handlers
+        _start_jq()
+
     yield
+
+    if settings.JOB_QUEUE_ENABLED and run_scheduler:
+        await _stop_jq()
     if settings.SYNC_ENABLED and run_scheduler:
         await stop_scheduler()
 
