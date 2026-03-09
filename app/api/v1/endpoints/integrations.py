@@ -402,3 +402,63 @@ async def integration_health_dashboard(
     from app.services.integration_health import get_full_integration_health
 
     return await get_full_integration_health(db, organization_id=int(actor["org_id"]))
+
+
+@router.post("/{integration_id}/force-sync")
+async def force_sync_integration(
+    integration_id: int,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Force an immediate resync for an integration, resetting error count."""
+    from app.services.integration import get_integration as _get_int
+
+    integration = await _get_int(db, integration_id, organization_id=int(actor["org_id"]))
+    if integration is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Integration not found")
+
+    if integration.status != "connected":
+        return {"status": "skipped", "reason": "not_connected"}
+
+    # Reset error state
+    integration.sync_error_count = 0
+    integration.last_sync_status = "pending"
+    await db.commit()
+
+    # Trigger sync via scheduler
+    sync_type = integration.type
+    try:
+        from app.services.sync_scheduler import sync_integration_for_org
+        await sync_integration_for_org(db, int(actor["org_id"]), sync_type)
+        return {"status": "syncing", "type": sync_type}
+    except Exception as exc:
+        return {"status": "enqueued", "type": sync_type, "note": "Sync will run on next scheduler tick"}
+
+
+@router.post("/{integration_id}/reset-errors")
+async def reset_integration_errors(
+    integration_id: int,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Reset sync error count for an integration stuck in error state."""
+    from app.services.integration import get_integration as _get_int
+
+    integration = await _get_int(db, integration_id, organization_id=int(actor["org_id"]))
+    if integration is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Integration not found")
+
+    old_count = integration.sync_error_count
+    integration.sync_error_count = 0
+    integration.last_sync_status = "ok"
+    await db.commit()
+
+    from app.logs.audit import record_action
+    await record_action(
+        db, event_type="integration_errors_reset", actor_user_id=actor["id"],
+        organization_id=actor["org_id"], entity_type="integration", entity_id=integration_id,
+        payload_json={"type": integration.type, "old_error_count": old_count},
+    )
+    return {"status": "reset", "type": integration.type, "previous_error_count": old_count}

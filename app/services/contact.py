@@ -300,6 +300,213 @@ async def route_contact(
     return contact
 
 
+async def find_duplicates(
+    db: AsyncSession,
+    organization_id: int,
+    *,
+    limit: int = 50,
+) -> list[dict]:
+    """Find potential duplicate contacts by matching email or normalized phone.
+
+    Returns groups of contacts that share the same email or phone number.
+    Each group is a dict with 'match_field', 'match_value', and 'contacts' list.
+    """
+    from sqlalchemy import and_, literal_column
+
+    dupes: list[dict] = []
+
+    # Email duplicates
+    email_q = (
+        select(Contact.email, func.count(Contact.id).label("cnt"))
+        .where(
+            Contact.organization_id == organization_id,
+            Contact.email.isnot(None),
+            Contact.email != "",
+        )
+        .group_by(Contact.email)
+        .having(func.count(Contact.id) > 1)
+        .limit(limit)
+    )
+    email_result = await db.execute(email_q)
+    for row in email_result.all():
+        contacts_q = select(Contact).where(
+            Contact.organization_id == organization_id,
+            Contact.email == row[0],
+        )
+        contacts = list((await db.execute(contacts_q)).scalars().all())
+        dupes.append({
+            "match_field": "email",
+            "match_value": row[0],
+            "count": row[1],
+            "contacts": [
+                {"id": c.id, "name": c.name, "email": c.email, "phone": c.phone,
+                 "pipeline_stage": c.pipeline_stage, "created_at": c.created_at.isoformat() if c.created_at else None}
+                for c in contacts
+            ],
+        })
+
+    # Phone duplicates
+    phone_q = (
+        select(Contact.phone, func.count(Contact.id).label("cnt"))
+        .where(
+            Contact.organization_id == organization_id,
+            Contact.phone.isnot(None),
+            Contact.phone != "",
+        )
+        .group_by(Contact.phone)
+        .having(func.count(Contact.id) > 1)
+        .limit(limit)
+    )
+    phone_result = await db.execute(phone_q)
+    for row in phone_result.all():
+        # Skip if already captured as email duplicate
+        contacts_q = select(Contact).where(
+            Contact.organization_id == organization_id,
+            Contact.phone == row[0],
+        )
+        contacts = list((await db.execute(contacts_q)).scalars().all())
+        dupes.append({
+            "match_field": "phone",
+            "match_value": row[0],
+            "count": row[1],
+            "contacts": [
+                {"id": c.id, "name": c.name, "email": c.email, "phone": c.phone,
+                 "pipeline_stage": c.pipeline_stage, "created_at": c.created_at.isoformat() if c.created_at else None}
+                for c in contacts
+            ],
+        })
+
+    return dupes
+
+
+async def merge_contacts(
+    db: AsyncSession,
+    organization_id: int,
+    primary_id: int,
+    duplicate_ids: list[int],
+) -> Contact | None:
+    """Merge duplicate contacts into a primary contact.
+
+    Preserves the primary contact, merges non-null fields from duplicates
+    (primary values take precedence), then deletes the duplicates.
+    """
+    primary = await get_contact(db, primary_id, organization_id)
+    if primary is None:
+        return None
+
+    dupes = []
+    for did in duplicate_ids:
+        if did == primary_id:
+            continue
+        d = await get_contact(db, did, organization_id)
+        if d:
+            dupes.append(d)
+
+    if not dupes:
+        return primary
+
+    # Merge: fill in blanks on primary from duplicates (first non-null wins)
+    _MERGE_FIELDS = [
+        "email", "phone", "company", "role", "notes", "lead_source",
+        "deal_value", "source_channel", "campaign_name", "partner_id",
+        "expected_close_date", "tags",
+    ]
+    for field in _MERGE_FIELDS:
+        if getattr(primary, field) is None:
+            for d in dupes:
+                val = getattr(d, field)
+                if val is not None:
+                    setattr(primary, field, val)
+                    break
+
+    # Keep highest lead_score and deal_value
+    for d in dupes:
+        if d.lead_score > primary.lead_score:
+            primary.lead_score = d.lead_score
+        if d.deal_value and (primary.deal_value is None or d.deal_value > primary.deal_value):
+            primary.deal_value = d.deal_value
+
+    # Merge tags
+    existing_tags = set((primary.tags or "").split(",")) if primary.tags else set()
+    for d in dupes:
+        if d.tags:
+            existing_tags.update(d.tags.split(","))
+    existing_tags.discard("")
+    if existing_tags:
+        primary.tags = ",".join(sorted(existing_tags))
+
+    primary.updated_at = now_utc()
+
+    # Delete duplicates
+    for d in dupes:
+        await db.delete(d)
+
+    await db.commit()
+    await db.refresh(primary)
+    logger.info(
+        "Merged %d contacts into primary %d (org %d)",
+        len(dupes), primary_id, organization_id,
+    )
+    return primary
+
+
+async def get_pipeline_analytics(
+    db: AsyncSession,
+    organization_id: int,
+) -> dict:
+    """Pipeline conversion analytics: stage counts, conversion rates, avg deal values."""
+    # Stage counts and deal values
+    stage_q = (
+        select(
+            Contact.pipeline_stage,
+            func.count(Contact.id),
+            func.coalesce(func.sum(Contact.deal_value), 0.0),
+            func.coalesce(func.avg(Contact.deal_value), 0.0),
+            func.coalesce(func.avg(Contact.lead_score), 0.0),
+        )
+        .where(Contact.organization_id == organization_id)
+        .group_by(Contact.pipeline_stage)
+    )
+    result = await db.execute(stage_q)
+    rows = {r[0]: {"count": r[1], "total_value": float(r[2]), "avg_value": round(float(r[3]), 2), "avg_score": round(float(r[4]), 1)} for r in result.all()}
+
+    # Build funnel with conversion rates
+    funnel = []
+    prev_count = None
+    for stage in PIPELINE_STAGES:
+        data = rows.get(stage, {"count": 0, "total_value": 0.0, "avg_value": 0.0, "avg_score": 0.0})
+        conversion = round((data["count"] / prev_count) * 100, 1) if prev_count and prev_count > 0 else None
+        funnel.append({
+            "stage": stage,
+            **data,
+            "conversion_rate": conversion,
+        })
+        prev_count = data["count"]
+
+    # Overall metrics
+    total_q = await db.execute(
+        select(
+            func.count(Contact.id),
+            func.coalesce(func.sum(Contact.deal_value), 0.0),
+        ).where(Contact.organization_id == organization_id)
+    )
+    total_row = total_q.one()
+
+    won_q = await db.execute(
+        select(func.coalesce(func.sum(Contact.deal_value), 0.0))
+        .where(Contact.organization_id == organization_id, Contact.pipeline_stage == "won")
+    )
+    won_value = float(won_q.scalar() or 0.0)
+
+    return {
+        "funnel": funnel,
+        "total_contacts": total_row[0] or 0,
+        "total_pipeline_value": float(total_row[1] or 0.0),
+        "won_value": won_value,
+        "win_rate": round((rows.get("won", {}).get("count", 0) / max(total_row[0] or 1, 1)) * 100, 1),
+    }
+
+
 async def qualify_contact(
     db: AsyncSession,
     *,

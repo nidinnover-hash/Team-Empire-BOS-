@@ -12,6 +12,7 @@ class ProjectCreate(BaseModel):
     description: str | None = Field(None, max_length=2000)
     category: ProjectCategory = "personal"
     due_date: date | None = None
+    goal_id: int | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -19,6 +20,7 @@ class ProjectUpdate(BaseModel):
     description: str | None = Field(None, max_length=2000)
     category: ProjectCategory | None = None
     due_date: date | None = None
+    goal_id: int | None = None
 
 
 class ProjectStatusUpdate(BaseModel):
@@ -31,6 +33,8 @@ class ProjectRead(BaseModel):
     description: str | None
     category: str
     status: str
+    progress: int = 0
+    goal_id: int | None = None
     due_date: date | None
     created_at: datetime
 

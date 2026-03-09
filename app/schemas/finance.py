@@ -61,3 +61,41 @@ class FinanceEfficiencyReport(BaseModel):
     efficiency_score: int = Field(ge=0, le=100)
     findings: list[FinanceEfficiencyFinding]
     recommendations: list[FinanceEfficiencyRecommendation]
+
+
+class MonthlyBreakdown(BaseModel):
+    month: str  # "2026-03"
+    income: float
+    expense: float
+    net: float
+
+
+class CategoryBreakdown(BaseModel):
+    category: str
+    total: float
+    count: int
+    pct_of_total: float
+
+
+class FinanceTrend(BaseModel):
+    months: list[MonthlyBreakdown]
+    category_breakdown: list[CategoryBreakdown]
+    avg_monthly_income: float
+    avg_monthly_expense: float
+    income_trend: str  # "up" | "down" | "flat"
+    expense_trend: str
+
+
+class BudgetCreate(BaseModel):
+    category: FinanceCategory
+    monthly_limit: float = Field(gt=0, le=999_999_999.99)
+    description: str | None = Field(None, max_length=200)
+
+
+class BudgetRead(BaseModel):
+    category: str
+    monthly_limit: float
+    description: str | None
+    spent_this_month: float = 0.0
+    remaining: float = 0.0
+    pct_used: float = 0.0

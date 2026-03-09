@@ -67,9 +67,15 @@
       var status = safeStatus(item.status);
       var statusText = esc(status);
       var dueDate = esc(item.due_date || "--");
+      var progress = Math.max(0, Math.min(100, item.progress || 0));
+      var barColor = progress === 100 ? "var(--ok, #38a169)" : progress > 50 ? "var(--brand, #3182ce)" : "var(--text-faint, #aaa)";
+      var progressBar = '<div style="display:flex;align-items:center;gap:.4rem">'
+        + '<div style="flex:1;height:6px;background:var(--border,#ddd);border-radius:3px;overflow:hidden">'
+        + '<div style="width:' + progress + '%;height:100%;background:' + barColor + ';border-radius:3px;transition:width .3s"></div>'
+        + '</div><span style="font-size:.75rem;color:var(--text-faint);min-width:2.5em;text-align:right">' + progress + '%</span></div>';
       var projectId = Number(item.id);
       if (!Number.isFinite(projectId) || projectId < 1) projectId = 0;
-      return "<tr><td>" + title + "</td><td>" + category + "</td><td><span class=\"badge badge-" + status + "\">" + statusText + "</span></td><td>" + dueDate + "</td><td><button class=\"btn-sm\" data-del=\"" + projectId + "\" type=\"button\">Delete</button></td></tr>";
+      return "<tr><td>" + title + "</td><td>" + category + "</td><td><span class=\"badge badge-" + status + "\">" + statusText + "</span></td><td>" + progressBar + "</td><td>" + dueDate + "</td><td><button class=\"btn-sm\" data-del=\"" + projectId + "\" type=\"button\">Delete</button></td></tr>";
     }).join("");
 
     body.querySelectorAll("[data-del]").forEach(function (button) {

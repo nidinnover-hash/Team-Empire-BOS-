@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     auth,
     automation,
     briefing,
+    bulk,
     coaching,
     commands,
     contacts,
@@ -83,6 +84,7 @@ api_router.include_router(intelligence.router)
 api_router.include_router(executions.router)
 api_router.include_router(integrations.router)
 api_router.include_router(finance.router)
+api_router.include_router(bulk.router)
 api_router.include_router(layers.router)
 api_router.include_router(observability.router)
 api_router.include_router(ops.router)

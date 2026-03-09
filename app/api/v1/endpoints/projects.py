@@ -35,12 +35,15 @@ async def create_project(
 async def list_projects(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0, le=10_000),
+    goal_id: int | None = Query(None, description="Filter by linked goal"),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
     workspace_id: int = Depends(get_current_workspace_id),
 ) -> list[ProjectRead]:
     """List all projects, newest first. Use limit/offset for pagination."""
-    return await project_service.list_projects(db, limit=limit, offset=offset, organization_id=actor["org_id"])
+    return await project_service.list_projects(
+        db, limit=limit, offset=offset, organization_id=actor["org_id"], goal_id=goal_id,
+    )
 
 
 @router.patch("/{project_id}/status", response_model=ProjectRead)

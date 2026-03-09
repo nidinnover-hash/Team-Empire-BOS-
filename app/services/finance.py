@@ -2,16 +2,20 @@ import logging
 from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.finance import FinanceEntry
 from app.schemas.finance import (
+    BudgetRead,
+    CategoryBreakdown,
     FinanceEfficiencyFinding,
     FinanceEfficiencyRecommendation,
     FinanceEfficiencyReport,
     FinanceEntryCreate,
     FinanceSummary,
+    FinanceTrend,
+    MonthlyBreakdown,
 )
 
 logger = logging.getLogger(__name__)
@@ -263,4 +267,195 @@ async def get_expenditure_efficiency(
         efficiency_score=score,
         findings=findings,
         recommendations=recommendations,
+    )
+
+
+# ── Monthly Trends ───────────────────────────────────────────────────────────
+
+async def get_monthly_trends(
+    db: AsyncSession,
+    organization_id: int,
+    months: int = 6,
+) -> FinanceTrend:
+    """Month-over-month income/expense breakdown with category analysis."""
+    end = date.today()
+    start = end.replace(day=1) - timedelta(days=(months - 1) * 30)
+    start = start.replace(day=1)
+
+    result = await db.execute(
+        select(FinanceEntry).where(
+            FinanceEntry.organization_id == organization_id,
+            FinanceEntry.entry_date >= start,
+            FinanceEntry.entry_date <= end,
+        ).order_by(FinanceEntry.entry_date).limit(5000)
+    )
+    entries = list(result.scalars().all())
+
+    # Group by month
+    month_data: dict[str, dict[str, Decimal]] = {}
+    cat_data: dict[str, dict[str, Decimal | int]] = {}
+
+    for e in entries:
+        key = e.entry_date.strftime("%Y-%m") if hasattr(e.entry_date, "strftime") else str(e.entry_date)[:7]
+        if key not in month_data:
+            month_data[key] = {"income": Decimal("0"), "expense": Decimal("0")}
+        amount = Decimal(str(e.amount))
+        if e.type == "income":
+            month_data[key]["income"] += amount
+        else:
+            month_data[key]["expense"] += amount
+
+        # Category breakdown (expenses only)
+        if e.type == "expense":
+            cat = e.category or "other"
+            if cat not in cat_data:
+                cat_data[cat] = {"total": Decimal("0"), "count": 0}
+            cat_data[cat]["total"] += amount
+            cat_data[cat]["count"] += 1
+
+    monthly = []
+    for key in sorted(month_data.keys()):
+        d = month_data[key]
+        monthly.append(MonthlyBreakdown(
+            month=key,
+            income=float(d["income"]),
+            expense=float(d["expense"]),
+            net=float(d["income"] - d["expense"]),
+        ))
+
+    # Category breakdown with percentages
+    total_expense = sum(v["total"] for v in cat_data.values()) or Decimal("1")
+    categories = sorted(
+        [
+            CategoryBreakdown(
+                category=cat,
+                total=float(v["total"]),
+                count=int(v["count"]),
+                pct_of_total=round(float(v["total"] / total_expense) * 100, 1),
+            )
+            for cat, v in cat_data.items()
+        ],
+        key=lambda x: x.total,
+        reverse=True,
+    )
+
+    # Trend direction (compare last 2 months)
+    def _trend(values: list[float]) -> str:
+        if len(values) < 2:
+            return "flat"
+        diff = values[-1] - values[-2]
+        if diff > values[-2] * 0.05:
+            return "up"
+        if diff < -values[-2] * 0.05:
+            return "down"
+        return "flat"
+
+    incomes = [m.income for m in monthly]
+    expenses = [m.expense for m in monthly]
+
+    return FinanceTrend(
+        months=monthly,
+        category_breakdown=categories[:15],
+        avg_monthly_income=round(sum(incomes) / max(len(incomes), 1), 2),
+        avg_monthly_expense=round(sum(expenses) / max(len(expenses), 1), 2),
+        income_trend=_trend(incomes),
+        expense_trend=_trend(expenses),
+    )
+
+
+# ── Budget Tracking ──────────────────────────────────────────────────────────
+# Budgets are stored in profile memory as "budget.<category>" keys.
+
+async def get_budgets(
+    db: AsyncSession, organization_id: int,
+) -> list[BudgetRead]:
+    """Get all budget limits with current month spend comparison."""
+    from app.models.memory import ProfileMemory
+
+    # Fetch budget entries from profile memory
+    budget_result = await db.execute(
+        select(ProfileMemory).where(
+            ProfileMemory.organization_id == organization_id,
+            ProfileMemory.key.like("budget.%"),
+        )
+    )
+    budget_entries = list(budget_result.scalars().all())
+
+    if not budget_entries:
+        return []
+
+    # Get current month spending by category
+    today = date.today()
+    month_start = today.replace(day=1)
+    spend_result = await db.execute(
+        select(
+            FinanceEntry.category,
+            func.sum(FinanceEntry.amount),
+        ).where(
+            FinanceEntry.organization_id == organization_id,
+            FinanceEntry.type == "expense",
+            FinanceEntry.entry_date >= month_start,
+            FinanceEntry.entry_date <= today,
+        ).group_by(FinanceEntry.category)
+    )
+    spend_by_cat = {row[0]: float(row[1] or 0) for row in spend_result.all()}
+
+    budgets = []
+    for entry in budget_entries:
+        cat = entry.key.replace("budget.", "")
+        try:
+            parts = (entry.value or "").split("|", 1)
+            limit_val = float(parts[0])
+            desc = parts[1] if len(parts) > 1 else None
+        except (ValueError, IndexError):
+            continue
+        spent = spend_by_cat.get(cat, 0.0)
+        budgets.append(BudgetRead(
+            category=cat,
+            monthly_limit=limit_val,
+            description=desc,
+            spent_this_month=round(spent, 2),
+            remaining=round(max(limit_val - spent, 0), 2),
+            pct_used=round((spent / limit_val) * 100, 1) if limit_val > 0 else 0.0,
+        ))
+
+    return sorted(budgets, key=lambda b: b.pct_used, reverse=True)
+
+
+async def set_budget(
+    db: AsyncSession, organization_id: int,
+    category: str, monthly_limit: float, description: str | None = None,
+) -> BudgetRead:
+    """Set or update a monthly budget for a category."""
+    from app.services.memory import upsert_profile_memory
+
+    value = f"{monthly_limit}"
+    if description:
+        value += f"|{description}"
+
+    await upsert_profile_memory(
+        db, organization_id, key=f"budget.{category}", value=value, category="finance",
+    )
+
+    # Get current month spend
+    today = date.today()
+    month_start = today.replace(day=1)
+    spend_result = await db.execute(
+        select(func.sum(FinanceEntry.amount)).where(
+            FinanceEntry.organization_id == organization_id,
+            FinanceEntry.type == "expense",
+            FinanceEntry.category == category,
+            FinanceEntry.entry_date >= month_start,
+            FinanceEntry.entry_date <= today,
+        )
+    )
+    spent = float(spend_result.scalar() or 0)
+
+    return BudgetRead(
+        category=category,
+        monthly_limit=monthly_limit,
+        description=description,
+        spent_this_month=round(spent, 2),
+        remaining=round(max(monthly_limit - spent, 0), 2),
+        pct_used=round((spent / monthly_limit) * 100, 1) if monthly_limit > 0 else 0.0,
     )

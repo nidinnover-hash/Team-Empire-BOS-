@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.core.rbac import require_roles, require_sensitive_financial_roles
 from app.logs.audit import record_action
+from pydantic import BaseModel, Field
+
 from app.schemas.contact import (
     ContactCreate,
     ContactRead,
@@ -14,6 +16,11 @@ from app.schemas.contact import (
     PipelineSummary,
 )
 from app.services import contact as contact_service
+
+
+class MergeRequest(BaseModel):
+    primary_id: int = Field(..., ge=1)
+    duplicate_ids: list[int] = Field(..., min_length=1)
 
 router = APIRouter(prefix="/contacts", tags=["Contacts"])
 
@@ -148,6 +155,46 @@ async def rescore_contacts(
         payload_json=result,
     )
     return result
+
+
+@router.get("/duplicates")
+async def find_duplicates(
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> list[dict]:
+    """Find potential duplicate contacts by matching email or phone."""
+    return await contact_service.find_duplicates(db, organization_id=actor["org_id"], limit=limit)
+
+
+@router.post("/merge", response_model=ContactRead)
+async def merge_contacts(
+    data: MergeRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> ContactRead:
+    """Merge duplicate contacts into a primary contact."""
+    result = await contact_service.merge_contacts(
+        db, organization_id=actor["org_id"],
+        primary_id=data.primary_id, duplicate_ids=data.duplicate_ids,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Primary contact not found")
+    await record_action(
+        db, event_type="contacts_merged", actor_user_id=actor["id"],
+        organization_id=actor["org_id"], entity_type="contact", entity_id=data.primary_id,
+        payload_json={"primary_id": data.primary_id, "merged_ids": data.duplicate_ids},
+    )
+    return ContactRead.model_validate(result, from_attributes=True)
+
+
+@router.get("/pipeline-analytics")
+async def pipeline_analytics(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_sensitive_financial_roles()),
+) -> dict:
+    """Pipeline funnel analytics with conversion rates and win rate."""
+    return await contact_service.get_pipeline_analytics(db, organization_id=actor["org_id"])
 
 
 @router.get("/{contact_id}", response_model=ContactRead)

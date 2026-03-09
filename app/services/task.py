@@ -1,11 +1,14 @@
+import logging
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.task import Task
 from app.schemas.task import TaskCreate, TaskUpdate
 from app.services.notification import create_notification
+
+logger = logging.getLogger(__name__)
 
 
 async def create_task(
@@ -15,6 +18,9 @@ async def create_task(
     db.add(task)
     await db.commit()
     await db.refresh(task)
+    # Recalculate project progress when adding a task to a project
+    if task.project_id:
+        await recalculate_project_progress(db, task.project_id, organization_id)
     return task
 
 
@@ -64,6 +70,7 @@ async def update_task(
 
     # Apply all non-None fields from the update payload
     was_done = task.is_done
+    old_project_id = task.project_id
     if data.is_done is not None:
         task.is_done = data.is_done
         task.completed_at = datetime.now(UTC) if data.is_done else None
@@ -95,6 +102,17 @@ async def update_task(
         )
     await db.commit()
     await db.refresh(task)
+
+    # Cascade: recalculate project progress when task completion changes
+    done_changed = (data.is_done is not None and task.is_done != was_done)
+    project_changed = (data.project_id is not None and task.project_id != old_project_id)
+    if done_changed or project_changed:
+        if task.project_id and organization_id:
+            await recalculate_project_progress(db, task.project_id, organization_id)
+        # Also update old project if task moved between projects
+        if project_changed and old_project_id and organization_id:
+            await recalculate_project_progress(db, old_project_id, organization_id)
+
     return task
 
 
@@ -112,6 +130,75 @@ async def delete_task(
     task = result.scalar_one_or_none()
     if task is None:
         return False
+    project_id = task.project_id
     await db.delete(task)
     await db.commit()
+    # Recalculate project progress after removing a task
+    if project_id:
+        await recalculate_project_progress(db, project_id, organization_id)
     return True
+
+
+# ── Cascading Logic ──────────────────────────────────────────────────────────
+
+async def recalculate_project_progress(
+    db: AsyncSession, project_id: int, organization_id: int,
+) -> None:
+    """Recalculate project progress based on % of tasks completed.
+
+    Cascades to project status (auto-complete when 100%) and then to goal
+    progress if the project is linked to a goal.
+    """
+    from app.models.project import Project
+
+    # Count total and done tasks for this project
+    result = await db.execute(
+        select(
+            func.count(Task.id).label("total"),
+            func.count(Task.id).filter(Task.is_done.is_(True)).label("done"),
+        ).where(Task.project_id == project_id, Task.organization_id == organization_id)
+    )
+    row = result.one()
+    total, done = row.total or 0, row.done or 0
+
+    proj_result = await db.execute(
+        select(Project).where(Project.id == project_id, Project.organization_id == organization_id)
+    )
+    project = proj_result.scalar_one_or_none()
+    if project is None:
+        return
+
+    new_progress = round((done / total) * 100) if total > 0 else 0
+    old_status = project.status
+    project.progress = new_progress
+
+    # Auto-complete project when all tasks are done
+    if new_progress == 100 and total > 0 and project.status == "active":
+        project.status = "completed"
+        await db.flush()
+        await create_notification(
+            db,
+            organization_id=organization_id,
+            type="project_completed",
+            severity="info",
+            title=f"Project Complete: {project.title}",
+            message=f"All {total} tasks in \"{project.title}\" are done.",
+            source="projects",
+            entity_type="project",
+            entity_id=project.id,
+        )
+    # Re-activate project if tasks are undone
+    elif new_progress < 100 and project.status == "completed":
+        project.status = "active"
+
+    await db.commit()
+
+    # Cascade to goal if project is linked
+    if project.goal_id:
+        from app.services.goal import recalculate_goal_progress
+        await recalculate_goal_progress(db, project.goal_id, organization_id)
+
+    logger.info(
+        "Project %d progress: %d%% (%d/%d tasks) status=%s",
+        project_id, new_progress, done, total, project.status,
+    )
