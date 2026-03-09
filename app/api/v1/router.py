@@ -10,18 +10,23 @@ from app.api.v1.endpoints import (
     automation,
     briefing,
     bulk,
+    activity_timeline,
     campaigns,
     coaching,
     commands,
+    contact_segments,
     contacts,
     control,
+    custom_fields,
     dashboard_kpi,
     data_collection,
     deal_forecast,
+    deal_requirements,
     deals,
     decision_cards,
     departments,
     email,
+    email_templates,
     empire_digital,
     executions,
     export,
@@ -44,6 +49,7 @@ from app.api.v1.endpoints import (
     notifications,
     observability,
     ops,
+    outbound_webhooks,
     ops_incident,
     orchestrator,
     orgs,
@@ -120,12 +126,18 @@ api_router.include_router(workspaces.router)
 api_router.include_router(share_packets.router)
 api_router.include_router(decision_cards.router)
 api_router.include_router(orchestrator.router)
+api_router.include_router(deal_forecast.router)
+api_router.include_router(deal_requirements.router)
 api_router.include_router(deals.router)
 api_router.include_router(campaigns.router)
-api_router.include_router(deal_forecast.router)
 api_router.include_router(scoring_rules.router)
 api_router.include_router(notification_rules.router)
 api_router.include_router(report_schedules.router)
 api_router.include_router(workspace_permissions.router)
+api_router.include_router(activity_timeline.router)
+api_router.include_router(custom_fields.router)
+api_router.include_router(email_templates.router)
+api_router.include_router(contact_segments.router)
+api_router.include_router(outbound_webhooks.router)
 api_router.include_router(workflow_observability.router)
 api_router.include_router(stripe_webhooks.router)

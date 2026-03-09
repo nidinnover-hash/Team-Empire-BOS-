@@ -34,6 +34,15 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/workspace-perms/my",  # user workspaces dict
     "/api/v1/workspace-perms/{workspace_id}/members",  # member list dict
     "/api/v1/workspace-perms/{workspace_id}/check-access/{user_id}",  # access check dict
+    "/api/v1/activity/timeline",  # activity feed dict
+    "/api/v1/custom-fields/values",  # set field value result
+    "/api/v1/custom-fields/values/{entity_type}/{entity_id}",  # field values list
+    "/api/v1/email-templates/{template_id}/render",  # rendered template dict
+    "/api/v1/deals/requirements/{req_id}/check/{deal_id}",  # check result dict
+    "/api/v1/deals/requirements/checklist/{deal_id}/{stage}",  # checklist dict
+    "/api/v1/deals/requirements/validate/{deal_id}/{stage}",  # validation dict
+    "/api/v1/contact-segments/{segment_id}/evaluate",  # segment evaluation dict
+    "/api/v1/outbound-webhooks/test-match",  # webhook match test dict
 }
 
 
