@@ -43,6 +43,11 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/deals/requirements/validate/{deal_id}/{stage}",  # validation dict
     "/api/v1/contact-segments/{segment_id}/evaluate",  # segment evaluation dict
     "/api/v1/outbound-webhooks/test-match",  # webhook match test dict
+    "/api/v1/sla-policies/check",  # SLA check result dict
+    "/api/v1/enrichment-queue/stats",  # enrichment stats dict
+    "/api/v1/approval-workflows/{workflow_id}",  # workflow detail with steps dict
+    "/api/v1/internal-comments",  # comment list/create dicts
+    "/api/v1/dashboard-widgets/catalog",  # system widget catalog list
 }
 
 

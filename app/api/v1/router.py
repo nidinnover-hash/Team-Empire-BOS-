@@ -5,6 +5,7 @@ from app.api.v1.endpoints import (
     admin_purge,
     agents,
     api_keys,
+    approval_workflows,
     approvals,
     auth,
     automation,
@@ -19,6 +20,7 @@ from app.api.v1.endpoints import (
     control,
     custom_fields,
     dashboard_kpi,
+    dashboard_widgets,
     data_collection,
     deal_forecast,
     deal_requirements,
@@ -28,6 +30,7 @@ from app.api.v1.endpoints import (
     email,
     email_templates,
     empire_digital,
+    enrichment_queue,
     executions,
     export,
     finance,
@@ -35,10 +38,12 @@ from app.api.v1.endpoints import (
     goals,
     governance,
     health,
+    import_export_presets,
     inbox,
     innovation,
     integrations,
     intelligence,
+    internal_comments,
     layers,
     locations,
     media,
@@ -60,9 +65,11 @@ from app.api.v1.endpoints import (
     search,
     scoring_rules,
     share_packets,
+    sla_policies,
     slack_commands,
     social,
     stripe_webhooks,
+    tags,
     tasks,
     users,
     webhooks,
@@ -141,3 +148,10 @@ api_router.include_router(contact_segments.router)
 api_router.include_router(outbound_webhooks.router)
 api_router.include_router(workflow_observability.router)
 api_router.include_router(stripe_webhooks.router)
+api_router.include_router(sla_policies.router)
+api_router.include_router(enrichment_queue.router)
+api_router.include_router(approval_workflows.router)
+api_router.include_router(tags.router)
+api_router.include_router(import_export_presets.router)
+api_router.include_router(internal_comments.router)
+api_router.include_router(dashboard_widgets.router)
