@@ -107,6 +107,12 @@ _maybe_run_daily_backup = maybe_run_daily_backup
 _retry_webhook_deliveries = retry_webhook_deliveries
 _monitor_scheduler_slos = monitor_scheduler_slos
 _record_job_run = record_job_run
+
+
+async def _run_alert_engine(db: AsyncSession, org_id: int) -> dict:
+    """Run proactive alert checks for an organization."""
+    from app.services.alert_engine import run_alert_checks
+    return await run_alert_checks(db, org_id)
 _scheduler_error_category = scheduler_error_category
 _collect_stale_integrations = _jobs_collect_stale_integrations
 _extract_top_risks = _jobs_extract_top_risks
@@ -885,6 +891,7 @@ async def _run_automation_jobs_for_org(db: AsyncSession, org_id: int) -> None:
         ("knowledge_consolidation", _maybe_run_knowledge_consolidation),
         ("weekly_coaching", _maybe_run_weekly_coaching),
         ("monitor_scheduler_slo", _monitor_scheduler_slos),
+        ("alert_engine", _run_alert_engine),
     ]
     if getattr(settings, "FEATURE_WORKFLOW_RELIABILITY", False):
         from app.engines.execution.workflow_recovery import recover_workflow_runs_for_org

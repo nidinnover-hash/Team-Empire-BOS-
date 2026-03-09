@@ -51,6 +51,7 @@ from app.api.v1.endpoints import (
     share_packets,
     slack_commands,
     social,
+    stripe_webhooks,
     tasks,
     users,
     webhooks,
@@ -115,3 +116,4 @@ api_router.include_router(decision_cards.router)
 api_router.include_router(orchestrator.router)
 api_router.include_router(deals.router)
 api_router.include_router(workflow_observability.router)
+api_router.include_router(stripe_webhooks.router)

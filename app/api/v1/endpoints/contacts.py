@@ -197,6 +197,25 @@ async def pipeline_analytics(
     return await contact_service.get_pipeline_analytics(db, organization_id=actor["org_id"])
 
 
+@router.get("/{contact_id}/timeline")
+async def contact_timeline(
+    contact_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+) -> list[dict]:
+    """Unified activity timeline for a contact — events, deals, notes."""
+    from app.services.contact_timeline import get_contact_timeline
+
+    contact = await contact_service.get_contact(
+        db, contact_id, organization_id=actor["org_id"],
+        actor_org_id=actor["org_id"], actor_role=str(actor.get("role", "")),
+    )
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    return await get_contact_timeline(db, contact_id=contact_id, organization_id=actor["org_id"], limit=limit)
+
+
 @router.get("/{contact_id}", response_model=ContactRead)
 async def get_contact(
     contact_id: int,

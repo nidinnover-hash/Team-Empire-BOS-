@@ -1,10 +1,13 @@
-"""Full data export for backup/compliance."""
+"""Full data export for backup/compliance — JSON and CSV formats."""
 
+import csv
+import io
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -15,6 +18,9 @@ from app.services import (
 )
 from app.services import (
     contact as contact_service,
+)
+from app.services import (
+    deal as deal_service,
 )
 from app.services import (
     finance as finance_service,
@@ -54,7 +60,9 @@ def _serialize(obj: object) -> dict:
         if col.name in _EXPORT_EXCLUDE:
             continue
         val = getattr(obj, col.name, None)
-        if isinstance(val, datetime):
+        if isinstance(val, Decimal):
+            val = float(val)
+        elif isinstance(val, datetime):
             val = val.isoformat()
         elif val is not None and hasattr(val, "isoformat"):
             iso = getattr(val, "isoformat", None)
@@ -105,3 +113,70 @@ async def export_all_data(
             "Content-Disposition": f'attachment; filename="nidin-bos-export-{datetime.now(UTC).strftime("%Y%m%d")}.json"',
         },
     )
+
+
+def _rows_to_csv(rows: list[dict]) -> str:
+    """Convert a list of dicts to a CSV string."""
+    if not rows:
+        return ""
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+    writer.writeheader()
+    writer.writerows(rows)
+    return output.getvalue()
+
+
+def _csv_response(csv_text: str, filename: str) -> StreamingResponse:
+    return StreamingResponse(
+        iter([csv_text]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/deals")
+async def export_deals(
+    fmt: str = Query("json", pattern="^(json|csv)$"),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+):
+    """Export all deals as JSON or CSV."""
+    org_id = int(actor["org_id"])
+    deals = await deal_service.list_deals(db, organization_id=org_id, limit=settings.EXPORT_MAX_ROWS)
+    rows = [_serialize(d) for d in deals]
+
+    if fmt == "csv":
+        return _csv_response(_rows_to_csv(rows), f"deals-{datetime.now(UTC).strftime('%Y%m%d')}.csv")
+    return JSONResponse(content={"exported_at": datetime.now(UTC).isoformat(), "deals": rows})
+
+
+@router.get("/contacts")
+async def export_contacts(
+    fmt: str = Query("json", pattern="^(json|csv)$"),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+):
+    """Export all contacts as JSON or CSV."""
+    org_id = int(actor["org_id"])
+    contacts = await contact_service.list_contacts(db, organization_id=org_id, limit=settings.EXPORT_MAX_ROWS)
+    rows = [_serialize(c) for c in contacts]
+
+    if fmt == "csv":
+        return _csv_response(_rows_to_csv(rows), f"contacts-{datetime.now(UTC).strftime('%Y%m%d')}.csv")
+    return JSONResponse(content={"exported_at": datetime.now(UTC).isoformat(), "contacts": rows})
+
+
+@router.get("/finance")
+async def export_finance(
+    fmt: str = Query("json", pattern="^(json|csv)$"),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+):
+    """Export all finance entries as JSON or CSV."""
+    org_id = int(actor["org_id"])
+    entries = await finance_service.list_entries(db, organization_id=org_id, limit=settings.EXPORT_MAX_ROWS)
+    rows = [_serialize(e) for e in entries]
+
+    if fmt == "csv":
+        return _csv_response(_rows_to_csv(rows), f"finance-{datetime.now(UTC).strftime('%Y%m%d')}.csv")
+    return JSONResponse(content={"exported_at": datetime.now(UTC).isoformat(), "finance": rows})

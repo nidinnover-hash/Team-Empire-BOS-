@@ -61,7 +61,8 @@ async def update_deal(
             setattr(deal, k, v)
 
     # Auto-set won_at/lost_at timestamps
-    if kwargs.get("stage") == "won" and deal.won_at is None:
+    newly_won = kwargs.get("stage") == "won" and deal.won_at is None
+    if newly_won:
         deal.won_at = datetime.now(UTC)
     if kwargs.get("stage") == "lost" and deal.lost_at is None:
         deal.lost_at = datetime.now(UTC)
@@ -69,7 +70,32 @@ async def update_deal(
     deal.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(deal)
+
+    # Auto-create income entry when deal is won
+    if newly_won and float(deal.value) > 0:
+        try:
+            await _create_income_for_won_deal(db, deal)
+        except Exception:
+            logger.warning("Failed to create finance entry for won deal %d", deal.id, exc_info=True)
+
     return deal
+
+
+async def _create_income_for_won_deal(db: AsyncSession, deal: Deal) -> None:
+    """Bridge: auto-create a finance income entry when a deal is marked won."""
+    from app.models.finance import FinanceEntry
+
+    entry = FinanceEntry(
+        organization_id=deal.organization_id,
+        type="income",
+        amount=float(deal.value),
+        category="sales",
+        description=f"Deal won: {deal.title}",
+        entry_date=datetime.now(UTC).date(),
+    )
+    db.add(entry)
+    await db.commit()
+    logger.info("Auto-created income entry for won deal %d ($%.2f)", deal.id, float(deal.value))
 
 
 async def delete_deal(db: AsyncSession, deal_id: int, organization_id: int) -> bool:
