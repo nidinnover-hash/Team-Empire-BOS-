@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from collections import defaultdict
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -166,4 +167,60 @@ async def get_deal_summary(db: AsyncSession, organization_id: int) -> dict:
         "win_rate": win_rate,
         "avg_deal_size": round(total_value / max(total_deals, 1), 2),
         "pipeline": sorted(pipeline, key=lambda x: DEAL_STAGES.index(x["stage"]) if x["stage"] in DEAL_STAGES else 99),
+    }
+
+
+async def get_deal_forecast(
+    db: AsyncSession, organization_id: int, months: int = 6,
+) -> dict:
+    """Revenue forecast based on open deals, their probability, and expected close dates."""
+    result = await db.execute(
+        select(Deal).where(
+            Deal.organization_id == organization_id,
+            Deal.stage.notin_(["won", "lost"]),
+        )
+    )
+    open_deals = list(result.scalars().all())
+
+    today = date.today()
+    monthly: dict[str, dict] = {}
+
+    for i in range(months):
+        month_date = today.replace(day=1) + timedelta(days=32 * i)
+        key = month_date.strftime("%Y-%m")
+        monthly[key] = {"month": key, "weighted": 0.0, "unweighted": 0.0, "deal_count": 0}
+
+    # No-close-date deals get spread across all months
+    no_date_deals = [d for d in open_deals if d.expected_close_date is None]
+    dated_deals = [d for d in open_deals if d.expected_close_date is not None]
+
+    for deal in dated_deals:
+        key = deal.expected_close_date.strftime("%Y-%m")
+        if key in monthly:
+            val = float(deal.value)
+            prob = (deal.probability or 0) / 100.0
+            monthly[key]["weighted"] += round(val * prob, 2)
+            monthly[key]["unweighted"] += round(val, 2)
+            monthly[key]["deal_count"] += 1
+
+    # Spread undated deals evenly
+    if no_date_deals and monthly:
+        per_month = len(monthly)
+        for deal in no_date_deals:
+            val = float(deal.value) / per_month
+            prob = (deal.probability or 0) / 100.0
+            for m in monthly.values():
+                m["weighted"] += round(val * prob, 2)
+                m["unweighted"] += round(val, 2)
+                m["deal_count"] += 1
+
+    forecast = sorted(monthly.values(), key=lambda x: x["month"])
+    total_weighted = round(sum(m["weighted"] for m in forecast), 2)
+    total_unweighted = round(sum(m["unweighted"] for m in forecast), 2)
+
+    return {
+        "months": forecast,
+        "total_weighted": total_weighted,
+        "total_unweighted": total_unweighted,
+        "open_deals": len(open_deals),
     }

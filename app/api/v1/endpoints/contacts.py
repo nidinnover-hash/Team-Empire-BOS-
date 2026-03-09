@@ -54,6 +54,15 @@ async def create_contact(
         entity_id=contact.id,
         payload_json={"name": data.name},
     )
+    # Fire-and-forget enrichment
+    import asyncio
+    from app.services.contact_enrichment import enrich_contact_background
+    try:
+        asyncio.get_running_loop().create_task(
+            enrich_contact_background(contact.id, int(actor["org_id"]))
+        )
+    except RuntimeError:
+        pass
     return _mask_contact_for_role(ContactRead.model_validate(contact, from_attributes=True), actor.get("role"))
 
 
@@ -134,6 +143,16 @@ async def contact_intelligence(
     return await get_contact_intelligence_summary(
         db, organization_id=int(actor["org_id"]), stale_days=stale_days,
     )
+
+
+@router.post("/enrich")
+async def batch_enrich_contacts(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Batch-enrich contacts: auto-fill company, lead score from email domain."""
+    from app.services.contact_enrichment import batch_enrich
+    return await batch_enrich(db, organization_id=int(actor["org_id"]))
 
 
 @router.post("/intelligence/rescore")

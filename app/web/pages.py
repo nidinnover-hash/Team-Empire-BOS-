@@ -131,6 +131,7 @@ router = APIRouter(tags=["Web Pages"])
 
 # Static authenticated pages
 router.get("/web/integrations", response_class=HTMLResponse, include_in_schema=False)(_web_page("integrations.html", {"CEO", "ADMIN"}))
+router.get("/web/integration-health", response_class=HTMLResponse, include_in_schema=False)(_web_page("integration_health.html", {"CEO", "ADMIN"}))
 router.get("/web/talk", response_class=HTMLResponse, include_in_schema=False)(_web_page("talk.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
 router.get("/web/data-hub", response_class=HTMLResponse, include_in_schema=False)(_web_page("data_hub.html", _ALL_WEB_ROLES))
 router.get("/web/observe", response_class=HTMLResponse, include_in_schema=False)(_web_page("observe.html", {"CEO", "ADMIN"}))

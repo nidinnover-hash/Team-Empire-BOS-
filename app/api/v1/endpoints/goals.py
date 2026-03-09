@@ -5,7 +5,9 @@ from app.core.deps import get_current_workspace_id, get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
 from app.schemas.goal import GoalCreate, GoalProgressUpdate, GoalRead, GoalStatusUpdate
+from app.schemas.project import ProjectRead
 from app.services import goal as goal_service
+from app.services import project as project_service
 
 router = APIRouter(prefix="/goals", tags=["Goals"])
 
@@ -71,6 +73,24 @@ async def update_status(
     if goal is None:
         raise HTTPException(status_code=404, detail="Goal not found")
     return goal
+
+
+@router.get("/{goal_id}/projects", response_model=list[ProjectRead])
+async def goal_projects(
+    goal_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0, le=10_000),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+    workspace_id: int = Depends(get_current_workspace_id),
+) -> list[ProjectRead]:
+    """List projects linked to a goal."""
+    goal = await goal_service.get_goal(db, goal_id, organization_id=actor["org_id"])
+    if goal is None:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    return await project_service.list_projects(
+        db, organization_id=actor["org_id"], goal_id=goal_id, limit=limit, offset=offset,
+    )
 
 
 @router.get("/{goal_id}", response_model=GoalRead)

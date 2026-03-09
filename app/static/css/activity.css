@@ -21,10 +21,11 @@ h1 { font-size: var(--text-lg); font-weight: 700; color: var(--text); }
   display: flex; gap: .5rem; align-items: center; margin-bottom: 1rem;
   flex-wrap: wrap;
 }
-.filter-bar select, .filter-bar input[type="date"] {
+.filter-bar select, .filter-bar input[type="date"], .filter-bar input[type="text"] {
   padding: .35rem .5rem; font-size: var(--text-sm); border: 1px solid var(--line);
   border-radius: var(--radius); background: var(--surface); color: var(--text);
 }
+.filter-bar input[type="text"] { min-width: 180px; }
 .filter-bar select:focus, .filter-bar input:focus { outline: none; border-color: var(--brand); }
 
 .btn-secondary {
@@ -58,6 +59,20 @@ h1 { font-size: var(--text-lg); font-weight: 700; color: var(--text); }
 }
 .evt-detail { font-size: var(--text-sm); color: var(--text); margin-top: .2rem; }
 .evt-meta { font-size: var(--text-xs); color: var(--text-faint); margin-top: .2rem; display: flex; gap: .8rem; }
+
+.evt-expand-btn {
+  background: none; border: none; cursor: pointer; font-size: var(--text-xs);
+  color: var(--text-faint); padding: 0 .3rem; vertical-align: middle;
+}
+.evt-expand-btn:hover { color: var(--brand); }
+.evt-payload {
+  margin-top: .4rem; padding: .5rem; background: var(--bg); border-radius: var(--radius);
+  border: 1px solid var(--line); overflow-x: auto;
+}
+.evt-payload pre {
+  margin: 0; font-size: var(--text-xs); color: var(--text-muted); white-space: pre-wrap;
+  word-break: break-word;
+}
 
 .risk-badge {
   font-size: var(--text-2xs); font-weight: 700; text-transform: uppercase; padding: .1rem .35rem;

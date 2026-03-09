@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Integration Health — Nidin BOS" />
+  <meta name="theme-color" content="#f5f5f7" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Integration Health — Nidin BOS</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
+  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+</head>
+<body>
+  {% set active_page = "integrations" %}
+  {% include "partials/sidebar.html" %}
+
+  <div class="main-wrap">
+    <div class="page-header">
+      <h1>Integration Health</h1>
+      <button class="btn btn-primary" id="btn-refresh">Refresh</button>
+    </div>
+
+    <!-- Summary KPIs -->
+    <div class="kpi-row">
+      <div class="kpi"><div class="label">Total</div><div class="val" id="k-total">0</div></div>
+      <div class="kpi"><div class="label">Healthy</div><div class="val" id="k-healthy" style="color:var(--green,#22c55e)">0</div></div>
+      <div class="kpi"><div class="label">Degraded</div><div class="val" id="k-degraded" style="color:var(--yellow,#f59e0b)">0</div></div>
+      <div class="kpi"><div class="label">Errored</div><div class="val" id="k-errored" style="color:var(--red,#ef4444)">0</div></div>
+      <div class="kpi"><div class="label">Health Score</div><div class="val" id="k-score">0%</div></div>
+    </div>
+
+    <!-- Integration Details Table -->
+    <div class="card" style="margin-top:1.5rem">
+      <table class="data-table" id="health-table">
+        <thead>
+          <tr>
+            <th>Integration</th>
+            <th>Status</th>
+            <th>Health</th>
+            <th>Last Sync</th>
+            <th>Sync Age</th>
+            <th>Errors</th>
+          </tr>
+        </thead>
+        <tbody id="health-body"></tbody>
+      </table>
+      <p id="empty-msg" class="empty-state" style="display:none">No integrations found.</p>
+    </div>
+  </div>
+
+  <script nonce="{{ csp_nonce }}" src="/static/js/integration-health-page.js"></script>
+  <script nonce="{{ csp_nonce }}">lucide.createIcons();</script>
+</body>
+</html>

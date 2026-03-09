@@ -57,6 +57,16 @@ async def deal_summary(
     )
 
 
+@router.get("/forecast")
+async def deal_forecast(
+    months: int = Query(6, ge=1, le=24),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> dict:
+    """Revenue forecast based on pipeline deals, probability, and expected close dates."""
+    return await deal_service.get_deal_forecast(db, organization_id=actor["org_id"], months=months)
+
+
 @router.get("/{deal_id}", response_model=DealRead)
 async def get_deal(
     deal_id: int,
