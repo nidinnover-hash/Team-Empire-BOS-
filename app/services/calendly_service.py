@@ -137,11 +137,75 @@ async def sync_events(
 ) -> dict:
     result = await _calendly_sync.sync(db, org_id, days_ahead=days_ahead)
 
-    # Count active events for backward-compat "upcoming_events" field
-    # (the base class doesn't know about Calendly-specific "status" field,
-    #  so we approximate: synced + skipped = total events returned by API)
+    # Link attendees to contacts
+    contacts_linked = 0
+    try:
+        contacts_linked = await _link_attendees_to_contacts(db, org_id)
+    except Exception:
+        logger.warning("Calendly attendee linking failed for org %d", org_id, exc_info=True)
+
     return {
         "events_synced": result.synced,
         "upcoming_events": result.synced + result.skipped,
+        "contacts_linked": contacts_linked,
         "last_sync_at": result.last_sync_at.isoformat(),
     }
+
+
+async def _link_attendees_to_contacts(
+    db: AsyncSession, org_id: int,
+) -> int:
+    """Fetch invitees for recent Calendly events and link to contacts via email.
+
+    Updates contact.last_contacted_at and sets next_follow_up_at if not already set.
+    """
+    from app.models.contact import Contact
+
+    integration = await get_integration_by_type(db, org_id, _TYPE)
+    if not integration or integration.status != "connected":
+        return 0
+    config = integration.config_json or {}
+    token = config.get("api_token", "")
+    user_uri = config.get("user_uri", "")
+    if not token or not user_uri:
+        return 0
+
+    # Fetch upcoming events
+    now = datetime.now(UTC)
+    events = await calendly_tool.list_scheduled_events(
+        token, user_uri,
+        min_start_time=now.isoformat(),
+        max_start_time=(now + timedelta(days=7)).isoformat(),
+        count=20,
+    )
+
+    linked = 0
+    for event in events:
+        event_uri = event.get("uri", "")
+        if not event_uri:
+            continue
+        try:
+            invitees = await calendly_tool.list_event_invitees(token, event_uri, count=10)
+        except Exception:
+            continue
+
+        for inv in invitees:
+            email = (inv.get("email") or "").strip().lower()
+            if not email:
+                continue
+            result = await db.execute(
+                select(Contact).where(
+                    Contact.organization_id == org_id,
+                    Contact.email == email,
+                ).limit(1)
+            )
+            contact = result.scalar_one_or_none()
+            if contact:
+                contact.last_contacted_at = now
+                if not contact.next_follow_up_at:
+                    contact.next_follow_up_at = now + timedelta(days=1)
+                linked += 1
+
+    if linked > 0:
+        await db.commit()
+    return linked

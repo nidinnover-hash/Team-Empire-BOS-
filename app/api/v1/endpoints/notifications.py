@@ -137,3 +137,13 @@ async def notification_stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/run-alerts")
+async def run_alert_checks(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Run proactive alert checks: budget overruns, stale contacts, failed syncs."""
+    from app.services.alert_engine import run_alert_checks as _run_checks
+    return await _run_checks(db, organization_id=int(actor["org_id"]))

@@ -29,15 +29,22 @@ _TYPE = "hubspot"
 # ---------------------------------------------------------------------------
 
 class HubSpotSync(IntegrationSync):
-    """Sync HubSpot contacts → Contact model."""
+    """Sync HubSpot contacts → Contact model with delta-sync support."""
 
     provider = "hubspot"
 
     async def fetch_items(self, token: str, config: dict[str, Any], **kwargs: Any) -> list[dict[str, Any]]:
-        return await hubspot_tool.list_contacts(
-            token, limit=100,
-            properties=["firstname", "lastname", "email", "company", "phone", "lifecyclestage"],
-        )
+        properties = ["firstname", "lastname", "email", "company", "phone", "lifecyclestage"]
+        # Delta-sync: if last_sync_at is available, only fetch contacts modified since then
+        last_sync = config.get("_last_sync_at")
+        if last_sync:
+            try:
+                return await hubspot_tool.search_contacts_updated_after(
+                    token, updated_after=last_sync, limit=200, properties=properties,
+                )
+            except Exception:
+                logger.info("HubSpot delta-sync failed, falling back to full sync")
+        return await hubspot_tool.list_contacts(token, limit=100, properties=properties)
 
     async def load_existing_keys(self, db: AsyncSession, org_id: int) -> set[Hashable]:
         result = await db.execute(
@@ -153,6 +160,13 @@ async def get_hubspot_status(db: AsyncSession, org_id: int) -> dict:
 async def sync_hubspot_data(
     db: AsyncSession, org_id: int
 ) -> dict:
+    # Inject _last_sync_at into config for delta-sync support
+    integration = await get_integration_by_type(db, org_id, _TYPE)
+    if integration and integration.last_sync_at:
+        config = dict(integration.config_json or {})
+        config["_last_sync_at"] = integration.last_sync_at.isoformat()
+        integration.config_json = config
+
     contact_result = await _hubspot_sync.sync(db, org_id)
 
     # Deals: persist to Note(source='hubspot_deal')
@@ -165,6 +179,8 @@ async def sync_hubspot_data(
 
     return {
         "contacts_synced": contact_result.synced,
+        "contacts_skipped": contact_result.skipped,
         "deals_synced": deals_synced,
+        "sync_mode": "delta" if (integration and integration.last_sync_at) else "full",
         "last_sync_at": contact_result.last_sync_at.isoformat(),
     }

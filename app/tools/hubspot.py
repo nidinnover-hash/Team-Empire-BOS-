@@ -62,6 +62,45 @@ async def list_contacts(
     return all_results[:limit]
 
 
+async def search_contacts_updated_after(
+    token: str,
+    updated_after: str,
+    *,
+    limit: int = 100,
+    properties: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Search contacts modified after a given ISO timestamp (delta-sync)."""
+    filters = [{"propertyName": "hs_lastmodifieddate", "operator": "GTE", "value": updated_after}]
+    payload: dict[str, Any] = {
+        "filterGroups": [{"filters": filters}],
+        "sorts": [{"propertyName": "hs_lastmodifieddate", "direction": "ASCENDING"}],
+        "limit": min(limit, 100),
+    }
+    if properties:
+        payload["properties"] = properties
+    client = _get_client()
+    all_results: list[dict[str, Any]] = []
+    after: str | int = 0
+    while len(all_results) < limit:
+        if after:
+            payload["after"] = after
+        resp = await client.post(
+            f"{_BASE}/crm/v3/objects/contacts/search",
+            json=payload,
+            headers=_headers(token),
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        results = body.get("results", [])
+        if isinstance(results, list):
+            all_results.extend(results)
+        paging = body.get("paging") or {}
+        after = paging.get("next", {}).get("after", 0)
+        if not after:
+            break
+    return all_results[:limit]
+
+
 async def list_deals(
     token: str,
     *,

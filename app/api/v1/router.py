@@ -16,6 +16,7 @@ from app.api.v1.endpoints import (
     control,
     dashboard_kpi,
     data_collection,
+    deals,
     decision_cards,
     departments,
     email,
@@ -112,4 +113,5 @@ api_router.include_router(workspaces.router)
 api_router.include_router(share_packets.router)
 api_router.include_router(decision_cards.router)
 api_router.include_router(orchestrator.router)
+api_router.include_router(deals.router)
 api_router.include_router(workflow_observability.router)

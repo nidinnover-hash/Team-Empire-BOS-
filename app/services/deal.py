@@ -1,0 +1,143 @@
+"""Deal service — CRUD and pipeline analytics for the Deal model."""
+from __future__ import annotations
+
+import logging
+from datetime import UTC, datetime
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.deal import DEAL_STAGES, Deal
+
+logger = logging.getLogger(__name__)
+
+_UPDATE_FIELDS = {
+    "contact_id", "title", "stage", "value", "probability",
+    "expected_close_date", "description", "source", "lost_reason",
+}
+
+
+async def create_deal(
+    db: AsyncSession, data: dict, organization_id: int, owner_user_id: int | None = None,
+) -> Deal:
+    deal = Deal(organization_id=organization_id, owner_user_id=owner_user_id, **data)
+    db.add(deal)
+    await db.commit()
+    await db.refresh(deal)
+    return deal
+
+
+async def list_deals(
+    db: AsyncSession, organization_id: int,
+    *, contact_id: int | None = None, stage: str | None = None,
+    limit: int = 100, offset: int = 0,
+) -> list[Deal]:
+    q = select(Deal).where(Deal.organization_id == organization_id)
+    if contact_id is not None:
+        q = q.where(Deal.contact_id == contact_id)
+    if stage:
+        q = q.where(Deal.stage == stage)
+    q = q.order_by(Deal.updated_at.desc()).offset(offset).limit(limit)
+    result = await db.execute(q)
+    return list(result.scalars().all())
+
+
+async def get_deal(db: AsyncSession, deal_id: int, organization_id: int) -> Deal | None:
+    result = await db.execute(
+        select(Deal).where(Deal.id == deal_id, Deal.organization_id == organization_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def update_deal(
+    db: AsyncSession, deal_id: int, organization_id: int, **kwargs,
+) -> Deal | None:
+    deal = await get_deal(db, deal_id, organization_id)
+    if deal is None:
+        return None
+
+    for k, v in kwargs.items():
+        if k in _UPDATE_FIELDS:
+            setattr(deal, k, v)
+
+    # Auto-set won_at/lost_at timestamps
+    if kwargs.get("stage") == "won" and deal.won_at is None:
+        deal.won_at = datetime.now(UTC)
+    if kwargs.get("stage") == "lost" and deal.lost_at is None:
+        deal.lost_at = datetime.now(UTC)
+
+    deal.updated_at = datetime.now(UTC)
+    await db.commit()
+    await db.refresh(deal)
+    return deal
+
+
+async def delete_deal(db: AsyncSession, deal_id: int, organization_id: int) -> bool:
+    deal = await get_deal(db, deal_id, organization_id)
+    if deal is None:
+        return False
+    await db.delete(deal)
+    await db.commit()
+    return True
+
+
+async def get_deal_summary(db: AsyncSession, organization_id: int) -> dict:
+    """Pipeline analytics for deals."""
+    total_q = await db.execute(
+        select(
+            func.count(Deal.id),
+            func.coalesce(func.sum(Deal.value), 0.0),
+        ).where(Deal.organization_id == organization_id)
+    )
+    row = total_q.one()
+    total_deals = row[0] or 0
+    total_value = float(row[1] or 0.0)
+
+    won_q = await db.execute(
+        select(
+            func.count(Deal.id),
+            func.coalesce(func.sum(Deal.value), 0.0),
+        ).where(Deal.organization_id == organization_id, Deal.stage == "won")
+    )
+    won_row = won_q.one()
+    won_value = float(won_row[1] or 0.0)
+
+    lost_q = await db.execute(
+        select(func.count(Deal.id))
+        .where(Deal.organization_id == organization_id, Deal.stage == "lost")
+    )
+    lost_count = lost_q.scalar() or 0
+
+    closed = (won_row[0] or 0) + lost_count
+    win_rate = round(((won_row[0] or 0) / max(closed, 1)) * 100, 1)
+
+    # Per-stage breakdown
+    stage_q = await db.execute(
+        select(
+            Deal.stage,
+            func.count(Deal.id),
+            func.coalesce(func.sum(Deal.value), 0.0),
+            func.coalesce(func.avg(Deal.value), 0.0),
+            func.coalesce(func.avg(Deal.probability), 0.0),
+        ).where(Deal.organization_id == organization_id)
+        .group_by(Deal.stage)
+    )
+    pipeline = []
+    for r in stage_q.all():
+        pipeline.append({
+            "stage": r[0],
+            "count": r[1],
+            "total_value": round(float(r[2]), 2),
+            "avg_value": round(float(r[3]), 2),
+            "avg_probability": round(float(r[4]), 1),
+        })
+
+    return {
+        "total_deals": total_deals,
+        "total_value": round(total_value, 2),
+        "won_value": round(won_value, 2),
+        "lost_count": lost_count,
+        "win_rate": win_rate,
+        "avg_deal_size": round(total_value / max(total_deals, 1), 2),
+        "pipeline": sorted(pipeline, key=lambda x: DEAL_STAGES.index(x["stage"]) if x["stage"] in DEAL_STAGES else 99),
+    }
