@@ -121,3 +121,10 @@ class PendingActionsDigestDraftRead(BaseModel):
     to: str
     subject: str
     preview: str
+
+
+class ThreadSummaryResponse(BaseModel):
+    thread_id: str
+    email_count: int
+    participants: list[str]
+    summary: str

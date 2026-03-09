@@ -37,6 +37,7 @@ from app.schemas.email import (
     PendingActionsDigestDraftRead,
     PendingActionsDigestRead,
     SyncResult,
+    ThreadSummaryResponse,
 )
 from app.services import email_control, email_service
 from app.services.email_service import EmailSyncError
@@ -329,6 +330,22 @@ async def list_inbox(
     return await email_service.list_emails(
         db, org_id=org_id, limit=limit, offset=offset, unread_only=unread_only
     )
+
+
+@router.post("/thread/{thread_id}/summarize", response_model=ThreadSummaryResponse)
+async def summarize_thread(
+    thread_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> ThreadSummaryResponse:
+    """AI summarizes an entire email thread."""
+    org_id = int(current_user["org_id"])
+    result = await email_service.summarize_thread(
+        db=db, thread_id=thread_id, org_id=org_id, actor_user_id=int(current_user["id"]),
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Thread not found or empty")
+    return ThreadSummaryResponse(**result)
 
 
 @router.post("/{email_id}/summarize", response_model=EmailSummaryResponse)

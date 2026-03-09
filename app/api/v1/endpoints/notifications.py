@@ -17,9 +17,12 @@ from app.schemas.notification import (
     NotificationListRead,
     NotificationMarkReadRequest,
     NotificationMarkReadResponse,
+    NotificationPreferenceRead,
+    NotificationPreferenceUpdate,
     NotificationRead,
 )
 from app.services import notification as notification_service
+from app.services import notification_preference as pref_service
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +102,46 @@ async def mark_notifications_read(
         updated = await notification_service.mark_all_read(db, org_id, user_id)
     await db.commit()
     return NotificationMarkReadResponse(ok=True, marked_read=updated)
+
+
+@router.get("/preferences", response_model=list[NotificationPreferenceRead])
+async def get_preferences(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "EMPLOYEE")),
+) -> list[NotificationPreferenceRead]:
+    """Get notification preferences for all categories (with defaults)."""
+    prefs = await pref_service.get_preferences_with_defaults(
+        db, user_id=int(actor["id"]), organization_id=int(actor["org_id"]),
+    )
+    return [NotificationPreferenceRead(**p) for p in prefs]
+
+
+@router.patch("/preferences", response_model=NotificationPreferenceRead)
+async def update_preference(
+    data: NotificationPreferenceUpdate,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "EMPLOYEE")),
+) -> NotificationPreferenceRead:
+    """Update notification preference for a specific category."""
+    pref = await pref_service.upsert_preference(
+        db,
+        user_id=int(actor["id"]),
+        organization_id=int(actor["org_id"]),
+        event_category=data.event_category,
+        in_app=data.in_app,
+        email=data.email,
+        slack=data.slack,
+        min_severity=data.min_severity,
+        muted=data.muted,
+    )
+    return NotificationPreferenceRead(
+        event_category=pref.event_category,
+        in_app=pref.in_app,
+        email=pref.email,
+        slack=pref.slack,
+        min_severity=pref.min_severity,
+        muted=pref.muted,
+    )
 
 
 @router.get("/stream")

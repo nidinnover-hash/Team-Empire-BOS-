@@ -423,6 +423,85 @@ async def summarize_email(
     return summary
 
 
+# -- Thread Summarization -----------------------------------------------------
+
+async def get_thread_emails(
+    db: AsyncSession, thread_id: str, org_id: int,
+) -> list[Email]:
+    """Fetch all emails in a thread, chronologically."""
+    result = await db.execute(
+        select(Email)
+        .where(Email.organization_id == org_id, Email.thread_id == thread_id)
+        .order_by(Email.received_at.asc())
+    )
+    return list(result.scalars().all())
+
+
+async def summarize_thread(
+    db: AsyncSession, thread_id: str, org_id: int, actor_user_id: int,
+) -> dict | None:
+    """AI summarizes an entire email thread.
+
+    Returns dict with thread_id, email_count, participants, summary.
+    """
+    emails = await get_thread_emails(db, thread_id, org_id)
+    if not emails:
+        return None
+
+    participants: set[str] = set()
+    thread_text_parts: list[str] = []
+    for e in emails:
+        if e.from_address:
+            participants.add(e.from_address)
+        if e.to_address:
+            participants.add(e.to_address)
+        thread_text_parts.append(
+            f"From: {e.from_address or 'Unknown'}\n"
+            f"Date: {e.received_at.isoformat() if e.received_at else 'Unknown'}\n"
+            f"Subject: {e.subject or '(no subject)'}\n\n"
+            f"{e.body_text or '(no body)'}\n\n---"
+        )
+
+    thread_text = "\n".join(thread_text_parts)
+    # Truncate to prevent token overflow
+    if len(thread_text) > 12000:
+        thread_text = thread_text[:12000] + "\n\n[... truncated]"
+
+    brain_context = await _build_email_brain_context(db, org_id=org_id, actor_user_id=actor_user_id)
+
+    summary = await call_ai(
+        system_prompt=(
+            "You are an email assistant. Summarize this entire email thread concisely. "
+            "Include: key discussion points, decisions made, action items, and current status. "
+            "Use bullet points. Be concise but comprehensive."
+        ),
+        user_message=f"Email thread ({len(emails)} messages):\n\n{thread_text}",
+        provider=settings.EMAIL_AI_PROVIDER or settings.DEFAULT_AI_PROVIDER,
+        organization_id=org_id,
+        brain_context=brain_context,
+    )
+
+    if _is_ai_error(summary):
+        summary = f"Thread with {len(emails)} emails from {', '.join(sorted(participants))}. AI summary unavailable."
+
+    await record_action(
+        db=db,
+        event_type="email_thread_summarized",
+        actor_user_id=actor_user_id,
+        entity_type="email_thread",
+        entity_id=None,
+        payload_json={"thread_id": thread_id, "email_count": len(emails)},
+        organization_id=org_id,
+    )
+
+    return {
+        "thread_id": thread_id,
+        "email_count": len(emails),
+        "participants": sorted(participants),
+        "summary": summary,
+    }
+
+
 # -- AI Draft Reply -----------------------------------------------------------
 
 async def draft_reply(

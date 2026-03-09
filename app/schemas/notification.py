@@ -37,3 +37,21 @@ class NotificationMarkReadRequest(BaseModel):
 class NotificationMarkReadResponse(BaseModel):
     ok: bool
     marked_read: int
+
+
+class NotificationPreferenceRead(BaseModel):
+    event_category: str
+    in_app: bool
+    email: bool
+    slack: bool
+    min_severity: str
+    muted: bool
+
+
+class NotificationPreferenceUpdate(BaseModel):
+    event_category: str = Field(max_length=50)
+    in_app: bool | None = None
+    email: bool | None = None
+    slack: bool | None = None
+    min_severity: str | None = Field(None, pattern="^(info|warning|critical)$")
+    muted: bool | None = None

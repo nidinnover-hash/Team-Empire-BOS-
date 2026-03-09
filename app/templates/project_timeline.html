@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Project Timeline — Nidin BOS" />
+  <meta name="theme-color" content="#f5f5f7" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Project Timeline — Nidin BOS</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
+  <link rel="stylesheet" href="/static/css/project-timeline.css" />
+  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+</head>
+<body>
+  {% set active_page = "projects" %}
+  {% include "partials/sidebar.html" %}
+
+  <div class="main-wrap">
+    <div class="page-header">
+      <h1>Project Timeline</h1>
+      <a href="/web/projects" class="btn-secondary">List View</a>
+    </div>
+
+    <div class="kpi-row">
+      <div class="kpi"><div class="label">Total Projects</div><div class="val" id="k-total">0</div></div>
+      <div class="kpi"><div class="label">Active</div><div class="val" id="k-active">0</div></div>
+      <div class="kpi"><div class="label">Completed</div><div class="val" id="k-completed">0</div></div>
+      <div class="kpi"><div class="label">Avg Progress</div><div class="val" id="k-progress">0%</div></div>
+    </div>
+
+    <div class="timeline-legend">
+      <span class="legend-item"><span class="legend-dot active"></span> Active</span>
+      <span class="legend-item"><span class="legend-dot completed"></span> Completed</span>
+      <span class="legend-item"><span class="legend-dot paused"></span> Paused</span>
+      <span class="legend-item"><span class="legend-dot archived"></span> Archived</span>
+    </div>
+
+    <div id="timeline-container" class="timeline-container">
+      <div class="empty loading">Loading projects...</div>
+    </div>
+  </div>
+
+  <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/project-timeline-page.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
+</body>
+</html>

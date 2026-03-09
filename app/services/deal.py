@@ -79,6 +79,13 @@ async def update_deal(
         except Exception:
             logger.warning("Failed to create finance entry for won deal %d", deal.id, exc_info=True)
 
+    # Fire automation triggers on stage change
+    if "stage" in kwargs:
+        try:
+            await _fire_deal_stage_triggers(db, deal, kwargs["stage"])
+        except Exception:
+            logger.warning("Failed to fire triggers for deal %d stage=%s", deal.id, kwargs["stage"], exc_info=True)
+
     return deal
 
 
@@ -97,6 +104,28 @@ async def _create_income_for_won_deal(db: AsyncSession, deal: Deal) -> None:
     db.add(entry)
     await db.commit()
     logger.info("Auto-created income entry for won deal %d ($%.2f)", deal.id, float(deal.value))
+
+
+async def _fire_deal_stage_triggers(db: AsyncSession, deal: Deal, new_stage: str) -> None:
+    """Fire automation triggers when a deal changes stage."""
+    from app.services.automation import fire_matching_triggers
+
+    payload = {
+        "deal_id": deal.id,
+        "title": deal.title,
+        "stage": new_stage,
+        "value": float(deal.value) if deal.value else 0,
+        "contact_id": deal.contact_id,
+    }
+    matched = await fire_matching_triggers(
+        db, organization_id=deal.organization_id,
+        event_type="deal_stage_changed", event_payload=payload,
+    )
+    if matched:
+        logger.info(
+            "Fired %d automation trigger(s) for deal %d stage=%s",
+            len(matched), deal.id, new_stage,
+        )
 
 
 async def delete_deal(db: AsyncSession, deal_id: int, organization_id: int) -> bool:

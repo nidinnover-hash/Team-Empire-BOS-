@@ -216,6 +216,24 @@ async def pipeline_analytics(
     return await contact_service.get_pipeline_analytics(db, organization_id=actor["org_id"])
 
 
+@router.get("/{contact_id}/network")
+async def contact_network(
+    contact_id: int,
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> dict:
+    """Relationship graph: contacts connected via company, deals, email threads."""
+    from app.services.contact_network import get_contact_network
+
+    result = await get_contact_network(
+        db, contact_id=contact_id, organization_id=actor["org_id"], limit=limit,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    return result
+
+
 @router.get("/{contact_id}/timeline")
 async def contact_timeline(
     contact_id: int,
