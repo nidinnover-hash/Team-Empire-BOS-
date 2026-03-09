@@ -48,6 +48,15 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/approval-workflows/{workflow_id}",  # workflow detail with steps dict
     "/api/v1/internal-comments",  # comment list/create dicts
     "/api/v1/dashboard-widgets/catalog",  # system widget catalog list
+    "/api/v1/duplicates/scan/contacts",  # duplicate scan result dict
+    "/api/v1/recurring-invoices/due",  # due invoices list dict
+    "/api/v1/role-dashboards",  # all role layouts list dict
+    "/api/v1/role-dashboards/{role}",  # role layout dict
+    "/api/v1/role-dashboards",  # save role layout dict
+    "/api/v1/webhook-deliveries/stats",  # delivery stats dict
+    "/api/v1/contact-lifecycle/current/{contact_id}",  # current stage dict
+    "/api/v1/contact-lifecycle/counts",  # stage counts dict
+    "/api/v1/bulk-action-logs/summary",  # bulk action summary dict
 }
 
 

@@ -11,10 +11,12 @@ from app.api.v1.endpoints import (
     automation,
     briefing,
     bulk,
+    bulk_action_logs,
     activity_timeline,
     campaigns,
     coaching,
     commands,
+    contact_lifecycle,
     contact_segments,
     contacts,
     control,
@@ -27,6 +29,7 @@ from app.api.v1.endpoints import (
     deals,
     decision_cards,
     departments,
+    duplicate_detection,
     email,
     email_templates,
     empire_digital,
@@ -61,7 +64,10 @@ from app.api.v1.endpoints import (
     performance,
     personas,
     projects,
+    recurring_invoices,
     report_schedules,
+    role_dashboards,
+    saved_filters,
     search,
     scoring_rules,
     share_packets,
@@ -72,6 +78,7 @@ from app.api.v1.endpoints import (
     tags,
     tasks,
     users,
+    webhook_deliveries,
     webhooks,
     workflow_observability,
     workspace_permissions,
@@ -155,3 +162,10 @@ api_router.include_router(tags.router)
 api_router.include_router(import_export_presets.router)
 api_router.include_router(internal_comments.router)
 api_router.include_router(dashboard_widgets.router)
+api_router.include_router(duplicate_detection.router)
+api_router.include_router(recurring_invoices.router)
+api_router.include_router(role_dashboards.router)
+api_router.include_router(webhook_deliveries.router)
+api_router.include_router(contact_lifecycle.router)
+api_router.include_router(saved_filters.router)
+api_router.include_router(bulk_action_logs.router)
