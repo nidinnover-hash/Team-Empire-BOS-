@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Contact Timeline — Nidin BOS" />
+  <meta name="theme-color" content="#f5f5f7" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Contact Timeline — Nidin BOS</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
+  <link rel="stylesheet" href="/static/css/contact-timeline.css" />
+  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+</head>
+<body>
+  {% set active_page = "contacts" %}
+  {% include "partials/sidebar.html" %}
+
+  <div class="main-wrap">
+    <div class="page-header">
+      <h1 id="page-title">Contact Timeline</h1>
+      <a href="/web/contacts" class="btn-secondary">Back to Contacts</a>
+    </div>
+
+    <div class="contact-profile" id="contact-profile">
+      <div class="empty loading">Loading contact...</div>
+    </div>
+
+    <div id="timeline-container" class="timeline-container">
+      <div class="empty loading">Loading timeline...</div>
+    </div>
+  </div>
+
+  <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/contact-timeline-page.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
+</body>
+</html>

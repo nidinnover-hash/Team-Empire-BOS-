@@ -18,6 +18,11 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/ops/team-activity",  # activity feed aggregation dict
     "/api/v1/contacts/{contact_id}/merge-history",  # merge history list
     "/api/v1/contacts/{contact_id}/unmerge",  # unmerge action
+    "/api/v1/notifications/live",  # SSE stream
+    "/api/v1/campaigns/{campaign_id}/summary",  # campaign analytics dict
+    "/api/v1/tasks/templates/generate",  # recurring task generation result
+    "/api/v1/bulk/import/deals",  # bulk import result dict
+    "/api/v1/dashboard/layout",  # widget layout dict (GET)
 }
 
 

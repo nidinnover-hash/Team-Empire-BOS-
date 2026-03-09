@@ -1,15 +1,17 @@
-"""Lightweight dashboard KPI polling endpoint."""
+"""Lightweight dashboard KPI polling endpoint + layout customization."""
 
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
-from app.core.rbac import require_sensitive_financial_roles
+from app.core.rbac import require_roles, require_sensitive_financial_roles
+from app.services import dashboard_layout as layout_service
 from app.models.approval import Approval
 from app.models.automation import AutomationTrigger, Workflow
 from app.models.event import Event
@@ -188,3 +190,44 @@ async def get_dashboard_trends(
         "tasks_completed": tasks_completed,
         "events": events,
     }
+
+
+# ---------------------------------------------------------------------------
+# Dashboard layout customization
+# ---------------------------------------------------------------------------
+
+class WidgetPosition(BaseModel):
+    id: str = Field(..., max_length=50)
+    title: str = Field(..., max_length=100)
+    x: int = Field(0, ge=0)
+    y: int = Field(0, ge=0)
+    w: int = Field(4, ge=1, le=12)
+    h: int = Field(2, ge=1, le=12)
+
+
+class LayoutSaveRequest(BaseModel):
+    widgets: list[WidgetPosition] = Field(..., max_length=20)
+    theme: str = Field("default", pattern=r"^(default|compact|dark)$")
+
+
+@router.get("/layout")
+async def get_layout(
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "EMPLOYEE")),
+) -> dict:
+    """Get the user's saved dashboard widget layout (or defaults)."""
+    return await layout_service.get_layout(db, organization_id=int(actor["org_id"]), user_id=int(actor["id"]))
+
+
+@router.put("/layout")
+async def save_layout(
+    data: LayoutSaveRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "EMPLOYEE")),
+) -> dict:
+    """Save the user's dashboard widget layout."""
+    widgets = [w.model_dump() for w in data.widgets]
+    return await layout_service.save_layout(
+        db, organization_id=int(actor["org_id"]), user_id=int(actor["id"]),
+        widgets=widgets, theme=data.theme,
+    )

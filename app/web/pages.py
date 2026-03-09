@@ -154,6 +154,7 @@ router.get("/web/projects", response_class=HTMLResponse, include_in_schema=False
 router.get("/web/project-timeline", response_class=HTMLResponse, include_in_schema=False)(_web_page("project_timeline.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
 router.get("/web/goals", response_class=HTMLResponse, include_in_schema=False)(_web_page("goals.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
 router.get("/web/contacts", response_class=HTMLResponse, include_in_schema=False)(_web_page("contacts.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
+router.get("/web/contact-timeline", response_class=HTMLResponse, include_in_schema=False)(_web_page("contact_timeline.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
 router.get("/web/empire-digital", response_class=HTMLResponse, include_in_schema=False)(_web_page("empire_digital.html", {"CEO", "ADMIN", "MANAGER"}))
 router.get("/web/deals", response_class=HTMLResponse, include_in_schema=False)(_web_page("deals.html", {"CEO", "ADMIN", "MANAGER"}))
 router.get("/web/deal-pipeline", response_class=HTMLResponse, include_in_schema=False)(_web_page("deal_pipeline.html", {"CEO", "ADMIN", "MANAGER"}))

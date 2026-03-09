@@ -1,0 +1,68 @@
+/* Contact Timeline Page */
+.main-wrap { margin-left: var(--sb-width); padding: 1.5rem 2rem; max-width: 900px; }
+h1 { font-size: var(--text-lg); font-weight: 700; color: var(--text); }
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+
+.btn-secondary {
+  background: var(--surface); color: var(--text-muted); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: .35rem .7rem; font-size: var(--text-sm); cursor: pointer;
+  text-decoration: none;
+}
+.btn-secondary:hover { border-color: var(--text-faint); }
+
+.contact-profile {
+  background: var(--surface); border-radius: var(--radius); padding: 1rem 1.2rem;
+  box-shadow: var(--shadow-sm); margin-bottom: 1.5rem;
+  display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap;
+}
+.cp-name { font-size: var(--text-base); font-weight: 700; color: var(--text); }
+.cp-detail { font-size: var(--text-sm); color: var(--text-muted); }
+.cp-badge {
+  display: inline-block; padding: .15rem .5rem; border-radius: 999px;
+  font-size: var(--text-2xs); font-weight: 600; text-transform: uppercase;
+}
+.cp-badge.stage-new { background: #e3f2fd; color: #1565c0; }
+.cp-badge.stage-contacted { background: #fff3e0; color: #e65100; }
+.cp-badge.stage-qualified { background: #e8f5e9; color: #2e7d32; }
+.cp-badge.stage-proposal { background: #f3e5f5; color: #7b1fa2; }
+.cp-badge.stage-negotiation { background: #fce4ec; color: #c62828; }
+.cp-badge.stage-won { background: #e8f5e9; color: #1b5e20; }
+.cp-badge.stage-lost { background: #fafafa; color: #616161; }
+
+.timeline-container { position: relative; padding-left: 2rem; }
+.timeline-container::before {
+  content: ''; position: absolute; left: .9rem; top: 0; bottom: 0;
+  width: 2px; background: var(--line);
+}
+
+.tl-item {
+  position: relative; margin-bottom: 1rem; padding: .75rem 1rem;
+  background: var(--surface); border-radius: var(--radius);
+  box-shadow: var(--shadow-sm); border-left: 3px solid var(--line);
+}
+.tl-item.type-event { border-left-color: var(--brand, #0a84ff); }
+.tl-item.type-deal { border-left-color: var(--ok, #34c759); }
+.tl-item.type-note { border-left-color: #ff9f0a; }
+.tl-item.type-email { border-left-color: #af52de; }
+
+.tl-item::before {
+  content: ''; position: absolute; left: -1.65rem; top: 1rem;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--line);
+}
+.tl-item.type-event::before { border-color: var(--brand, #0a84ff); }
+.tl-item.type-deal::before { border-color: var(--ok, #34c759); }
+.tl-item.type-note::before { border-color: #ff9f0a; }
+
+.tl-header { display: flex; justify-content: space-between; align-items: center; }
+.tl-type { font-size: var(--text-2xs); text-transform: uppercase; font-weight: 700; color: var(--text-faint); }
+.tl-time { font-size: var(--text-2xs); color: var(--text-faint); }
+.tl-title { font-size: var(--text-sm); font-weight: 600; color: var(--text); margin-top: .2rem; }
+.tl-detail { font-size: var(--text-xs); color: var(--text-muted); margin-top: .15rem; }
+
+.empty { color: var(--text-faint); text-align: center; padding: 3rem; font-size: var(--text-base); }
+
+@media (max-width: 768px) {
+  .main-wrap { padding: 1rem; padding-top: 3.5rem; }
+  .contact-profile { flex-direction: column; gap: .5rem; }
+}

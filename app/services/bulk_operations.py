@@ -163,6 +163,85 @@ async def import_tasks_csv(
     return {"imported": imported, "skipped": skipped, "errors": errors[:20]}
 
 
+async def import_deals_csv(
+    db: AsyncSession,
+    organization_id: int,
+    csv_text: str,
+) -> dict:
+    """Import deals from CSV. Columns: title, value, stage, probability, expected_close_date, contact_id, description, source.
+
+    Returns {imported, skipped, errors}.
+    """
+    from app.models.deal import DEAL_STAGES, Deal
+
+    reader = csv.DictReader(io.StringIO(csv_text))
+    imported = 0
+    skipped = 0
+    errors: list[str] = []
+
+    for i, row in enumerate(reader):
+        if i >= MAX_IMPORT_ROWS:
+            errors.append(f"Row limit reached ({MAX_IMPORT_ROWS}). Remaining rows skipped.")
+            break
+
+        title = (row.get("title") or "").strip()
+        if not title:
+            skipped += 1
+            errors.append(f"Row {i + 2}: missing required 'title' field")
+            continue
+
+        try:
+            value = float(row.get("value", 0))
+        except (ValueError, TypeError):
+            value = 0
+
+        stage = (row.get("stage") or "discovery").strip().lower()
+        if stage not in DEAL_STAGES:
+            stage = "discovery"
+
+        try:
+            probability = int(row.get("probability", 0))
+            probability = max(0, min(100, probability))
+        except (ValueError, TypeError):
+            probability = 0
+
+        expected_close = None
+        raw_close = (row.get("expected_close_date") or "").strip()
+        if raw_close:
+            try:
+                expected_close = datetime.strptime(raw_close, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+
+        contact_id = None
+        raw_contact = (row.get("contact_id") or "").strip()
+        if raw_contact:
+            try:
+                contact_id = int(raw_contact)
+            except ValueError:
+                pass
+
+        deal = Deal(
+            organization_id=organization_id,
+            title=title[:300],
+            value=value,
+            stage=stage,
+            probability=probability,
+            expected_close_date=expected_close,
+            contact_id=contact_id,
+            description=(row.get("description") or "").strip()[:2000] or None,
+            source=(row.get("source") or "").strip()[:100] or None,
+        )
+        db.add(deal)
+        imported += 1
+
+    if imported > 0:
+        await db.commit()
+
+    logger.info("CSV deal import: %d imported, %d skipped for org %d", imported, skipped, organization_id)
+    return {"imported": imported, "skipped": skipped, "errors": errors[:20]}
+
+
 async def batch_delete_contacts(
     db: AsyncSession,
     organization_id: int,

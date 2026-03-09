@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     automation,
     briefing,
     bulk,
+    campaigns,
     coaching,
     commands,
     contacts,
@@ -115,5 +116,6 @@ api_router.include_router(share_packets.router)
 api_router.include_router(decision_cards.router)
 api_router.include_router(orchestrator.router)
 api_router.include_router(deals.router)
+api_router.include_router(campaigns.router)
 api_router.include_router(workflow_observability.router)
 api_router.include_router(stripe_webhooks.router)

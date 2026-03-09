@@ -49,6 +49,24 @@ async def import_tasks(
     return result
 
 
+@router.post("/import/deals")
+async def import_deals(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Import deals from a CSV file. Columns: title, value, stage, probability, expected_close_date, contact_id, description, source."""
+    content = await file.read()
+    csv_text = content.decode("utf-8-sig")
+    result = await bulk_operations.import_deals_csv(db, organization_id=actor["org_id"], csv_text=csv_text)
+    await record_action(
+        db, event_type="bulk_import_deals", actor_user_id=actor["id"],
+        organization_id=actor["org_id"], entity_type="deal", entity_id=None,
+        payload_json={"imported": result["imported"], "skipped": result["skipped"]},
+    )
+    return result
+
+
 class BatchDeleteRequest(BaseModel):
     ids: list[int] = Field(..., min_length=1, max_length=500)
 

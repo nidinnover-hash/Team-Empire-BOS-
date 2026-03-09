@@ -182,6 +182,66 @@ async def notification_stream(
     )
 
 
+@router.get("/live")
+async def notification_live_stream(
+    request: Request,
+    actor: dict = Depends(_get_notification_stream_actor),
+) -> StreamingResponse:
+    """Enhanced SSE stream: pushes unread count + latest notifications on change.
+
+    Events:
+      - ``data: {"unread_count": N, "notifications": [...]}`` when new items arrive.
+    """
+    _ensure_notification_role(actor)
+    org_id = int(actor["org_id"])
+    user_id = int(actor["id"])
+
+    async def event_generator():
+        last_count = -1
+        last_top_id = -1
+        while True:
+            if await request.is_disconnected():
+                break
+            try:
+                async with AsyncSessionLocal() as db:
+                    count = await notification_service.get_unread_count(db, org_id, user_id)
+                    items = await notification_service.list_notifications(
+                        db, org_id, user_id, unread_only=True, limit=10,
+                    )
+                    top_id = items[0].id if items else 0
+            except (OSError, RuntimeError, ValueError, TypeError) as exc:
+                logger.debug("SSE live probe failed (%s)", type(exc).__name__)
+                await asyncio.sleep(5)
+                continue
+
+            if count != last_count or top_id != last_top_id:
+                payload = {
+                    "unread_count": count,
+                    "notifications": [
+                        {
+                            "id": n.id,
+                            "type": n.type,
+                            "severity": n.severity,
+                            "title": n.title,
+                            "message": n.message,
+                            "source": n.source,
+                            "created_at": n.created_at.isoformat() if n.created_at else None,
+                        }
+                        for n in items[:5]
+                    ],
+                }
+                yield f"data: {json.dumps(payload)}\n\n"
+                last_count = count
+                last_top_id = top_id
+            await asyncio.sleep(3)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.post("/run-alerts")
 async def run_alert_checks(
     db: AsyncSession = Depends(get_db),
