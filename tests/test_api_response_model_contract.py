@@ -71,6 +71,11 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/user-activity/top-features",  # top features list dict
     "/api/v1/document-templates/{template_id}/render",  # rendered template dict
     "/api/v1/goal-cascades/tree",  # cascade tree dict
+    "/api/v1/commissions/summary",  # commission summary dict
+    "/api/v1/contact-scores/{contact_id}/trend",  # score trend list dict
+    "/api/v1/email-suppressions/check",  # suppression check dict
+    "/api/v1/email-suppressions/stats",  # suppression stats dict
+    "/api/v1/revenue/summary/{period}",  # period revenue summary dict
 }
 
 

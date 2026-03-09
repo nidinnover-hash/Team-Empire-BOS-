@@ -17,7 +17,9 @@ from app.api.v1.endpoints import (
     contact_relationships,
     coaching,
     commands,
+    commissions,
     contact_lifecycle,
+    contact_score_history,
     contact_segments,
     contacts,
     control,
@@ -26,6 +28,7 @@ from app.api.v1.endpoints import (
     dashboard_widgets,
     data_collection,
     data_retention,
+    deal_collaborators,
     deal_forecast,
     deal_risks,
     deal_velocity,
@@ -37,6 +40,7 @@ from app.api.v1.endpoints import (
     duplicate_detection,
     email,
     email_sequences,
+    email_suppressions,
     email_templates,
     empire_digital,
     enrichment_queue,
@@ -44,6 +48,7 @@ from app.api.v1.endpoints import (
     export,
     field_audit,
     finance,
+    forms,
     github,
     goal_cascades,
     goals,
@@ -58,6 +63,7 @@ from app.api.v1.endpoints import (
     layers,
     locations,
     media,
+    meeting_notes,
     memory,
     mfa,
     notes,
@@ -75,6 +81,7 @@ from app.api.v1.endpoints import (
     projects,
     rate_limit_configs,
     recurring_invoices,
+    revenue_recognition,
     report_schedules,
     role_dashboards,
     saved_filters,
@@ -197,3 +204,10 @@ api_router.include_router(pipeline_snapshots.router)
 api_router.include_router(user_activity_heatmap.router)
 api_router.include_router(document_templates.router)
 api_router.include_router(goal_cascades.router)
+api_router.include_router(commissions.router)
+api_router.include_router(contact_score_history.router)
+api_router.include_router(deal_collaborators.router)
+api_router.include_router(email_suppressions.router)
+api_router.include_router(forms.router)
+api_router.include_router(meeting_notes.router)
+api_router.include_router(revenue_recognition.router)
