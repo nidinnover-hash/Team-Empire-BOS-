@@ -63,6 +63,7 @@ from app.jobs.intelligence import (
     maybe_generate_daily_pending_digest,
     maybe_run_knowledge_consolidation,
     maybe_run_weekly_coaching,
+    maybe_send_daily_briefing_email,
 )
 from app.jobs.maintenance import (
     cleanup_old_chat_messages,
@@ -99,6 +100,7 @@ _check_stale_tasks = check_stale_tasks
 _maybe_emit_daily_briefing_notification = maybe_emit_daily_briefing_notification
 _maybe_run_knowledge_consolidation = maybe_run_knowledge_consolidation
 _maybe_run_weekly_coaching = maybe_run_weekly_coaching
+_maybe_send_daily_briefing_email = maybe_send_daily_briefing_email
 _check_follow_up_contacts = check_follow_up_contacts
 _check_token_health_job = check_token_health_job
 _snapshot_org_trends_job = snapshot_org_trends_job
@@ -880,6 +882,7 @@ async def _run_automation_jobs_for_org(db: AsyncSession, org_id: int) -> None:
         ("daily_ceo_summary", _maybe_generate_daily_ceo_summary),
         ("daily_pending_digest", _maybe_generate_daily_pending_digest),
         ("daily_empire_flow_digest", _maybe_generate_daily_empire_flow_digest),
+        ("daily_briefing_email", _maybe_send_daily_briefing_email),
         ("social_publish_queue", _publish_due_social_posts),
         ("cleanup_chat_messages", _cleanup_old_chat_messages),
         ("cleanup_logs", _cleanup_old_logs),

@@ -1,5 +1,5 @@
 import logging
-from datetime import date
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import func, select
@@ -925,3 +925,132 @@ async def update_clone_training_plan_status(
     if row is None:
         raise HTTPException(status_code=404, detail="Training plan not found")
     return row
+
+
+# ── API Usage Analytics ───────────────────────────────────────────────────────
+
+
+@router.get("/api-usage")
+async def api_usage_analytics(
+    days: int = Query(7, ge=1, le=90),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """API usage analytics: event counts by type and day."""
+    from datetime import timedelta
+    from app.models.event import Event
+
+    org_id = int(user["org_id"])
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+
+    # Event counts by type
+    type_counts = (await db.execute(
+        select(Event.event_type, func.count(Event.id))
+        .where(Event.organization_id == org_id, Event.created_at >= cutoff)
+        .group_by(Event.event_type)
+        .order_by(func.count(Event.id).desc())
+        .limit(50)
+    )).all()
+
+    # Daily totals
+    daily_counts = (await db.execute(
+        select(func.date(Event.created_at), func.count(Event.id))
+        .where(Event.organization_id == org_id, Event.created_at >= cutoff)
+        .group_by(func.date(Event.created_at))
+        .order_by(func.date(Event.created_at))
+    )).all()
+
+    # Top actors
+    actor_counts = (await db.execute(
+        select(Event.actor_user_id, func.count(Event.id))
+        .where(
+            Event.organization_id == org_id,
+            Event.created_at >= cutoff,
+            Event.actor_user_id.isnot(None),
+        )
+        .group_by(Event.actor_user_id)
+        .order_by(func.count(Event.id).desc())
+        .limit(10)
+    )).all()
+
+    total_events = sum(c for _, c in type_counts)
+
+    return {
+        "days": days,
+        "total_events": total_events,
+        "by_event_type": [
+            {"event_type": t, "count": c} for t, c in type_counts
+        ],
+        "by_day": [
+            {"date": str(d), "count": c} for d, c in daily_counts
+        ],
+        "by_actor": [
+            {"actor_user_id": a, "count": c} for a, c in actor_counts
+        ],
+    }
+
+
+# ── Team Activity Feed ────────────────────────────────────────────────────────
+
+
+@router.get("/team-activity")
+async def team_activity_feed(
+    days: int = Query(3, ge=1, le=30),
+    limit: int = Query(100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> dict:
+    """Aggregated team activity feed grouped by user."""
+    from datetime import timedelta
+    from app.models.event import Event
+    from app.models.user import User
+
+    org_id = int(user["org_id"])
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+
+    # Recent events with actor info
+    events = (await db.execute(
+        select(Event)
+        .where(Event.organization_id == org_id, Event.created_at >= cutoff)
+        .order_by(Event.created_at.desc())
+        .limit(limit)
+    )).scalars().all()
+
+    # Fetch user names
+    user_ids = {e.actor_user_id for e in events if e.actor_user_id}
+    user_map: dict[int, str] = {}
+    if user_ids:
+        users = (await db.execute(
+            select(User.id, User.email).where(User.id.in_(user_ids))
+        )).all()
+        user_map = {u.id: u.email for u in users}
+
+    # Group by actor
+    by_actor: dict[int | None, list] = {}
+    for e in events:
+        key = e.actor_user_id
+        if key not in by_actor:
+            by_actor[key] = []
+        by_actor[key].append({
+            "id": e.id,
+            "event_type": e.event_type,
+            "entity_type": e.entity_type,
+            "entity_id": e.entity_id,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        })
+
+    feed = []
+    for actor_id, actor_events in by_actor.items():
+        feed.append({
+            "actor_user_id": actor_id,
+            "actor_email": user_map.get(actor_id) if actor_id else None,
+            "event_count": len(actor_events),
+            "recent_events": actor_events[:20],
+        })
+    feed.sort(key=lambda x: x["event_count"], reverse=True)
+
+    return {
+        "days": days,
+        "total_events": len(events),
+        "actors": feed,
+    }

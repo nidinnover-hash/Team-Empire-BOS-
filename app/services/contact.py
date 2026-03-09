@@ -379,17 +379,34 @@ async def find_duplicates(
     return dupes
 
 
+def _snapshot_contact(c: Contact) -> dict:
+    """Capture key fields of a contact for merge history."""
+    return {
+        "id": c.id, "name": c.name, "email": c.email, "phone": c.phone,
+        "company": c.company, "role": c.role, "relationship": c.relationship,
+        "notes": c.notes, "pipeline_stage": c.pipeline_stage,
+        "lead_score": c.lead_score, "lead_source": c.lead_source,
+        "deal_value": float(c.deal_value) if c.deal_value else None,
+        "tags": c.tags, "source_channel": c.source_channel,
+        "campaign_name": c.campaign_name, "partner_id": c.partner_id,
+    }
+
+
 async def merge_contacts(
     db: AsyncSession,
     organization_id: int,
     primary_id: int,
     duplicate_ids: list[int],
+    actor_user_id: int | None = None,
 ) -> Contact | None:
     """Merge duplicate contacts into a primary contact.
 
     Preserves the primary contact, merges non-null fields from duplicates
     (primary values take precedence), then deletes the duplicates.
+    Saves merge history for undo capability.
     """
+    from app.models.contact_merge_history import ContactMergeHistory
+
     primary = await get_contact(db, primary_id, organization_id)
     if primary is None:
         return None
@@ -404,6 +421,9 @@ async def merge_contacts(
 
     if not dupes:
         return primary
+
+    # Snapshot primary before merge
+    primary_before = _snapshot_contact(primary)
 
     # Merge: fill in blanks on primary from duplicates (first non-null wins)
     _MERGE_FIELDS = [
@@ -437,8 +457,17 @@ async def merge_contacts(
 
     primary.updated_at = now_utc()
 
-    # Delete duplicates
+    # Save merge history for each duplicate, then delete
     for d in dupes:
+        history = ContactMergeHistory(
+            organization_id=organization_id,
+            primary_contact_id=primary_id,
+            merged_contact_id=d.id,
+            merged_contact_snapshot=_snapshot_contact(d),
+            primary_before_snapshot=primary_before,
+            actor_user_id=actor_user_id,
+        )
+        db.add(history)
         await db.delete(d)
 
     await db.commit()
@@ -448,6 +477,73 @@ async def merge_contacts(
         len(dupes), primary_id, organization_id,
     )
     return primary
+
+
+async def get_merge_history(
+    db: AsyncSession,
+    organization_id: int,
+    contact_id: int,
+    limit: int = 50,
+) -> list:
+    """Get merge history for a contact."""
+    from app.models.contact_merge_history import ContactMergeHistory
+
+    result = await db.execute(
+        select(ContactMergeHistory).where(
+            ContactMergeHistory.organization_id == organization_id,
+            ContactMergeHistory.primary_contact_id == contact_id,
+        ).order_by(ContactMergeHistory.created_at.desc()).limit(limit)
+    )
+    return list(result.scalars().all())
+
+
+async def unmerge_contact(
+    db: AsyncSession,
+    organization_id: int,
+    merge_history_id: int,
+) -> Contact | None:
+    """Undo a merge by re-creating the deleted contact from snapshot."""
+    from app.models.contact_merge_history import ContactMergeHistory
+
+    result = await db.execute(
+        select(ContactMergeHistory).where(
+            ContactMergeHistory.id == merge_history_id,
+            ContactMergeHistory.organization_id == organization_id,
+            ContactMergeHistory.undone.is_(False),
+        )
+    )
+    history = result.scalar_one_or_none()
+    if history is None:
+        return None
+
+    snap = history.merged_contact_snapshot or {}
+    restored = Contact(
+        organization_id=organization_id,
+        name=snap.get("name", "Restored Contact"),
+        email=snap.get("email"),
+        phone=snap.get("phone"),
+        company=snap.get("company"),
+        role=snap.get("role"),
+        relationship=snap.get("relationship", "personal"),
+        notes=snap.get("notes"),
+        pipeline_stage=snap.get("pipeline_stage", "new"),
+        lead_score=snap.get("lead_score", 0),
+        lead_source=snap.get("lead_source"),
+        deal_value=snap.get("deal_value"),
+        tags=snap.get("tags"),
+        source_channel=snap.get("source_channel"),
+        campaign_name=snap.get("campaign_name"),
+        partner_id=snap.get("partner_id"),
+    )
+    db.add(restored)
+    history.undone = True
+    await db.commit()
+    await db.refresh(restored)
+    logger.info(
+        "Unmerged contact %d from primary %d (org %d)",
+        restored.id, history.primary_contact_id, organization_id,
+    )
+    return restored
 
 
 async def get_pipeline_analytics(

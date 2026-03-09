@@ -156,6 +156,7 @@ router.get("/web/goals", response_class=HTMLResponse, include_in_schema=False)(_
 router.get("/web/contacts", response_class=HTMLResponse, include_in_schema=False)(_web_page("contacts.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
 router.get("/web/empire-digital", response_class=HTMLResponse, include_in_schema=False)(_web_page("empire_digital.html", {"CEO", "ADMIN", "MANAGER"}))
 router.get("/web/deals", response_class=HTMLResponse, include_in_schema=False)(_web_page("deals.html", {"CEO", "ADMIN", "MANAGER"}))
+router.get("/web/deal-pipeline", response_class=HTMLResponse, include_in_schema=False)(_web_page("deal_pipeline.html", {"CEO", "ADMIN", "MANAGER"}))
 router.get("/web/finance", response_class=HTMLResponse, include_in_schema=False)(_web_page("finance.html", {"CEO", "ADMIN", "MANAGER"}))
 router.get("/web/maps", response_class=HTMLResponse, include_in_schema=False)(_web_page("maps.html", _ALL_WEB_ROLES))
 router.get("/web/strategy", response_class=HTMLResponse, include_in_schema=False)(_web_page("strategy.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))

@@ -14,6 +14,10 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/admin/audit/verify",  # internal audit integrity check
     "/api/v1/admin/unlock-account/{user_id}",  # internal admin action
     "/api/v1/empire-digital/leads/export",  # file/streaming export
+    "/api/v1/ops/api-usage",  # analytics aggregation dict
+    "/api/v1/ops/team-activity",  # activity feed aggregation dict
+    "/api/v1/contacts/{contact_id}/merge-history",  # merge history list
+    "/api/v1/contacts/{contact_id}/unmerge",  # unmerge action
 }
 
 

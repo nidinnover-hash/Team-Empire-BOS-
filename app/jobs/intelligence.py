@@ -597,3 +597,134 @@ async def maybe_emit_daily_briefing_notification(db: AsyncSession, org_id: int) 
             error=f"{type(exc).__name__}: {str(exc)[:200]}",
         )
         await db.commit()
+
+
+# Per-org daily dedup for briefing email.
+_last_briefing_email_date_by_org: dict[int, str] = {}
+
+
+async def maybe_send_daily_briefing_email(db: AsyncSession, org_id: int) -> None:
+    """Send a morning briefing email via Gmail at 8-9am IST (once per day per org)."""
+    from app.core.config import settings
+    from app.models.user import User
+    from app.services.integration import get_integration_by_type
+
+    tz = ZoneInfo("Asia/Kolkata")
+    local_now = datetime.now(UTC).astimezone(tz)
+    if local_now.hour < 8 or local_now.hour >= 9:
+        return
+
+    day_key = local_now.strftime("%Y-%m-%d")
+    if _last_briefing_email_date_by_org.get(org_id) == day_key:
+        return
+
+    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    existing = (await db.execute(
+        select(SchedulerJobRun).where(
+            SchedulerJobRun.organization_id == org_id,
+            SchedulerJobRun.job_name == "daily_briefing_email",
+            SchedulerJobRun.status == "ok",
+            SchedulerJobRun.finished_at >= today_start,
+        ).limit(1)
+    )).scalar_one_or_none()
+    if existing is not None:
+        _last_briefing_email_date_by_org[org_id] = day_key
+        return
+
+    # Find admin email
+    admin = (await db.execute(
+        select(User).where(
+            User.organization_id == org_id,
+            User.role.in_(["CEO", "ADMIN"]),
+            User.is_active.is_(True),
+        ).order_by(User.id).limit(1)
+    )).scalar_one_or_none()
+    if admin is None:
+        return
+
+    # Check Gmail integration
+    integration = await get_integration_by_type(db, org_id, "gmail")
+    if not integration:
+        return
+
+    started = datetime.now(UTC)
+    try:
+        from app.services.briefing import get_executive_briefing
+
+        executive = await get_executive_briefing(db, org_id=org_id)
+        summary = executive.get("summary") or executive.get("team_summary") or {}
+        briefing_text = _format_briefing_summary(summary)
+
+        calendar = executive.get("calendar", {})
+        cal_count = calendar.get("event_count", 0)
+        cal_events = calendar.get("events", [])
+        cal_lines = "\n".join(
+            f"  - {e.get('content', 'Event')}" for e in cal_events[:5]
+        ) if cal_events else "  No events today."
+
+        approvals = executive.get("approvals", {})
+        pending = approvals.get("pending_count", 0)
+
+        inbox = executive.get("inbox", {})
+        unread = inbox.get("unread_count", 0)
+
+        priorities = executive.get("today_priorities", [])
+        priority_lines = "\n".join(
+            f"  {i+1}. {p}" for i, p in enumerate(priorities[:5])
+        ) if priorities else "  None set."
+
+        subject = f"Morning Briefing — {day_key}"
+        body = (
+            f"Good morning.\n\n"
+            f"TEAM STATUS\n{briefing_text}\n\n"
+            f"CALENDAR ({cal_count} events)\n{cal_lines}\n\n"
+            f"PENDING APPROVALS: {pending}\n"
+            f"UNREAD EMAILS: {unread}\n\n"
+            f"TODAY'S PRIORITIES\n{priority_lines}\n\n"
+            f"— Nidin BOS"
+        )
+
+        config = integration.config_json or {}
+        access_token = config.get("access_token", "")
+        refresh_token = config.get("refresh_token")
+        expires_at = config.get("expires_at")
+
+        from app.tools import gmail as gmail_tool
+        sent = await asyncio.to_thread(
+            gmail_tool.send_email,
+            access_token=access_token,
+            to=admin.email,
+            subject=subject,
+            body=body,
+            refresh_token=refresh_token,
+            expires_at=expires_at,
+        )
+
+        _last_briefing_email_date_by_org[org_id] = day_key
+        await record_job_run(
+            db, org_id=org_id, job_name="daily_briefing_email",
+            status="ok" if sent else "error",
+            started_at=started, finished_at=datetime.now(UTC),
+            details={"to": admin.email, "sent": sent},
+        )
+        await db.commit()
+        logger.info("Daily briefing email org=%d sent=%s", org_id, sent)
+    except asyncio.CancelledError:
+        raise
+    except (
+        SQLAlchemyError, IntegrationSyncError, TimeoutError, ConnectionError,
+        RuntimeError, ValueError, TypeError, OSError, ImportError, AttributeError,
+    ) as exc:
+        logger.warning(
+            "Daily briefing email failed org=%d: %s",
+            org_id, scheduler_error_category(exc), exc_info=True,
+        )
+        await record_job_run(
+            db, org_id=org_id, job_name="daily_briefing_email", status="error",
+            started_at=started, finished_at=datetime.now(UTC),
+            error=f"{type(exc).__name__}: {str(exc)[:200]}",
+        )
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()

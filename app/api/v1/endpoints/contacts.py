@@ -196,6 +196,7 @@ async def merge_contacts(
     result = await contact_service.merge_contacts(
         db, organization_id=actor["org_id"],
         primary_id=data.primary_id, duplicate_ids=data.duplicate_ids,
+        actor_user_id=int(actor["id"]),
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Primary contact not found")
@@ -214,6 +215,52 @@ async def pipeline_analytics(
 ) -> dict:
     """Pipeline funnel analytics with conversion rates and win rate."""
     return await contact_service.get_pipeline_analytics(db, organization_id=actor["org_id"])
+
+
+@router.get("/{contact_id}/merge-history")
+async def merge_history(
+    contact_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> list[dict]:
+    """Get merge history for a contact."""
+    history = await contact_service.get_merge_history(
+        db, organization_id=actor["org_id"], contact_id=contact_id, limit=limit,
+    )
+    return [
+        {
+            "id": h.id,
+            "primary_contact_id": h.primary_contact_id,
+            "merged_contact_id": h.merged_contact_id,
+            "merged_contact_snapshot": h.merged_contact_snapshot,
+            "actor_user_id": h.actor_user_id,
+            "undone": h.undone,
+            "created_at": h.created_at.isoformat() if h.created_at else None,
+        }
+        for h in history
+    ]
+
+
+@router.post("/{contact_id}/unmerge")
+async def unmerge_contact(
+    contact_id: int,
+    merge_history_id: int = Query(..., ge=1),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> ContactRead:
+    """Undo a merge by re-creating the deleted contact from its snapshot."""
+    restored = await contact_service.unmerge_contact(
+        db, organization_id=actor["org_id"], merge_history_id=merge_history_id,
+    )
+    if restored is None:
+        raise HTTPException(status_code=404, detail="Merge history not found or already undone")
+    await record_action(
+        db, event_type="contact_unmerged", actor_user_id=actor["id"],
+        organization_id=actor["org_id"], entity_type="contact", entity_id=restored.id,
+        payload_json={"merge_history_id": merge_history_id, "restored_contact_id": restored.id},
+    )
+    return ContactRead.model_validate(restored, from_attributes=True)
 
 
 @router.get("/{contact_id}/network")

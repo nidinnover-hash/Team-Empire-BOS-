@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Deal Pipeline Kanban — Nidin BOS" />
+  <meta name="theme-color" content="#f5f5f7" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Deal Pipeline — Nidin BOS</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
+  <link rel="stylesheet" href="/static/css/deal-pipeline.css" />
+  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+</head>
+<body>
+  {% set active_page = "deals" %}
+  {% include "partials/sidebar.html" %}
+
+  <div class="main-wrap">
+    <div class="page-header">
+      <h1>Deal Pipeline</h1>
+      <div style="display:flex;gap:.5rem">
+        <a href="/web/deals" class="btn-secondary">Table View</a>
+      </div>
+    </div>
+
+    <div class="kpi-row">
+      <div class="kpi"><div class="label">Total Deals</div><div class="val" id="k-total">0</div></div>
+      <div class="kpi"><div class="label">Pipeline Value</div><div class="val" id="k-value">$0</div></div>
+      <div class="kpi"><div class="label">Won Revenue</div><div class="val" id="k-won">$0</div></div>
+      <div class="kpi"><div class="label">Win Rate</div><div class="val" id="k-winrate">0%</div></div>
+    </div>
+
+    <div id="kanban-board" class="kanban-board">
+      <div class="empty loading">Loading deals...</div>
+    </div>
+  </div>
+
+  <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/deal-pipeline-page.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
+</body>
+</html>
