@@ -91,6 +91,11 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/forecast-scenarios/compare/{period}",  # scenario comparison dict
     "/api/v1/feature-requests/stats",  # feature request stats dict
     "/api/v1/audit-trail/stats",  # audit stats dict
+    "/api/v1/customer-health/summary",  # health summary dict
+    "/api/v1/document-signing/stats",  # signing stats dict
+    "/api/v1/dedup-rules/check",  # duplicate check dict
+    "/api/v1/stage-gates/validate",  # stage validation dict
+    "/api/v1/activity-goals/progress/{user_id}",  # progress list dict
 }
 
 

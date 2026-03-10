@@ -125,6 +125,13 @@ from app.api.v1.endpoints import (
     forecast_scenarios,
     feature_requests,
     audit_trail,
+    customer_health,
+    meetings,
+    document_signing,
+    leaderboard,
+    dedup_rules,
+    stage_gates,
+    activity_goals,
 )
 
 api_router = APIRouter()
@@ -253,3 +260,10 @@ api_router.include_router(onboarding.router)
 api_router.include_router(forecast_scenarios.router)
 api_router.include_router(feature_requests.router)
 api_router.include_router(audit_trail.router)
+api_router.include_router(customer_health.router)
+api_router.include_router(meetings.router)
+api_router.include_router(document_signing.router)
+api_router.include_router(leaderboard.router)
+api_router.include_router(dedup_rules.router)
+api_router.include_router(stage_gates.router)
+api_router.include_router(activity_goals.router)
