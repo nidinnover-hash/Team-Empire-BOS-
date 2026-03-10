@@ -82,6 +82,10 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/email-analytics/email/{email_id}/metrics",  # email metrics dict
     "/api/v1/email-analytics/contact/{contact_id}/engagement",  # contact engagement dict
     "/api/v1/referrals/stats",  # referral stats dict
+    "/api/v1/surveys/{survey_id}/nps",  # NPS calculation dict
+    "/api/v1/import-mappings/imports/stats",  # import stats dict
+    "/api/v1/deal-rotations/{queue_id}/fairness",  # fairness metrics dict
+    "/api/v1/webhook-events/stats",  # webhook event stats dict
 }
 
 

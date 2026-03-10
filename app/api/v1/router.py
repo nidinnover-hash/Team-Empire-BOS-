@@ -111,6 +111,13 @@ from app.api.v1.endpoints import (
     territories,
     referrals,
     knowledge_base,
+    quotes,
+    surveys,
+    playbooks,
+    import_mappings,
+    deal_rotations,
+    webhook_events,
+    custom_reports,
 )
 
 api_router = APIRouter()
@@ -225,3 +232,10 @@ api_router.include_router(email_analytics.router)
 api_router.include_router(territories.router)
 api_router.include_router(referrals.router)
 api_router.include_router(knowledge_base.router)
+api_router.include_router(quotes.router)
+api_router.include_router(surveys.router)
+api_router.include_router(playbooks.router)
+api_router.include_router(import_mappings.router)
+api_router.include_router(deal_rotations.router)
+api_router.include_router(webhook_events.router)
+api_router.include_router(custom_reports.router)
