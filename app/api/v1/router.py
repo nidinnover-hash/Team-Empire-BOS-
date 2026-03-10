@@ -104,6 +104,13 @@ from app.api.v1.endpoints import (
     workflow_observability,
     workspace_permissions,
     workspaces,
+    products,
+    contracts,
+    competitors,
+    email_analytics,
+    territories,
+    referrals,
+    knowledge_base,
 )
 
 api_router = APIRouter()
@@ -211,3 +218,10 @@ api_router.include_router(email_suppressions.router)
 api_router.include_router(forms.router)
 api_router.include_router(meeting_notes.router)
 api_router.include_router(revenue_recognition.router)
+api_router.include_router(products.router)
+api_router.include_router(contracts.router)
+api_router.include_router(competitors.router)
+api_router.include_router(email_analytics.router)
+api_router.include_router(territories.router)
+api_router.include_router(referrals.router)
+api_router.include_router(knowledge_base.router)

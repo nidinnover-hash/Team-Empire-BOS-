@@ -76,6 +76,12 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/email-suppressions/check",  # suppression check dict
     "/api/v1/email-suppressions/stats",  # suppression stats dict
     "/api/v1/revenue/summary/{period}",  # period revenue summary dict
+    "/api/v1/contracts/summary",  # contract summary dict
+    "/api/v1/competitors/win-loss-stats",  # win/loss stats dict
+    "/api/v1/email-analytics/overview",  # email analytics overview dict
+    "/api/v1/email-analytics/email/{email_id}/metrics",  # email metrics dict
+    "/api/v1/email-analytics/contact/{contact_id}/engagement",  # contact engagement dict
+    "/api/v1/referrals/stats",  # referral stats dict
 }
 
 
