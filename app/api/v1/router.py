@@ -139,6 +139,13 @@ from app.api.v1.endpoints import (
     product_bundles,
     forecast_rollups,
     conversion_funnels,
+    revenue_goals,
+    deal_dependencies,
+    contact_timeline_events,
+    email_warmup,
+    territory_assignments,
+    quote_approvals,
+    win_loss,
 )
 
 api_router = APIRouter()
@@ -281,3 +288,10 @@ api_router.include_router(contact_merge_logs.router)
 api_router.include_router(product_bundles.router)
 api_router.include_router(forecast_rollups.router)
 api_router.include_router(conversion_funnels.router)
+api_router.include_router(revenue_goals.router)
+api_router.include_router(deal_dependencies.router)
+api_router.include_router(contact_timeline_events.router)
+api_router.include_router(email_warmup.router)
+api_router.include_router(territory_assignments.router)
+api_router.include_router(quote_approvals.router)
+api_router.include_router(win_loss.router)

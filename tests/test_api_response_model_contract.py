@@ -105,6 +105,13 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/forecast-rollups/summary/{period}",  # period summary dict
     "/api/v1/conversion-funnels/summary/{period}",  # funnel summary dict
     "/api/v1/conversion-funnels/bottlenecks/{period}",  # bottlenecks list dict
+    "/api/v1/revenue-goals/gap-analysis/{period}",  # gap analysis dict
+    "/api/v1/contact-timeline/summary/{contact_id}",  # activity summary dict
+    "/api/v1/email-warmup/status",  # warmup status dict
+    "/api/v1/territory-assignments/coverage",  # coverage dict
+    "/api/v1/quote-approvals/pending",  # pending count dict
+    "/api/v1/win-loss/analytics",  # analytics dict
+    "/api/v1/win-loss/top-reasons/{outcome}",  # top reasons list dict
 }
 
 
