@@ -86,6 +86,11 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/import-mappings/imports/stats",  # import stats dict
     "/api/v1/deal-rotations/{queue_id}/fairness",  # fairness metrics dict
     "/api/v1/webhook-events/stats",  # webhook event stats dict
+    "/api/v1/subscriptions/mrr-summary",  # MRR summary dict
+    "/api/v1/lead-score-rules/evaluate",  # rule evaluation dict
+    "/api/v1/forecast-scenarios/compare/{period}",  # scenario comparison dict
+    "/api/v1/feature-requests/stats",  # feature request stats dict
+    "/api/v1/audit-trail/stats",  # audit stats dict
 }
 
 

@@ -118,6 +118,13 @@ from app.api.v1.endpoints import (
     deal_rotations,
     webhook_events,
     custom_reports,
+    subscriptions,
+    drip_campaigns,
+    lead_score_rules,
+    onboarding,
+    forecast_scenarios,
+    feature_requests,
+    audit_trail,
 )
 
 api_router = APIRouter()
@@ -239,3 +246,10 @@ api_router.include_router(import_mappings.router)
 api_router.include_router(deal_rotations.router)
 api_router.include_router(webhook_events.router)
 api_router.include_router(custom_reports.router)
+api_router.include_router(subscriptions.router)
+api_router.include_router(drip_campaigns.router)
+api_router.include_router(lead_score_rules.router)
+api_router.include_router(onboarding.router)
+api_router.include_router(forecast_scenarios.router)
+api_router.include_router(feature_requests.router)
+api_router.include_router(audit_trail.router)
