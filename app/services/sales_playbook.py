@@ -4,6 +4,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.tenant import apply_org_scope
 from app.models.sales_playbook import Playbook, PlaybookStep
 
 
@@ -27,7 +28,7 @@ async def list_playbooks(
     db: AsyncSession, organization_id: int, *,
     deal_stage: str | None = None, is_active: bool | None = None,
 ) -> list[Playbook]:
-    q = select(Playbook).where(Playbook.organization_id == organization_id)
+    q = apply_org_scope(select(Playbook), Playbook, organization_id)
     if deal_stage:
         q = q.where(Playbook.deal_stage == deal_stage)
     if is_active is not None:
@@ -37,7 +38,7 @@ async def list_playbooks(
 
 
 async def get_playbook(db: AsyncSession, playbook_id: int, organization_id: int) -> Playbook | None:
-    q = select(Playbook).where(Playbook.id == playbook_id, Playbook.organization_id == organization_id)
+    q = apply_org_scope(select(Playbook).where(Playbook.id == playbook_id), Playbook, organization_id)
     return (await db.execute(q)).scalar_one_or_none()
 
 
@@ -79,16 +80,16 @@ async def add_step(
 
 
 async def list_steps(db: AsyncSession, organization_id: int, playbook_id: int) -> list[PlaybookStep]:
-    q = (
-        select(PlaybookStep)
-        .where(PlaybookStep.organization_id == organization_id, PlaybookStep.playbook_id == playbook_id)
-        .order_by(PlaybookStep.step_order)
-    )
+    q = apply_org_scope(
+        select(PlaybookStep).where(PlaybookStep.playbook_id == playbook_id),
+        PlaybookStep,
+        organization_id,
+    ).order_by(PlaybookStep.step_order)
     return list((await db.execute(q)).scalars().all())
 
 
 async def delete_step(db: AsyncSession, step_id: int, organization_id: int) -> bool:
-    q = select(PlaybookStep).where(PlaybookStep.id == step_id, PlaybookStep.organization_id == organization_id)
+    q = apply_org_scope(select(PlaybookStep).where(PlaybookStep.id == step_id), PlaybookStep, organization_id)
     step = (await db.execute(q)).scalar_one_or_none()
     if not step:
         return False

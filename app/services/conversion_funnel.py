@@ -6,8 +6,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.conversion_funnel import ConversionFunnel
 
+_PROTECTED_FIELDS = {"id", "organization_id", "created_at"}
+
 
 async def upsert_stage(db: AsyncSession, *, organization_id: int, **kw) -> ConversionFunnel:
+    # Natural key: (organization_id, period, from_stage, to_stage)
+    period = kw.get("period")
+    from_stage = kw.get("from_stage")
+    to_stage = kw.get("to_stage")
+    if period and from_stage and to_stage:
+        existing = (await db.execute(
+            select(ConversionFunnel).where(
+                ConversionFunnel.organization_id == organization_id,
+                ConversionFunnel.period == period,
+                ConversionFunnel.from_stage == from_stage,
+                ConversionFunnel.to_stage == to_stage,
+            )
+        )).scalar_one_or_none()
+        if existing:
+            for k, v in kw.items():
+                if k not in _PROTECTED_FIELDS:
+                    setattr(existing, k, v)
+            await db.commit()
+            await db.refresh(existing)
+            return existing
     row = ConversionFunnel(organization_id=organization_id, **kw)
     db.add(row)
     await db.commit()

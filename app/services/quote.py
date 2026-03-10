@@ -1,11 +1,10 @@
 """Quote / proposal service."""
 from __future__ import annotations
 
-import json
-
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.tenant import apply_org_scope
 from app.models.quote import Quote, QuoteLineItem
 
 
@@ -40,7 +39,7 @@ async def list_quotes(
     db: AsyncSession, organization_id: int, *,
     status: str | None = None,
 ) -> list[Quote]:
-    q = select(Quote).where(Quote.organization_id == organization_id)
+    q = apply_org_scope(select(Quote), Quote, organization_id)
     if status:
         q = q.where(Quote.status == status)
     q = q.order_by(Quote.updated_at.desc())
@@ -48,8 +47,11 @@ async def list_quotes(
 
 
 async def get_quote(db: AsyncSession, quote_id: int, organization_id: int) -> Quote | None:
-    q = select(Quote).where(Quote.id == quote_id, Quote.organization_id == organization_id)
+    q = apply_org_scope(select(Quote).where(Quote.id == quote_id), Quote, organization_id)
     return (await db.execute(q)).scalar_one_or_none()
+
+
+_PROTECTED_FIELDS = {"id", "organization_id", "created_by_user_id", "created_at"}
 
 
 async def update_quote(db: AsyncSession, quote_id: int, organization_id: int, **kwargs) -> Quote | None:
@@ -57,7 +59,7 @@ async def update_quote(db: AsyncSession, quote_id: int, organization_id: int, **
     if not row:
         return None
     for k, v in kwargs.items():
-        if v is not None:
+        if v is not None and k not in _PROTECTED_FIELDS:
             setattr(row, k, v)
     row.total = _recalc(float(row.subtotal), float(row.discount_percent), float(row.tax_percent))
     await db.commit()
@@ -98,15 +100,16 @@ async def add_line_item(
 
 
 async def list_line_items(db: AsyncSession, organization_id: int, quote_id: int) -> list[QuoteLineItem]:
-    q = select(QuoteLineItem).where(
-        QuoteLineItem.organization_id == organization_id,
-        QuoteLineItem.quote_id == quote_id,
+    q = apply_org_scope(
+        select(QuoteLineItem).where(QuoteLineItem.quote_id == quote_id),
+        QuoteLineItem,
+        organization_id,
     ).order_by(QuoteLineItem.id)
     return list((await db.execute(q)).scalars().all())
 
 
 async def delete_line_item(db: AsyncSession, item_id: int, organization_id: int) -> bool:
-    q = select(QuoteLineItem).where(QuoteLineItem.id == item_id, QuoteLineItem.organization_id == organization_id)
+    q = apply_org_scope(select(QuoteLineItem).where(QuoteLineItem.id == item_id), QuoteLineItem, organization_id)
     item = (await db.execute(q)).scalar_one_or_none()
     if not item:
         return False

@@ -28,7 +28,11 @@ async def list_approvals(db: AsyncSession, org_id: int, *, quote_id: int | None 
 
 
 async def decide(db: AsyncSession, approval_id: int, org_id: int, status: str, reason: str | None = None) -> QuoteApproval | None:
-    row = (await db.execute(select(QuoteApproval).where(QuoteApproval.id == approval_id, QuoteApproval.organization_id == org_id))).scalar_one_or_none()
+    row = (await db.execute(select(QuoteApproval).where(
+        QuoteApproval.id == approval_id,
+        QuoteApproval.organization_id == org_id,
+        QuoteApproval.status == "pending",  # Only pending approvals can be decided
+    ))).scalar_one_or_none()
     if not row:
         return None
     row.status = status

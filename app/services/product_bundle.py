@@ -27,12 +27,16 @@ async def list_bundles(db: AsyncSession, org_id: int, *, is_active: bool | None 
     return list((await db.execute(q)).scalars().all())
 
 
+_PROTECTED_FIELDS = {"id", "organization_id", "created_at"}
+
+
 async def update_bundle(db: AsyncSession, bundle_id: int, org_id: int, **kw) -> ProductBundle | None:
     row = await get_bundle(db, bundle_id, org_id)
     if not row:
         return None
     for k, v in kw.items():
-        setattr(row, k, v)
+        if k not in _PROTECTED_FIELDS:
+            setattr(row, k, v)
     await db.commit()
     await db.refresh(row)
     return row
@@ -55,7 +59,11 @@ async def add_item(db: AsyncSession, bundle_id: int, org_id: int, **kw) -> Bundl
     return item
 
 
-async def list_items(db: AsyncSession, bundle_id: int) -> list[BundleItem]:
+async def list_items(db: AsyncSession, bundle_id: int, org_id: int) -> list[BundleItem]:
+    # Verify bundle belongs to org before returning items (tenant isolation)
+    bundle = await get_bundle(db, bundle_id, org_id)
+    if not bundle:
+        return []
     q = select(BundleItem).where(BundleItem.bundle_id == bundle_id)
     return list((await db.execute(q)).scalars().all())
 
@@ -64,7 +72,7 @@ async def get_pricing(db: AsyncSession, bundle_id: int, org_id: int) -> dict:
     bundle = await get_bundle(db, bundle_id, org_id)
     if not bundle:
         return {}
-    items = await list_items(db, bundle_id)
+    items = await list_items(db, bundle_id, org_id)
     individual = sum(i.unit_price * i.quantity for i in items)
     savings = individual - bundle.bundle_price if individual > 0 else 0
     return {

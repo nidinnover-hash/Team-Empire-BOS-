@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.deal_split import DealSplit
 
+_PROTECTED_FIELDS = {"id", "organization_id", "created_at"}
+
 
 async def create_split(db: AsyncSession, *, organization_id: int, **kw) -> DealSplit:
     row = DealSplit(organization_id=organization_id, **kw)
@@ -25,7 +27,8 @@ async def update_split(db: AsyncSession, split_id: int, org_id: int, **kw) -> De
     if not row:
         return None
     for k, v in kw.items():
-        setattr(row, k, v)
+        if k not in _PROTECTED_FIELDS:
+            setattr(row, k, v)
     await db.commit()
     await db.refresh(row)
     return row

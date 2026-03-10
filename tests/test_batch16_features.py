@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.core.config import settings
 from app.services import (
     quote as quote_svc,
     survey as survey_svc,
@@ -24,6 +25,22 @@ def _obj(**kw):
 
 
 TS = "2026-03-10T00:00:00+00:00"
+
+
+@pytest.fixture(autouse=True)
+def _enable_crm_flags():
+    saved = (
+        settings.FEATURE_QUOTES,
+        settings.FEATURE_PLAYBOOKS,
+        settings.FEATURE_SURVEYS,
+    )
+    object.__setattr__(settings, "FEATURE_QUOTES", True)
+    object.__setattr__(settings, "FEATURE_PLAYBOOKS", True)
+    object.__setattr__(settings, "FEATURE_SURVEYS", True)
+    yield
+    object.__setattr__(settings, "FEATURE_QUOTES", saved[0])
+    object.__setattr__(settings, "FEATURE_PLAYBOOKS", saved[1])
+    object.__setattr__(settings, "FEATURE_SURVEYS", saved[2])
 
 
 # ── Quotes ────────────────────────────────────────────────────────────────

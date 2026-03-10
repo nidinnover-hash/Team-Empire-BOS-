@@ -126,7 +126,7 @@ async def list_items(
     bundle_id: int, db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ):
-    return await svc.list_items(db, bundle_id)
+    return await svc.list_items(db, bundle_id, actor["org_id"])
 
 
 @router.get("/{bundle_id}/pricing")

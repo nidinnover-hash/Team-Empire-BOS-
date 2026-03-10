@@ -38,13 +38,53 @@ import app.models.org_membership
 import app.models.organization
 import app.models.policy_rule
 import app.models.project
+import app.models.quote
+import app.models.sales_playbook
 import app.models.self_learning_run
 import app.models.social
+import app.models.survey
 import app.models.task
 import app.models.threat_signal
 import app.models.user
 import app.models.weekly_report
 import app.models.whatsapp_message  # noqa: F401
+
+# Batch 17: customer health, meetings, document signing, leaderboard, dedup, stage gates, activity goals
+import app.models.customer_health  # noqa: F401
+import app.models.meeting_scheduler  # noqa: F401
+import app.models.document_signing  # noqa: F401
+import app.models.sales_leaderboard  # noqa: F401
+import app.models.dedup_rule  # noqa: F401
+import app.models.stage_gate  # noqa: F401
+import app.models.activity_goal  # noqa: F401
+
+# Batch 18: subscriptions, drip campaigns, lead scoring, onboarding, forecast scenarios, feature requests, audit trail
+import app.models.subscription  # noqa: F401
+import app.models.drip_campaign  # noqa: F401
+import app.models.lead_score_rule  # noqa: F401
+import app.models.onboarding_checklist  # noqa: F401
+import app.models.forecast_scenario  # noqa: F401
+import app.models.feature_request  # noqa: F401
+import app.models.audit_entry  # noqa: F401
+
+# Batch 19: call logs, drip analytics, deal splits, contact merge logs, product bundles, forecast rollups, conversion funnels
+import app.models.call_log  # noqa: F401
+import app.models.drip_analytics  # noqa: F401
+import app.models.deal_split  # noqa: F401
+import app.models.contact_merge_log  # noqa: F401
+import app.models.product_bundle  # noqa: F401
+import app.models.forecast_rollup  # noqa: F401
+import app.models.conversion_funnel  # noqa: F401
+
+# Batch 20: revenue goals, deal dependencies, contact timeline, email warmup, territory assignments, quote approvals, win/loss
+import app.models.revenue_goal  # noqa: F401
+import app.models.deal_dependency  # noqa: F401
+import app.models.contact_timeline  # noqa: F401
+import app.models.email_warmup  # noqa: F401
+import app.models.territory_assignment  # noqa: F401
+import app.models.quote_approval  # noqa: F401
+import app.models.win_loss_analysis  # noqa: F401
+
 from alembic import context
 from app.core.config import settings
 from app.db.base import Base

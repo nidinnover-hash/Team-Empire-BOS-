@@ -5,10 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.automation.bootstrap import (
-    workflow_approval_pipeline_enabled,
-    workflow_exec_insights_enabled,
-    workflow_runs_enabled,
-    workflow_v2_enabled,
+    workflow_approval_pipeline_enabled_for_org,
+    workflow_copilot_enabled_for_org,
+    workflow_exec_insights_enabled_for_org,
+    workflow_runs_enabled_for_org,
+    workflow_v2_enabled_for_org,
 )
 from app.application.automation.copilot import build_workflow_copilot_plan
 from app.core.config import settings
@@ -30,28 +31,28 @@ from app.services import automation as automation_service
 router = APIRouter(prefix="/automations", tags=["Automations"])
 
 
-def _require_workflow_v2() -> None:
-    if not workflow_v2_enabled():
+async def _require_workflow_v2(db: AsyncSession, org_id: int) -> None:
+    if not await workflow_v2_enabled_for_org(db, org_id):
         raise HTTPException(status_code=404, detail="Not found")
 
 
-def _require_workflow_runs() -> None:
-    if not workflow_runs_enabled():
+async def _require_workflow_runs(db: AsyncSession, org_id: int) -> None:
+    if not await workflow_runs_enabled_for_org(db, org_id):
         raise HTTPException(status_code=404, detail="Not found")
 
 
-def _require_workflow_approval_pipeline() -> None:
-    if not workflow_approval_pipeline_enabled():
+async def _require_workflow_approval_pipeline(db: AsyncSession, org_id: int) -> None:
+    if not await workflow_approval_pipeline_enabled_for_org(db, org_id):
         raise HTTPException(status_code=404, detail="Not found")
 
 
-def _require_workflow_copilot() -> None:
-    if not settings.FEATURE_WORKFLOW_COPILOT:
+async def _require_workflow_copilot(db: AsyncSession, org_id: int) -> None:
+    if not await workflow_copilot_enabled_for_org(db, org_id):
         raise HTTPException(status_code=404, detail="Not found")
 
 
-def _require_workflow_exec_insights() -> None:
-    if not workflow_exec_insights_enabled():
+async def _require_workflow_exec_insights(db: AsyncSession, org_id: int) -> None:
+    if not await workflow_exec_insights_enabled_for_org(db, org_id):
         raise HTTPException(status_code=404, detail="Not found")
 
 
@@ -65,7 +66,7 @@ async def list_workflow_definitions(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> list[WorkflowDefinitionRead]:
-    _require_workflow_v2()
+    await _require_workflow_v2(db, int(actor["org_id"]))
     rows = await automation_service.list_workflow_definitions(
         db, organization_id=int(actor["org_id"]), status=status, limit=limit,
     )
@@ -79,7 +80,7 @@ async def create_workflow_definition(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
     workspace_id: int = Depends(get_current_workspace_id),
 ) -> WorkflowDefinitionRead:
-    _require_workflow_v2()
+    await _require_workflow_v2(db, int(actor["org_id"]))
     row = await automation_service.create_workflow_definition(
         db, organization_id=int(actor["org_id"]),
         workspace_id=workspace_id, actor_user_id=int(actor["id"]), data=data,
@@ -93,7 +94,7 @@ async def get_workflow_definition(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> WorkflowDefinitionRead:
-    _require_workflow_v2()
+    await _require_workflow_v2(db, int(actor["org_id"]))
     row = await automation_service.get_workflow_definition(
         db, organization_id=int(actor["org_id"]),
         workflow_definition_id=workflow_definition_id,
@@ -110,7 +111,7 @@ async def update_workflow_definition(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> WorkflowDefinitionRead:
-    _require_workflow_v2()
+    await _require_workflow_v2(db, int(actor["org_id"]))
     row = await automation_service.update_workflow_definition(
         db, organization_id=int(actor["org_id"]),
         workflow_definition_id=workflow_definition_id,
@@ -127,7 +128,7 @@ async def publish_workflow_definition(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> WorkflowDefinitionRead:
-    _require_workflow_v2()
+    await _require_workflow_v2(db, int(actor["org_id"]))
     row = await automation_service.publish_workflow_definition(
         db, organization_id=int(actor["org_id"]),
         workflow_definition_id=workflow_definition_id,
@@ -146,7 +147,7 @@ async def preview_workflow_definition_run(
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
     workspace_id: int = Depends(get_current_workspace_id),
 ) -> WorkflowApprovalPreviewRead:
-    _require_workflow_v2()
+    await _require_workflow_v2(db, int(actor["org_id"]))
     preview = await automation_service.preview_workflow_run(
         db, organization_id=int(actor["org_id"]),
         workspace_id=workspace_id, actor_user_id=int(actor["id"]),
@@ -166,7 +167,7 @@ async def run_workflow_definition(
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
     workspace_id: int = Depends(get_current_workspace_id),
 ) -> WorkflowRunRead:
-    _require_workflow_approval_pipeline()
+    await _require_workflow_approval_pipeline(db, int(actor["org_id"]))
     run = await automation_service.run_workflow_definition(
         db, organization_id=int(actor["org_id"]),
         workspace_id=workspace_id, actor_user_id=int(actor["id"]),
@@ -196,7 +197,7 @@ async def list_workflow_runs(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> list[WorkflowRunListItem]:
-    _require_workflow_runs()
+    await _require_workflow_runs(db, int(actor["org_id"]))
     rows = await automation_service.list_workflow_runs_v2(
         db, organization_id=int(actor["org_id"]), status=status, limit=limit,
     )
@@ -209,7 +210,7 @@ async def get_workflow_run(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> WorkflowRunRead:
-    _require_workflow_runs()
+    await _require_workflow_runs(db, int(actor["org_id"]))
     detail = await automation_service.get_workflow_run_detail(
         db, organization_id=int(actor["org_id"]),
         workflow_run_id=workflow_run_id,
@@ -225,7 +226,7 @@ async def retry_workflow_run(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> WorkflowRunListItem:
-    _require_workflow_runs()
+    await _require_workflow_runs(db, int(actor["org_id"]))
     run = await automation_service.retry_workflow_run_v2(
         db, organization_id=int(actor["org_id"]),
         actor_user_id=int(actor["id"]), workflow_run_id=workflow_run_id,
@@ -241,7 +242,7 @@ async def pause_workflow_run(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> WorkflowRunListItem:
-    _require_workflow_runs()
+    await _require_workflow_runs(db, int(actor["org_id"]))
     run = await automation_service.pause_workflow_run_v2(
         db, organization_id=int(actor["org_id"]),
         actor_user_id=int(actor["id"]), workflow_run_id=workflow_run_id,
@@ -257,7 +258,7 @@ async def resume_workflow_run(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ) -> WorkflowRunListItem:
-    _require_workflow_runs()
+    await _require_workflow_runs(db, int(actor["org_id"]))
     run = await automation_service.resume_workflow_run_v2(
         db, organization_id=int(actor["org_id"]),
         actor_user_id=int(actor["id"]), workflow_run_id=workflow_run_id,
@@ -277,8 +278,7 @@ async def workflow_copilot_plan(
     db: AsyncSession = Depends(get_db),
     workspace_id: int = Depends(get_current_workspace_id),
 ) -> WorkflowPlanDraftRead:
-    del db
-    _require_workflow_copilot()
+    await _require_workflow_copilot(db, int(actor["org_id"]))
     payload = await build_workflow_copilot_plan(
         actor=actor, organization_id=int(actor["org_id"]),
         workspace_id=data.workspace_id if data.workspace_id is not None else workspace_id,
@@ -296,7 +296,7 @@ async def workflow_copilot_plan_and_save(
     workspace_id: int = Depends(get_current_workspace_id),
 ) -> WorkflowDefinitionRead:
     """Generate a workflow plan from natural language AND save it as a draft definition."""
-    _require_workflow_copilot()
+    await _require_workflow_copilot(db, int(actor["org_id"]))
     org_id = int(actor["org_id"])
     effective_ws = data.workspace_id if data.workspace_id is not None else workspace_id
     payload = await build_workflow_copilot_plan(
@@ -344,7 +344,7 @@ async def get_workflow_insights(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Workflow execution analytics: success rates, step timings, failure patterns."""
-    _require_workflow_exec_insights()
+    await _require_workflow_exec_insights(db, int(actor["org_id"]))
     from app.services.workflow_insights import get_full_insights
     return await get_full_insights(db, organization_id=int(actor["org_id"]), days=days)
 
@@ -354,10 +354,11 @@ async def get_workflow_insights(
 
 @router.get("/templates")
 async def list_workflow_templates(
+    db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> list[dict]:
     """Return built-in workflow template presets."""
-    _require_workflow_v2()
+    await _require_workflow_v2(db, int(actor["org_id"]))
     from app.services.workflow_templates import get_templates
     return get_templates()
 
@@ -370,7 +371,7 @@ async def create_from_template(
     workspace_id: int = Depends(get_current_workspace_id),
 ) -> WorkflowDefinitionRead:
     """Create a draft workflow definition from a built-in template."""
-    _require_workflow_v2()
+    await _require_workflow_v2(db, int(actor["org_id"]))
     from app.services.workflow_templates import get_template_by_id
     tpl = get_template_by_id(template_id)
     if tpl is None:

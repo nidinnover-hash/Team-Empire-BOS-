@@ -7,11 +7,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.crm.bootstrap import surveys_enabled
 from app.core.deps import get_db
 from app.core.rbac import require_roles
+from app.logs.audit import record_action
 from app.services import survey as svc
 
 router = APIRouter(prefix="/surveys", tags=["surveys"])
+
+
+async def _require_surveys(db: AsyncSession, org_id: int) -> None:
+    if not await surveys_enabled(db, org_id):
+        raise HTTPException(status_code=404, detail="Not found")
 
 
 class SurveyOut(BaseModel):
@@ -66,7 +73,18 @@ async def create_survey(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ):
-    return await svc.create_survey(db, organization_id=actor["org_id"], **body.model_dump())
+    await _require_surveys(db, actor["org_id"])
+    row = await svc.create_survey(db, organization_id=actor["org_id"], **body.model_dump())
+    await record_action(
+        db,
+        event_type="survey_created",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="survey",
+        entity_id=row.id,
+        payload_json={"title": row.title},
+    )
+    return row
 
 
 @router.get("", response_model=list[SurveyOut])
@@ -75,6 +93,7 @@ async def list_surveys(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ):
+    await _require_surveys(db, actor["org_id"])
     return await svc.list_surveys(db, actor["org_id"], is_active=is_active)
 
 
@@ -84,6 +103,7 @@ async def get_survey(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ):
+    await _require_surveys(db, actor["org_id"])
     row = await svc.get_survey(db, survey_id, actor["org_id"])
     if not row:
         raise HTTPException(404, "Survey not found")
@@ -97,9 +117,18 @@ async def update_survey(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ):
+    await _require_surveys(db, actor["org_id"])
     row = await svc.update_survey(db, survey_id, actor["org_id"], **body.model_dump(exclude_unset=True))
     if not row:
         raise HTTPException(404, "Survey not found")
+    await record_action(
+        db,
+        event_type="survey_updated",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="survey",
+        entity_id=row.id,
+    )
     return row
 
 
@@ -109,9 +138,18 @@ async def delete_survey(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ):
+    await _require_surveys(db, actor["org_id"])
     ok = await svc.delete_survey(db, survey_id, actor["org_id"])
     if not ok:
         raise HTTPException(404, "Survey not found")
+    await record_action(
+        db,
+        event_type="survey_deleted",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="survey",
+        entity_id=survey_id,
+    )
 
 
 @router.post("/{survey_id}/responses", response_model=ResponseOut, status_code=201)
@@ -121,7 +159,18 @@ async def submit_response(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ):
-    return await svc.submit_response(db, organization_id=actor["org_id"], survey_id=survey_id, **body.model_dump())
+    await _require_surveys(db, actor["org_id"])
+    row = await svc.submit_response(db, organization_id=actor["org_id"], survey_id=survey_id, **body.model_dump())
+    await record_action(
+        db,
+        event_type="survey_response_submitted",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="survey_response",
+        entity_id=row.id,
+        payload_json={"survey_id": survey_id, "score": row.score},
+    )
+    return row
 
 
 @router.get("/{survey_id}/responses", response_model=list[ResponseOut])
@@ -131,6 +180,7 @@ async def list_responses(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ):
+    await _require_surveys(db, actor["org_id"])
     return await svc.list_responses(db, actor["org_id"], survey_id, limit=limit)
 
 
@@ -140,4 +190,5 @@ async def get_nps(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ):
+    await _require_surveys(db, actor["org_id"])
     return await svc.get_nps(db, actor["org_id"], survey_id)

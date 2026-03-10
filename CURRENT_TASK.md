@@ -1,63 +1,66 @@
-# Current Task Template
-
-Use this file to document the current feature being developed. Update it before starting work so all AI assistants have shared context.
-
----
+# Current Task
 
 ## Feature Name
 
-_[Name of the feature or module being built]_
+CRM Expansion: Quotes, Sales Playbooks, and CSAT Surveys
 
 ## Goal
 
-_[One-sentence description of what this feature achieves]_
+Add database-backed CRM modules for quote/proposal management, sales playbooks, and customer surveys that can be consumed by existing services and upcoming API endpoints.
 
 ## Requirements
 
-- [ ] _[Requirement 1]_
-- [ ] _[Requirement 2]_
-- [ ] _[Requirement 3]_
+- [x] Define SQLAlchemy models for quotes and quote line items
+- [x] Define SQLAlchemy models for sales playbooks and playbook steps
+- [x] Define SQLAlchemy models for survey definitions and responses
+- [ ] Wire endpoints with RBAC and audit logging
+- [ ] Add feature flags for endpoint exposure
+- [ ] Add API + service tests for happy path and permission checks
 
-## Files to Create
+## Files Created
 
 | File | Purpose |
 |------|---------|
-| `app/services/xxx.py` | _Service logic_ |
-| `app/api/v1/endpoints/xxx.py` | _API endpoint_ |
-| `tests/test_xxx.py` | _Test coverage_ |
+| `app/models/quote.py` | Quote and quote line item models |
+| `app/models/sales_playbook.py` | Playbook and playbook step models |
+| `app/models/survey.py` | Survey definition and response models |
+| `alembic/versions/20260310_0086_add_crm_quote_playbook_survey_tables.py` | Migration for new CRM tables |
 
-## Files to Modify
+## Files Modified
 
 | File | Change |
 |------|--------|
-| `app/core/config.py` | _Add feature flag_ |
+| `alembic/env.py` | Register new model modules for Alembic metadata discovery |
+| `CURRENT_TASK.md` | Replace template with active task context |
 
 ## Constraints
 
-- Must follow existing service layer pattern (thin routes, logic in services)
-- Must respect RBAC — use `require_roles()` on all endpoints
-- Must generate audit events for write operations
-- Must not break existing tests
-- Feature-flagged behind `FEATURE_XXX` setting
+- Keep routes thin and place business logic in services
+- Enforce RBAC with `require_roles()` on mutating endpoints
+- Record audit events for all write actions
+- Keep changes migration-driven (no manual DB edits)
+- Avoid broad refactors unrelated to CRM module rollout
 
 ## Validation
 
-- [ ] All new tests pass
-- [ ] Full test suite green (1986+ tests)
-- [ ] No security vulnerabilities introduced
-- [ ] Audit events recorded for mutations
-- [ ] Feature flag correctly gates the functionality
+- [ ] Migration applies and downgrades cleanly
+- [ ] New endpoint/service tests pass
+- [ ] Full suite green
+- [ ] Audit events present on writes
+- [ ] Feature flags gate new endpoints
 
 ## Risks
 
 | Risk | Mitigation |
 |------|------------|
-| _[Risk description]_ | _[How to mitigate]_ |
+| Existing local DB drift causes migration mismatch | Keep migration explicit/manual and validate upgrade + downgrade |
+| Endpoint rollout without RBAC/audit enforcement | Implement and test endpoints only after service/model layer is stable |
 
 ## Status
 
-- [ ] Planning
-- [ ] Implementation
+- [x] Planning
+- [x] Model implementation
+- [x] Migration scaffolding
+- [ ] API layer implementation
 - [ ] Tests written
 - [ ] Full suite passing
-- [ ] Deployed to production

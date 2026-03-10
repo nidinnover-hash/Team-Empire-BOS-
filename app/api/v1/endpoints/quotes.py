@@ -7,11 +7,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.crm.bootstrap import quotes_enabled
 from app.core.deps import get_db
 from app.core.rbac import require_roles
+from app.logs.audit import record_action
 from app.services import quote as svc
 
 router = APIRouter(prefix="/quotes", tags=["quotes"])
+
+
+async def _require_quotes(db: AsyncSession, org_id: int) -> None:
+    if not await quotes_enabled(db, org_id):
+        raise HTTPException(status_code=404, detail="Not found")
 
 
 class QuoteOut(BaseModel):
@@ -83,7 +90,18 @@ async def create_quote(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ):
-    return await svc.create_quote(db, organization_id=actor["org_id"], created_by_user_id=actor["id"], **body.model_dump())
+    await _require_quotes(db, actor["org_id"])
+    row = await svc.create_quote(db, organization_id=actor["org_id"], created_by_user_id=actor["id"], **body.model_dump())
+    await record_action(
+        db,
+        event_type="quote_created",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="quote",
+        entity_id=row.id,
+        payload_json={"title": row.title, "status": row.status},
+    )
+    return row
 
 
 @router.get("", response_model=list[QuoteOut])
@@ -92,6 +110,7 @@ async def list_quotes(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ):
+    await _require_quotes(db, actor["org_id"])
     return await svc.list_quotes(db, actor["org_id"], status=status)
 
 
@@ -101,6 +120,7 @@ async def get_quote(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ):
+    await _require_quotes(db, actor["org_id"])
     row = await svc.get_quote(db, quote_id, actor["org_id"])
     if not row:
         raise HTTPException(404, "Quote not found")
@@ -114,9 +134,18 @@ async def update_quote(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ):
+    await _require_quotes(db, actor["org_id"])
     row = await svc.update_quote(db, quote_id, actor["org_id"], **body.model_dump(exclude_unset=True))
     if not row:
         raise HTTPException(404, "Quote not found")
+    await record_action(
+        db,
+        event_type="quote_updated",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="quote",
+        entity_id=row.id,
+    )
     return row
 
 
@@ -126,9 +155,18 @@ async def delete_quote(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN")),
 ):
+    await _require_quotes(db, actor["org_id"])
     ok = await svc.delete_quote(db, quote_id, actor["org_id"])
     if not ok:
         raise HTTPException(404, "Quote not found")
+    await record_action(
+        db,
+        event_type="quote_deleted",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="quote",
+        entity_id=quote_id,
+    )
 
 
 @router.post("/{quote_id}/lines", response_model=LineItemOut, status_code=201)
@@ -138,7 +176,18 @@ async def add_line_item(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ):
-    return await svc.add_line_item(db, organization_id=actor["org_id"], quote_id=quote_id, **body.model_dump())
+    await _require_quotes(db, actor["org_id"])
+    row = await svc.add_line_item(db, organization_id=actor["org_id"], quote_id=quote_id, **body.model_dump())
+    await record_action(
+        db,
+        event_type="quote_line_item_added",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="quote_line_item",
+        entity_id=row.id,
+        payload_json={"quote_id": quote_id},
+    )
+    return row
 
 
 @router.get("/{quote_id}/lines", response_model=list[LineItemOut])
@@ -147,6 +196,7 @@ async def list_line_items(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ):
+    await _require_quotes(db, actor["org_id"])
     return await svc.list_line_items(db, actor["org_id"], quote_id)
 
 
@@ -156,6 +206,15 @@ async def delete_line_item(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ):
+    await _require_quotes(db, actor["org_id"])
     ok = await svc.delete_line_item(db, item_id, actor["org_id"])
     if not ok:
         raise HTTPException(404, "Line item not found")
+    await record_action(
+        db,
+        event_type="quote_line_item_deleted",
+        actor_user_id=actor["id"],
+        organization_id=actor["org_id"],
+        entity_type="quote_line_item",
+        entity_id=item_id,
+    )

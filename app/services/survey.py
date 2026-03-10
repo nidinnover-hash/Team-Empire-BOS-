@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.tenant import apply_org_scope
 from app.models.survey import SurveyDefinition, SurveyResponse
 
 
@@ -30,7 +31,7 @@ async def list_surveys(
     db: AsyncSession, organization_id: int, *,
     is_active: bool | None = None,
 ) -> list[SurveyDefinition]:
-    q = select(SurveyDefinition).where(SurveyDefinition.organization_id == organization_id)
+    q = apply_org_scope(select(SurveyDefinition), SurveyDefinition, organization_id)
     if is_active is not None:
         q = q.where(SurveyDefinition.is_active == is_active)
     q = q.order_by(SurveyDefinition.created_at.desc())
@@ -38,7 +39,7 @@ async def list_surveys(
 
 
 async def get_survey(db: AsyncSession, survey_id: int, organization_id: int) -> SurveyDefinition | None:
-    q = select(SurveyDefinition).where(SurveyDefinition.id == survey_id, SurveyDefinition.organization_id == organization_id)
+    q = apply_org_scope(select(SurveyDefinition).where(SurveyDefinition.id == survey_id), SurveyDefinition, organization_id)
     return (await db.execute(q)).scalar_one_or_none()
 
 
@@ -89,19 +90,24 @@ async def list_responses(
     db: AsyncSession, organization_id: int, survey_id: int,
     *, limit: int = 100,
 ) -> list[SurveyResponse]:
-    q = (
-        select(SurveyResponse)
-        .where(SurveyResponse.organization_id == organization_id, SurveyResponse.survey_id == survey_id)
-        .order_by(SurveyResponse.created_at.desc())
-        .limit(limit)
-    )
+    q = apply_org_scope(
+        select(SurveyResponse).where(SurveyResponse.survey_id == survey_id),
+        SurveyResponse,
+        organization_id,
+    ).order_by(SurveyResponse.created_at.desc()).limit(limit)
     return list((await db.execute(q)).scalars().all())
 
 
 async def get_nps(db: AsyncSession, organization_id: int, survey_id: int) -> dict:
     rows = (await db.execute(
-        select(SurveyResponse.nps_score)
-        .where(SurveyResponse.organization_id == organization_id, SurveyResponse.survey_id == survey_id, SurveyResponse.nps_score.isnot(None))
+        apply_org_scope(
+            select(SurveyResponse.nps_score).where(
+                SurveyResponse.survey_id == survey_id,
+                SurveyResponse.nps_score.isnot(None),
+            ),
+            SurveyResponse,
+            organization_id,
+        )
     )).scalars().all()
     if not rows:
         return {"promoters": 0, "passives": 0, "detractors": 0, "nps": 0, "total": 0}

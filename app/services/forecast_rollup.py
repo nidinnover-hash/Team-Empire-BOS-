@@ -6,8 +6,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.forecast_rollup import ForecastRollup
 
+_PROTECTED_FIELDS = {"id", "organization_id", "created_at"}
+
 
 async def upsert_rollup(db: AsyncSession, *, organization_id: int, **kw) -> ForecastRollup:
+    # Natural key: (organization_id, period, group_by, group_value)
+    period = kw.get("period")
+    group_by = kw.get("group_by")
+    group_value = kw.get("group_value")
+    if period and group_by and group_value:
+        existing = (await db.execute(
+            select(ForecastRollup).where(
+                ForecastRollup.organization_id == organization_id,
+                ForecastRollup.period == period,
+                ForecastRollup.group_by == group_by,
+                ForecastRollup.group_value == group_value,
+            )
+        )).scalar_one_or_none()
+        if existing:
+            for k, v in kw.items():
+                if k not in _PROTECTED_FIELDS:
+                    setattr(existing, k, v)
+            await db.commit()
+            await db.refresh(existing)
+            return existing
     row = ForecastRollup(organization_id=organization_id, **kw)
     db.add(row)
     await db.commit()

@@ -31,6 +31,7 @@ from app.api.v1.router import api_router
 from app.core.config import format_startup_issues, settings, validate_startup_settings
 from app.core.contracts import error_envelope
 from app.core.deps import get_current_api_user, get_db
+from app.core.audit_middleware import MutationAuditMiddleware
 from app.core.middleware import (
     CorrelationIDMiddleware,
     RateLimitMiddleware,
@@ -306,9 +307,10 @@ if _cors_origins:
     )
 
 # Middleware is applied in reverse order (last added = outermost = runs first).
-# Desired execution order: SecurityHeaders → RequestLog → CorrelationID → RateLimit → BodyLimit → GZip
+# Desired execution order: SecurityHeaders → RequestLog → CorrelationID → RateLimit → BodyLimit → MutationAudit → GZip
 # So we add them bottom-up:
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(MutationAuditMiddleware)
 app.add_middleware(RequestBodyLimitMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(CorrelationIDMiddleware)
