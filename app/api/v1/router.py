@@ -132,6 +132,13 @@ from app.api.v1.endpoints import (
     dedup_rules,
     stage_gates,
     activity_goals,
+    call_logs,
+    drip_analytics,
+    deal_splits,
+    contact_merge_logs,
+    product_bundles,
+    forecast_rollups,
+    conversion_funnels,
 )
 
 api_router = APIRouter()
@@ -267,3 +274,10 @@ api_router.include_router(leaderboard.router)
 api_router.include_router(dedup_rules.router)
 api_router.include_router(stage_gates.router)
 api_router.include_router(activity_goals.router)
+api_router.include_router(call_logs.router)
+api_router.include_router(drip_analytics.router)
+api_router.include_router(deal_splits.router)
+api_router.include_router(contact_merge_logs.router)
+api_router.include_router(product_bundles.router)
+api_router.include_router(forecast_rollups.router)
+api_router.include_router(conversion_funnels.router)

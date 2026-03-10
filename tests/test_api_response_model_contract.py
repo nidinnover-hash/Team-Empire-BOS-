@@ -96,6 +96,15 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/dedup-rules/check",  # duplicate check dict
     "/api/v1/stage-gates/validate",  # stage validation dict
     "/api/v1/activity-goals/progress/{user_id}",  # progress list dict
+    "/api/v1/call-logs/stats",  # call stats dict
+    "/api/v1/drip-analytics/steps/{campaign_id}",  # step stats list dict
+    "/api/v1/drip-analytics/summary/{campaign_id}",  # campaign summary dict
+    "/api/v1/deal-splits/deal/{deal_id}/summary",  # split summary dict
+    "/api/v1/contact-merge-logs/stats",  # merge stats dict
+    "/api/v1/product-bundles/{bundle_id}/pricing",  # pricing dict
+    "/api/v1/forecast-rollups/summary/{period}",  # period summary dict
+    "/api/v1/conversion-funnels/summary/{period}",  # funnel summary dict
+    "/api/v1/conversion-funnels/bottlenecks/{period}",  # bottlenecks list dict
 }
 
 
