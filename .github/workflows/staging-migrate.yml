@@ -46,7 +46,7 @@ jobs:
 
       - name: Report success
         if: success()
-        run: echo "Staging migration and seeding succeeded."
+        run: echo "Staging migration and seeding succeeded (port 5432 direct)."
 
       - name: Report failure
         if: failure()
