@@ -15,6 +15,22 @@ depends_on = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    tables = set(inspector.get_table_names())
+    migration_tables = {
+        "github_repos",
+        "github_users",
+        "github_pull_requests",
+        "github_reviews",
+        "github_commits_daily",
+        "github_workflow_runs",
+        "github_sync_runs",
+    }
+    # Keep idempotent when bootstrap migrations already materialized these tables.
+    if migration_tables.issubset(tables):
+        return
+
     op.create_table(
         "github_repos",
         sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
