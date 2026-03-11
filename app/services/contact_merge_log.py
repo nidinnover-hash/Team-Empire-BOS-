@@ -1,7 +1,7 @@
 """Contact merge log service."""
 from __future__ import annotations
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact_merge_log import ContactMergeLog

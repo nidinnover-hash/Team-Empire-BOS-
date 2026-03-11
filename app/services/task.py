@@ -26,9 +26,9 @@ async def create_task(
 
 async def list_tasks(
     db: AsyncSession,
+    organization_id: int,
     limit: int = 50,
     offset: int = 0,
-    organization_id: int,
     workspace_id: int | None = None,
     project_id: int | None = None,
     category: str | None = None,

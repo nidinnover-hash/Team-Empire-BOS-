@@ -1,10 +1,10 @@
 """Referral program service."""
 from __future__ import annotations
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.referral import ReferralSource, Referral
+from app.models.referral import Referral, ReferralSource
 
 
 async def create_source(

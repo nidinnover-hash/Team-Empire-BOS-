@@ -218,9 +218,9 @@ def test_parse_ai_response_strips_markdown():
 
 
 def test_parse_ai_response_rejects_no_steps():
-    from app.engines.brain.workflow_planner import _parse_ai_response
-
     import pytest
+
+    from app.engines.brain.workflow_planner import _parse_ai_response
     with pytest.raises(ValueError, match="missing 'steps'"):
         _parse_ai_response('{"name": "Bad"}')
 

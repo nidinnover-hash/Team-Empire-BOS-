@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rbac import require_roles
 from app.core.deps import get_db
+from app.core.rbac import require_roles
 from app.services import meeting_note as svc
 
 router = APIRouter(prefix="/meeting-notes", tags=["meeting-notes"])
@@ -14,24 +14,33 @@ router = APIRouter(prefix="/meeting-notes", tags=["meeting-notes"])
 
 class NoteOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int; organization_id: int; title: str
-    summary: str | None = None; full_notes: str | None = None
-    action_items_json: str; attendees_json: str
-    contact_id: int | None = None; deal_id: int | None = None
+    id: int
+    organization_id: int
+    title: str
+    summary: str | None = None
+    full_notes: str | None = None
+    action_items_json: str
+    attendees_json: str
+    contact_id: int | None = None
+    deal_id: int | None = None
     meeting_date: datetime | None = None
-    created_by_user_id: int | None = None; created_at: datetime
+    created_by_user_id: int | None = None
+    created_at: datetime
 
 
 class NoteCreate(BaseModel):
-    title: str; summary: str | None = None
+    title: str
+    summary: str | None = None
     full_notes: str | None = None
     action_items: list[dict] | None = None
     attendees: list[str] | None = None
-    contact_id: int | None = None; deal_id: int | None = None
+    contact_id: int | None = None
+    deal_id: int | None = None
 
 
 class NoteUpdate(BaseModel):
-    title: str | None = None; summary: str | None = None
+    title: str | None = None
+    summary: str | None = None
     full_notes: str | None = None
     action_items: list[dict] | None = None
     attendees: list[str] | None = None

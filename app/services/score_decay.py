@@ -1,8 +1,6 @@
 """Contact score decay service — manage decay rules and simulate runs."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

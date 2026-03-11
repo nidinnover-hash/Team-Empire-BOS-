@@ -77,11 +77,7 @@ async def evaluate_rules(db: AsyncSession, organization_id: int, contact_data: d
     for rule in rules:
         if rule.field_name and rule.field_name in contact_data:
             val = str(contact_data[rule.field_name])
-            if rule.operator == "equals" and val == rule.value:
-                delta = int(rule.score_delta * float(rule.weight))
-                total_score += delta
-                matched.append({"rule_id": rule.id, "name": rule.name, "delta": delta})
-            elif rule.operator == "contains" and rule.value and rule.value in val:
+            if (rule.operator == "equals" and val == rule.value) or (rule.operator == "contains" and rule.value and rule.value in val):
                 delta = int(rule.score_delta * float(rule.weight))
                 total_score += delta
                 matched.append({"rule_id": rule.id, "name": rule.name, "delta": delta})

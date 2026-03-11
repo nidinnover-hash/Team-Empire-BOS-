@@ -1,10 +1,10 @@
 """Product bundling service."""
 from __future__ import annotations
 
-from sqlalchemy import select, delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.product_bundle import ProductBundle, BundleItem
+from app.models.product_bundle import BundleItem, ProductBundle
 from app.services._guardrails import apply_safe_updates, get_tenant_row, tenant_select
 
 

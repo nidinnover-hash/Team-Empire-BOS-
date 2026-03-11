@@ -56,7 +56,7 @@ async def update_article(db: AsyncSession, article_id: int, organization_id: int
         return None
     if "tags" in kwargs:
         kwargs["tags_json"] = json.dumps(kwargs.pop("tags") or [])
-    if "title" in kwargs and kwargs["title"]:
+    if kwargs.get("title"):
         kwargs["slug"] = _slugify(kwargs["title"])
     for k, v in kwargs.items():
         if v is not None:

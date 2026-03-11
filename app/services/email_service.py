@@ -11,6 +11,7 @@ Flow:
 import asyncio
 import logging
 from datetime import UTC, datetime
+from typing import cast
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -420,7 +421,7 @@ async def summarize_email(
         payload_json={"subject": email.subject},
         organization_id=org_id,
     )
-    return summary
+    return cast(str | None, summary)
 
 
 # -- Thread Summarization -----------------------------------------------------
@@ -630,7 +631,7 @@ async def draft_reply(
         },
         organization_id=org_id,
     )
-    return draft
+    return cast(str | None, draft)
 
 
 # -- AI Strategize ------------------------------------------------------------
@@ -689,7 +690,7 @@ async def strategize_email(
         payload_json={"subject": email.subject},
         organization_id=org_id,
     )
-    return analysis
+    return cast(str | None, analysis)
 
 
 # -- AI Compose New Email -----------------------------------------------------
@@ -780,7 +781,7 @@ async def compose_email(
         payload_json={"to": to, "subject": subject, "approval_id": approval.id},
         organization_id=org_id,
     )
-    return draft
+    return cast(str | None, draft)
 
 
 # -- Send Approved Reply ------------------------------------------------------

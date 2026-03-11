@@ -1,15 +1,12 @@
 """Tests for centralized mutation audit coverage contract."""
 from __future__ import annotations
 
-import pytest
-
 from app.core.audit_middleware import (
+    _SKIP_PREFIXES,
     MutationAuditMiddleware,
     _derive_event_type,
     _extract_entity_id,
-    _SKIP_PREFIXES,
 )
-from fastapi.routing import APIRoute
 from app.main import app as fastapi_app
 
 

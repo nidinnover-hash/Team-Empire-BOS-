@@ -4,7 +4,6 @@ contact enrichment, goal-to-project linking, audit log enhancements."""
 import pytest
 from httpx import AsyncClient
 
-
 # ── Deal Revenue Forecasting ────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -54,7 +53,9 @@ async def test_deal_forecast_months_param(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_integration_health_page_redirect(client: AsyncClient):
     """Integration health page redirects to login without session cookie."""
-    from httpx import ASGITransport, AsyncClient as AC
+    from httpx import ASGITransport
+    from httpx import AsyncClient as AC
+
     from app.main import app
 
     async with AC(transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False) as anon:

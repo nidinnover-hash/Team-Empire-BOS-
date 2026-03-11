@@ -6,17 +6,30 @@ import pytest
 
 from app.services import (
     call_log as cl_svc,
-    drip_analytics as da_svc,
-    deal_split as ds_svc,
+)
+from app.services import (
     contact_merge_log as cml_svc,
-    product_bundle as pb_svc,
-    forecast_rollup as fr_svc,
+)
+from app.services import (
     conversion_funnel as cf_svc,
+)
+from app.services import (
+    deal_split as ds_svc,
+)
+from app.services import (
+    drip_analytics as da_svc,
+)
+from app.services import (
+    forecast_rollup as fr_svc,
+)
+from app.services import (
+    product_bundle as pb_svc,
 )
 
 
 def _obj(**kw):
-    class _O: pass
+    class _O:
+        pass
     o = _O()
     for k, v in kw.items():
         setattr(o, k, v)

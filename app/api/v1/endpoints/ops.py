@@ -938,6 +938,7 @@ async def api_usage_analytics(
 ) -> dict:
     """API usage analytics: event counts by type and day."""
     from datetime import timedelta
+
     from app.models.event import Event
 
     org_id = int(user["org_id"])
@@ -1002,6 +1003,7 @@ async def team_activity_feed(
 ) -> dict:
     """Aggregated team activity feed grouped by user."""
     from datetime import timedelta
+
     from app.models.event import Event
     from app.models.user import User
 

@@ -11,6 +11,9 @@ the real function used by call_ai().
 import importlib
 import sys
 
+# Re-export for type checkers (at runtime sys.modules replace below wins)
+from app.engines.brain.router import call_ai as call_ai
+
 # Import the real module
 _real = importlib.import_module("app.engines.brain.router")
 

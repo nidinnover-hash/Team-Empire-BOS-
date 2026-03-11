@@ -1,8 +1,7 @@
 """Tests for batch 7 features: live notifications, contact timeline, OKR key results,
 recurring task templates, email campaigns, dashboard layout, bulk deal import."""
 
-from datetime import date, datetime
-from io import BytesIO
+from datetime import date
 
 import pytest
 
@@ -89,7 +88,7 @@ async def test_update_key_result_recalculates_goal(client):
 
     # Goal should also show ~50% progress
     goals = await client.get("/api/v1/goals")
-    goal = [g for g in goals.json() if g["id"] == goal_id][0]
+    goal = next(g for g in goals.json() if g["id"] == goal_id)
     assert goal["progress"] == 50
 
 

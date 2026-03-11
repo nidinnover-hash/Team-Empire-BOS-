@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact import Contact
-from app.models.scoring_rule import RULE_OPERATORS, ScoringRule
+from app.models.scoring_rule import ScoringRule
 
 logger = logging.getLogger(__name__)
 

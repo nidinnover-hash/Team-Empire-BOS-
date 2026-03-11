@@ -10,18 +10,44 @@ import pytest
 
 from app.services import (
     call_log as cl_svc,
-    drip_analytics as da_svc,
-    deal_split as ds_svc,
+)
+from app.services import (
     contact_merge_log as cml_svc,
-    product_bundle as pb_svc,
-    forecast_rollup as fr_svc,
-    conversion_funnel as cf_svc,
-    revenue_goal as rg_svc,
-    deal_dependency as dd_svc,
+)
+from app.services import (
     contact_timeline_events as ct_svc,
+)
+from app.services import (
+    conversion_funnel as cf_svc,
+)
+from app.services import (
+    deal_dependency as dd_svc,
+)
+from app.services import (
+    deal_split as ds_svc,
+)
+from app.services import (
+    drip_analytics as da_svc,
+)
+from app.services import (
     email_warmup as ew_svc,
-    territory_assignment as ta_svc,
+)
+from app.services import (
+    forecast_rollup as fr_svc,
+)
+from app.services import (
+    product_bundle as pb_svc,
+)
+from app.services import (
     quote_approval as qa_svc,
+)
+from app.services import (
+    revenue_goal as rg_svc,
+)
+from app.services import (
+    territory_assignment as ta_svc,
+)
+from app.services import (
     win_loss_analysis as wl_svc,
 )
 from tests.conftest import _make_auth_headers

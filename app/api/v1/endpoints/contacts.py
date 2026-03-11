@@ -1,12 +1,13 @@
+import contextlib
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.idempotency import build_fingerprint, get_cached_response, store_response
 from app.core.rbac import require_roles, require_sensitive_financial_roles
 from app.logs.audit import record_action
-from pydantic import BaseModel, Field
-
 from app.schemas.contact import (
     ContactCreate,
     ContactRead,
@@ -64,13 +65,12 @@ async def create_contact(
     )
     # Fire-and-forget enrichment
     import asyncio
+
     from app.services.contact_enrichment import enrich_contact_background
-    try:
+    with contextlib.suppress(RuntimeError):
         asyncio.get_running_loop().create_task(
             enrich_contact_background(contact.id, int(actor["org_id"]))
         )
-    except RuntimeError:
-        pass
     result = _mask_contact_for_role(ContactRead.model_validate(contact, from_attributes=True), actor.get("role"))
     if idempotency_key:
         store_response(scope, idempotency_key, result.model_dump(), fingerprint=fp)

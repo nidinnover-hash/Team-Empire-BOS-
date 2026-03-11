@@ -113,4 +113,4 @@ async def archive_old_entries(
         .values(status="archived", resolved_at=datetime.now(UTC))
     )
     await db.commit()
-    return result.rowcount  # type: ignore[return-value]
+    return result.rowcount

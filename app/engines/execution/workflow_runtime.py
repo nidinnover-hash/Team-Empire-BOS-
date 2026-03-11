@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import cast
 
 from app.domains.automation import repo as automation_repo
 from app.domains.automation import service as automation_domain
@@ -23,7 +24,7 @@ async def run_workflow_plan(
 ) -> object:
     step_runs = await automation_repo.list_workflow_step_runs(db, organization_id=organization_id, workflow_run_id=run.id)
     await automation_domain.mark_run_started(db, run=run, actor_user_id=actor_user_id)
-    for step_plan in plan.get("step_plans", []):
+    for step_plan in cast(list, plan.get("step_plans", [])):
         index = int(step_plan["step_index"])
         step_run = next(sr for sr in step_runs if sr.step_index == index)
         step_run.idempotency_key = build_workflow_step_idempotency_key(
@@ -327,7 +328,7 @@ async def resume_existing_workflow_run(
             definition=definition,
         )
         run.plan_snapshot_json = plan
-        step_plans = list(plan.get("step_plans") or [])
+        step_plans = list(cast(list, plan.get("step_plans") or []))
 
     start_index = min(
         (

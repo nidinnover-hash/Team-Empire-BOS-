@@ -3,7 +3,6 @@ email templates, deal stage requirements, contact segments, outbound webhooks.""
 
 import pytest
 
-
 # ── Activity timeline ────────────────────────────────────────────────────────
 
 
@@ -203,7 +202,7 @@ async def test_check_requirement_and_validate(client):
 
 @pytest.mark.asyncio
 async def test_deal_checklist(client):
-    req = await client.post("/api/v1/deals/requirements", json={
+    await client.post("/api/v1/deals/requirements", json={
         "stage": "won", "title": "Payment received",
     })
     deal = await client.post("/api/v1/deals", json={

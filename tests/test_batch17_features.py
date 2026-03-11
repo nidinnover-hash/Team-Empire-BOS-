@@ -5,18 +5,31 @@ from __future__ import annotations
 import pytest
 
 from app.services import (
-    subscription as sub_svc,
-    drip_campaign as drip_svc,
-    lead_score_rule as lsr_svc,
-    onboarding_checklist as ob_svc,
-    forecast_scenario as fs_svc,
-    feature_request as fr_svc,
     audit_entry as ae_svc,
+)
+from app.services import (
+    drip_campaign as drip_svc,
+)
+from app.services import (
+    feature_request as fr_svc,
+)
+from app.services import (
+    forecast_scenario as fs_svc,
+)
+from app.services import (
+    lead_score_rule as lsr_svc,
+)
+from app.services import (
+    onboarding_checklist as ob_svc,
+)
+from app.services import (
+    subscription as sub_svc,
 )
 
 
 def _obj(**kw):
-    class _O: pass
+    class _O:
+        pass
     o = _O()
     for k, v in kw.items():
         setattr(o, k, v)

@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document_signing import SignatureRequest
@@ -53,7 +53,7 @@ async def mark_signed(db: AsyncSession, request_id: int, organization_id: int) -
     if not row:
         return None
     row.status = "signed"
-    row.signed_at = datetime.now(timezone.utc)
+    row.signed_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(row)
     return row

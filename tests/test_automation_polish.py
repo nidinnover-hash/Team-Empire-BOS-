@@ -2,10 +2,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, patch
 
 import pytest
-
 
 # ── Workflow Templates ────────────────────────────────────────────────────
 
@@ -204,8 +202,8 @@ async def test_definition_publish_flow(client):
 
 def test_new_job_handlers_registered():
     """Verify that the new job handlers are registered."""
-    from app.services.job_queue import _handlers
     import app.jobs.job_handlers  # noqa: F401
+    from app.services.job_queue import _handlers
 
     assert "run_scheduled_workflows" in _handlers
     assert "run_workflow" in _handlers

@@ -3,10 +3,8 @@ Stripe webhooks, export CSV/JSON, deals dashboard."""
 from __future__ import annotations
 
 import json
-from datetime import date
 
 import pytest
-
 
 # ── 1. Alert engine in scheduler ──────────────────────────────────────────
 
@@ -33,7 +31,7 @@ async def test_deal_won_creates_finance_entry(client):
 
     # Get finance entries before
     before = await client.get("/api/v1/finance")
-    before_count = len(before.json()) if before.status_code == 200 else 0
+    _before_count = len(before.json()) if before.status_code == 200 else 0
 
     # Mark deal as won
     resp = await client.patch(f"/api/v1/deals/{deal_id}", json={"stage": "won"})
@@ -206,7 +204,8 @@ async def test_export_finance_json(client):
 @pytest.mark.asyncio
 async def test_deals_web_page_redirects_unauthenticated(client):
     """GET /web/deals redirects to login without auth."""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
+
     from app.main import app
 
     async with AsyncClient(

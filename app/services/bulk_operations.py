@@ -1,6 +1,7 @@
 """Bulk operations — CSV import and batch operations for contacts, tasks, projects."""
 from __future__ import annotations
 
+import contextlib
 import csv
 import io
 import logging
@@ -131,18 +132,14 @@ async def import_tasks_csv(
         due_date = None
         raw_due = (row.get("due_date") or "").strip()
         if raw_due:
-            try:
+            with contextlib.suppress(ValueError):
                 due_date = datetime.strptime(raw_due, "%Y-%m-%d").date()
-            except ValueError:
-                pass
 
         project_id = None
         raw_project = (row.get("project_id") or "").strip()
         if raw_project:
-            try:
+            with contextlib.suppress(ValueError):
                 project_id = int(raw_project)
-            except ValueError:
-                pass
 
         task = Task(
             organization_id=organization_id,
@@ -208,18 +205,14 @@ async def import_deals_csv(
         expected_close = None
         raw_close = (row.get("expected_close_date") or "").strip()
         if raw_close:
-            try:
+            with contextlib.suppress(ValueError):
                 expected_close = datetime.strptime(raw_close, "%Y-%m-%d").date()
-            except ValueError:
-                pass
 
         contact_id = None
         raw_contact = (row.get("contact_id") or "").strip()
         if raw_contact:
-            try:
+            with contextlib.suppress(ValueError):
                 contact_id = int(raw_contact)
-            except ValueError:
-                pass
 
         deal = Deal(
             organization_id=organization_id,

@@ -1,0 +1,62 @@
+name: Staging Gate State Only
+
+on:
+  push:
+    branches:
+      - staging
+
+jobs:
+  state-gate:
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      DATABASE_URL: ${{ secrets.STAGING_PGCONN }}
+      STAGING_PGCONN: ${{ secrets.STAGING_PGCONN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Preflight parse + DNS
+        run: |
+          python - <<'PY'
+          import os
+          from sqlalchemy.engine.url import make_url
+          u = make_url(os.environ["DATABASE_URL"])
+          print(f"driver={u.drivername}")
+          print(f"host={u.host}")
+          print(f"port={u.port}")
+          print(f"database={u.database}")
+          PY
+          host=$(python - <<'PY'
+          import os
+          from sqlalchemy.engine.url import make_url
+          print(make_url(os.environ["DATABASE_URL"]).host)
+          PY
+          )
+          nslookup "$host"
+
+      - name: Alembic state parity
+        run: |
+          set -euo pipefail
+          current=$(python -m alembic current)
+          heads=$(python -m alembic heads)
+          echo "$current"
+          echo "$heads"
+          cur_rev=$(echo "$current" | sed -n 's/^\([A-Za-z0-9_]\+\) (head).*$/\1/p' | head -n1)
+          head_rev=$(echo "$heads" | sed -n 's/^\([A-Za-z0-9_]\+\) (head).*$/\1/p' | head -n1)
+          if [ -z "$cur_rev" ] || [ -z "$head_rev" ] || [ "$cur_rev" != "$head_rev" ]; then
+            echo "State gate failed: current/head mismatch"
+            exit 1
+          fi
+          echo "State gate passed: $cur_rev"

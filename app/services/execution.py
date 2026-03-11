@@ -95,13 +95,15 @@ async def complete_execution(
     db: AsyncSession,
     execution_id: int,
     status: str,
+    organization_id: int,
     output_json: dict | None = None,
     error_text: str | None = None,
-    organization_id: int | None = None,
 ) -> Execution | None:
-    query = select(Execution).where(Execution.id == execution_id)
-    if organization_id is not None:
-        query = query.where(Execution.organization_id == organization_id)
+    query = (
+        select(Execution)
+        .where(Execution.id == execution_id)
+        .where(Execution.organization_id == organization_id)
+    )
     result = await db.execute(query)
     execution = result.scalar_one_or_none()
     if execution is None:

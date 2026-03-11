@@ -28,11 +28,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from alembic.config import Config as AlembicConfig
 from alembic.script import ScriptDirectory
 from app.api.v1.router import api_router
+from app.core.audit_middleware import MutationAuditMiddleware
 from app.core.config import format_startup_issues, settings, validate_startup_settings
 from app.core.contracts import error_envelope
 from app.core.deps import get_current_api_user, get_db
-from app.core.audit_middleware import MutationAuditMiddleware
-from app.core.slo_middleware import SLOTrackingMiddleware
 from app.core.middleware import (
     CorrelationIDMiddleware,
     RateLimitMiddleware,
@@ -41,6 +40,7 @@ from app.core.middleware import (
     SecurityHeadersMiddleware,
     get_client_ip,
 )
+from app.core.slo_middleware import SLOTrackingMiddleware
 from app.db.base import Base
 from app.db.session import engine
 from app.models.registry import load_all_models
@@ -227,9 +227,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         start_scheduler(interval_minutes=settings.SYNC_INTERVAL_MINUTES)
 
     # Start persistent job queue worker (Postgres-backed)
-    from app.services.job_queue import start_worker as _start_jq, stop_worker as _stop_jq
+    from app.services.job_queue import start_worker as _start_jq
+    from app.services.job_queue import stop_worker as _stop_jq
     if settings.JOB_QUEUE_ENABLED and run_scheduler:
-        import app.jobs.job_handlers  # noqa: F401 — registers handlers
+        import app.jobs.job_handlers
         _start_jq()
 
     yield

@@ -7,14 +7,14 @@ from sqlalchemy import Select, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.signal import Signal
-from app.platform.signals.schemas import SignalEnvelope
+from app.platform.signals.schemas import SignalCategory, SignalEnvelope
 
 
 def _to_envelope(row: Signal) -> SignalEnvelope:
     return SignalEnvelope(
         signal_id=row.signal_id,
         topic=row.topic,
-        category=row.category,
+        category=SignalCategory(row.category),
         organization_id=row.organization_id,
         workspace_id=row.workspace_id,
         actor_user_id=row.actor_user_id,

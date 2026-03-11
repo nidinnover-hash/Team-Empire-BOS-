@@ -1,7 +1,7 @@
 """Win/loss analysis service."""
 from __future__ import annotations
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.win_loss_analysis import WinLossRecord

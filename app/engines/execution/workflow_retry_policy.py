@@ -43,7 +43,7 @@ def should_mark_run_stuck(*, run, now: datetime | None = None) -> bool:
     if run.last_heartbeat_at is None:
         return False
     timeout = timedelta(seconds=max(30, int(settings.WORKFLOW_HEARTBEAT_TIMEOUT_SECONDS)))
-    return run.last_heartbeat_at < current - timeout
+    return bool(run.last_heartbeat_at < current - timeout)
 
 
 def should_resume_retry_wait_run(*, run, now: datetime | None = None) -> bool:
@@ -52,4 +52,4 @@ def should_resume_retry_wait_run(*, run, now: datetime | None = None) -> bool:
         return False
     if run.next_retry_at is None:
         return True
-    return run.next_retry_at <= current
+    return bool(run.next_retry_at <= current)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.routing import APIRoute
@@ -139,7 +139,7 @@ async def test_cross_tenant_product_bundle_items_not_exposed(client):
     ],
 )
 async def test_create_mutations_emit_audit_events(client, monkeypatch, path, payload, svc_attr, event_name):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     events: list[str] = []
 
     async def fake_record_action(_db, **kwargs):

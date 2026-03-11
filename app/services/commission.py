@@ -1,10 +1,10 @@
 """Commission calculator service."""
 from __future__ import annotations
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.commission import CommissionRule, CommissionPayout
+from app.models.commission import CommissionPayout, CommissionRule
 
 
 async def create_rule(

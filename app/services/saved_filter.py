@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import select, or_
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.saved_filter import SavedFilter

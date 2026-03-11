@@ -1,9 +1,9 @@
 """Quote approval service."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.quote_approval import QuoteApproval
@@ -37,7 +37,7 @@ async def decide(db: AsyncSession, approval_id: int, org_id: int, status: str, r
         return None
     row.status = status
     row.reason = reason
-    row.decided_at = datetime.now(timezone.utc)
+    row.decided_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(row)
     return row

@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact import Contact
@@ -75,7 +74,7 @@ async def get_contact_network(
     deal_rows = deal_result.all()
     if deal_rows:
         # Find other contacts that share deals via same company or are referenced
-        for deal_id, deal_title in deal_rows:
+        for _deal_id, _deal_title in deal_rows:
             # Contacts linked to other deals with the same contact's company
             pass  # Deals are 1:1 contact_id, so look for contacts on same-stage deals
 

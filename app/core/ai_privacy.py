@@ -53,7 +53,7 @@ class PIIMasker:
             if category in self._allowed:
                 continue
             result = pattern.sub(
-                lambda m, cat=category: self._next_placeholder(cat, m.group(0)),
+                lambda m, cat=category: self._next_placeholder(cat, m.group(0)),  # type: ignore[misc]
                 result,
             )
         return result

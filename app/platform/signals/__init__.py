@@ -13,6 +13,7 @@ from app.platform.signals.store import InMemorySignalStore, SignalStore, SqlAlch
 from app.platform.signals.topics import (
     AI_CALL_COMPLETED,
     AI_CALL_FAILED,
+    ANOMALY_DETECTED,
     APPROVAL_APPROVED,
     APPROVAL_REJECTED,
     APPROVAL_REQUESTED,
@@ -34,7 +35,6 @@ from app.platform.signals.topics import (
     SCHEDULER_JOB_COMPLETED,
     SCHEDULER_JOB_FAILED,
     SLO_BREACH_DETECTED,
-    ANOMALY_DETECTED,
     USER_LOGIN,
     USER_LOGOUT,
     WEBHOOK_DELIVERY_FAILED,
@@ -71,6 +71,7 @@ async def publish_signal(signal: SignalEnvelope, *, db: AsyncSession | None = No
 __all__ = [
     "AI_CALL_COMPLETED",
     "AI_CALL_FAILED",
+    "ANOMALY_DETECTED",
     "APPROVAL_APPROVED",
     "APPROVAL_REJECTED",
     "APPROVAL_REQUESTED",
@@ -92,7 +93,6 @@ __all__ = [
     "SCHEDULER_JOB_COMPLETED",
     "SCHEDULER_JOB_FAILED",
     "SLO_BREACH_DETECTED",
-    "ANOMALY_DETECTED",
     "USER_LOGIN",
     "USER_LOGOUT",
     "WEBHOOK_DELIVERY_FAILED",

@@ -6,7 +6,7 @@ import hmac
 import logging
 import time
 
-from fastapi import APIRouter, Header, HTTPException, Request, Depends
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -63,7 +63,7 @@ async def stripe_webhook(
     try:
         event = json.loads(body)
     except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+        raise HTTPException(status_code=400, detail="Invalid JSON") from None
 
     event_type = event.get("type", "")
     event_id = event.get("id", "")
@@ -75,9 +75,10 @@ async def stripe_webhook(
     if not obj:
         return {"status": "ignored", "reason": "no data object"}
 
-    from app.models.stripe_transaction import StripeTransaction
-    from app.models.contact import Contact
     from sqlalchemy import select
+
+    from app.models.contact import Contact
+    from app.models.stripe_transaction import StripeTransaction
 
     # Determine transaction type and extract fields
     if event_type.startswith("charge.dispute"):

@@ -617,7 +617,6 @@ _last_briefing_email_date_by_org: dict[int, str] = {}
 
 async def maybe_send_daily_briefing_email(db: AsyncSession, org_id: int) -> None:
     """Send a morning briefing email via Gmail at 8-9am IST (once per day per org)."""
-    from app.core.config import settings
     from app.models.user import User
     from app.services.integration import get_integration_by_type
 

@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.import_mapping import ImportMapping, ImportHistory
+from app.models.import_mapping import ImportHistory, ImportMapping
 
 
 async def create_mapping(

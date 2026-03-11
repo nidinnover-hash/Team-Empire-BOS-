@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rbac import require_roles
 from app.core.deps import get_db
+from app.core.rbac import require_roles
 from app.services import contact_relationship as svc
 
 router = APIRouter(prefix="/contact-relationships", tags=["contact-relationships"])

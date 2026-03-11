@@ -2,14 +2,12 @@
 from __future__ import annotations
 
 import json
-from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from datetime import UTC, datetime
+from unittest.mock import patch
 
 import pytest
 
 from app.models.job_queue import JobEntry
-
 
 # ── Model ────────────────────────────────────────────────────────────────────
 
@@ -45,10 +43,7 @@ async def test_enqueue_with_delay(db):
     assert job is not None
     # run_after should be ~60s in the future
     now = datetime.now(UTC)
-    if job.run_after.tzinfo is None:
-        run_after = job.run_after.replace(tzinfo=UTC)
-    else:
-        run_after = job.run_after
+    run_after = job.run_after.replace(tzinfo=UTC) if job.run_after.tzinfo is None else job.run_after
     assert run_after > now
 
 
@@ -93,7 +88,7 @@ def test_handler_decorator():
 @pytest.mark.asyncio
 async def test_execute_job_calls_handler(db):
     """Handler is called with payload kwargs when job executes."""
-    from app.services.job_queue import _handlers, enqueue, _execute_job
+    from app.services.job_queue import _execute_job, _handlers, enqueue
 
     calls = []
 
@@ -131,7 +126,7 @@ async def test_execute_job_calls_handler(db):
 @pytest.mark.asyncio
 async def test_execute_job_no_handler(db):
     """Job with no registered handler is marked as dead."""
-    from app.services.job_queue import enqueue, _execute_job
+    from app.services.job_queue import _execute_job, enqueue
 
     job_id = await enqueue("nonexistent_handler", {}, db=db)
     await db.commit()
@@ -156,7 +151,7 @@ async def test_execute_job_no_handler(db):
 @pytest.mark.asyncio
 async def test_execute_job_failure_retries(db):
     """Failed job retries with backoff until max_retries, then moves to dead."""
-    from app.services.job_queue import _handlers, enqueue, _execute_job
+    from app.services.job_queue import _execute_job, _handlers, enqueue
 
     async def failing_handler(**kwargs):
         raise ValueError("intentional failure")
@@ -242,8 +237,8 @@ def test_job_queue_config_defaults():
 
 def test_job_handlers_registered():
     """Verify that importing job_handlers registers the expected handlers."""
-    from app.services.job_queue import _handlers
     import app.jobs.job_handlers  # noqa: F401
+    from app.services.job_queue import _handlers
 
     assert "embed_memory" in _handlers
     assert "backfill_embeddings" in _handlers

@@ -140,13 +140,11 @@ def _is_definition_due(
         if not _cron_matches_now(cron_expr, now):
             return False
         # Ensure we haven't already run this minute
-        if last_run and last_run.replace(second=0, microsecond=0) >= now.replace(second=0, microsecond=0):
-            return False
-        return True
+        return not (last_run and last_run.replace(second=0, microsecond=0) >= now.replace(second=0, microsecond=0))
 
     # Interval-based scheduling
     interval = spec.get("interval_minutes")
-    if interval and isinstance(interval, (int, float)) and interval > 0:
+    if interval and isinstance(interval, int | float) and interval > 0:
         if last_run is None:
             return True
         return (now - last_run) >= timedelta(minutes=interval)

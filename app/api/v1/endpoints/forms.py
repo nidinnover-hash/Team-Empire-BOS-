@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rbac import require_roles
 from app.core.deps import get_db
+from app.core.rbac import require_roles
 from app.services import form_builder as svc
 
 router = APIRouter(prefix="/forms", tags=["forms"])
@@ -14,35 +14,48 @@ router = APIRouter(prefix="/forms", tags=["forms"])
 
 class FormOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int; organization_id: int; name: str
-    description: str | None = None; fields_json: str
+    id: int
+    organization_id: int
+    name: str
+    description: str | None = None
+    fields_json: str
     redirect_url: str | None = None
     confirmation_message: str | None = None
-    is_active: bool; total_submissions: int
-    created_by_user_id: int | None = None; created_at: datetime
+    is_active: bool
+    total_submissions: int
+    created_by_user_id: int | None = None
+    created_at: datetime
 
 
 class FormCreate(BaseModel):
-    name: str; description: str | None = None
+    name: str
+    description: str | None = None
     fields: list[dict] | None = None
     redirect_url: str | None = None
     confirmation_message: str | None = None
 
 
 class FormUpdate(BaseModel):
-    name: str | None = None; description: str | None = None
-    fields: list[dict] | None = None; is_active: bool | None = None
+    name: str | None = None
+    description: str | None = None
+    fields: list[dict] | None = None
+    is_active: bool | None = None
 
 
 class SubmissionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int; form_id: int; organization_id: int
-    data_json: str; contact_id: int | None = None
-    source_ip: str | None = None; created_at: datetime
+    id: int
+    form_id: int
+    organization_id: int
+    data_json: str
+    contact_id: int | None = None
+    source_ip: str | None = None
+    created_at: datetime
 
 
 class SubmitData(BaseModel):
-    data: dict; contact_id: int | None = None
+    data: dict
+    contact_id: int | None = None
 
 
 @router.post("", response_model=FormOut, status_code=201)

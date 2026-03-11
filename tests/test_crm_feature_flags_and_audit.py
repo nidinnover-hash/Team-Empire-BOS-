@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -32,7 +32,7 @@ def _enable_crm_flags(monkeypatch):
 async def test_quotes_create_records_audit_event(client, monkeypatch):
     from app.api.v1.endpoints import quotes as quotes_ep
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     events: list[str] = []
 
     async def fake_create_quote(db, *, organization_id, created_by_user_id, **kwargs):
@@ -97,7 +97,7 @@ async def test_quotes_effective_flag_can_disable_when_global_true(client, monkey
 async def test_playbooks_create_records_audit_event(client, monkeypatch):
     from app.api.v1.endpoints import playbooks as playbooks_ep
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     events: list[str] = []
 
     async def fake_create_playbook(db, *, organization_id, **kwargs):
@@ -142,7 +142,7 @@ async def test_playbooks_flag_disabled_returns_404(client, monkeypatch):
 async def test_surveys_create_records_audit_event(client, monkeypatch):
     from app.api.v1.endpoints import surveys as surveys_ep
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     events: list[str] = []
 
     async def fake_create_survey(db, *, organization_id, **kwargs):

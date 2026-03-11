@@ -12,7 +12,6 @@ from app.application.automation.bootstrap import (
     workflow_v2_enabled_for_org,
 )
 from app.application.automation.copilot import build_workflow_copilot_plan
-from app.core.config import settings
 from app.core.deps import get_current_workspace_id, get_db
 from app.core.rbac import require_roles
 from app.logs.audit import record_action

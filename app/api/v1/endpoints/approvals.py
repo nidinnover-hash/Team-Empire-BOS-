@@ -39,6 +39,7 @@ RISKY_APPROVAL_TYPES = {
     "change_crm_status",
     "spend_money",
     "spend",
+    "recruitment_offer",  # EmpireO: offers must be approved via BOS
 }
 NON_FATAL_SIDE_EFFECT_ERRORS = (SQLAlchemyError, RuntimeError, ValueError, TypeError)
 

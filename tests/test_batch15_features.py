@@ -5,18 +5,31 @@ from __future__ import annotations
 import pytest
 
 from app.services import (
-    product_catalog as prod_svc,
-    contract as cont_svc,
     competitor as comp_svc,
+)
+from app.services import (
+    contract as cont_svc,
+)
+from app.services import (
     email_analytics as ea_svc,
-    territory as terr_svc,
-    referral as ref_svc,
+)
+from app.services import (
     knowledge_base as kb_svc,
+)
+from app.services import (
+    product_catalog as prod_svc,
+)
+from app.services import (
+    referral as ref_svc,
+)
+from app.services import (
+    territory as terr_svc,
 )
 
 
 def _obj(**kw):
-    class _O: pass
+    class _O:
+        pass
     o = _O()
     for k, v in kw.items():
         setattr(o, k, v)

@@ -1,7 +1,7 @@
 """Subscription management endpoints."""
 from __future__ import annotations
 
-from datetime import datetime, date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict

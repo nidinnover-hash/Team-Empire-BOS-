@@ -1,7 +1,7 @@
 """Email sequence automation service."""
 from __future__ import annotations
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.email_sequence import EmailSequence, EmailSequenceStep

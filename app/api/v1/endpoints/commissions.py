@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rbac import require_roles
 from app.core.deps import get_db
+from app.core.rbac import require_roles
 from app.services import commission as svc
 
 router = APIRouter(prefix="/commissions", tags=["commissions"])
@@ -14,36 +14,56 @@ router = APIRouter(prefix="/commissions", tags=["commissions"])
 
 class RuleOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int; organization_id: int; name: str
-    deal_type: str | None = None; stage: str | None = None
-    rate_percent: float; min_deal_value: int
-    max_deal_value: int | None = None; is_active: bool
+    id: int
+    organization_id: int
+    name: str
+    deal_type: str | None = None
+    stage: str | None = None
+    rate_percent: float
+    min_deal_value: int
+    max_deal_value: int | None = None
+    is_active: bool
     created_at: datetime
 
 
 class RuleCreate(BaseModel):
-    name: str; rate_percent: float = 10.0
-    deal_type: str | None = None; stage: str | None = None
-    min_deal_value: int = 0; max_deal_value: int | None = None
+    name: str
+    rate_percent: float = 10.0
+    deal_type: str | None = None
+    stage: str | None = None
+    min_deal_value: int = 0
+    max_deal_value: int | None = None
 
 
 class RuleUpdate(BaseModel):
-    name: str | None = None; rate_percent: float | None = None
-    deal_type: str | None = None; stage: str | None = None
+    name: str | None = None
+    rate_percent: float | None = None
+    deal_type: str | None = None
+    stage: str | None = None
     is_active: bool | None = None
 
 
 class PayoutOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int; organization_id: int; rule_id: int
-    deal_id: int; user_id: int; deal_value: int
-    commission_amount: float; split_percent: float
-    status: str; notes: str | None = None; created_at: datetime
+    id: int
+    organization_id: int
+    rule_id: int
+    deal_id: int
+    user_id: int
+    deal_value: int
+    commission_amount: float
+    split_percent: float
+    status: str
+    notes: str | None = None
+    created_at: datetime
 
 
 class PayoutCreate(BaseModel):
-    rule_id: int; deal_id: int; user_id: int
-    deal_value: int; split_percent: float = 100.0
+    rule_id: int
+    deal_id: int
+    user_id: int
+    deal_value: int
+    split_percent: float = 100.0
     notes: str | None = None
 
 

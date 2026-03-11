@@ -3,7 +3,6 @@ tag management, import/export presets, internal comments, dashboard widgets."""
 
 import pytest
 
-
 # ── SLA Policies ─────────────────────────────────────────────────────────────
 
 
@@ -70,12 +69,18 @@ async def test_sla_check(client):
 @pytest.mark.asyncio
 async def test_enqueue_enrichment(client, monkeypatch):
     from app.services import enrichment_queue as eq_svc
-    from app.models.enrichment_queue import EnrichmentRequest
 
     class FakeReq:
-        id = 1; contact_id = 1; status = "pending"; source = "domain_lookup"
-        result_json = None; error_message = None; created_at = None; completed_at = None
-        requested_by_user_id = 1; organization_id = 1
+        id = 1
+        contact_id = 1
+        status = "pending"
+        source = "domain_lookup"
+        result_json = None
+        error_message = None
+        created_at = None
+        completed_at = None
+        requested_by_user_id = 1
+        organization_id = 1
 
     async def fake_enqueue(db, organization_id, contact_id, source="domain_lookup", requested_by=None):
         return FakeReq()

@@ -1,8 +1,6 @@
 """Workspace permission service — manage memberships and check access."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
