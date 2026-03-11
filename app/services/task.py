@@ -28,7 +28,7 @@ async def list_tasks(
     db: AsyncSession,
     limit: int = 50,
     offset: int = 0,
-    organization_id: int = 0,
+    organization_id: int,
     workspace_id: int | None = None,
     project_id: int | None = None,
     category: str | None = None,
@@ -53,7 +53,7 @@ async def update_task(
     db: AsyncSession,
     task_id: int,
     data: TaskUpdate,
-    organization_id: int = 0,
+    organization_id: int,
     workspace_id: int | None = None,
 ) -> Task | None:
     query = select(Task).where(Task.id == task_id, Task.organization_id == organization_id, Task.is_deleted.is_(False))
