@@ -5,6 +5,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.product_bundle import ProductBundle, BundleItem
+from app.services._guardrails import apply_safe_updates, get_tenant_row, tenant_select
 
 
 async def create_bundle(db: AsyncSession, *, organization_id: int, **kw) -> ProductBundle:
@@ -16,11 +17,11 @@ async def create_bundle(db: AsyncSession, *, organization_id: int, **kw) -> Prod
 
 
 async def get_bundle(db: AsyncSession, bundle_id: int, org_id: int) -> ProductBundle | None:
-    return (await db.execute(select(ProductBundle).where(ProductBundle.id == bundle_id, ProductBundle.organization_id == org_id))).scalar_one_or_none()
+    return await get_tenant_row(db, ProductBundle, bundle_id, org_id)
 
 
 async def list_bundles(db: AsyncSession, org_id: int, *, is_active: bool | None = None) -> list[ProductBundle]:
-    q = select(ProductBundle).where(ProductBundle.organization_id == org_id)
+    q = tenant_select(ProductBundle, org_id)
     if is_active is not None:
         q = q.where(ProductBundle.is_active == is_active)
     q = q.order_by(ProductBundle.created_at.desc())
@@ -34,9 +35,7 @@ async def update_bundle(db: AsyncSession, bundle_id: int, org_id: int, **kw) -> 
     row = await get_bundle(db, bundle_id, org_id)
     if not row:
         return None
-    for k, v in kw.items():
-        if k not in _PROTECTED_FIELDS:
-            setattr(row, k, v)
+    apply_safe_updates(row, kw, protected_fields=_PROTECTED_FIELDS)
     await db.commit()
     await db.refresh(row)
     return row
