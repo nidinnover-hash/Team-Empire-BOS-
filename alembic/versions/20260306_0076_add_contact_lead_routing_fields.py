@@ -87,7 +87,12 @@ def upgrade() -> None:
             sa.Column("qualification_notes", sa.Text(), nullable=True),
         )
 
-    try:
+    existing_ck = {
+        row[0] for row in bind.execute(
+            sa.text("SELECT conname FROM pg_constraint WHERE contype IN ('f','c')")
+        ).fetchall()
+    }
+    if "fk_contacts_lead_owner_company_id_org" not in existing_ck:
         op.create_foreign_key(
             "fk_contacts_lead_owner_company_id_org",
             "contacts",
@@ -96,9 +101,7 @@ def upgrade() -> None:
             ["id"],
             ondelete="RESTRICT",
         )
-    except Exception:
-        pass
-    try:
+    if "fk_contacts_routed_company_id_org" not in existing_ck:
         op.create_foreign_key(
             "fk_contacts_routed_company_id_org",
             "contacts",
@@ -107,9 +110,7 @@ def upgrade() -> None:
             ["id"],
             ondelete="SET NULL",
         )
-    except Exception:
-        pass
-    try:
+    if "fk_contacts_routed_by_user_id_user" not in existing_ck:
         op.create_foreign_key(
             "fk_contacts_routed_by_user_id_user",
             "contacts",
@@ -118,8 +119,6 @@ def upgrade() -> None:
             ["id"],
             ondelete="SET NULL",
         )
-    except Exception:
-        pass
 
     existing_idxs = {i["name"] for i in inspector.get_indexes("contacts")}
     if op.f("ix_contacts_lead_owner_company_id") not in existing_idxs:
@@ -139,38 +138,30 @@ def upgrade() -> None:
     if op.f("ix_contacts_qualified_status") not in existing_idxs:
         op.create_index(op.f("ix_contacts_qualified_status"), "contacts", ["qualified_status"], unique=False)
 
-    try:
+    if "ck_contact_lead_type" not in existing_ck:
         op.create_check_constraint(
             "ck_contact_lead_type",
             "contacts",
             "lead_type IN ('general', 'study_abroad', 'recruitment')",
         )
-    except Exception:
-        pass
-    try:
+    if "ck_contact_routing_status" not in existing_ck:
         op.create_check_constraint(
             "ck_contact_routing_status",
             "contacts",
             "routing_status IN ('unrouted', 'under_review', 'routed', 'accepted', 'rejected', 'closed')",
         )
-    except Exception:
-        pass
-    try:
+    if "ck_contact_qualified_status" not in existing_ck:
         op.create_check_constraint(
             "ck_contact_qualified_status",
             "contacts",
             "qualified_status IN ('unqualified', 'qualified', 'disqualified', 'needs_review')",
         )
-    except Exception:
-        pass
-    try:
+    if "ck_contact_qualified_score" not in existing_ck:
         op.create_check_constraint(
             "ck_contact_qualified_score",
             "contacts",
             "qualified_score IS NULL OR (qualified_score >= 0 AND qualified_score <= 100)",
         )
-    except Exception:
-        pass
 
     op.alter_column("contacts", "lead_owner_company_id", server_default=None)
     op.alter_column("contacts", "lead_type", server_default=None)

@@ -50,24 +50,23 @@ def upgrade() -> None:
     # ── CHECK constraints ──────────────────────────────────────────────
 
     # contact.relationship — enforce valid enum values
-    try:
+    existing_ck = {
+        row[0] for row in bind.execute(sa.text("SELECT conname FROM pg_constraint")).fetchall()
+    }
+    if "ck_contact_relationship" not in existing_ck:
         op.create_check_constraint(
             "ck_contact_relationship",
             "contacts",
             "relationship IN ('personal', 'business', 'family', 'mentor', 'other')",
         )
-    except Exception:
-        pass
 
     # integration.sync_error_count — must be non-negative
-    try:
+    if "ck_integration_sync_error_count_gte0" not in existing_ck:
         op.create_check_constraint(
             "ck_integration_sync_error_count_gte0",
             "integrations",
             "sync_error_count >= 0",
         )
-    except Exception:
-        pass
 
 
 def downgrade() -> None:

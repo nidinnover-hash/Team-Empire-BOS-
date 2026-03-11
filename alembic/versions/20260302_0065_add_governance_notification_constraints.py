@@ -13,43 +13,32 @@ branch_labels = None
 depends_on = None
 
 
+def _constraint_exists(conn, name: str) -> bool:
+    rows = conn.execute(
+        sa.text("SELECT 1 FROM pg_constraint WHERE conname = :n"),
+        {"n": name},
+    ).fetchall()
+    return len(rows) > 0
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
 
     # -- CHECK constraints --------------------------------------------------
-    try:
-        op.create_check_constraint(
-            "ck_governance_policy_type",
-            "governance_policies",
-            "policy_type IN ('general', 'performance', 'compliance', 'security', 'operational')",
-        )
-    except Exception:
-        pass
-    try:
-        op.create_check_constraint(
-            "ck_governance_violation_status",
-            "governance_violations",
-            "status IN ('open', 'resolved', 'dismissed')",
-        )
-    except Exception:
-        pass
-    try:
-        op.create_check_constraint(
-            "ck_notification_severity",
-            "notifications",
-            "severity IN ('info', 'warning', 'error', 'critical')",
-        )
-    except Exception:
-        pass
-    try:
-        op.create_check_constraint(
-            "ck_user_role",
-            "users",
-            "role IN ('STAFF', 'ADMIN', 'CEO', 'MANAGER', 'EMPLOYEE', 'PERSONAL_CEO')",
-        )
-    except Exception:
-        pass
+    _ck = [
+        ("ck_governance_policy_type", "governance_policies",
+         "policy_type IN ('general', 'performance', 'compliance', 'security', 'operational')"),
+        ("ck_governance_violation_status", "governance_violations",
+         "status IN ('open', 'resolved', 'dismissed')"),
+        ("ck_notification_severity", "notifications",
+         "severity IN ('info', 'warning', 'error', 'critical')"),
+        ("ck_user_role", "users",
+         "role IN ('STAFF', 'ADMIN', 'CEO', 'MANAGER', 'EMPLOYEE', 'PERSONAL_CEO')"),
+    ]
+    for ck_name, table, expr in _ck:
+        if not _constraint_exists(bind, ck_name):
+            op.create_check_constraint(ck_name, table, expr)
 
     # -- Composite indexes for common query patterns -----------------------
     existing_gp = {i["name"] for i in inspector.get_indexes("governance_policies")}

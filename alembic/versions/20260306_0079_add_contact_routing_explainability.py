@@ -32,7 +32,12 @@ def upgrade() -> None:
     if op.f("ix_contacts_routing_rule_id") not in existing_idxs:
         op.create_index(op.f("ix_contacts_routing_rule_id"), "contacts", ["routing_rule_id"], unique=False)
 
-    try:
+    existing_fk = {
+        row[0] for row in bind.execute(
+            sa.text("SELECT conname FROM pg_constraint WHERE contype IN ('f','c')")
+        ).fetchall()
+    }
+    if "fk_contacts_routing_rule_id_lead_routing_rules" not in existing_fk:
         op.create_foreign_key(
             "fk_contacts_routing_rule_id_lead_routing_rules",
             "contacts",
@@ -41,17 +46,13 @@ def upgrade() -> None:
             ["id"],
             ondelete="SET NULL",
         )
-    except Exception:
-        pass
 
-    try:
+    if "ck_contact_routing_source" not in existing_fk:
         op.create_check_constraint(
             "ck_contact_routing_source",
             "contacts",
             "routing_source IS NULL OR routing_source IN ('default', 'manual', 'rule', 'fallback')",
         )
-    except Exception:
-        pass
 
 
 def downgrade() -> None:
