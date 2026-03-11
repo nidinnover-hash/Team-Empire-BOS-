@@ -4,9 +4,10 @@ from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, Str
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.soft_delete import SoftDeleteMixin
 
 
-class Goal(Base):
+class Goal(SoftDeleteMixin, Base):
     """A long-term goal with progress tracking (0-100%)."""
 
     __tablename__ = "goals"

@@ -33,7 +33,7 @@ async def list_projects(
 ) -> list[Project]:
     query = (
         select(Project)
-        .where(Project.organization_id == organization_id)
+        .where(Project.organization_id == organization_id, Project.is_deleted.is_(False))
         .order_by(Project.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -74,7 +74,7 @@ async def get_project(
 ) -> Project | None:
     result = await db.execute(
         select(Project).where(
-            Project.id == project_id, Project.organization_id == organization_id,
+            Project.id == project_id, Project.organization_id == organization_id, Project.is_deleted.is_(False),
         )
     )
     return result.scalar_one_or_none()
@@ -106,15 +106,19 @@ async def update_project(
 async def delete_project(
     db: AsyncSession, project_id: int, organization_id: int,
 ) -> bool:
+    """Soft-delete a project. Returns True if deleted, False if not found."""
+    from datetime import UTC
+    from datetime import datetime as dt
     project = await get_project(db, project_id, organization_id)
-    if project is None:
+    if project is None or project.is_deleted:
         return False
     goal_id = project.goal_id
-    await db.delete(project)
+    project.is_deleted = True
+    project.deleted_at = dt.now(UTC)
     await db.commit()
     # Cascade to goal after project removal
     if goal_id:
         from app.services.goal import recalculate_goal_progress
         await recalculate_goal_progress(db, goal_id, organization_id)
-    logger.info("project deleted id=%d org=%d", project_id, organization_id)
+    logger.info("project soft-deleted id=%d org=%d", project_id, organization_id)
     return True

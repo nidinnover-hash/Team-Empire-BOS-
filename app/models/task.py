@@ -15,9 +15,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.soft_delete import SoftDeleteMixin
 
 
-class Task(Base):
+class Task(SoftDeleteMixin, Base):
     """A to-do item with priority, category, and optional project link."""
 
     __tablename__ = "tasks"

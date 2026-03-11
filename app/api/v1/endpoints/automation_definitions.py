@@ -404,4 +404,4 @@ async def get_job_queue_stats(
 ) -> dict:
     """Return job queue health metrics."""
     from app.services.job_queue import get_queue_stats
-    return await get_queue_stats(db)
+    return await get_queue_stats(db, organization_id=int(actor["org_id"]))

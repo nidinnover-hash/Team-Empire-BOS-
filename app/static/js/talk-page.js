@@ -100,30 +100,50 @@ function getCookie(name) {
       div.className = "msg " + (role === "user" ? "user" : "agent");
       var html = '<span class="tag">' + (role === "user" ? "You" : "Agent") + "</span>" + esc(text);
       if (meta) {
-        var badges = [];
+        // Confidence badge
         if (meta.confidence_level) {
-          var levelMap = {"high": "badge-ok", "low": "badge-warn", "medium": "badge-info"};
-          var cCls = levelMap[meta.confidence_level] || "badge-info";
-          badges.push('<span class="chat-badge ' + cCls + '">Confidence: ' + esc(meta.confidence_score) + ' (' + esc(meta.confidence_level) + ')</span>');
-        }
-        if (meta.policy_score !== undefined) {
-          badges.push('<span class="chat-badge badge-info">Policy: ' + esc(meta.policy_score) + '</span>');
+          var cLevel = meta.confidence_level;
+          html += ' <span class="confidence-badge ' + esc(cLevel) + '">' +
+            esc(meta.confidence_score || cLevel) + '</span>';
         }
         if (meta.blocked_by_policy) {
-          badges.push('<span class="chat-badge badge-warn">Blocked by policy</span>');
+          html += ' <span class="confidence-badge low">Blocked by policy</span>';
         }
         if (meta.needs_human_review) {
-          badges.push('<span class="chat-badge badge-warn">Needs review</span>');
+          html += ' <span class="confidence-badge medium">Needs review</span>';
         }
+        // Memory source pills
+        if (meta.memory_sources && meta.memory_sources.length) {
+          html += '<div class="memory-sources">';
+          meta.memory_sources.forEach(function (src) {
+            html += '<span class="memory-pill"><i data-lucide="database"></i>' + esc(src) + '</span>';
+          });
+          html += '</div>';
+        }
+        // Proposed action cards
         if (meta.proposed_actions && meta.proposed_actions.length) {
-          var actionLabels = meta.proposed_actions.map(function (a) { return esc(a.action_type); }).join(", ");
-          badges.push('<span class="chat-badge badge-info">Actions: ' + actionLabels + '</span>');
-        }
-        if (badges.length) {
-          html += '<div class="chat-meta">' + badges.join(" ") + '</div>';
+          meta.proposed_actions.forEach(function (a) {
+            html += '<div class="proposed-action">' +
+              '<div class="proposed-action-header">' +
+                '<span class="proposed-action-type">' + esc(a.action_type || "action") + '</span>' +
+                (a.confidence ? '<span class="confidence-badge ' +
+                  (a.confidence >= 0.8 ? 'high' : a.confidence >= 0.5 ? 'medium' : 'low') +
+                  '">' + Math.round(a.confidence * 100) + '%</span>' : '') +
+              '</div>' +
+              '<div class="proposed-action-title">' + esc(a.title || a.action_type || "Proposed Action") + '</div>' +
+              (a.description ? '<div class="proposed-action-desc">' + esc(a.description) + '</div>' : '') +
+              '<div class="proposed-action-footer">' +
+                '<button class="proposed-action-btn approve" data-action-id="' + esc(a.id || '') + '">Approve</button>' +
+                '<button class="proposed-action-btn reject" data-action-id="' + esc(a.id || '') + '">Reject</button>' +
+              '</div></div>';
+          });
         }
       }
       div.innerHTML = html;
+      // Re-init lucide for memory pills
+      if (meta && meta.memory_sources && window.lucide) {
+        setTimeout(function () { lucide.createIcons({ nodes: [div] }); }, 0);
+      }
       chatLog.appendChild(div);
       chatLog.scrollTop = chatLog.scrollHeight;
     }
@@ -365,6 +385,12 @@ function getCookie(name) {
       setStatus("Agent is online and synced with your work.", "ok");
     }
 
+    var typingEl = document.getElementById("typing-indicator");
+    function showTyping(on) {
+      if (typingEl) typingEl.classList.toggle("hidden", !on);
+      if (on) chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
     async function sendMessage() {
       var message = (input.value || "").trim();
       if (!message) return;
@@ -377,6 +403,7 @@ function getCookie(name) {
       input.value = "";
       if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(sendBtn, true, "Sending...");
       else sendBtn.disabled = true;
+      showTyping(true);
       setStatus(useStreaming ? "Streaming..." : "Agent is thinking...");
 
       try {
@@ -411,6 +438,7 @@ function getCookie(name) {
         appendMessage("agent", "I hit an error while processing that. Please try again.");
         setStatus(mapUiError(err), "err");
       } finally {
+        showTyping(false);
         if (window.PCUI && window.PCUI.setButtonLoading) window.PCUI.setButtonLoading(sendBtn, false);
         else sendBtn.disabled = false;
       }
@@ -503,7 +531,7 @@ function getCookie(name) {
       entertainmentAvatarBtn.addEventListener("click", function () { switchAvatar("entertainment", "Entertainment"); });
     }
     input.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" && !e.shiftKey) {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey || !e.shiftKey)) {
         e.preventDefault();
         sendMessage();
       }

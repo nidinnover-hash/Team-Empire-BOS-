@@ -33,7 +33,7 @@ async def test_dashboard_contains_brand_name(client):
     assert "Nidin BOS" in response.text
     assert "AI Operations Assistant" in response.text
     assert "REVENUE" in response.text
-    assert "BUSINESS HEALTH" in response.text
+    assert "HEALTH SCORE" in response.text
     assert "QUICK TASKS" in response.text
     assert "view-dashboard" in response.text
     assert "view-chat" in response.text
@@ -71,4 +71,3 @@ async def test_dashboard_staff_revenue_card_is_restricted(client):
     response = await client.get("/")
     assert response.status_code == 200
     assert "Restricted" in response.text
-    assert 'aria-label="Revenue trend restricted"' in response.text

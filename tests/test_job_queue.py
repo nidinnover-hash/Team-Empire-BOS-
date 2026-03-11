@@ -208,7 +208,7 @@ async def test_get_queue_stats(db):
     await enqueue("stat_test_2", {}, db=db)
     await db.commit()
 
-    stats = await get_queue_stats(db)
+    stats = await get_queue_stats(db, organization_id=1)
     assert stats["total"] >= 2
     assert stats["pending"] >= 2
     assert "worker_id" in stats

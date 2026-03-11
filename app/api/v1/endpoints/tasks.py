@@ -1,10 +1,11 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_workspace_id, get_db
+from app.core.idempotency import build_fingerprint, get_cached_response, store_response
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
@@ -53,11 +54,18 @@ router = APIRouter(prefix="/tasks", tags=["Tasks"])
 @router.post("", response_model=TaskRead, status_code=201)
 async def create_task(
     data: TaskCreate,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=128),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
     workspace_id: int = Depends(get_current_workspace_id),
 ) -> TaskRead:
     """Create a task. Optionally link to a project and set priority/due_date."""
+    if idempotency_key:
+        scope = f"task:create:{actor['org_id']}"
+        fp = build_fingerprint(data.model_dump())
+        cached = get_cached_response(scope, idempotency_key, fingerprint=fp)
+        if cached:
+            return TaskRead.model_validate(cached)
     task = await task_service.create_task(
         db,
         data,
@@ -69,6 +77,8 @@ async def create_task(
         organization_id=actor["org_id"], entity_type="task", entity_id=task.id,
         payload_json={"title": task.title, "priority": task.priority},
     )
+    if idempotency_key:
+        store_response(scope, idempotency_key, task.model_dump() if hasattr(task, "model_dump") else {"id": task.id}, fingerprint=fp)
     return task
 
 

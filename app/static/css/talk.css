@@ -226,6 +226,113 @@ main {
 #status.ok { color: var(--ok); }
 #status.err { color: var(--danger); }
 
+/* ── Typing Indicator ─────────────────────────────────────────────────── */
+.typing-indicator {
+  display: flex; align-items: center; gap: .4rem;
+  padding: .5rem .75rem;
+  align-self: flex-start;
+}
+.typing-indicator.hidden { display: none; }
+.typing-indicator .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-faint);
+  animation: typing-bounce 1.4s ease-in-out infinite;
+}
+.typing-indicator .dot:nth-child(2) { animation-delay: .2s; }
+.typing-indicator .dot:nth-child(3) { animation-delay: .4s; }
+.typing-indicator .label {
+  font-size: var(--text-xs); color: var(--text-faint); font-weight: 500;
+}
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: .4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+/* ── Proposed Action Cards ────────────────────────────────────────────── */
+.proposed-action {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: .65rem .85rem;
+  margin-top: .35rem;
+  display: flex; flex-direction: column; gap: .35rem;
+}
+.proposed-action-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .5rem;
+}
+.proposed-action-type {
+  font-size: var(--text-2xs); font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em;
+  color: var(--warn);
+  background: var(--warn-soft);
+  padding: .1rem .4rem; border-radius: 4px;
+}
+.proposed-action-title {
+  font-size: var(--text-sm); font-weight: 600; color: var(--text);
+}
+.proposed-action-desc {
+  font-size: var(--text-xs); color: var(--text-muted); line-height: 1.4;
+}
+.proposed-action-footer {
+  display: flex; align-items: center; gap: .35rem; margin-top: .15rem;
+}
+.proposed-action-btn {
+  padding: .2rem .55rem; border-radius: 6px;
+  font-size: var(--text-2xs); font-weight: 700; cursor: pointer;
+  border: 1px solid; font-family: var(--font); text-transform: uppercase;
+}
+.proposed-action-btn.approve {
+  background: var(--ok-soft); color: var(--ok); border-color: var(--ok-border);
+}
+.proposed-action-btn.approve:hover { border-color: var(--ok); }
+.proposed-action-btn.reject {
+  background: var(--danger-soft); color: var(--danger); border-color: var(--danger-border);
+}
+.proposed-action-btn.reject:hover { border-color: var(--danger); }
+
+/* ── Confidence Badge ─────────────────────────────────────────────────── */
+.confidence-badge {
+  display: inline-flex; align-items: center; gap: .25rem;
+  font-size: var(--text-2xs); font-weight: 700;
+  padding: .08rem .4rem; border-radius: 99px;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.confidence-badge.high {
+  background: var(--ok-soft); color: var(--ok);
+}
+.confidence-badge.medium {
+  background: var(--warn-soft); color: var(--warn);
+}
+.confidence-badge.low {
+  background: var(--danger-soft); color: var(--danger);
+}
+
+/* ── Memory Source Pills ──────────────────────────────────────────────── */
+.memory-sources {
+  display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .3rem;
+}
+.memory-pill {
+  display: inline-flex; align-items: center; gap: .2rem;
+  font-size: var(--text-2xs); font-weight: 600;
+  padding: .08rem .4rem; border-radius: 99px;
+  background: var(--surface-alt); color: var(--text-faint);
+  border: 1px solid var(--line-soft);
+}
+.memory-pill i { width: 10px; height: 10px; }
+
+/* ── Ctrl+Enter hint ──────────────────────────────────────────────────── */
+.composer-hint {
+  font-size: var(--text-2xs); color: var(--text-faint);
+  padding: .15rem .75rem 0;
+  text-align: right;
+}
+.composer-hint kbd {
+  background: var(--surface-alt); border: 1px solid var(--line-soft);
+  border-radius: 3px; padding: 0 .25rem; font-size: var(--text-2xs);
+  font-family: var(--font);
+}
+
 /* ── Toast ─────────────────────────────────────────────────────────────── */
 #toast-container {
   position: fixed; top: 1.1rem; right: 1.2rem; z-index: 9999;

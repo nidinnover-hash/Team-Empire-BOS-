@@ -60,6 +60,12 @@ WORKFLOW_STEP_STARTED = "workflow.step.started"
 WORKFLOW_STEP_COMPLETED = "workflow.step.completed"
 WORKFLOW_STEP_FAILED = "workflow.step.failed"
 
+# --- SLO ---
+SLO_BREACH_DETECTED = "slo.breach.detected"
+
+# --- Anomaly ---
+ANOMALY_DETECTED = "anomaly.detected"
+
 # --- Dead-letter ---
 DEAD_LETTER_CAPTURED = "dead_letter.captured"
 DEAD_LETTER_RETRIED = "dead_letter.retried"

@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/static/css/talk.css" />
 
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+  <link rel="stylesheet" href="/static/css/bos-design-system.css">
 </head>
 <body>
 {% set active_page = "talk" %}
@@ -36,6 +37,10 @@
   <section class="panel">
     <div class="panel-head">Live Conversation</div>
     <div id="chat-log"></div>
+    <div id="typing-indicator" class="typing-indicator hidden">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      <span class="label">Agent is thinking...</span>
+    </div>
     <div id="interim-display"></div>
     <div class="ai-provider-bar">
       <label for="provider-select">AI:</label>
@@ -55,6 +60,7 @@
       <textarea id="message-input" placeholder="Tell your agent what to do next..." aria-label="Chat message"></textarea>
       <button id="send-btn" type="button">Send</button>
     </div>
+    <div class="composer-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> to send</div>
   </section>
 
   <aside class="panel">

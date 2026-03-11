@@ -285,6 +285,8 @@ class TestHubSpotSyncWrapper:
         fake_deal_result = SyncResult(provider="hubspot", synced=3, skipped=0)
         fake_deal_result.last_sync_at = datetime(2026, 1, 1, tzinfo=UTC)
 
+        fake_integration = _make_integration()
+        monkeypatch.setattr(hubspot_service, "get_integration_by_type", AsyncMock(return_value=fake_integration))
         monkeypatch.setattr(hubspot_service._hubspot_sync, "sync", AsyncMock(return_value=fake_contact_result))
         monkeypatch.setattr(hubspot_service._hubspot_deal_sync, "sync", AsyncMock(return_value=fake_deal_result))
 

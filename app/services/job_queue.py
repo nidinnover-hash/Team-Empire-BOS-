@@ -280,7 +280,7 @@ async def stop_worker() -> None:
 
 # ── Stats ────────────────────────────────────────────────────────────────────
 
-async def get_queue_stats(db: AsyncSession) -> dict:
+async def get_queue_stats(db: AsyncSession, *, organization_id: int) -> dict:
     """Return job queue statistics."""
     from sqlalchemy import case, func
     result = await db.execute(

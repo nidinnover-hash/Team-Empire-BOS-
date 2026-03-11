@@ -9,6 +9,7 @@
   <title>Nidin BOS</title>
   <link rel="stylesheet" href="/static/css/theme.css" />
   <link rel="stylesheet" href="/static/css/shared.css" />
+  <link rel="stylesheet" href="/static/css/bos-design-system.css" />
   <link rel="stylesheet" href="/static/css/dashboard.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
 </head>
@@ -86,57 +87,64 @@
       <p class="greeting-date">{{ today_date }}</p>
     </section>
 
+    <!-- ── TOP ROW: 4 Executive Stat Cards ──────────────────────────────── -->
+    <div class="exec-stats-row stagger-enter">
+      {% set can_view_revenue = session_user and session_user.get('role') in ['CEO', 'ADMIN', 'MANAGER'] %}
+      <div class="exec-stat-card">
+        <div class="stat-header">
+          <div class="stat-icon stat-icon-revenue"><i data-lucide="trending-up"></i></div>
+          <div class="stat-label">REVENUE</div>
+        </div>
+        {% if can_view_revenue %}
+        <div class="stat-big"><span data-count-to="{{ (finance.balance or 0) | round(0) | int }}" data-count-prefix="$">0</span></div>
+        <div class="exec-stat-trend positive" id="exec-revenue-trend">--</div>
+        {% else %}
+        <div class="stat-big"><span>Restricted</span></div>
+        <div class="exec-stat-trend">--</div>
+        {% endif %}
+      </div>
+      <div class="exec-stat-card">
+        <div class="stat-header">
+          <div class="stat-icon" style="background:var(--info-soft,#e8f4fd);color:var(--info)"><i data-lucide="check-square"></i></div>
+          <div class="stat-label">OPEN TASKS</div>
+        </div>
+        <div class="stat-big"><span id="exec-tasks-count">{{ tasks|length }}</span></div>
+        <div class="exec-stat-trend" id="exec-tasks-trend">--</div>
+      </div>
+      <div class="exec-stat-card">
+        <div class="stat-header">
+          <div class="stat-icon" style="background:var(--warn-soft);color:var(--warn)"><i data-lucide="shield-check"></i></div>
+          <div class="stat-label">PENDING APPROVALS</div>
+        </div>
+        <div class="stat-big"><span id="exec-approvals-count">--</span></div>
+        <div class="exec-stat-trend" id="exec-approvals-trend">Requires action</div>
+      </div>
+      <div class="exec-stat-card">
+        <div class="stat-header">
+          <div class="stat-icon stat-icon-health"><i data-lucide="heart-pulse"></i></div>
+          <div class="stat-label">HEALTH SCORE</div>
+        </div>
+        <div class="stat-big"><span id="exec-health-score">--</span></div>
+        <div class="exec-stat-trend" id="exec-health-trend">Loading...</div>
+      </div>
+    </div>
+
     <div class="dash-grid stagger-enter">
 
       <!-- LEFT COLUMN -->
       <div class="dash-col-main">
 
-        <!-- Revenue + Health Score row -->
-        <div class="stats-row stagger-enter">
-          <div class="stat-card stat-card-revenue">
-            <div class="stat-header">
-              <div class="stat-icon stat-icon-revenue"><i data-lucide="trending-up"></i></div>
-              <div class="stat-label">REVENUE</div>
+        <!-- Signal Feed -->
+        <div class="panel-card" id="exec-signal-feed">
+          <div class="panel-head">
+            <div class="panel-head-left">
+              <i data-lucide="radio" class="panel-icon"></i>
+              <span class="panel-title">Signal Feed</span>
             </div>
-            {% set can_view_revenue = session_user and session_user.get('role') in ['CEO', 'ADMIN', 'MANAGER'] %}
-            {% if can_view_revenue %}
-              <div class="stat-big"><span data-count-to="{{ (finance.balance or 0) | round(0) | int }}" data-count-prefix="$">0</span><span class="stat-change positive">+{{ (((finance.total_income or 0) / ((finance.total_expense or 0) or 1)) * 10) | round(0) | int }}%</span></div>
-              <div class="stat-sparkline" id="dash-revenue-spark" role="img" aria-label="Revenue trend sparkline">
-                <div class="empty" style="padding:.4rem 0;color:var(--text-faint);font-size:.72rem">Loading trend...</div>
-              </div>
-            {% else %}
-              <div class="stat-big"><span>Restricted</span></div>
-              <div class="stat-sparkline" id="dash-revenue-spark" role="img" aria-label="Revenue trend restricted">
-                <div class="empty" style="padding:.4rem 0;color:var(--text-faint);font-size:.72rem">Restricted</div>
-              </div>
-            {% endif %}
+            <span class="count-pill" id="signal-count">0</span>
           </div>
-          <div class="stat-card stat-card-health">
-            <div class="stat-header">
-              <div class="stat-icon stat-icon-health"><i data-lucide="heart-pulse"></i></div>
-              <div class="stat-label">BUSINESS HEALTH</div>
-            </div>
-            <div class="health-ring">
-              <svg viewBox="0 0 120 120" role="img" aria-label="Business health score">
-                <circle cx="60" cy="60" r="50" fill="none" stroke="var(--line-soft)" stroke-width="8"/>
-                <circle
-                  class="health-progress"
-                  cx="60"
-                  cy="60"
-                  r="50"
-                  fill="none"
-                  stroke="var(--ok, #34c759)"
-                  stroke-width="8"
-                  stroke-linecap="round"
-                  stroke-dasharray="314"
-                  stroke-dashoffset="314"
-                  data-target-offset="314"
-                  transform="rotate(-90 60 60)"
-                />
-              </svg>
-              <div class="health-val" id="dash-health-value">--</div>
-            </div>
-            <div class="health-label" id="dash-health-label">Loading health...</div>
+          <div class="panel-scroll" id="signal-list" style="max-height:320px">
+            <div class="widget-empty" id="signal-empty">Loading signals...</div>
           </div>
         </div>
 
@@ -206,6 +214,17 @@
       <!-- RIGHT COLUMN -->
       <div class="dash-col-side stagger-enter">
 
+        <!-- Decision Cards Queue (Approvals) -->
+        <div class="widget-card" id="exec-decisions-card">
+          <div class="widget-head">
+            <span class="widget-label">DECISION QUEUE</span>
+            <span class="count-pill" id="decision-count">0</span>
+          </div>
+          <div class="widget-list widget-scroll" id="decision-list" style="max-height:220px">
+            <div class="widget-empty" id="decision-empty">No pending decisions</div>
+          </div>
+        </div>
+
         <!-- Next Up / Meeting -->
         <div class="widget-card">
           <div class="widget-label">NEXT UP</div>
@@ -248,6 +267,40 @@
           </div>
         </div>
 
+      </div>
+    </div>
+
+    <!-- ── BOTTOM ROW: Company Health Grid ────────────────────────────────── -->
+    <div class="exec-health-grid stagger-enter" style="padding:0 1.75rem 1.5rem">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div class="panel-head-left">
+            <i data-lucide="building-2" class="panel-icon"></i>
+            <span class="panel-title">Company Health</span>
+          </div>
+        </div>
+        <div class="exec-company-grid" id="company-health-grid">
+          <div class="exec-company-tile" data-company="empireo">
+            <div class="exec-company-name">EmpireO.ai</div>
+            <div class="exec-company-desc">International Recruitment</div>
+            <div class="exec-company-metric" id="health-empireo">--</div>
+          </div>
+          <div class="exec-company-tile" data-company="esa">
+            <div class="exec-company-name">ESA</div>
+            <div class="exec-company-desc">Study Abroad</div>
+            <div class="exec-company-metric" id="health-esa">--</div>
+          </div>
+          <div class="exec-company-tile" data-company="empire-digital">
+            <div class="exec-company-name">Empire Digital</div>
+            <div class="exec-company-desc">Marketing & Sales</div>
+            <div class="exec-company-metric" id="health-empire-digital">--</div>
+          </div>
+          <div class="exec-company-tile" data-company="codnov">
+            <div class="exec-company-name">Codnov.ai</div>
+            <div class="exec-company-desc">AI Products</div>
+            <div class="exec-company-metric" id="health-codnov">--</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -384,6 +437,10 @@
     <div id="approvals-card"></div>
     <button id="tasks-tab-open" class="seg-btn active" type="button"></button>
     <button id="tasks-tab-done" class="seg-btn" type="button"></button>
+    <!-- Compat: old health ring IDs referenced by dashboard-page.js -->
+    <div id="dash-health-value"></div>
+    <div id="dash-health-label"></div>
+    <div id="dash-revenue-spark"></div>
   </div>
 
 </main>
@@ -400,6 +457,7 @@
 <script nonce="{{ csp_nonce }}" src="/static/js/micro.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/charts-lite.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/dashboard-page.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/exec-dashboard.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
 </body>
 </html>

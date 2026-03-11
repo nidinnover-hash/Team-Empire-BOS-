@@ -337,7 +337,7 @@ async def test_api_copilot_plan(client, monkeypatch):
             "confidence": 0.9,
         }
 
-    monkeypatch.setattr("app.api.v1.endpoints.automation.build_workflow_copilot_plan", fake_copilot)
+    monkeypatch.setattr("app.api.v1.endpoints.automation_definitions.build_workflow_copilot_plan", fake_copilot)
     from app.core.config import settings
     monkeypatch.setattr(settings, "FEATURE_WORKFLOW_COPILOT", True)
 
@@ -392,7 +392,7 @@ async def test_api_copilot_plan_and_save(client, monkeypatch):
             "confidence": 0.88,
         }
 
-    monkeypatch.setattr("app.api.v1.endpoints.automation.build_workflow_copilot_plan", fake_copilot)
+    monkeypatch.setattr("app.api.v1.endpoints.automation_definitions.build_workflow_copilot_plan", fake_copilot)
     from app.core.config import settings
     monkeypatch.setattr(settings, "FEATURE_WORKFLOW_COPILOT", True)
     monkeypatch.setattr(settings, "FEATURE_WORKFLOW_V2", True)

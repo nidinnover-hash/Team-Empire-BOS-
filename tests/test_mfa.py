@@ -58,7 +58,7 @@ async def client():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_db, None)
     await engine.dispose()
 
 
@@ -303,7 +303,7 @@ async def mfa_enabled_client():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c, secret
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_db, None)
     await engine.dispose()
 
 
@@ -451,7 +451,7 @@ async def mfa_required_unenrolled_client():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_db, None)
     await engine.dispose()
 
 

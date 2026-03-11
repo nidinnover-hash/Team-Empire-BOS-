@@ -92,11 +92,12 @@ async def request_approval(
 async def get_approval(
     db: AsyncSession,
     approval_id: int,
-    organization_id: int | None = None,
+    organization_id: int,
 ) -> Approval | None:
-    query = select(Approval).where(Approval.id == approval_id)
-    if organization_id is not None:
-        query = query.where(Approval.organization_id == organization_id)
+    query = select(Approval).where(
+        Approval.id == approval_id,
+        Approval.organization_id == organization_id,
+    )
     result = await db.execute(query)
     return result.scalar_one_or_none()
 

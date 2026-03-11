@@ -1054,3 +1054,43 @@ async def team_activity_feed(
         "total_events": len(events),
         "actors": feed,
     }
+
+
+# ── Soft Delete Restore / Purge ─────────────────────────────────────────────
+
+
+@router.post("/restore/{entity_type}/{entity_id}", status_code=200)
+async def restore_entity(
+    entity_type: str,
+    entity_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO", "ADMIN")),
+) -> dict:
+    """Restore a soft-deleted record (contact, task, deal, goal, project)."""
+    from app.services.soft_delete import restore
+    row = await restore(db, entity_type, entity_id, organization_id=int(user["org_id"]))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Deleted record not found")
+    await record_action(
+        db, event_type=f"{entity_type}_restored", actor_user_id=user["id"],
+        organization_id=user["org_id"], entity_type=entity_type, entity_id=entity_id,
+    )
+    return {"restored": True, "entity_type": entity_type, "entity_id": entity_id}
+
+
+@router.delete("/purge/{entity_type}/{entity_id}", status_code=204)
+async def purge_entity(
+    entity_type: str,
+    entity_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_roles("CEO")),
+) -> None:
+    """Hard-delete a soft-deleted record for GDPR compliance. CEO only."""
+    from app.services.soft_delete import purge
+    deleted = await purge(db, entity_type, entity_id, organization_id=int(user["org_id"]))
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Deleted record not found")
+    await record_action(
+        db, event_type=f"{entity_type}_purged", actor_user_id=user["id"],
+        organization_id=user["org_id"], entity_type=entity_type, entity_id=entity_id,
+    )

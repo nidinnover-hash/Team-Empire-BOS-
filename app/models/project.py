@@ -4,9 +4,10 @@ from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, Str
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.soft_delete import SoftDeleteMixin
 
 
-class Project(Base):
+class Project(SoftDeleteMixin, Base):
     """A container that groups related tasks - business or personal."""
 
     __tablename__ = "projects"

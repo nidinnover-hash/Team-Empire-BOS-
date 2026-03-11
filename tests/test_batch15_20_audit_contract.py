@@ -27,7 +27,7 @@ def test_derive_event_type_delete():
 
 def test_derive_event_type_nested_action():
     result = _derive_event_type("PUT", "/api/v1/deal-dependencies/1/resolve")
-    assert result == "deal_dependencie_resolve"
+    assert result == "deal_dependency_resolve"
 
 
 def test_derive_event_type_hyphenated_resource():

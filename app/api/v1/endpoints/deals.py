@@ -1,10 +1,11 @@
 """Deal CRUD + pipeline analytics endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
+from app.core.idempotency import build_fingerprint, get_cached_response, store_response
 from app.core.rbac import require_roles
 from app.logs.audit import record_action
 from app.schemas.deal import DealCreate, DealRead, DealSummary, DealUpdate
@@ -16,9 +17,16 @@ router = APIRouter(prefix="/deals", tags=["Deals"])
 @router.post("", response_model=DealRead, status_code=201)
 async def create_deal(
     data: DealCreate,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=128),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
 ) -> DealRead:
+    if idempotency_key:
+        scope = f"deal:create:{actor['org_id']}"
+        fp = build_fingerprint(data.model_dump())
+        cached = get_cached_response(scope, idempotency_key, fingerprint=fp)
+        if cached:
+            return DealRead.model_validate(cached)
     deal = await deal_service.create_deal(
         db, data.model_dump(), organization_id=actor["org_id"],
         owner_user_id=actor["id"],
@@ -28,7 +36,10 @@ async def create_deal(
         organization_id=actor["org_id"], entity_type="deal",
         entity_id=deal.id, payload_json={"title": deal.title, "value": float(deal.value)},
     )
-    return DealRead.model_validate(deal, from_attributes=True)
+    result = DealRead.model_validate(deal, from_attributes=True)
+    if idempotency_key:
+        store_response(scope, idempotency_key, result.model_dump(), fingerprint=fp)
+    return result
 
 
 @router.get("", response_model=list[DealRead])

@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
+from app.core.idempotency import build_fingerprint, get_cached_response, store_response
 from app.core.rbac import require_roles, require_sensitive_financial_roles
 from app.logs.audit import record_action
 from pydantic import BaseModel, Field
@@ -40,10 +41,17 @@ def _mask_contacts_for_role(contacts: list[ContactRead], role: object) -> list[C
 @router.post("", response_model=ContactRead, status_code=201)
 async def create_contact(
     data: ContactCreate,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=128),
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> ContactRead:
     """Add a person to your network."""
+    if idempotency_key:
+        scope = f"contact:create:{actor['org_id']}"
+        fp = build_fingerprint(data.model_dump())
+        cached = get_cached_response(scope, idempotency_key, fingerprint=fp)
+        if cached:
+            return ContactRead.model_validate(cached)
     contact = await contact_service.create_contact(db, data, organization_id=actor["org_id"])
     await record_action(
         db,
@@ -63,7 +71,10 @@ async def create_contact(
         )
     except RuntimeError:
         pass
-    return _mask_contact_for_role(ContactRead.model_validate(contact, from_attributes=True), actor.get("role"))
+    result = _mask_contact_for_role(ContactRead.model_validate(contact, from_attributes=True), actor.get("role"))
+    if idempotency_key:
+        store_response(scope, idempotency_key, result.model_dump(), fingerprint=fp)
+    return result
 
 
 @router.get("/pipeline-summary", response_model=list[PipelineSummary])

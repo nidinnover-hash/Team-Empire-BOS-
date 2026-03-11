@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/static/css/ops_intel.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
 
+  <link rel="stylesheet" href="/static/css/bos-design-system.css">
 </head>
 <body data-role="{{ (session_user.get('role') if session_user else '') | upper }}">
   {% set active_page = "ops-intel" %}
