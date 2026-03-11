@@ -35,12 +35,14 @@ jobs:
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
       - name: Run Alembic migrations on staging
-        run: |
-          alembic upgrade head
+        env:
+          PGOPTIONS: "-c statement_timeout=0"
+        run: alembic upgrade head
 
       - name: Seed staging users
-        run: |
-          python scripts/seed_staging_users.py
+        env:
+          PGOPTIONS: "-c statement_timeout=0"
+        run: python scripts/seed_staging_users.py
 
       - name: Report success
         if: success()
