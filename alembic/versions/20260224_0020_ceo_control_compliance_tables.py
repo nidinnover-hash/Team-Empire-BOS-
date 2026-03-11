@@ -18,6 +18,27 @@ def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
     tables = set(inspector.get_table_names())
+    migration_tables = {
+        "org_people",
+        "github_identity_map",
+        "github_role_snapshot",
+        "github_repo_snapshot",
+        "github_pr_snapshot",
+        "clickup_spaces",
+        "clickup_folders",
+        "clickup_lists",
+        "clickup_tasks_snapshot",
+        "do_droplet_snapshot",
+        "do_team_snapshot",
+        "do_cost_snapshot",
+        "policy_violations",
+        "ceo_summaries",
+    }
+    # Base-table bootstrap migrations may have already materialized this entire set.
+    # In that case keep this migration idempotent by no-oping.
+    if migration_tables.issubset(tables):
+        return
+
     existing_org_people_indexes = {
         idx["name"] for idx in inspector.get_indexes("org_people")
     } if "org_people" in tables else set()
