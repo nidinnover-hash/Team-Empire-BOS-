@@ -52,22 +52,16 @@ def upgrade() -> None:
         op.create_index(op.f("ix_lead_routing_rules_target_company_id"), "lead_routing_rules", ["target_company_id"], unique=False)
         op.create_index(op.f("ix_lead_routing_rules_priority"), "lead_routing_rules", ["priority"], unique=False)
         op.create_index(op.f("ix_lead_routing_rules_is_active"), "lead_routing_rules", ["is_active"], unique=False)
-        try:
-            op.create_check_constraint(
-                "ck_lead_routing_rule_priority",
-                "lead_routing_rules",
-                "priority >= 1 AND priority <= 1000",
-            )
-        except Exception:
-            pass
-        try:
-            op.create_check_constraint(
-                "ck_lead_routing_rule_lead_type",
-                "lead_routing_rules",
-                "lead_type IN ('general', 'study_abroad', 'recruitment')",
-            )
-        except Exception:
-            pass
+        op.create_check_constraint(
+            "ck_lead_routing_rule_priority",
+            "lead_routing_rules",
+            "priority >= 1 AND priority <= 1000",
+        )
+        op.create_check_constraint(
+            "ck_lead_routing_rule_lead_type",
+            "lead_routing_rules",
+            "lead_type IN ('general', 'study_abroad', 'recruitment')",
+        )
         op.alter_column("lead_routing_rules", "priority", server_default=None)
         op.alter_column("lead_routing_rules", "is_active", server_default=None)
 

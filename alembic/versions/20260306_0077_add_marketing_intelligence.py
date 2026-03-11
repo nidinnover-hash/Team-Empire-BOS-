@@ -50,30 +50,21 @@ def upgrade() -> None:
         op.create_index(op.f("ix_marketing_intelligence_priority"), "marketing_intelligence", ["priority"], unique=False)
         op.create_index(op.f("ix_marketing_intelligence_status"), "marketing_intelligence", ["status"], unique=False)
         op.create_index(op.f("ix_marketing_intelligence_created_at"), "marketing_intelligence", ["created_at"], unique=False)
-        try:
-            op.create_check_constraint(
-                "ck_marketing_intelligence_status",
-                "marketing_intelligence",
-                "status IN ('submitted', 'reviewing', 'accepted', 'rejected', 'applied')",
-            )
-        except Exception:
-            pass
-        try:
-            op.create_check_constraint(
-                "ck_marketing_intelligence_priority",
-                "marketing_intelligence",
-                "priority IS NULL OR priority IN ('low', 'medium', 'high', 'critical')",
-            )
-        except Exception:
-            pass
-        try:
-            op.create_check_constraint(
-                "ck_marketing_intelligence_confidence",
-                "marketing_intelligence",
-                "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
-            )
-        except Exception:
-            pass
+        op.create_check_constraint(
+            "ck_marketing_intelligence_status",
+            "marketing_intelligence",
+            "status IN ('submitted', 'reviewing', 'accepted', 'rejected', 'applied')",
+        )
+        op.create_check_constraint(
+            "ck_marketing_intelligence_priority",
+            "marketing_intelligence",
+            "priority IS NULL OR priority IN ('low', 'medium', 'high', 'critical')",
+        )
+        op.create_check_constraint(
+            "ck_marketing_intelligence_confidence",
+            "marketing_intelligence",
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
+        )
         op.alter_column("marketing_intelligence", "status", server_default=None)
 
 

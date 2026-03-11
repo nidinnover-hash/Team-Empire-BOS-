@@ -113,39 +113,33 @@ def downgrade() -> None:
     dialect = bind.dialect.name
 
     if dialect != "sqlite":
-        try:
+        inspector = sa.inspect(bind)
+        existing_con = {
+            row[0]
+            for row in bind.execute(
+                sa.text("SELECT conname FROM pg_constraint WHERE contype IN ('f', 'c')")
+            ).fetchall()
+        }
+
+        if "fk_decision_trace_daily_run" in existing_con:
             op.drop_constraint("fk_decision_trace_daily_run", "decision_traces", type_="foreignkey")
-        except Exception:
-            pass
-        try:
+        if "fk_decision_trace_actor_user" in existing_con:
             op.drop_constraint("fk_decision_trace_actor_user", "decision_traces", type_="foreignkey")
-        except Exception:
-            pass
-        try:
+        if "fk_daily_run_requested_by_user" in existing_con:
             op.drop_constraint("fk_daily_run_requested_by_user", "daily_runs", type_="foreignkey")
-        except Exception:
-            pass
-        try:
+        if "fk_approval_requested_by_user" in existing_con:
             op.drop_constraint("fk_approval_requested_by_user", "approvals", type_="foreignkey")
-        except Exception:
-            pass
+
         # Restore old CHECK for tasks
-        try:
+        if "ck_task_done_has_completed_at" in existing_con:
             op.drop_constraint("ck_task_done_has_completed_at", "tasks", type_="check")
-        except Exception:
-            pass
         op.create_check_constraint(
             "ck_task_done_has_completed_at",
             "tasks",
             "is_done = 0 OR completed_at IS NOT NULL",
         )
 
-    if dialect != "sqlite":
-        try:
+        if "ck_daily_task_plan_status" in existing_con:
             op.drop_constraint("ck_daily_task_plan_status", "daily_task_plans", type_="check")
-        except Exception:
-            pass
-        try:
+        if "ck_approval_status" in existing_con:
             op.drop_constraint("ck_approval_status", "approvals", type_="check")
-        except Exception:
-            pass

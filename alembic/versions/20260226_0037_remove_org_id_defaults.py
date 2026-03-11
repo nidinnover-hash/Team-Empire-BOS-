@@ -53,13 +53,16 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    dialect = op.get_bind().dialect.name
+    bind = op.get_bind()
+    dialect = bind.dialect.name
     if dialect == "sqlite":
         return
+    inspector = sa.inspect(bind)
+    tables = set(inspector.get_table_names())
     for table in _TABLES:
-        try:
-            op.alter_column(
-                table, "organization_id", server_default=sa.text("1")
-            )
-        except Exception:
-            pass
+        if table not in tables:
+            continue
+        cols = {c["name"] for c in inspector.get_columns(table)}
+        if "organization_id" not in cols:
+            continue
+        op.alter_column(table, "organization_id", server_default=sa.text("1"))

@@ -95,31 +95,29 @@ def upgrade() -> None:
 def downgrade() -> None:
     bind = op.get_bind()
     dialect = bind.dialect.name
+    inspector = sa.inspect(bind)
+    tables = set(inspector.get_table_names())
 
     # Restore server_default=1
     if dialect != "sqlite":
-        try:
+        if "ai_call_logs" in tables:
             op.alter_column("ai_call_logs", "organization_id", server_default=sa.text("1"))
-        except Exception:
-            pass
-        try:
+        if "events" in tables:
             op.alter_column("events", "organization_id", server_default=sa.text("1"))
-        except Exception:
-            pass
 
     # Drop index
-    try:
+    if "integrations" in tables and _has_index(inspector, "integrations", "ix_integrations_last_sync_at"):
         op.drop_index("ix_integrations_last_sync_at", table_name="integrations")
-    except Exception:
-        pass
 
     # Drop FKs
     if dialect != "sqlite":
-        try:
+        existing_fk = {
+            row[0]
+            for row in bind.execute(
+                sa.text("SELECT conname FROM pg_constraint WHERE contype = 'f'")
+            ).fetchall()
+        }
+        if "fk_execution_triggered_by_user" in existing_fk:
             op.drop_constraint("fk_execution_triggered_by_user", "executions", type_="foreignkey")
-        except Exception:
-            pass
-        try:
+        if "fk_event_actor_user" in existing_fk:
             op.drop_constraint("fk_event_actor_user", "events", type_="foreignkey")
-        except Exception:
-            pass

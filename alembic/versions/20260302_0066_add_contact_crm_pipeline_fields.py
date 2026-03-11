@@ -41,22 +41,24 @@ def upgrade() -> None:
     if "ix_contacts_next_follow_up_at" not in existing_idxs:
         op.create_index("ix_contacts_next_follow_up_at", "contacts", ["next_follow_up_at"])
 
-    try:
+    existing_ck = {
+        row[0]
+        for row in bind.execute(
+            sa.text("SELECT conname FROM pg_constraint WHERE conrelid = 'contacts'::regclass AND contype = 'c'")
+        ).fetchall()
+    }
+    if "ck_contact_pipeline_stage" not in existing_ck:
         op.create_check_constraint(
             "ck_contact_pipeline_stage",
             "contacts",
             "pipeline_stage IN ('new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost')",
         )
-    except Exception:
-        pass
-    try:
+    if "ck_contact_lead_score" not in existing_ck:
         op.create_check_constraint(
             "ck_contact_lead_score",
             "contacts",
             "lead_score >= 0 AND lead_score <= 100",
         )
-    except Exception:
-        pass
 
 
 def downgrade() -> None:

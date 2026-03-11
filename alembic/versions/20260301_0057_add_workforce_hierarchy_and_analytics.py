@@ -38,7 +38,13 @@ def upgrade() -> None:
             sa.Column("branch_label", sa.String(length=120), nullable=True),
         )
 
-    try:
+    existing_con = {
+        row[0]
+        for row in bind.execute(
+            sa.text("SELECT conname FROM pg_constraint WHERE contype IN ('f', 'c')")
+        ).fetchall()
+    }
+    if "fk_organizations_parent_organization_id" not in existing_con:
         op.create_foreign_key(
             "fk_organizations_parent_organization_id",
             "organizations",
@@ -47,8 +53,6 @@ def upgrade() -> None:
             ["id"],
             ondelete="SET NULL",
         )
-    except Exception:
-        pass
 
     existing_org_idxs = {i["name"] for i in inspector.get_indexes("organizations")}
     if "ix_organizations_parent_organization_id" not in existing_org_idxs:
@@ -90,7 +94,7 @@ def upgrade() -> None:
     if "offboarded_at" not in existing_emp:
         op.add_column("employees", sa.Column("offboarded_at", sa.DateTime(timezone=True), nullable=True))
 
-    try:
+    if "fk_employees_department_id" not in existing_con:
         op.create_foreign_key(
             "fk_employees_department_id",
             "employees",
@@ -99,8 +103,6 @@ def upgrade() -> None:
             ["id"],
             ondelete="SET NULL",
         )
-    except Exception:
-        pass
 
     existing_emp_idxs = {i["name"] for i in inspector.get_indexes("employees")}
     if "ix_employees_department_id" not in existing_emp_idxs:
