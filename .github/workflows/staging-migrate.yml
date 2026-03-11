@@ -36,13 +36,10 @@ jobs:
 
       - name: Run Alembic migrations on staging
         run: |
-          export DATABASE_URL="$STAGING_PGCONN"
-          export PGOPTIONS="-c statement_timeout=0"
           alembic upgrade head
 
       - name: Seed staging users
         run: |
-          export PGOPTIONS="-c statement_timeout=0"
           python scripts/seed_staging_users.py
 
       - name: Report success

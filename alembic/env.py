@@ -90,7 +90,7 @@ from app.core.config import settings
 from app.db.base import Base
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -122,6 +122,7 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args={"server_settings": {"statement_timeout": "0"}},
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
