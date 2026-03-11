@@ -9,7 +9,7 @@ from alembic import op
 from sqlalchemy import Column, DateTime, text
 
 revision = "20260301_0060"
-down_revision = "20260301_0059"
+down_revision = "20260301_0059b"
 branch_labels = None
 depends_on = None
 
@@ -69,11 +69,28 @@ def _has_column(conn, table: str, column: str) -> bool:
     return len(rows) > 0
 
 
+def _table_exists(conn, table: str) -> bool:
+    dialect = conn.dialect.name
+    if dialect == "sqlite":
+        rows = conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name=:t"),
+            {"t": table},
+        ).fetchall()
+        return len(rows) > 0
+    rows = conn.execute(
+        text("SELECT 1 FROM information_schema.tables WHERE table_name = :t AND table_schema = 'public'"),
+        {"t": table},
+    ).fetchall()
+    return len(rows) > 0
+
+
 def upgrade() -> None:
     conn = op.get_bind()
 
     # Add updated_at columns
     for table in _UPDATED_AT_TABLES:
+        if not _table_exists(conn, table):
+            continue
         if not _has_column(conn, table, "updated_at"):
             op.add_column(
                 table,
@@ -85,6 +102,8 @@ def upgrade() -> None:
 
     # Add composite indexes
     for idx_name, table, columns in _INDEXES:
+        if not _table_exists(conn, table):
+            continue
         if not _has_index(conn, idx_name):
             op.create_index(idx_name, table, columns)
 
