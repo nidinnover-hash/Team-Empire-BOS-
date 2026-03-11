@@ -21,31 +21,24 @@ def upgrade() -> None:
     # ── Indexes ────────────────────────────────────────────────────────
 
     # task.depends_on_task_id — FK lookups for dependency queries
-    existing_tasks = {i["name"] for i in inspector.get_indexes("tasks")}
-    if "ix_tasks_depends_on_task_id" not in existing_tasks:
-        op.create_index(
-            "ix_tasks_depends_on_task_id",
-            "tasks",
-            ["depends_on_task_id"],
-        )
-
-    # tasks (organization_id, project_id) — composite for project-scoped queries
-    if "ix_tasks_org_project" not in existing_tasks:
-        op.create_index(
-            "ix_tasks_org_project",
-            "tasks",
-            ["organization_id", "project_id"],
-        )
+    if inspector.has_table("tasks"):
+        existing_tasks = {i["name"] for i in inspector.get_indexes("tasks")}
+        if "ix_tasks_depends_on_task_id" not in existing_tasks:
+            op.create_index("ix_tasks_depends_on_task_id", "tasks", ["depends_on_task_id"])
+        if "ix_tasks_org_project" not in existing_tasks:
+            op.create_index("ix_tasks_org_project", "tasks", ["organization_id", "project_id"])
 
     # goal.status — frequently filtered for active/completed goals
-    existing_goals = {i["name"] for i in inspector.get_indexes("goals")}
-    if "ix_goals_status" not in existing_goals:
-        op.create_index("ix_goals_status", "goals", ["status"])
+    if inspector.has_table("goals"):
+        existing_goals = {i["name"] for i in inspector.get_indexes("goals")}
+        if "ix_goals_status" not in existing_goals:
+            op.create_index("ix_goals_status", "goals", ["status"])
 
     # project.due_date — range queries for upcoming due dates
-    existing_proj = {i["name"] for i in inspector.get_indexes("projects")}
-    if "ix_projects_due_date" not in existing_proj:
-        op.create_index("ix_projects_due_date", "projects", ["due_date"])
+    if inspector.has_table("projects"):
+        existing_proj = {i["name"] for i in inspector.get_indexes("projects")}
+        if "ix_projects_due_date" not in existing_proj:
+            op.create_index("ix_projects_due_date", "projects", ["due_date"])
 
     # ── CHECK constraints ──────────────────────────────────────────────
 
