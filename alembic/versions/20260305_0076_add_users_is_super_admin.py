@@ -23,7 +23,7 @@ def upgrade() -> None:
                 "is_super_admin",
                 sa.Boolean(),
                 nullable=False,
-                server_default=sa.text("0"),
+                server_default=sa.false(),
             ),
         )
 
