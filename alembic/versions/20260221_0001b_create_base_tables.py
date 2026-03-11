@@ -67,6 +67,20 @@ def upgrade() -> None:
     inspector = sa.inspect(bind)
     existing_tables = set(inspector.get_table_names())
 
+    # Early bootstrap: some base ORM tables reference organizations via FK.
+    # Ensure organizations exists before bulk create_all in this compatibility migration.
+    if "organizations" not in existing_tables:
+        op.create_table(
+            "organizations",
+            sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+            sa.Column("name", sa.String(length=255), nullable=False),
+            sa.Column("slug", sa.String(length=120), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        )
+        op.create_index("ix_organizations_slug", "organizations", ["slug"], unique=True)
+        op.create_unique_constraint("uq_organizations_name", "organizations", ["name"])
+        existing_tables.add("organizations")
+
     # Only create tables that are NOT already handled by other migrations
     tables_to_create = []
     for table in Base.metadata.sorted_tables:
