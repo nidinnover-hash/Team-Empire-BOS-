@@ -118,11 +118,25 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
+    import ssl as _ssl
+    import os
+
+    cfg = config.get_section(config.config_ini_section, {})
+    connect_args: dict = {}
+
+    # On Windows asyncpg cannot write SSL temp cert files — pass ssl context directly.
+    db_url = cfg.get("sqlalchemy.url", "") or os.environ.get("DATABASE_URL", "")
+    if "ssl=require" in db_url or "sslmode=require" in db_url or db_url.startswith("postgresql"):
+        ssl_ctx = _ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = _ssl.CERT_NONE
+        connect_args["ssl"] = ssl_ctx
+
     connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        cfg,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        connect_args={"server_settings": {"statement_timeout": "0"}},
+        connect_args=connect_args,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
