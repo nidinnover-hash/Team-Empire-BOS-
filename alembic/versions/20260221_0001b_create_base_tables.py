@@ -81,14 +81,34 @@ def upgrade() -> None:
         op.create_unique_constraint("uq_organizations_name", "organizations", ["name"])
         existing_tables.add("organizations")
 
-    # Only create tables that are NOT already handled by other migrations
-    tables_to_create = []
+    # Candidate set: tables not already present and not explicitly handled elsewhere.
+    candidate_tables = []
     for table in Base.metadata.sorted_tables:
         if table.name in SKIP_TABLES:
             continue
         if table.name in existing_tables:
             continue
-        tables_to_create.append(table)
+        candidate_tables.append(table)
+
+    # Create only tables whose FK dependencies are already available in this
+    # migration context. This avoids creating late-era tables before prerequisite
+    # migrations (for example, tables that depend on workspaces).
+    tables_to_create = []
+    available_table_names = set(existing_tables)
+    remaining = list(candidate_tables)
+    progressed = True
+    while remaining and progressed:
+        progressed = False
+        next_remaining = []
+        for table in remaining:
+            deps = {fk.column.table.name for fk in table.foreign_keys} - {table.name}
+            if deps.issubset(available_table_names):
+                tables_to_create.append(table)
+                available_table_names.add(table.name)
+                progressed = True
+            else:
+                next_remaining.append(table)
+        remaining = next_remaining
 
     if tables_to_create:
         Base.metadata.create_all(bind=bind, tables=tables_to_create, checkfirst=True)
