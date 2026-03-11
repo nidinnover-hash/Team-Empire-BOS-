@@ -15,21 +15,32 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "chat_messages",
-        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("organization_id", sa.Integer(), nullable=False),
-        sa.Column("user_id", sa.Integer(), nullable=True),
-        sa.Column("role", sa.String(50), nullable=False),
-        sa.Column("user_message", sa.Text(), nullable=False),
-        sa.Column("ai_response", sa.Text(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
-        sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="SET NULL"),
-    )
-    op.create_index("ix_chat_messages_organization_id", "chat_messages", ["organization_id"])
-    op.create_index("ix_chat_messages_created_at", "chat_messages", ["created_at"])
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    tables = set(inspector.get_table_names())
+
+    if "chat_messages" not in tables:
+        op.create_table(
+            "chat_messages",
+            sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+            sa.Column("organization_id", sa.Integer(), nullable=False),
+            sa.Column("user_id", sa.Integer(), nullable=True),
+            sa.Column("role", sa.String(50), nullable=False),
+            sa.Column("user_message", sa.Text(), nullable=False),
+            sa.Column("ai_response", sa.Text(), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+            sa.PrimaryKeyConstraint("id"),
+            sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="RESTRICT"),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="SET NULL"),
+        )
+        op.create_index("ix_chat_messages_organization_id", "chat_messages", ["organization_id"])
+        op.create_index("ix_chat_messages_created_at", "chat_messages", ["created_at"])
+    else:
+        existing = {i["name"] for i in inspector.get_indexes("chat_messages")}
+        if "ix_chat_messages_organization_id" not in existing:
+            op.create_index("ix_chat_messages_organization_id", "chat_messages", ["organization_id"])
+        if "ix_chat_messages_created_at" not in existing:
+            op.create_index("ix_chat_messages_created_at", "chat_messages", ["created_at"])
 
 
 def downgrade() -> None:
