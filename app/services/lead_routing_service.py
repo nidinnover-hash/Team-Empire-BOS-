@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.lead_routing import LEAD_TYPE_ROUTE_MAP, normalize_lead_type
+from app.core.lead_routing import normalize_lead_type
 from app.models.user import User
 
 RECRUITER_ROLES = ("CEO", "ADMIN", "MANAGER", "STAFF", "OWNER", "OPS_MANAGER")

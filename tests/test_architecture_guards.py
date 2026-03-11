@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
+
+logger = logging.getLogger(__name__)
 
 # Paths relative to repo root
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -118,7 +121,7 @@ class TestMutatingRoutesProtected:
                         if resp.status_code == 200:
                             failures.append((method, path))
                     except Exception:
-                        pass  # route raised (e.g. missing config); treat as protected
+                        logger.debug("Route %s %s raised (e.g. missing config); treat as protected", method, path, exc_info=True)
         assert not failures, (
             "Mutating routes must not return 200 without auth. "
             f"Got 200 without Authorization for: {failures[:25]}"

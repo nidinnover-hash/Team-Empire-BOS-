@@ -8,8 +8,8 @@ from .dead_letter import router as dead_letter_router
 from .github_maps import router as github_maps_router
 from .health import router as health_router
 from .jobs import router as jobs_router
-from .platform import router as platform_router
 from .levers import router as levers_router
+from .platform import router as platform_router
 from .recruitment import router as recruitment_router
 
 router = APIRouter(prefix="/control", tags=["CEO Control"])
