@@ -13,6 +13,7 @@ from app.schemas.approval import ApprovalRequestCreate
 from app.services import approval as approval_service
 from app.services import contact_policy as contact_policy_service
 from app.services import lead_routing_service as lead_routing_service
+from app.services import money_approval_matrix as money_matrix_service
 from app.services import study_abroad as study_abroad_service
 
 router = APIRouter(prefix="/levers", tags=["Control Levers"])
@@ -34,21 +35,46 @@ class CanSendResponse(BaseModel):
     recommended_time_utc: str | None
 
 
+class RecordSendRequest(BaseModel):
+    organization_id: int = Field(..., ge=1)
+    contact_id: str = Field(..., min_length=1, max_length=255)
+    channel: str = Field(..., max_length=50)
+
+
 @router.post("/can-send", response_model=CanSendResponse)
 async def can_send(
     data: CanSendRequest,
+    db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> CanSendResponse:
     """BOS decides if a send is allowed. Other systems must call before sending."""
     if data.organization_id != actor["org_id"]:
         raise HTTPException(status_code=403, detail="Cross-organization access denied")
     result = await contact_policy_service.can_send(
+        db,
         data.organization_id,
         contact_id=data.contact_id,
         channel=data.channel,
         campaign_id=data.campaign_id,
     )
     return CanSendResponse(**result)
+
+
+@router.post("/record-send", status_code=204)
+async def record_send(
+    data: RecordSendRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
+) -> None:
+    """Call after a send so can_send rate limits work. Marketing app must call this after each send."""
+    if data.organization_id != actor["org_id"]:
+        raise HTTPException(status_code=403, detail="Cross-organization access denied")
+    await contact_policy_service.record_send(
+        db,
+        data.organization_id,
+        contact_id=data.contact_id,
+        channel=data.channel,
+    )
 
 
 # ── route_lead ───────────────────────────────────────────────────────────────
@@ -113,7 +139,7 @@ async def request_money_approval(
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ) -> RequestMoneyApprovalResponse:
-    """Create a money approval in BOS. No money action without BOS approval_id."""
+    """Create a money approval in BOS. Auto-approve if actor role is in matrix for this amount band."""
     if data.organization_id != actor["org_id"]:
         raise HTTPException(status_code=403, detail="Cross-organization access denied")
     payload_json = {
@@ -128,6 +154,22 @@ async def request_money_approval(
         payload_json=payload_json,
     )
     approval = await approval_service.request_approval(db, int(actor["id"]), create)
+    can_auto = await money_matrix_service.can_auto_approve_money(
+        db,
+        data.organization_id,
+        action_type=data.action_type,
+        amount=data.amount,
+        actor_role=actor.get("role") or "STAFF",
+    )
+    if can_auto:
+        approved = await approval_service.approve_approval(
+            db,
+            approval_id=approval.id,
+            approver_id=actor["id"],
+            organization_id=data.organization_id,
+        )
+        if approved:
+            approval = approved
     await record_critical_mutation(
         db,
         event_type="money_approval_requested",
@@ -148,16 +190,17 @@ class ApplicationMilestonesRequest(BaseModel):
     application_id: str = Field(..., min_length=1, max_length=255)
 
 
-@router.post("/study-abroad/application-milestones")
+@router.post("/study-abroad/application-milestones", response_model=dict)
 async def application_milestones(
     data: ApplicationMilestonesRequest,
+    db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ):
-    """BOS returns next required steps for an application. Stub returns empty for now."""
+    """BOS returns next required steps for an application from milestone templates."""
     if data.organization_id != actor["org_id"]:
         raise HTTPException(status_code=403, detail="Cross-organization access denied")
     return await study_abroad_service.next_required_steps(
-        data.organization_id, data.application_id
+        db, data.organization_id, data.application_id
     )
 
 
@@ -166,14 +209,15 @@ class RiskStatusRequest(BaseModel):
     application_id: str = Field(..., min_length=1, max_length=255)
 
 
-@router.post("/study-abroad/risk-status")
+@router.post("/study-abroad/risk-status", response_model=dict)
 async def risk_status(
     data: RiskStatusRequest,
+    db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
 ):
-    """BOS returns risk status for an application. Stub returns on_track."""
+    """BOS returns risk status from pending deadlines (on_track / at_risk / critical)."""
     if data.organization_id != actor["org_id"]:
         raise HTTPException(status_code=403, detail="Cross-organization access denied")
     return await study_abroad_service.risk_status(
-        data.organization_id, data.application_id
+        db, data.organization_id, data.application_id
     )
