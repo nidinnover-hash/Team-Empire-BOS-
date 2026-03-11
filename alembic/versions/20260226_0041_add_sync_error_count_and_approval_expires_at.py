@@ -14,15 +14,26 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "integrations",
-        sa.Column("sync_error_count", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "approvals",
-        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
-    )
-    op.create_index("ix_approvals_expires_at", "approvals", ["expires_at"])
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    existing_int = {c["name"] for c in inspector.get_columns("integrations")}
+    if "sync_error_count" not in existing_int:
+        op.add_column(
+            "integrations",
+            sa.Column("sync_error_count", sa.Integer(), nullable=False, server_default="0"),
+        )
+
+    existing_apr = {c["name"] for c in inspector.get_columns("approvals")}
+    if "expires_at" not in existing_apr:
+        op.add_column(
+            "approvals",
+            sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
+        )
+
+    existing_idxs = {i["name"] for i in inspector.get_indexes("approvals")}
+    if "ix_approvals_expires_at" not in existing_idxs:
+        op.create_index("ix_approvals_expires_at", "approvals", ["expires_at"])
 
 
 def downgrade() -> None:

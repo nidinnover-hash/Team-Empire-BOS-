@@ -17,113 +17,160 @@ depends_on: Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "contacts",
-        sa.Column("lead_owner_company_id", sa.Integer(), nullable=False, server_default="1"),
-    )
-    op.add_column(
-        "contacts",
-        sa.Column("routed_company_id", sa.Integer(), nullable=True),
-    )
-    op.add_column(
-        "contacts",
-        sa.Column("lead_type", sa.String(length=50), nullable=False, server_default="general"),
-    )
-    op.add_column(
-        "contacts",
-        sa.Column("routing_status", sa.String(length=30), nullable=False, server_default="unrouted"),
-    )
-    op.add_column(
-        "contacts",
-        sa.Column("routing_reason", sa.String(length=500), nullable=True),
-    )
-    op.add_column(
-        "contacts",
-        sa.Column("routed_at", sa.DateTime(timezone=True), nullable=True),
-    )
-    op.add_column(
-        "contacts",
-        sa.Column("routed_by_user_id", sa.Integer(), nullable=True),
-    )
-    op.add_column(
-        "contacts",
-        sa.Column("source_channel", sa.String(length=80), nullable=True),
-    )
-    op.add_column(
-        "contacts",
-        sa.Column("campaign_name", sa.String(length=200), nullable=True),
-    )
-    op.add_column(
-        "contacts",
-        sa.Column("partner_id", sa.String(length=120), nullable=True),
-    )
-    op.add_column(
-        "contacts",
-        sa.Column("qualified_score", sa.Integer(), nullable=True),
-    )
-    op.add_column(
-        "contacts",
-        sa.Column("qualified_status", sa.String(length=30), nullable=False, server_default="unqualified"),
-    )
-    op.add_column(
-        "contacts",
-        sa.Column("qualification_notes", sa.Text(), nullable=True),
-    )
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing = {c["name"] for c in inspector.get_columns("contacts")}
 
-    op.create_foreign_key(
-        "fk_contacts_lead_owner_company_id_org",
-        "contacts",
-        "organizations",
-        ["lead_owner_company_id"],
-        ["id"],
-        ondelete="RESTRICT",
-    )
-    op.create_foreign_key(
-        "fk_contacts_routed_company_id_org",
-        "contacts",
-        "organizations",
-        ["routed_company_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-    op.create_foreign_key(
-        "fk_contacts_routed_by_user_id_user",
-        "contacts",
-        "users",
-        ["routed_by_user_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    if "lead_owner_company_id" not in existing:
+        op.add_column(
+            "contacts",
+            sa.Column("lead_owner_company_id", sa.Integer(), nullable=False, server_default="1"),
+        )
+    if "routed_company_id" not in existing:
+        op.add_column(
+            "contacts",
+            sa.Column("routed_company_id", sa.Integer(), nullable=True),
+        )
+    if "lead_type" not in existing:
+        op.add_column(
+            "contacts",
+            sa.Column("lead_type", sa.String(length=50), nullable=False, server_default="general"),
+        )
+    if "routing_status" not in existing:
+        op.add_column(
+            "contacts",
+            sa.Column("routing_status", sa.String(length=30), nullable=False, server_default="unrouted"),
+        )
+    if "routing_reason" not in existing:
+        op.add_column(
+            "contacts",
+            sa.Column("routing_reason", sa.String(length=500), nullable=True),
+        )
+    if "routed_at" not in existing:
+        op.add_column(
+            "contacts",
+            sa.Column("routed_at", sa.DateTime(timezone=True), nullable=True),
+        )
+    if "routed_by_user_id" not in existing:
+        op.add_column(
+            "contacts",
+            sa.Column("routed_by_user_id", sa.Integer(), nullable=True),
+        )
+    if "source_channel" not in existing:
+        op.add_column(
+            "contacts",
+            sa.Column("source_channel", sa.String(length=80), nullable=True),
+        )
+    if "campaign_name" not in existing:
+        op.add_column(
+            "contacts",
+            sa.Column("campaign_name", sa.String(length=200), nullable=True),
+        )
+    if "partner_id" not in existing:
+        op.add_column(
+            "contacts",
+            sa.Column("partner_id", sa.String(length=120), nullable=True),
+        )
+    if "qualified_score" not in existing:
+        op.add_column(
+            "contacts",
+            sa.Column("qualified_score", sa.Integer(), nullable=True),
+        )
+    if "qualified_status" not in existing:
+        op.add_column(
+            "contacts",
+            sa.Column("qualified_status", sa.String(length=30), nullable=False, server_default="unqualified"),
+        )
+    if "qualification_notes" not in existing:
+        op.add_column(
+            "contacts",
+            sa.Column("qualification_notes", sa.Text(), nullable=True),
+        )
 
-    op.create_index(op.f("ix_contacts_lead_owner_company_id"), "contacts", ["lead_owner_company_id"], unique=False)
-    op.create_index(op.f("ix_contacts_routed_company_id"), "contacts", ["routed_company_id"], unique=False)
-    op.create_index(op.f("ix_contacts_lead_type"), "contacts", ["lead_type"], unique=False)
-    op.create_index(op.f("ix_contacts_routing_status"), "contacts", ["routing_status"], unique=False)
-    op.create_index(op.f("ix_contacts_source_channel"), "contacts", ["source_channel"], unique=False)
-    op.create_index(op.f("ix_contacts_campaign_name"), "contacts", ["campaign_name"], unique=False)
-    op.create_index(op.f("ix_contacts_partner_id"), "contacts", ["partner_id"], unique=False)
-    op.create_index(op.f("ix_contacts_qualified_status"), "contacts", ["qualified_status"], unique=False)
+    try:
+        op.create_foreign_key(
+            "fk_contacts_lead_owner_company_id_org",
+            "contacts",
+            "organizations",
+            ["lead_owner_company_id"],
+            ["id"],
+            ondelete="RESTRICT",
+        )
+    except Exception:
+        pass
+    try:
+        op.create_foreign_key(
+            "fk_contacts_routed_company_id_org",
+            "contacts",
+            "organizations",
+            ["routed_company_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
+    except Exception:
+        pass
+    try:
+        op.create_foreign_key(
+            "fk_contacts_routed_by_user_id_user",
+            "contacts",
+            "users",
+            ["routed_by_user_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
+    except Exception:
+        pass
 
-    op.create_check_constraint(
-        "ck_contact_lead_type",
-        "contacts",
-        "lead_type IN ('general', 'study_abroad', 'recruitment')",
-    )
-    op.create_check_constraint(
-        "ck_contact_routing_status",
-        "contacts",
-        "routing_status IN ('unrouted', 'under_review', 'routed', 'accepted', 'rejected', 'closed')",
-    )
-    op.create_check_constraint(
-        "ck_contact_qualified_status",
-        "contacts",
-        "qualified_status IN ('unqualified', 'qualified', 'disqualified', 'needs_review')",
-    )
-    op.create_check_constraint(
-        "ck_contact_qualified_score",
-        "contacts",
-        "qualified_score IS NULL OR (qualified_score >= 0 AND qualified_score <= 100)",
-    )
+    existing_idxs = {i["name"] for i in inspector.get_indexes("contacts")}
+    if op.f("ix_contacts_lead_owner_company_id") not in existing_idxs:
+        op.create_index(op.f("ix_contacts_lead_owner_company_id"), "contacts", ["lead_owner_company_id"], unique=False)
+    if op.f("ix_contacts_routed_company_id") not in existing_idxs:
+        op.create_index(op.f("ix_contacts_routed_company_id"), "contacts", ["routed_company_id"], unique=False)
+    if op.f("ix_contacts_lead_type") not in existing_idxs:
+        op.create_index(op.f("ix_contacts_lead_type"), "contacts", ["lead_type"], unique=False)
+    if op.f("ix_contacts_routing_status") not in existing_idxs:
+        op.create_index(op.f("ix_contacts_routing_status"), "contacts", ["routing_status"], unique=False)
+    if op.f("ix_contacts_source_channel") not in existing_idxs:
+        op.create_index(op.f("ix_contacts_source_channel"), "contacts", ["source_channel"], unique=False)
+    if op.f("ix_contacts_campaign_name") not in existing_idxs:
+        op.create_index(op.f("ix_contacts_campaign_name"), "contacts", ["campaign_name"], unique=False)
+    if op.f("ix_contacts_partner_id") not in existing_idxs:
+        op.create_index(op.f("ix_contacts_partner_id"), "contacts", ["partner_id"], unique=False)
+    if op.f("ix_contacts_qualified_status") not in existing_idxs:
+        op.create_index(op.f("ix_contacts_qualified_status"), "contacts", ["qualified_status"], unique=False)
+
+    try:
+        op.create_check_constraint(
+            "ck_contact_lead_type",
+            "contacts",
+            "lead_type IN ('general', 'study_abroad', 'recruitment')",
+        )
+    except Exception:
+        pass
+    try:
+        op.create_check_constraint(
+            "ck_contact_routing_status",
+            "contacts",
+            "routing_status IN ('unrouted', 'under_review', 'routed', 'accepted', 'rejected', 'closed')",
+        )
+    except Exception:
+        pass
+    try:
+        op.create_check_constraint(
+            "ck_contact_qualified_status",
+            "contacts",
+            "qualified_status IN ('unqualified', 'qualified', 'disqualified', 'needs_review')",
+        )
+    except Exception:
+        pass
+    try:
+        op.create_check_constraint(
+            "ck_contact_qualified_score",
+            "contacts",
+            "qualified_score IS NULL OR (qualified_score >= 0 AND qualified_score <= 100)",
+        )
+    except Exception:
+        pass
 
     op.alter_column("contacts", "lead_owner_company_id", server_default=None)
     op.alter_column("contacts", "lead_type", server_default=None)

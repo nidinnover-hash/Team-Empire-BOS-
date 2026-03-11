@@ -16,10 +16,17 @@ _TABLES = ("contacts", "tasks", "deals", "goals", "projects")
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
     for table in _TABLES:
-        op.add_column(table, sa.Column("is_deleted", sa.Boolean(), nullable=False, server_default="0"))
-        op.add_column(table, sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
-        op.create_index(f"ix_{table}_is_deleted", table, ["is_deleted"])
+        existing = {c["name"] for c in inspector.get_columns(table)}
+        if "is_deleted" not in existing:
+            op.add_column(table, sa.Column("is_deleted", sa.Boolean(), nullable=False, server_default="0"))
+        if "deleted_at" not in existing:
+            op.add_column(table, sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
+        existing_idxs = {i["name"] for i in inspector.get_indexes(table)}
+        if f"ix_{table}_is_deleted" not in existing_idxs:
+            op.create_index(f"ix_{table}_is_deleted", table, ["is_deleted"])
 
 
 def downgrade() -> None:

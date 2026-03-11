@@ -14,14 +14,20 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "users",
-        sa.Column("totp_secret", sa.String(64), nullable=True),
-    )
-    op.add_column(
-        "users",
-        sa.Column("mfa_enabled", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-    )
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing = {c["name"] for c in inspector.get_columns("users")}
+
+    if "totp_secret" not in existing:
+        op.add_column(
+            "users",
+            sa.Column("totp_secret", sa.String(64), nullable=True),
+        )
+    if "mfa_enabled" not in existing:
+        op.add_column(
+            "users",
+            sa.Column("mfa_enabled", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+        )
 
 
 def downgrade() -> None:

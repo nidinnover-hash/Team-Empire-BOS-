@@ -85,7 +85,10 @@ def upgrade() -> None:
         expr = f"{column} IN ({vals})"
         if nullable:
             expr = f"({expr} OR {column} IS NULL)"
-        op.create_check_constraint(name, table, expr)
+        try:
+            op.create_check_constraint(name, table, expr)
+        except Exception:
+            pass
 
 
 def downgrade() -> None:

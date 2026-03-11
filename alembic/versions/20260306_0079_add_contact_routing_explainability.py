@@ -17,23 +17,41 @@ depends_on: Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("contacts", sa.Column("routing_source", sa.String(length=30), nullable=True))
-    op.add_column("contacts", sa.Column("routing_rule_id", sa.Integer(), nullable=True))
-    op.create_index(op.f("ix_contacts_routing_source"), "contacts", ["routing_source"], unique=False)
-    op.create_index(op.f("ix_contacts_routing_rule_id"), "contacts", ["routing_rule_id"], unique=False)
-    op.create_foreign_key(
-        "fk_contacts_routing_rule_id_lead_routing_rules",
-        "contacts",
-        "lead_routing_rules",
-        ["routing_rule_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-    op.create_check_constraint(
-        "ck_contact_routing_source",
-        "contacts",
-        "routing_source IS NULL OR routing_source IN ('default', 'manual', 'rule', 'fallback')",
-    )
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing = {c["name"] for c in inspector.get_columns("contacts")}
+
+    if "routing_source" not in existing:
+        op.add_column("contacts", sa.Column("routing_source", sa.String(length=30), nullable=True))
+    if "routing_rule_id" not in existing:
+        op.add_column("contacts", sa.Column("routing_rule_id", sa.Integer(), nullable=True))
+
+    existing_idxs = {i["name"] for i in inspector.get_indexes("contacts")}
+    if op.f("ix_contacts_routing_source") not in existing_idxs:
+        op.create_index(op.f("ix_contacts_routing_source"), "contacts", ["routing_source"], unique=False)
+    if op.f("ix_contacts_routing_rule_id") not in existing_idxs:
+        op.create_index(op.f("ix_contacts_routing_rule_id"), "contacts", ["routing_rule_id"], unique=False)
+
+    try:
+        op.create_foreign_key(
+            "fk_contacts_routing_rule_id_lead_routing_rules",
+            "contacts",
+            "lead_routing_rules",
+            ["routing_rule_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
+    except Exception:
+        pass
+
+    try:
+        op.create_check_constraint(
+            "ck_contact_routing_source",
+            "contacts",
+            "routing_source IS NULL OR routing_source IN ('default', 'manual', 'rule', 'fallback')",
+        )
+    except Exception:
+        pass
 
 
 def downgrade() -> None:

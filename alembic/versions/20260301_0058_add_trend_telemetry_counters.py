@@ -17,31 +17,36 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "trend_telemetry_counters",
-        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("organization_id", sa.Integer(), nullable=False),
-        sa.Column("metric_name", sa.String(length=80), nullable=False),
-        sa.Column("metric_value", sa.Float(), nullable=False, server_default="0"),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
-        sa.UniqueConstraint("organization_id", "metric_name", name="uq_trend_telemetry_counters_org_metric"),
-    )
-    op.create_index(
-        "ix_trend_telemetry_counters_organization_id",
-        "trend_telemetry_counters",
-        ["organization_id"],
-    )
-    op.create_index(
-        "ix_trend_telemetry_counters_metric_name",
-        "trend_telemetry_counters",
-        ["metric_name"],
-    )
-    op.create_index(
-        "ix_trend_telemetry_counters_updated_at",
-        "trend_telemetry_counters",
-        ["updated_at"],
-    )
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    tables = set(inspector.get_table_names())
+
+    if "trend_telemetry_counters" not in tables:
+        op.create_table(
+            "trend_telemetry_counters",
+            sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+            sa.Column("organization_id", sa.Integer(), nullable=False),
+            sa.Column("metric_name", sa.String(length=80), nullable=False),
+            sa.Column("metric_value", sa.Float(), nullable=False, server_default="0"),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+            sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
+            sa.UniqueConstraint("organization_id", "metric_name", name="uq_trend_telemetry_counters_org_metric"),
+        )
+        op.create_index(
+            "ix_trend_telemetry_counters_organization_id",
+            "trend_telemetry_counters",
+            ["organization_id"],
+        )
+        op.create_index(
+            "ix_trend_telemetry_counters_metric_name",
+            "trend_telemetry_counters",
+            ["metric_name"],
+        )
+        op.create_index(
+            "ix_trend_telemetry_counters_updated_at",
+            "trend_telemetry_counters",
+            ["updated_at"],
+        )
 
 
 def downgrade() -> None:

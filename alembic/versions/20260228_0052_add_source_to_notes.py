@@ -14,11 +14,19 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "notes",
-        sa.Column("source", sa.String(50), nullable=True),
-    )
-    op.create_index("ix_notes_source", "notes", ["source"])
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing = {c["name"] for c in inspector.get_columns("notes")}
+
+    if "source" not in existing:
+        op.add_column(
+            "notes",
+            sa.Column("source", sa.String(50), nullable=True),
+        )
+
+    existing_idxs = {i["name"] for i in inspector.get_indexes("notes")}
+    if "ix_notes_source" not in existing_idxs:
+        op.create_index("ix_notes_source", "notes", ["source"])
 
 
 def downgrade() -> None:
