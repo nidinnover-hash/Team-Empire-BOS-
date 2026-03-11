@@ -35,10 +35,24 @@ jobs:
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
       - name: Run Alembic migrations on staging
-        run: alembic upgrade head
+        run: |
+          # Append statement_timeout=0 to bypass Supabase default timeout
+          if [[ "$STAGING_PGCONN" == *"?"* ]]; then
+            export DATABASE_URL="${STAGING_PGCONN}&options=-c%20statement_timeout%3D0"
+          else
+            export DATABASE_URL="${STAGING_PGCONN}?options=-c%20statement_timeout%3D0"
+          fi
+          alembic upgrade head
 
       - name: Seed staging users
-        run: python scripts/seed_staging_users.py
+        run: |
+          # Append statement_timeout=0 to STAGING_PGCONN for seed script
+          if [[ "$STAGING_PGCONN" == *"?"* ]]; then
+            export STAGING_PGCONN="${STAGING_PGCONN}&options=-c%20statement_timeout%3D0"
+          else
+            export STAGING_PGCONN="${STAGING_PGCONN}?options=-c%20statement_timeout%3D0"
+          fi
+          python scripts/seed_staging_users.py
 
       - name: Report success
         if: success()
