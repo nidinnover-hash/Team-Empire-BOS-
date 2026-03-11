@@ -8,6 +8,7 @@ on:
 jobs:
   migrate-and-seed:
     runs-on: ubuntu-latest
+    environment: staging
     env:
       PYTHONPATH: .
       STAGING_PGCONN: ${{ secrets.STAGING_PGCONN }}
