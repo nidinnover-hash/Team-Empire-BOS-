@@ -2,7 +2,7 @@ import asyncio
 import os
 
 from dotenv import load_dotenv
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.security import hash_password
@@ -87,6 +87,14 @@ async def main() -> None:
     session_factory = async_sessionmaker(bind=engine, expire_on_commit=False)
 
     async with session_factory() as session:
+        # Sync sequences in case DB was initialized from parent data with explicit row IDs
+        for table in ("organizations", "users"):
+            await session.execute(text(
+                f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
+                f"COALESCE((SELECT MAX(id) FROM {table}), 0))"
+            ))
+        await session.flush()
+
         org1 = await _ensure_org(session, name="Team Empire Org", slug=org1_slug)
         org2 = await _ensure_org(session, name="Team Empire India", slug=org2_slug)
 
