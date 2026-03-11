@@ -36,22 +36,13 @@ jobs:
 
       - name: Run Alembic migrations on staging
         run: |
-          # Append statement_timeout=0 to bypass Supabase default timeout
-          if [[ "$STAGING_PGCONN" == *"?"* ]]; then
-            export DATABASE_URL="${STAGING_PGCONN}&options=-c%20statement_timeout%3D0"
-          else
-            export DATABASE_URL="${STAGING_PGCONN}?options=-c%20statement_timeout%3D0"
-          fi
+          export DATABASE_URL="$STAGING_PGCONN"
+          export PGOPTIONS="-c statement_timeout=0"
           alembic upgrade head
 
       - name: Seed staging users
         run: |
-          # Append statement_timeout=0 to STAGING_PGCONN for seed script
-          if [[ "$STAGING_PGCONN" == *"?"* ]]; then
-            export STAGING_PGCONN="${STAGING_PGCONN}&options=-c%20statement_timeout%3D0"
-          else
-            export STAGING_PGCONN="${STAGING_PGCONN}?options=-c%20statement_timeout%3D0"
-          fi
+          export PGOPTIONS="-c statement_timeout=0"
           python scripts/seed_staging_users.py
 
       - name: Report success
