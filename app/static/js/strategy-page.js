@@ -198,7 +198,13 @@
     saveRuleBtn.addEventListener("click", async function () {
       var key = (ruleKey.value || "").trim();
       var value = (ruleValue.value || "").trim();
-      if (!key || !value) return;
+      var fv = window.BOS && window.BOS.formValidation;
+      if (fv) {
+        fv.clear(ruleKey);
+        fv.clear(ruleValue);
+        if (!key) { fv.showError(ruleKey, "Rule name is required"); ruleKey.focus(); return; }
+        if (!value) { fv.showError(ruleValue, "Rule content is required"); ruleValue.focus(); return; }
+      } else if (!key || !value) return;
       var csrf = getCsrf();
       if (!csrf) return;
 

@@ -22,11 +22,11 @@
   <div class="main-wrap">
     <h1>Operations Intelligence</h1>
     <div id="loading">Loading ops data...</div>
-    <div id="content" style="display:none">
+    <div id="content" class="u-hidden">
       <div
         id="ops-access-note"
         class="empty"
-        style="display:none;margin-bottom:.75rem;text-align:left"
+        class="empty u-hidden u-mb-1 u-text-left"
       ></div>
       <div class="incident-strip" id="incident-strip">
         <div class="incident-head">
@@ -36,7 +36,7 @@
           </div>
           <button class="btn" id="btn-refresh-incident">Refresh</button>
         </div>
-        <div id="incident-chart" style="margin-top:.55rem"><div class="empty">Loading incident timeline...</div></div>
+        <div id="incident-chart" class="u-mt-sm"><div class="empty">Loading incident timeline...</div></div>
         <div class="incident-actions" id="incident-actions"></div>
       </div>
 
@@ -62,7 +62,7 @@
             <span>Employee Mapping</span>
             <button class="btn" id="btn-add-emp">+ Add Employee</button>
           </div>
-          <div class="card-body" style="overflow-x:auto">
+          <div class="card-body u-overflow-x-auto">
             <table>
               <thead><tr><th>Name</th><th>Email</th><th>Job Title</th><th>GitHub</th><th>ClickUp</th><th>Status</th></tr></thead>
               <tbody id="emp-body"><tr><td colspan="6" class="empty">No employees mapped</td></tr></tbody>
@@ -76,14 +76,14 @@
         <div class="card">
           <div class="card-head">Signal Ingestion (Observer Mode)</div>
           <div class="card-body">
-            <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:1rem">
+            <div class="u-flex u-gap-md u-flex-wrap u-mb-1">
               <button class="btn" id="btn-sync-clickup">Sync ClickUp<span class="sync-status" id="sync-clickup-status"></span></button>
               <button class="btn" id="btn-sync-github">Sync GitHub<span class="sync-status" id="sync-github-status"></span></button>
               <button class="btn" id="btn-sync-gmail">Sync Gmail<span class="sync-status" id="sync-gmail-status"></span></button>
               <button class="btn" id="btn-sync-cicd">Sync CI/CD<span class="sync-status" id="sync-cicd-status"></span></button>
               <button class="btn primary" id="btn-compute-metrics">Compute Metrics</button>
             </div>
-            <p style="font-size:.72rem;color:#999999">Signals are read-only snapshots. No external writes are performed.</p>
+            <p class="text-caption">Signals are read-only snapshots. No external writes are performed.</p>
           </div>
         </div>
       </div>
@@ -95,7 +95,7 @@
             <span>Decision Log</span>
             <button class="btn" id="btn-add-decision">+ Log Decision</button>
           </div>
-          <div class="card-body" style="overflow-x:auto">
+          <div class="card-body u-overflow-x-auto">
             <table>
               <thead><tr><th>Type</th><th>Context</th><th>Objective</th><th>Reason</th><th>Risk</th><th>Date</th></tr></thead>
               <tbody id="decisions-body"><tr><td colspan="6" class="empty">No decisions logged</td></tr></tbody>
@@ -111,7 +111,7 @@
             <span>Policy Rules</span>
             <button class="btn primary" id="btn-gen-policies">Generate Drafts</button>
           </div>
-          <div class="card-body" style="overflow-x:auto">
+          <div class="card-body u-overflow-x-auto">
             <table>
               <thead><tr><th>Title</th><th>Rule</th><th>Status</th><th>Action</th></tr></thead>
               <tbody id="policies-body"><tr><td colspan="4" class="empty">No policies yet</td></tr></tbody>
@@ -125,7 +125,7 @@
         <div class="card">
           <div class="card-head">
             <span>Weekly Reports</span>
-            <div style="display:flex;gap:.4rem">
+            <div class="u-flex u-gap-sm">
               <button class="btn" id="btn-report-health">Team Health</button>
               <button class="btn" id="btn-report-risk">Project Risk</button>
               <button class="btn" id="btn-report-review">Founder Review</button>
@@ -142,7 +142,7 @@
 
   <!-- Add Employee Modal -->
   <div id="modal-emp" class="modal-mask">
-    <div class="modal" style="max-width:420px">
+    <div class="modal modal-w-420">
       <h3 class="modal-title">Add Employee</h3>
       <div class="modal-form">
         <input id="emp-name" placeholder="Name" aria-label="Employee name" />
@@ -160,7 +160,7 @@
 
   <!-- Add Decision Modal -->
   <div id="modal-decision" class="modal-mask">
-    <div class="modal" style="max-width:480px">
+    <div class="modal modal-w-480">
       <h3 class="modal-title">Log Decision</h3>
       <div class="modal-form">
         <select id="dec-type" aria-label="Decision type">

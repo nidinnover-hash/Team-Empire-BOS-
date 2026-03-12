@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Control Dashboard — Nidin BOS" />
+  <meta name="theme-color" content="#f5f5f7" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <title>Control Dashboard — Nidin BOS</title>
+  <link rel="stylesheet" href="/static/css/theme.css" />
+  <link rel="stylesheet" href="/static/css/shared.css" />
+  <link rel="stylesheet" href="/static/css/bos-design-system.css" />
+  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+</head>
+<body>
+  {% set active_page = "control_dashboard" %}
+  {% include "partials/sidebar.html" %}
+
+  <div class="main-wrap">
+    <div class="page-header">
+      <h1>Control Dashboard</h1>
+      <p class="page-desc">Pending approvals, placements, money approvals, and study-abroad at-risk.</p>
+    </div>
+
+    <div class="kpi-row">
+      <div class="kpi"><div class="label">Pending Approvals</div><div class="val" id="k-pending">0</div></div>
+      <div class="kpi"><div class="label">Study Abroad at Risk</div><div class="val" id="k-at-risk">0</div></div>
+    </div>
+
+    <div class="card card-spaced">
+      <h3>Pending Approvals (recent)</h3>
+      <div id="pending-list"><div class="empty loading">Loading...</div></div>
+      <p class="muted" style="margin-top:.5rem">Approve in Agent Chat or Approvals flow. Approval ID links to review.</p>
+    </div>
+
+    <div class="card card-spaced">
+      <h3>Recent Placements (7d)</h3>
+      <div id="placements-list"><div class="empty loading">Loading...</div></div>
+    </div>
+
+    <div class="card card-spaced">
+      <h3>Recent Money Approvals (7d)</h3>
+      <div id="money-list"><div class="empty loading">Loading...</div></div>
+    </div>
+
+    <div class="card card-spaced" id="sector-kpis" style="display: none;">
+      <h3>Sector KPIs (by company)</h3>
+      <div id="sector-kpis-list"></div>
+    </div>
+
+    <p class="muted u-mt-1" id="generated-at"></p>
+  </div>
+
+  <script nonce="{{ csp_nonce }}" src="/static/js/theme.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/control-dashboard-page.js"></script>
+  <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+</body>
+</html>

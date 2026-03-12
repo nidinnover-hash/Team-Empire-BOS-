@@ -9,6 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit_helpers import record_critical_mutation
 from app.core.deps import get_db
 from app.core.rbac import require_roles
+from app.platform.signals import publish_signal
+from app.platform.signals.models import SignalCategory, SignalEnvelope
+from app.platform.signals.topics import RECRUITMENT_PLACEMENT_CONFIRMED
 from app.services import recruitment_routing as routing_service
 
 router = APIRouter(prefix="/recruitment", tags=["Recruitment Control"])
@@ -188,5 +191,22 @@ async def confirm_placement(
             "candidate_id": data.candidate_id,
             "job_id": data.job_id,
         },
+    )
+    await publish_signal(
+        SignalEnvelope(
+            topic=RECRUITMENT_PLACEMENT_CONFIRMED,
+            category=SignalCategory.DECISION,
+            organization_id=data.organization_id,
+            actor_user_id=actor["id"],
+            source="control.recruitment",
+            entity_type="recruitment_placement",
+            entity_id=result["placement_id"],
+            payload={
+                "placement_id": result["placement_id"],
+                "candidate_id": data.candidate_id,
+                "job_id": data.job_id,
+            },
+        ),
+        db=db,
     )
     return ConfirmPlacementResponse(**result)

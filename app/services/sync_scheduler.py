@@ -27,6 +27,7 @@ from app.core.resilience import IntegrationSyncError, RetryPolicy, error_details
 from app.db.session import AsyncSessionLocal
 from app.jobs._helpers import record_job_run, scheduler_error_category
 from app.jobs.approval_jobs import auto_reject_expired_approvals
+from app.jobs.control_alerts import run_control_alerts
 from app.jobs.infra import maybe_run_daily_backup, retry_webhook_deliveries
 from app.jobs.intelligence import (
     _collect_stale_integrations as _jobs_collect_stale_integrations,
@@ -895,6 +896,7 @@ async def _run_automation_jobs_for_org(db: AsyncSession, org_id: int) -> None:
         ("cleanup_logs", _cleanup_old_logs),
         ("cleanup_snapshots", _cleanup_old_job_runs_and_snapshots),
         ("approval_auto_reject", _auto_reject_expired_approvals),
+        ("control_alerts", run_control_alerts),
         ("trend_snapshot", _snapshot_org_trends_job),
         ("cleanup_trend_events", _cleanup_old_trend_events),
         ("layer_snapshot", _snapshot_layer_scores_job),

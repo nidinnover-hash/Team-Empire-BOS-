@@ -1,25 +1,11 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="AI Agent Factory — Nidin BOS" />
-  <meta name="theme-color" content="#f5f5f7" />
-  <link rel="manifest" href="/static/manifest.json" />
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <title>Tasks — Nidin BOS</title>
-  <link rel="stylesheet" href="/static/css/theme.css" />
-  <link rel="stylesheet" href="/static/css/shared.css" />
-  <link rel="stylesheet" href="/static/css/tasks.css" />
-  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+{% extends "base.html" %}
+{% block active_page %}tasks{% endblock %}
+{% block title %}Tasks — Nidin BOS{% endblock %}
+{% block meta_description %}<meta name="description" content="Task Inbox — Nidin BOS" />{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/css/tasks.css" />{% endblock %}
 
-  <link rel="stylesheet" href="/static/css/bos-design-system.css">
-</head>
-<body>
-  {% set active_page = "tasks" %}
-  {% include "partials/sidebar.html" %}
-
-  <div class="main-wrap">
+{% block content %}
+  <div class="main-wrap" id="main-content">
     <h1>Task Inbox</h1>
     <div class="kpi-row stagger-enter">
       <div class="kpi"><div class="label">Open</div><div class="val" id="k-open" data-count-to="0">0</div></div>
@@ -36,13 +22,9 @@
     </div>
     <div id="task-list" class="task-list"></div>
   </div>
+{% endblock %}
 
-  <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
-  <script nonce="{{ csp_nonce }}" src="/static/js/micro.js"></script>
-  <script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
-  <script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
-  <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+{% block extra_js %}
+<script nonce="{{ csp_nonce }}" src="/static/js/micro.js"></script>
 <script nonce="{{ csp_nonce }}" src="/static/js/tasks-page.js"></script>
-<script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
-</body>
-</html>
+{% endblock %}

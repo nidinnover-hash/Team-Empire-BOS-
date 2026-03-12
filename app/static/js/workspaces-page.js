@@ -134,6 +134,7 @@
     modalTitle.textContent = "New Workspace";
     modalSave.textContent = "Create";
     modalOverlay.style.display = "flex";
+    modalOverlay.setAttribute("aria-hidden", "false");
     setTimeout(() => nameInput.focus(), 50);
   }
 
@@ -145,11 +146,13 @@
     modalTitle.textContent = "Edit Workspace";
     modalSave.textContent = "Save";
     modalOverlay.style.display = "flex";
+    modalOverlay.setAttribute("aria-hidden", "false");
     setTimeout(() => nameInput.focus(), 50);
   }
 
   function closeModal() {
     modalOverlay.style.display = "none";
+    modalOverlay.setAttribute("aria-hidden", "true");
   }
 
   if (createBtn) createBtn.addEventListener("click", openCreateModal);
@@ -160,7 +163,17 @@
   if (modalSave) {
     modalSave.addEventListener("click", async () => {
       const name = nameInput.value.trim();
-      if (!name) { nameInput.focus(); return; }
+      if (window.BOS && window.BOS.formValidation) {
+        if (!name) {
+          window.BOS.formValidation.showError(nameInput, "Name is required");
+          nameInput.focus();
+          return;
+        }
+        window.BOS.formValidation.clear(nameInput);
+      } else if (!name) {
+        nameInput.focus();
+        return;
+      }
       const id = editIdInput.value;
       modalSave.disabled = true;
       modalSave.textContent = id ? "Saving..." : "Creating...";

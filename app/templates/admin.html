@@ -1,26 +1,13 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="AI Agent Factory — Super Admin — Nidin BOS" />
-  <meta name="theme-color" content="#f5f5f7" />
-  <link rel="manifest" href="/static/manifest.json" />
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <title>Admin — Nidin BOS</title>
-  <link rel="stylesheet" href="/static/css/theme.css" />
-  <link rel="stylesheet" href="/static/css/shared.css" />
-  <link rel="stylesheet" href="/static/css/admin.css" />
-  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
-  <link rel="stylesheet" href="/static/css/bos-design-system.css">
-</head>
-<body>
-{% set active_page = "admin" %}
-{% include "partials/sidebar.html" %}
+{% extends "base.html" %}
+{% block active_page %}admin{% endblock %}
+{% block title %}Admin — Nidin BOS{% endblock %}
+{% block meta_description %}<meta name="description" content="AI Agent Factory — Super Admin — Nidin BOS" />{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/css/admin.css" />{% endblock %}
 
+{% block content %}
 <div class="main-wrap">
   <div class="page-head">
-    <h1>Super Admin <span class="super-badge"><i data-lucide="shield" style="width:10px;height:10px"></i> Super Admin</span></h1>
+    <h1>Super Admin <span class="super-badge"><i data-lucide="shield" class="icon-inline-xs"></i> Super Admin</span></h1>
   </div>
 
   <div class="kpi-row">
@@ -32,7 +19,7 @@
 
   <div class="card">
     <div class="card-head"><span>All Organisations</span></div>
-    <div class="card-body" style="overflow-x:auto">
+    <div class="card-body u-overflow-x-auto">
       <div id="loading-orgs" class="loading-state">Loading…</div>
       <table>
         <thead>
@@ -63,7 +50,7 @@
         </select>
       </label>
     </div>
-    <div class="card-body" style="overflow-x:auto">
+    <div class="card-body u-overflow-x-auto">
       <div id="loading-readiness" class="loading-state">Loading...</div>
       <table>
         <thead>
@@ -84,7 +71,7 @@
     <div class="card-head"><span>Autonomy Control Panel</span></div>
     <div class="card-body">
       <div id="readiness-detail-empty" class="empty">Select an organisation from readiness ranking.</div>
-      <div id="readiness-detail" style="display:none">
+      <div id="readiness-detail" class="u-hidden">
         <div class="detail-grid">
           <div>
             <div class="mini-label">Selected Org</div>
@@ -233,7 +220,7 @@
 
   <div class="card">
     <div class="card-head"><span>All Users</span></div>
-    <div class="card-body" style="overflow-x:auto">
+    <div class="card-body u-overflow-x-auto">
       <div id="loading-users" class="loading-state">Loading…</div>
       <table>
         <thead>
@@ -250,14 +237,8 @@
     </div>
   </div>
 </div>
+{% endblock %}
 
-<div id="toast-container"></div>
-
-<script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
-<script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
-<script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
-<script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+{% block extra_js %}
 <script nonce="{{ csp_nonce }}" src="/static/js/admin-page.js"></script>
-<script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
-</body>
-</html>
+{% endblock %}

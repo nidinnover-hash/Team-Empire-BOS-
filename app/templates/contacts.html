@@ -1,21 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <title>Contacts - Nidin BOS</title>
-  <link rel="stylesheet" href="/static/css/theme.css" />
-  <link rel="stylesheet" href="/static/css/shared.css" />
-  <link rel="stylesheet" href="/static/css/contacts.css" />
-  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
-  <link rel="stylesheet" href="/static/css/bos-design-system.css">
-</head>
-<body>
-  {% set active_page = "contacts" %}
-  {% include "partials/sidebar.html" %}
+{% extends "base.html" %}
+{% block active_page %}contacts{% endblock %}
+{% block title %}Contacts — Nidin BOS{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/css/contacts.css" />{% endblock %}
 
-  <div class="main-wrap">
+{% block content %}
+  <div class="main-wrap" id="main-content">
     <div class="page-header">
       <h1>Contacts</h1>
       <button class="btn-primary" id="add-btn" type="button">+ Add Contact</button>
@@ -28,23 +17,22 @@
       <div class="kpi"><div class="label">Follow-ups Due</div><div class="val" id="k-followup" data-count-to="0">0</div></div>
     </div>
 
-    <div class="section-label" style="margin-top:1.2rem">Pipeline Funnel</div>
-    <div class="kpi-row" id="pipeline-funnel" style="flex-wrap:wrap;gap:.5rem">
+    <div class="section-label section-label-spaced">Pipeline Funnel</div>
+    <div class="kpi-row kpi-row-wrap" id="pipeline-funnel">
       {% if visibility.can_view_contacts_pipeline_summary %}
-        <div class="kpi" style="flex:1;min-width:80px"><div class="label">New</div><div class="val" id="pf-new">0</div></div>
-        <div class="kpi" style="flex:1;min-width:80px"><div class="label">Contacted</div><div class="val" id="pf-contacted">0</div></div>
-        <div class="kpi" style="flex:1;min-width:80px"><div class="label">Qualified</div><div class="val" id="pf-qualified">0</div></div>
-        <div class="kpi" style="flex:1;min-width:80px"><div class="label">Proposal</div><div class="val" id="pf-proposal">0</div></div>
-        <div class="kpi" style="flex:1;min-width:80px"><div class="label">Negotiation</div><div class="val" id="pf-negotiation">0</div></div>
-        <div class="kpi" style="flex:1;min-width:80px"><div class="label">Won</div><div class="val" id="pf-won">0</div></div>
-        <div class="kpi" style="flex:1;min-width:80px"><div class="label">Lost</div><div class="val" id="pf-lost">0</div></div>
+        <div class="kpi kpi-flex"><div class="label">New</div><div class="val" id="pf-new">0</div></div>
+        <div class="kpi kpi-flex"><div class="label">Contacted</div><div class="val" id="pf-contacted">0</div></div>
+        <div class="kpi kpi-flex"><div class="label">Qualified</div><div class="val" id="pf-qualified">0</div></div>
+        <div class="kpi kpi-flex"><div class="label">Proposal</div><div class="val" id="pf-proposal">0</div></div>
+        <div class="kpi kpi-flex"><div class="label">Negotiation</div><div class="val" id="pf-negotiation">0</div></div>
+        <div class="kpi kpi-flex"><div class="label">Won</div><div class="val" id="pf-won">0</div></div>
+        <div class="kpi kpi-flex"><div class="label">Lost</div><div class="val" id="pf-lost">0</div></div>
       {% else %}
-        <div class="kpi" style="width:100%"><div class="label">Pipeline</div><div class="val" style="font-size:.95rem">Restricted for your role</div></div>
+        <div class="kpi kpi-full"><div class="label">Pipeline</div><div class="val val-sm">Restricted for your role</div></div>
       {% endif %}
     </div>
 
-    <!-- Contact Intelligence Panel -->
-    <div class="card intel-panel" style="margin-top:1rem" id="intel-panel">
+    <div class="card intel-panel card-spaced" id="intel-panel">
       <div class="intel-head">
         <div class="card-title">Contact Intelligence</div>
         <div class="intel-actions">
@@ -53,8 +41,8 @@
         </div>
       </div>
       <div class="intel-body">
-        <div id="intel-loading" class="small">Loading intelligence...</div>
-        <div id="intel-content" style="display:none">
+        <div id="intel-loading" class="loading-inline loading-placeholder"><span class="spinner" aria-hidden="true"></span>Loading intelligence…</div>
+        <div id="intel-content" class="u-hidden">
           <div class="intel-grid" id="intel-grid"></div>
           <div class="intel-section" id="intel-stale-section">
             <div class="intel-section-title">Stale Contacts (no activity 30+ days)</div>
@@ -68,7 +56,7 @@
       </div>
     </div>
 
-    <div class="filter-bar" style="margin-top:1rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+    <div class="filter-bar filter-bar-inline">
       <select id="filter-stage">
         <option value="">All stages</option>
         <option value="new">New</option>
@@ -87,10 +75,10 @@
         <option value="mentor">Mentor</option>
         <option value="other">Other</option>
       </select>
-      <input id="filter-search" type="text" placeholder="Search name, email, company..." style="flex:1;min-width:160px;padding:.4rem .6rem;border:1px solid var(--line);border-radius:6px;background:var(--bg-card);color:var(--text)" />
+      <input id="filter-search" type="text" placeholder="Search name, email, company..." class="filter-search-input" />
     </div>
 
-    <div class="card" style="margin-top:1rem">
+    <div class="card card-spaced">
       <table class="data-table">
         <thead><tr>
           <th>Name</th>
@@ -105,9 +93,9 @@
       </table>
     </div>
   </div>
-  <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
-  <script nonce="{{ csp_nonce }}" src="/static/js/micro.js"></script>
-  <script nonce="{{ csp_nonce }}" src="/static/js/contacts-page.js"></script>
-  <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
-</body>
-</html>
+{% endblock %}
+
+{% block extra_js %}
+<script nonce="{{ csp_nonce }}" src="/static/js/micro.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/contacts-page.js"></script>
+{% endblock %}

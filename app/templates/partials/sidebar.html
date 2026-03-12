@@ -1,3 +1,4 @@
+{% include "partials/skip-link.html" %}
 <nav class="sidebar" aria-label="Main navigation">
   {% set role = (session_user.get('role', '') if session_user is defined and session_user else '') %}
   <div class="sb-brand">
@@ -39,6 +40,7 @@
     {% endif %}
     {% if role in ['CEO', 'ADMIN', 'MANAGER'] %}
     <a href="/web/finance" class="sb-item{{ ' active' if active_page == 'finance' }}" aria-label="Finance"><i data-lucide="wallet"></i><span class="sb-label">Finance</span></a>
+    <a href="/web/control-dashboard" class="sb-item{{ ' active' if active_page == 'control_dashboard' }}" aria-label="Control Dashboard"><i data-lucide="shield-check"></i><span class="sb-label">Control</span></a>
     {% endif %}
     {% if role in ['CEO', 'ADMIN', 'MANAGER'] %}
     <a href="/web/workspaces" class="sb-item{{ ' active' if active_page == 'workspaces' }}" aria-label="Workspaces"><i data-lucide="brain"></i><span class="sb-label">Workspaces</span></a>
@@ -72,5 +74,5 @@
     {% endif %}
   </div>
 </nav>
-<script src="/static/js/bos-toast.js"></script>
-<script src="/static/js/company-switcher.js"></script>
+<script nonce="{{ csp_nonce|default('') }}" src="/static/js/bos-toast.js"></script>
+<script nonce="{{ csp_nonce|default('') }}" src="/static/js/company-switcher.js"></script>

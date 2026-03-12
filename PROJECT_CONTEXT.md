@@ -12,14 +12,16 @@ Nidin BOS (Business Operating System) is an AI-powered operations platform built
 - Memory-augmented AI agents that learn from past interactions
 - Real-time observability, audit trails, and compliance guardrails
 
-## Companies Supported
+## Companies Supported (four sectors, one BOS)
 
-| Company | Domain | Role |
-|---------|--------|------|
-| Empire Overseas Education (EmpireO) | International education consulting | Primary business |
-| ESA (Empire Student Assistance) | Student support services | Support arm |
-| Empire Digital | Digital marketing and web services | Digital division |
-| Codnov / Nidin.Ai | AI platform development | Tech company |
+| Sector | Company | Domain |
+|--------|---------|--------|
+| **Recruitment** | EmpireO.ai | International recruitment (MEA) |
+| **Study Abroad** | ESA (Empire Study Abroad) | Student support & study-abroad services |
+| **Sales & Marketing** | Empire Digital | Digital marketing, sales, lead generation |
+| **Tech** | Codnov.ai | AI product development |
+
+All four are managed through one BOS with tenant isolation per organization. See [docs/MULTI_BUSINESS_MANAGEMENT.md](docs/MULTI_BUSINESS_MANAGEMENT.md) for how to run and scale them from a single control plane.
 
 ## Architecture: FastAPI Modular Monolith
 

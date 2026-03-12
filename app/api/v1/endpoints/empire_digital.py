@@ -19,6 +19,7 @@ from app.schemas.empire_digital import (
     EmpireSlaConfigUpdate,
     EscalateStaleLeadsRequest,
     EscalateStaleLeadsResult,
+    ScorecardRead,
 )
 from app.schemas.lead_routing_rule import (
     LeadRoutingRuleCreate,
@@ -49,6 +50,23 @@ async def get_cockpit(
         db,
         actor_org_id=int(actor["org_id"]),
         actor_role=str(actor.get("role", "")).upper(),
+    )
+
+
+@router.get("/scorecard", response_model=ScorecardRead)
+async def get_scorecard(
+    window_days: int = Query(7, ge=1, le=31),
+    db: AsyncSession = Depends(get_db),
+    actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER")),
+) -> ScorecardRead:
+    """Scorecard tiles with green/amber/red bands (Q1 targets). Empire Digital org only."""
+    if int(actor["org_id"]) != EMPIRE_DIGITAL_COMPANY_ID:
+        raise HTTPException(status_code=403, detail="Scorecard available for Empire Digital only")
+    return await empire_digital_service.get_scorecard_empire_digital(
+        db,
+        actor_org_id=int(actor["org_id"]),
+        actor_role=str(actor.get("role", "")).upper(),
+        window_days=window_days,
     )
 
 

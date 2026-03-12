@@ -64,7 +64,7 @@
     </div>
 
     <!-- Workflows Panel -->
-    <div id="panel-workflows" class="panel" style="display:none">
+    <div id="panel-workflows" class="panel u-hidden">
       <div class="panel-actions">
         <button class="btn-primary" id="btn-new-workflow" type="button" aria-label="Create new workflow">New Legacy Workflow</button>
       </div>
@@ -77,11 +77,11 @@
       <div id="template-gallery" class="template-gallery-section"></div>
 
       <!-- Legacy Workflows -->
-      <h3 class="section-title" style="margin-top:1rem">Legacy Workflows</h3>
+      <h3 class="section-title section-mt-1">Legacy Workflows</h3>
       <div id="workflow-list" class="item-list"><div class="empty loading">Loading workflows...</div></div>
     </div>
 
-    <div id="panel-studio" class="panel" style="display:none">
+    <div id="panel-studio" class="panel u-hidden">
       <div class="studio-layout">
         <div class="studio-main">
           {% include "partials/workflow_builder_form.html" %}
@@ -117,7 +117,7 @@
 
     <!-- Insights Panel -->
     {% if feature_flags.workflow_exec_insights %}
-    <div id="panel-insights" class="panel" style="display:none">
+    <div id="panel-insights" class="panel u-hidden">
       <div class="insights-header">
         <h2>Execution Insights</h2>
         <select id="insights-period" class="insights-select">
@@ -161,7 +161,7 @@
     {% endif %}
 
     <!-- Trigger Create Modal -->
-    <div id="modal-trigger" class="modal-overlay" style="display:none">
+    <div id="modal-trigger" class="modal-overlay u-hidden">
       <div class="modal">
         <div class="modal-header">
           <h2>New Trigger</h2>
@@ -181,7 +181,7 @@
     </div>
 
     <!-- Workflow Create Modal -->
-    <div id="modal-workflow" class="modal-overlay" style="display:none">
+    <div id="modal-workflow" class="modal-overlay u-hidden">
       <div class="modal">
         <div class="modal-header">
           <h2>New Workflow</h2>

@@ -257,7 +257,29 @@ async def save_extracted_knowledge(
                 exc_info=True,
             )
     if errors and not saved:
-        # Escalate when every write failed so callers can react (e.g. retry or alert).
+        try:
+            from app.platform.signals import (
+                KNOWLEDGE_SAVE_FAILED,
+                SignalCategory,
+                SignalEnvelope,
+                publish_signal,
+            )
+            await publish_signal(
+                SignalEnvelope(
+                    topic=KNOWLEDGE_SAVE_FAILED,
+                    category=SignalCategory.DOMAIN,
+                    organization_id=organization_id,
+                    workspace_id=workspace_id,
+                    actor_user_id=None,
+                    source="engines.intelligence.knowledge",
+                    entity_type="knowledge_save",
+                    entity_id="",
+                    payload={"organization_id": organization_id, "entry_count": len(entries), "errors": errors},
+                ),
+                db=db,
+            )
+        except Exception:
+            logger.debug("Failed to publish KNOWLEDGE_SAVE_FAILED signal", exc_info=True)
         raise RuntimeError(f"Failed to persist any knowledge entries for org {organization_id}")
     return saved
 

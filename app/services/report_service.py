@@ -229,7 +229,7 @@ async def _generate_founder_review(db: AsyncSession, org_id: int, week_start: da
     policy_result = await db.execute(
         select(PolicyRule).where(
             PolicyRule.organization_id == org_id,
-            PolicyRule.is_active == True,  # noqa: E712
+            PolicyRule.is_active == True,
         ).limit(500)
     )
     active_policies = list(policy_result.scalars().all())
@@ -281,7 +281,7 @@ async def _generate_founder_review(db: AsyncSession, org_id: int, week_start: da
 
 async def _get_employees(db: AsyncSession, org_id: int) -> list[Employee]:
     result = await db.execute(
-        select(Employee).where(Employee.organization_id == org_id, Employee.is_active == True).order_by(Employee.name)  # noqa: E712
+        select(Employee).where(Employee.organization_id == org_id, Employee.is_active == True).order_by(Employee.name)
     )
     return list(result.scalars().all())
 

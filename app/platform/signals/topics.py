@@ -28,6 +28,21 @@ CONTACT_UPDATED = "contact.updated"
 CONTACT_DELETED = "contact.deleted"
 CONTACT_ROUTED = "contact.routed"
 
+# --- CRM / Quotes ---
+QUOTE_CREATED = "quote.created"
+QUOTE_UPDATED = "quote.updated"
+QUOTE_LINE_ITEM_ADDED = "quote.line_item.added"
+QUOTE_LINE_ITEM_REMOVED = "quote.line_item.removed"
+
+# --- CRM / Sales Playbooks ---
+PLAYBOOK_CREATED = "playbook.created"
+PLAYBOOK_UPDATED = "playbook.updated"
+PLAYBOOK_STEP_EXECUTED = "playbook.step.executed"
+
+# --- CRM / Surveys ---
+SURVEY_DEFINITION_CREATED = "survey.definition.created"
+SURVEY_RESPONSE_SUBMITTED = "survey.response.submitted"
+
 # --- Finance ---
 FINANCE_INVOICE_CREATED = "finance.invoice.created"
 FINANCE_PAYMENT_RECEIVED = "finance.payment.received"
@@ -39,8 +54,9 @@ INTEGRATION_DISCONNECTED = "integration.disconnected"
 INTEGRATION_SYNC_COMPLETED = "integration.sync.completed"
 INTEGRATION_SYNC_FAILED = "integration.sync.failed"
 
-# --- Memory ---
+# --- Memory / Intelligence ---
 MEMORY_UPDATED = "memory.updated"
+KNOWLEDGE_SAVE_FAILED = "intelligence.knowledge.save_failed"
 
 # --- User / Auth ---
 USER_LOGIN = "user.login"
@@ -59,12 +75,16 @@ WORKFLOW_RUN_FAILED = "workflow.run.failed"
 WORKFLOW_STEP_STARTED = "workflow.step.started"
 WORKFLOW_STEP_COMPLETED = "workflow.step.completed"
 WORKFLOW_STEP_FAILED = "workflow.step.failed"
+WORKFLOW_STEP_BLOCKED = "workflow.step.blocked"
 
 # --- SLO ---
 SLO_BREACH_DETECTED = "slo.breach.detected"
 
 # --- Anomaly ---
 ANOMALY_DETECTED = "anomaly.detected"
+
+# --- Recruitment (EmpireO) ---
+RECRUITMENT_PLACEMENT_CONFIRMED = "recruitment.placement.confirmed"
 
 # --- Dead-letter ---
 DEAD_LETTER_CAPTURED = "dead_letter.captured"

@@ -121,6 +121,7 @@ from app.api.v1.endpoints import (
     role_dashboards,
     saved_filters,
     score_decay,
+    scorecard,
     scoring_rules,
     search,
     share_packets,
@@ -234,6 +235,7 @@ api_router.include_router(saved_filters.router)
 api_router.include_router(bulk_action_logs.router)
 api_router.include_router(data_retention.router)
 api_router.include_router(score_decay.router)
+api_router.include_router(scorecard.router)
 api_router.include_router(deal_velocity.router)
 api_router.include_router(team_quotas.router)
 api_router.include_router(webhook_retries.router)

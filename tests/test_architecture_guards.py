@@ -15,10 +15,13 @@ BRAIN_DIR = REPO_ROOT / "app" / "engines" / "brain"
 SERVICES_DIR = REPO_ROOT / "app" / "services"
 
 # Service files that do DB selects but are allowed to not reference organization_id
-# (e.g. system-wide lookups). Add only when necessary.
 TENANT_GUARD_ALLOWLIST = frozenset({
-    "embedding.py",          # may do generic embedding lookups
-    "lead_routing_policy.py",  # cross-org routing; uses owner_company_id, not organization_id
+    "embedding.py",
+    "lead_routing_policy.py",
+})
+# Services that have org_id but may not use .where( (e.g. insert-only, or filter via join)
+WHERE_FILTER_ALLOWLIST = frozenset({
+    "api_key.py",  # validate by key hash; org from key
 })
 
 
@@ -77,6 +80,28 @@ class TestServicesTenantAwareness:
             f"Add org filter or allowlist in test. Failed: {failures}"
         )
 
+    def test_services_with_select_use_where_filter(self):
+        """Services with select+execute+organization_id must also use .where( (filter in place)."""
+        if not SERVICES_DIR.exists():
+            pytest.skip("Services dir not found")
+        failures = []
+        for py in SERVICES_DIR.rglob("*.py"):
+            rel = py.relative_to(REPO_ROOT)
+            name = rel.name
+            if name in TENANT_GUARD_ALLOWLIST or name in WHERE_FILTER_ALLOWLIST:
+                continue
+            text = py.read_text(encoding="utf-8", errors="replace")
+            has_select = "select(" in text
+            has_execute = "execute(select" in text or "db.execute(" in text
+            has_org = "organization_id" in text
+            has_where = ".where(" in text
+            if has_select and has_execute and has_org and not has_where:
+                failures.append(str(rel))
+        assert not failures, (
+            "Services that query with organization_id should use .where( for tenant filter. "
+            f"Add allowlist if legitimate. Failed: {failures}"
+        )
+
 
 class TestMutatingRoutesProtected:
     """POST/PUT/PATCH/DELETE API routes must require auth (401/403 without token)."""
@@ -125,4 +150,34 @@ class TestMutatingRoutesProtected:
         assert not failures, (
             "Mutating routes must not return 200 without auth. "
             f"Got 200 without Authorization for: {failures[:25]}"
+        )
+
+
+class TestSensitiveRoutesGated:
+    """Control-lever routes must be the documented ones (no new lever without updating guard)."""
+
+    def test_levers_mutating_routes_are_allowlisted(self):
+        """Any POST under /api/v1/control/levers/ must be in the allowed list."""
+        from app.main import app as fastapi_app
+
+        LEVERS_PREFIX = "/api/v1/control/levers/"
+        ALLOWED_LEVER_PATHS = (
+            "/api/v1/control/levers/can-send",
+            "/api/v1/control/levers/record-send",
+            "/api/v1/control/levers/route-lead",
+            "/api/v1/control/levers/request-money-approval",
+            "/api/v1/control/levers/study-abroad/application-milestones",
+            "/api/v1/control/levers/study-abroad/risk-status",
+        )
+        routes = _collect_routes(fastapi_app)
+        mutating = [
+            path
+            for path, methods in routes
+            if methods & {"POST", "PUT", "PATCH", "DELETE"}
+            and path.startswith(LEVERS_PREFIX)
+        ]
+        disallowed = [p for p in mutating if not any(p == a or p.startswith(a + "/") for a in ALLOWED_LEVER_PATHS)]
+        assert not disallowed, (
+            "New control lever routes must be added to ALLOWED_LEVER_PATHS in this test. "
+            f"Disallowed: {disallowed}"
         )

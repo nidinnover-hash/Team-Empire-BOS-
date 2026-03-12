@@ -162,6 +162,7 @@ router.get("/web/finance", response_class=HTMLResponse, include_in_schema=False)
 router.get("/web/maps", response_class=HTMLResponse, include_in_schema=False)(_web_page("maps.html", _ALL_WEB_ROLES))
 router.get("/web/strategy", response_class=HTMLResponse, include_in_schema=False)(_web_page("strategy.html", {"CEO", "ADMIN", "MANAGER", "STAFF"}))
 router.get("/web/workspaces", response_class=HTMLResponse, include_in_schema=False)(_web_page("workspaces.html", {"CEO", "ADMIN", "MANAGER"}))
+router.get("/web/control-dashboard", response_class=HTMLResponse, include_in_schema=False)(_web_page("control_dashboard.html", {"CEO", "ADMIN", "MANAGER"}))
 
 
 @router.get("/web/login", response_class=HTMLResponse, include_in_schema=False)

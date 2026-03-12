@@ -41,13 +41,13 @@ def _sa_make_union_type_py314_compat(*types):
 
 sa_typing.make_union_type = _sa_make_union_type_py314_compat
 
-from app.core.deps import get_db  # noqa: E402
-from app.core.security import create_access_token  # noqa: E402
-from app.db.base import Base  # noqa: E402
-from app.main import app as fastapi_app  # noqa: E402
-from app.models.organization import Organization  # noqa: E402
-from app.models.registry import load_all_models  # noqa: E402
-from app.models.user import User  # noqa: E402
+from app.core.deps import get_db
+from app.core.security import create_access_token
+from app.db.base import Base
+from app.main import app as fastapi_app
+from app.models.organization import Organization
+from app.models.registry import load_all_models
+from app.models.user import User
 
 # Register all models so Base.metadata knows about every table.
 load_all_models()

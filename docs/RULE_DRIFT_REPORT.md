@@ -59,3 +59,20 @@ One-time scan for architectural rule violations: optional `organization_id`, un-
 | Un-scoped selects | 0 new | N/A. |
 
 Run the full test suite after these changes; add tests for `complete_execution` with wrong org (expect no update) and for the new service entry points if desired.
+
+**New surface:** `app/services/ai_call_log.log_ai_call`, `app/services/memory.consolidate_profile_memory_duplicates` — see CODEBASE_MAP.md Services table for one-line descriptions.
+
+---
+
+## What was done (this pass)
+
+1. **Full test suite** — Run was started; some failures observed (e.g. ~8%, ~24%, ~27%). Fix by running `pytest tests/ -x --tb=short` and addressing the first failing test, then re-running until green.
+2. **Known issues (CLAUDE.md)** — `list_tasks` and `list_goals` already require `organization_id`; `layers_pkg` (people, clone, marketing) already scope `select(Task)` / `select(Contact)` by `organization_id`. No code change needed.
+3. **Observability** — Added `WORKFLOW_STEP_BLOCKED` and `KNOWLEDGE_SAVE_FAILED` signal topics; workflow_plans emits a signal per blocked step; `save_extracted_knowledge` emits a signal before raising when all saves fail.
+4. **Docs** — CODEBASE_MAP.md Services table updated with `ai_call_log.py` and `consolidate_profile_memory_duplicates`; RULE_DRIFT_REPORT.md references them.
+
+## Suggested next priorities
+
+- **Green full suite:** Run `pytest tests/ -q`, fix any remaining failures, then run `python scripts/dev_gate.py` before merge.
+- **Consumers for new signals:** Add a dashboard or alert rule for `WORKFLOW_STEP_BLOCKED` and `KNOWLEDGE_SAVE_FAILED` if you want operational visibility.
+- **Extension work:** Use `docs/EXTENSION_RECIPES.md` when adding a new CRM entity, workflow action, or AI insight.

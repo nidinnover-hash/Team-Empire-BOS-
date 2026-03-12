@@ -131,6 +131,17 @@ body { margin: 0; overflow: hidden; }
 .dash-view.is-hidden {
   display: none;
 }
+.dash-scorecard-section {
+  margin: 0 1.75rem 1rem;
+  padding: 1rem 1.25rem;
+}
+.dash-scorecard-section .kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
 .dash-grid {
   flex: 1;
   display: grid;

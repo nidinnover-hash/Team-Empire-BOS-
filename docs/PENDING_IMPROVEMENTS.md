@@ -45,8 +45,13 @@ Docs: `docs/RECRUITMENT_APP_BOS_INTEGRATION.md`, `docs/RECRUITMENT_APP_GO_LIVE.m
 - **Study abroad:** Application/milestone model and real deadlines.
 - **Money approvals:** Approval matrix by role/amount (config).
 
+### Done (optional round — items 3–4)
+- **Tenant guard tightened:** Services with select+execute+org must also use `.where(` (allowlist: api_key.py).
+- **Recruitment placements:** `recruitment_placements` table (migration 20260312_0089); `confirm_placement` persists and emits `RECRUITMENT_PLACEMENT_CONFIRMED`.
+- **Staging gate:** `TestSensitiveRoutesGated` — control/levers mutating routes must be allowlisted.
+- **Integration docs:** Study Abroad, Marketing, Billing — `docs/STUDY_ABROAD_APP_BOS_INTEGRATION.md`, `docs/MARKETING_APP_BOS_INTEGRATION.md`, `docs/BILLING_MONEY_APP_BOS_INTEGRATION.md`.
+
 ### Recruitment (optional)
-- Persist placement records in BOS (e.g. `recruitment_placements` table) and optionally emit signals for analytics.
 - Richer routing rules (by region/product_line) and SLA config per org.
 
 ---
