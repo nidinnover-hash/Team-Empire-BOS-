@@ -26,10 +26,12 @@ def _org(actor: dict) -> int:
 class ContactSendPolicyCreate(BaseModel):
     channel: str = Field(..., max_length=50)
     max_per_contact_per_day: int = Field(..., ge=1, le=100)
+    max_org_sends_per_day: int | None = Field(None, ge=1, le=1_000_000)
 
 
 class ContactSendPolicyUpdate(BaseModel):
     max_per_contact_per_day: int | None = Field(None, ge=1, le=100)
+    max_org_sends_per_day: int | None = Field(None, ge=1, le=1_000_000)
 
 
 class ContactSendPolicyRead(BaseModel):
@@ -37,6 +39,7 @@ class ContactSendPolicyRead(BaseModel):
     organization_id: int
     channel: str
     max_per_contact_per_day: int
+    max_org_sends_per_day: int | None
     created_at: str | None
 
     model_config = {"from_attributes": True}
@@ -59,6 +62,7 @@ async def list_contact_policies(
             organization_id=r.organization_id,
             channel=r.channel,
             max_per_contact_per_day=r.max_per_contact_per_day,
+            max_org_sends_per_day=getattr(r, "max_org_sends_per_day", None),
             created_at=r.created_at.isoformat() if r.created_at else None,
         )
         for r in rows
@@ -83,6 +87,7 @@ async def create_contact_policy(
         organization_id=_org(actor),
         channel=data.channel,
         max_per_contact_per_day=data.max_per_contact_per_day,
+        max_org_sends_per_day=data.max_org_sends_per_day,
     )
     db.add(row)
     await db.commit()
@@ -92,6 +97,7 @@ async def create_contact_policy(
         organization_id=row.organization_id,
         channel=row.channel,
         max_per_contact_per_day=row.max_per_contact_per_day,
+        max_org_sends_per_day=getattr(row, "max_org_sends_per_day", None),
         created_at=row.created_at.isoformat() if row.created_at else None,
     )
 
@@ -112,8 +118,11 @@ async def update_contact_policy(
     row = result.scalar_one_or_none()
     if not row:
         raise HTTPException(404, "Policy not found")
-    if data.max_per_contact_per_day is not None:
-        row.max_per_contact_per_day = data.max_per_contact_per_day
+    payload = data.model_dump(exclude_unset=True)
+    if "max_per_contact_per_day" in payload:
+        row.max_per_contact_per_day = payload["max_per_contact_per_day"]
+    if "max_org_sends_per_day" in payload:
+        row.max_org_sends_per_day = payload["max_org_sends_per_day"]
     await db.commit()
     await db.refresh(row)
     return ContactSendPolicyRead(
@@ -121,6 +130,7 @@ async def update_contact_policy(
         organization_id=row.organization_id,
         channel=row.channel,
         max_per_contact_per_day=row.max_per_contact_per_day,
+        max_org_sends_per_day=getattr(row, "max_org_sends_per_day", None),
         created_at=row.created_at.isoformat() if row.created_at else None,
     )
 
@@ -288,6 +298,8 @@ async def delete_money_matrix(
 class RecruitmentRoutingRuleCreate(BaseModel):
     region: str | None = Field(None, max_length=100)
     product_line: str | None = Field(None, max_length=100)
+    lead_type: str | None = Field(None, max_length=50)
+    sla_hours: int | None = Field(None, ge=1, le=720)
     priority: int = Field(0, ge=0)
     assign_to_user_id: int | None = Field(None, ge=1)
 
@@ -295,6 +307,8 @@ class RecruitmentRoutingRuleCreate(BaseModel):
 class RecruitmentRoutingRuleUpdate(BaseModel):
     region: str | None = Field(None, max_length=100)
     product_line: str | None = Field(None, max_length=100)
+    lead_type: str | None = Field(None, max_length=50)
+    sla_hours: int | None = Field(None, ge=1, le=720)
     priority: int | None = Field(None, ge=0)
     assign_to_user_id: int | None = Field(None, ge=1)
 
@@ -304,6 +318,8 @@ class RecruitmentRoutingRuleRead(BaseModel):
     organization_id: int
     region: str | None
     product_line: str | None
+    lead_type: str | None
+    sla_hours: int | None
     priority: int
     assign_to_user_id: int | None
     created_at: str | None
@@ -328,6 +344,8 @@ async def list_recruitment_routing_rules(
             organization_id=r.organization_id,
             region=r.region,
             product_line=r.product_line,
+            lead_type=getattr(r, "lead_type", None),
+            sla_hours=getattr(r, "sla_hours", None),
             priority=r.priority,
             assign_to_user_id=r.assign_to_user_id,
             created_at=r.created_at.isoformat() if r.created_at else None,
@@ -346,6 +364,8 @@ async def create_recruitment_routing_rule(
         organization_id=_org(actor),
         region=data.region or None,
         product_line=data.product_line or None,
+        lead_type=(data.lead_type.strip().lower() or None) if data.lead_type else None,
+        sla_hours=data.sla_hours,
         priority=data.priority,
         assign_to_user_id=data.assign_to_user_id,
     )
@@ -357,6 +377,8 @@ async def create_recruitment_routing_rule(
         organization_id=row.organization_id,
         region=row.region,
         product_line=row.product_line,
+        lead_type=getattr(row, "lead_type", None),
+        sla_hours=getattr(row, "sla_hours", None),
         priority=row.priority,
         assign_to_user_id=row.assign_to_user_id,
         created_at=row.created_at.isoformat() if row.created_at else None,
@@ -383,6 +405,10 @@ async def update_recruitment_routing_rule(
         row.region = data.region or None
     if data.product_line is not None:
         row.product_line = data.product_line or None
+    if data.lead_type is not None:
+        row.lead_type = (data.lead_type or "").strip().lower() or None
+    if data.sla_hours is not None:
+        row.sla_hours = data.sla_hours
     if data.priority is not None:
         row.priority = data.priority
     if data.assign_to_user_id is not None:
@@ -394,6 +420,8 @@ async def update_recruitment_routing_rule(
         organization_id=row.organization_id,
         region=row.region,
         product_line=row.product_line,
+        lead_type=getattr(row, "lead_type", None),
+        sla_hours=getattr(row, "sla_hours", None),
         priority=row.priority,
         assign_to_user_id=row.assign_to_user_id,
         created_at=row.created_at.isoformat() if row.created_at else None,

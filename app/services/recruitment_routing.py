@@ -62,7 +62,9 @@ async def route_candidate(
             )
             owner = user_result.scalar_one_or_none()
             if owner:
-                sla_at = datetime.now(UTC) + timedelta(hours=max(1, sla_hours))
+                rule_sla = getattr(rule, "sla_hours", None)
+                hours = max(1, int(rule_sla)) if rule_sla is not None else sla_hours
+                sla_at = datetime.now(UTC) + timedelta(hours=hours)
                 return {
                     "owner_user_id": owner.id,
                     "owner_email": owner.email,

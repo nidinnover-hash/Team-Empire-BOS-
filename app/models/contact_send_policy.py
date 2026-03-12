@@ -20,6 +20,7 @@ class ContactSendPolicy(Base):
     )
     channel: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     max_per_contact_per_day: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    max_org_sends_per_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

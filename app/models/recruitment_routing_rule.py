@@ -20,6 +20,8 @@ class RecruitmentRoutingRule(Base):
     )
     region: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     product_line: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    lead_type: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    sla_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     assign_to_user_id: Mapped[int | None] = mapped_column(
         Integer,

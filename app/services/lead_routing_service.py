@@ -48,6 +48,7 @@ async def route_lead(
 
     region_norm = (region or "").strip().lower() or None
     product_norm = (source or "").strip().lower() or None
+    lead_type_norm = normalize_lead_type(lead_type) if lead_type else None
 
     rules_result = await db.execute(
         select(RecruitmentRoutingRule)
@@ -58,9 +59,12 @@ async def route_lead(
     for rule in rules:
         r_region = (rule.region or "").strip().lower() or None
         r_product = (rule.product_line or "").strip().lower() or None
+        r_lead = (getattr(rule, "lead_type", None) or "").strip().lower() or None
         if r_region and region_norm and r_region != region_norm:
             continue
         if r_product and product_norm and r_product != product_norm:
+            continue
+        if r_lead and lead_type_norm and r_lead != lead_type_norm:
             continue
         if rule.assign_to_user_id:
             user_result = await db.execute(
@@ -73,7 +77,9 @@ async def route_lead(
             )
             owner = user_result.scalar_one_or_none()
             if owner:
-                deadline = datetime.now(UTC) + timedelta(hours=sla_hours)
+                rule_sla = getattr(rule, "sla_hours", None)
+                hours = max(1, int(rule_sla)) if rule_sla is not None else sla_hours
+                deadline = datetime.now(UTC) + timedelta(hours=hours)
                 return {
                     "owner_user_id": owner.id,
                     "owner_email": owner.email,

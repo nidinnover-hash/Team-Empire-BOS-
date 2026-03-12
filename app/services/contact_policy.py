@@ -57,6 +57,25 @@ async def can_send(
             "reason": f"Max {max_per_day} sends per contact per day for channel {channel} already reached.",
             "recommended_time_utc": (today_start + timedelta(days=1)).isoformat(),
         }
+
+    # Optional org-level daily cap (per channel)
+    if policy and policy.max_org_sends_per_day is not None:
+        org_count_result = await db.execute(
+            select(func.count(ContactSendLog.id))
+            .where(
+                ContactSendLog.organization_id == organization_id,
+                ContactSendLog.channel == channel,
+                ContactSendLog.sent_at >= today_start,
+            )
+        )
+        org_count = org_count_result.scalar() or 0
+        if org_count >= policy.max_org_sends_per_day:
+            return {
+                "allowed": False,
+                "reason": f"Org daily cap for channel {channel} ({policy.max_org_sends_per_day}) reached.",
+                "recommended_time_utc": (today_start + timedelta(days=1)).isoformat(),
+            }
+
     return {
         "allowed": True,
         "reason": None,
