@@ -18,6 +18,7 @@ jobs:
       SANDBOX_GITHUB_TOKEN: ${{ secrets.SANDBOX_GITHUB_TOKEN }}
       SANDBOX_SLACK_BOT_TOKEN: ${{ secrets.SANDBOX_SLACK_BOT_TOKEN }}
       SANDBOX_NOTION_TOKEN: ${{ secrets.SANDBOX_NOTION_TOKEN }}
+      OAUTH_STATE_KEY: ${{ secrets.OAUTH_STATE_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
