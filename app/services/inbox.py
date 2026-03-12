@@ -121,7 +121,7 @@ async def get_conversation_by_id(
         participant_display=participant,
         last_message_at=last_item.timestamp,
     )
-    unread_count = sum(1 for i in items if i.channel == "email" and i.is_read is False)
+    unread_count = sum(1 for i in items if i.channel == "email" and not i.is_read)
     return UnifiedConversation(
         record_id=record.id,
         conversation_id=f"{channel}:{participant_key}",
@@ -185,7 +185,7 @@ async def get_unified_conversations(
                 last_message_at=last_item.timestamp,
             )
         unread_count = sum(
-            1 for i in items if i.channel == "email" and i.is_read is False
+            1 for i in items if i.channel == "email" and not i.is_read
         )
         conversations.append(
             UnifiedConversation(

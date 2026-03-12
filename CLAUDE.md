@@ -160,9 +160,8 @@ Every new feature needs:
 
 ## Current Known Issues to Fix
 
-- *(None at this time.)* Previously: `list_tasks`/`list_goals` required
-  `organization_id`; layers_pkg Task/Contact selects use org filter.
-  Run `tests/test_architecture_guards.py` to enforce tenant awareness.
+- *(None at this time.)* All list/get services require `organization_id` for tenant isolation.
+  Run `tests/test_architecture_guards.py` to enforce tenant awareness and layers_pkg org filters.
 
 ---
 

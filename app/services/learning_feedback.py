@@ -79,7 +79,7 @@ async def analyze_effectiveness(
             await db.execute(
                 select(func.count(LearningOutcome.id)).where(
                     LearningOutcome.organization_id == org_id,
-                    LearningOutcome.was_applied is True,
+                    LearningOutcome.was_applied.is_(True),
                     LearningOutcome.created_at >= cutoff,
                 )
             )
@@ -90,7 +90,7 @@ async def analyze_effectiveness(
         await db.execute(
             select(func.avg(LearningOutcome.outcome_score)).where(
                 LearningOutcome.organization_id == org_id,
-                LearningOutcome.was_applied is True,
+                LearningOutcome.was_applied.is_(True),
                 LearningOutcome.created_at >= cutoff,
             )
         )
@@ -100,7 +100,7 @@ async def analyze_effectiveness(
         await db.execute(
             select(func.avg(LearningOutcome.outcome_score)).where(
                 LearningOutcome.organization_id == org_id,
-                LearningOutcome.was_applied is False,
+                LearningOutcome.was_applied.is_(False),
                 LearningOutcome.created_at >= cutoff,
             )
         )

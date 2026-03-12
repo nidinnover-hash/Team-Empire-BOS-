@@ -530,7 +530,7 @@ async def run_compliance(db: AsyncSession, org_id: int) -> dict[str, Any]:
             )
         ).scalars().all()
         for d in droplets:
-            if d.status == "active" and d.backups_enabled is False:
+            if d.status == "active" and not d.backups_enabled:
                 violations.append(
                     PolicyViolation(
                         organization_id=org_id,

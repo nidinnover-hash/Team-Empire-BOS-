@@ -55,7 +55,7 @@ async def list_policies(
 ) -> list[GovernancePolicy]:
     query = select(GovernancePolicy).where(GovernancePolicy.organization_id == org_id)
     if active_only:
-        query = query.where(GovernancePolicy.is_active is True)
+        query = query.where(GovernancePolicy.is_active.is_(True))
     query = query.order_by(GovernancePolicy.name).offset(skip).limit(limit)
     result = await db.execute(query)
     return list(result.scalars().all())
@@ -120,7 +120,7 @@ async def evaluate_compliance(
             )
             .where(
                 Employee.organization_id == org_id,
-                Employee.is_active is True,
+                Employee.is_active.is_(True),
             )
             .group_by(Employee.id, Employee.name)
         )
@@ -294,7 +294,7 @@ async def get_governance_dashboard(
             await db.execute(
                 select(func.count(GovernancePolicy.id)).where(
                     GovernancePolicy.organization_id == org_id,
-                    GovernancePolicy.is_active is True,
+                    GovernancePolicy.is_active.is_(True),
                 )
             )
         ).scalar_one() or 0
@@ -492,7 +492,7 @@ async def calculate_automation_level(
             await db.execute(
                 select(func.count(LearningOutcome.id)).where(
                     LearningOutcome.organization_id == org_id,
-                    LearningOutcome.was_applied is True,
+                    LearningOutcome.was_applied.is_(True),
                     LearningOutcome.created_at >= cutoff,
                 )
             )
@@ -502,7 +502,7 @@ async def calculate_automation_level(
         await db.execute(
             select(func.avg(LearningOutcome.outcome_score)).where(
                 LearningOutcome.organization_id == org_id,
-                LearningOutcome.was_applied is True,
+                LearningOutcome.was_applied.is_(True),
                 LearningOutcome.created_at >= cutoff,
             )
         )
