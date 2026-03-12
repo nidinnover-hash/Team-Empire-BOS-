@@ -160,11 +160,9 @@ Every new feature needs:
 
 ## Current Known Issues to Fix
 
-1. `list_tasks()` in `app/services/task.py` — `organization_id` is
-   Optional. Must be made required.
-2. `list_goals()` in `app/services/goal.py` — same issue.
-3. `app/services/layers_pkg/people.py` and `clone.py` — verify all
-   `select(Task)` and `select(Contact)` calls include org filter.
+- *(None at this time.)* Previously: `list_tasks`/`list_goals` required
+  `organization_id`; layers_pkg Task/Contact selects use org filter.
+  Run `tests/test_architecture_guards.py` to enforce tenant awareness.
 
 ---
 

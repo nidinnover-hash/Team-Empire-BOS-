@@ -100,7 +100,7 @@ async def search_articles(db: AsyncSession, organization_id: int, query: str) ->
         select(KBArticle)
         .where(
             KBArticle.organization_id == organization_id,
-            KBArticle.is_published == True,
+            KBArticle.is_published is True,
             KBArticle.title.ilike(f"%{query}%") | KBArticle.content.ilike(f"%{query}%"),
         )
         .order_by(KBArticle.view_count.desc())

@@ -128,7 +128,7 @@ async def get_attachment(
         select(MediaAttachment).where(
             MediaAttachment.id == attachment_id,
             MediaAttachment.organization_id == org_id,
-            MediaAttachment.is_deleted == False,
+            MediaAttachment.is_deleted is False,
         )
     )
     return result.scalar_one_or_none()
@@ -150,7 +150,7 @@ async def list_attachments(
 ) -> list[MediaAttachment]:
     query = select(MediaAttachment).where(
         MediaAttachment.organization_id == org_id,
-        MediaAttachment.is_deleted == False,
+        MediaAttachment.is_deleted is False,
     )
     if entity_type:
         query = query.where(MediaAttachment.entity_type == entity_type)
@@ -220,8 +220,8 @@ async def search_media(
         select(MediaAttachment)
         .where(
             MediaAttachment.organization_id == org_id,
-            MediaAttachment.is_deleted == False,
-            MediaAttachment.is_processed == True,
+            MediaAttachment.is_deleted is False,
+            MediaAttachment.is_processed is True,
             (
                 MediaAttachment.ai_summary.ilike(pattern)
                 | MediaAttachment.original_name.ilike(pattern)
@@ -244,7 +244,7 @@ async def get_storage_stats(
         (await db.execute(
             select(func.count(MediaAttachment.id)).where(
                 MediaAttachment.organization_id == org_id,
-                MediaAttachment.is_deleted == False,
+                MediaAttachment.is_deleted is False,
             )
         )).scalar_one() or 0
     )
@@ -252,7 +252,7 @@ async def get_storage_stats(
         (await db.execute(
             select(func.sum(MediaAttachment.file_size_bytes)).where(
                 MediaAttachment.organization_id == org_id,
-                MediaAttachment.is_deleted == False,
+                MediaAttachment.is_deleted is False,
             )
         )).scalar_one() or 0
     )
@@ -260,8 +260,8 @@ async def get_storage_stats(
         (await db.execute(
             select(func.count(MediaAttachment.id)).where(
                 MediaAttachment.organization_id == org_id,
-                MediaAttachment.is_deleted == False,
-                MediaAttachment.is_processed == True,
+                MediaAttachment.is_deleted is False,
+                MediaAttachment.is_processed is True,
             )
         )).scalar_one() or 0
     )

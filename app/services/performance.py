@@ -156,7 +156,7 @@ async def _bulk_employee_perf(
     cutoff = (datetime.now(UTC) - timedelta(days=max(1, days))).date()
 
     # Build employee filter
-    emp_filter = [Employee.organization_id == org_id, Employee.is_active == True]
+    emp_filter = [Employee.organization_id == org_id, Employee.is_active is True]
     if department_id is not None:
         emp_filter.append(Employee.department_id == department_id)
     if employee_ids is not None:
@@ -264,7 +264,7 @@ async def get_org_performance(
         (
             await db.execute(
                 select(func.count(Employee.id)).where(
-                    Employee.organization_id == org_id, Employee.is_active == True
+                    Employee.organization_id == org_id, Employee.is_active is True
                 )
             )
         ).scalar_one() or 0
@@ -274,7 +274,7 @@ async def get_org_performance(
         (
             await db.execute(
                 select(func.count(Department.id)).where(
-                    Department.organization_id == org_id, Department.is_active == True
+                    Department.organization_id == org_id, Department.is_active is True
                 )
             )
         ).scalar_one() or 0
@@ -311,14 +311,14 @@ async def get_org_performance(
             func.avg(EmployeeWorkPattern.tasks_completed),
             func.sum(EmployeeWorkPattern.tasks_completed),
         )
-        .outerjoin(Employee, (Employee.department_id == Department.id) & (Employee.is_active == True))
+        .outerjoin(Employee, (Employee.department_id == Department.id) & (Employee.is_active is True))
         .outerjoin(
             EmployeeWorkPattern,
             (EmployeeWorkPattern.employee_id == Employee.id)
             & (EmployeeWorkPattern.organization_id == org_id)
             & (EmployeeWorkPattern.work_date >= cutoff),
         )
-        .where(Department.organization_id == org_id, Department.is_active == True)
+        .where(Department.organization_id == org_id, Department.is_active is True)
         .group_by(Department.id, Department.name)
         .order_by(Department.name)
     )

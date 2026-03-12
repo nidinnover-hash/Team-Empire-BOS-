@@ -129,6 +129,37 @@ async def list_contacts(
     return list(result.scalars().all())
 
 
+async def find_contact_by_email_or_phone(
+    db: AsyncSession,
+    organization_id: int,
+    *,
+    email: str | None = None,
+    phone: str | None = None,
+) -> Contact | None:
+    """Return first non-deleted contact in org matching email or phone (email preferred)."""
+    if email and email.strip():
+        r = await db.execute(
+            select(Contact).where(
+                Contact.organization_id == organization_id,
+                Contact.is_deleted.is_(False),
+                Contact.email.ilike(email.strip()),
+            ).limit(1)
+        )
+        c = r.scalar_one_or_none()
+        if c is not None:
+            return c
+    if phone and str(phone).strip():
+        r = await db.execute(
+            select(Contact).where(
+                Contact.organization_id == organization_id,
+                Contact.is_deleted.is_(False),
+                Contact.phone == str(phone).strip(),
+            ).limit(1)
+        )
+        return r.scalar_one_or_none()
+    return None
+
+
 async def get_contact(
     db: AsyncSession,
     contact_id: int,

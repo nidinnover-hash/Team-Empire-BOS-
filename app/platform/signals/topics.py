@@ -27,6 +27,7 @@ CONTACT_CREATED = "contact.created"
 CONTACT_UPDATED = "contact.updated"
 CONTACT_DELETED = "contact.deleted"
 CONTACT_ROUTED = "contact.routed"
+LEAD_CREATED_FROM_SOCIAL = "lead.created_from_social"
 
 # --- CRM / Quotes ---
 QUOTE_CREATED = "quote.created"

@@ -16,7 +16,7 @@ async def list_departments(
 ) -> list[Department]:
     query = select(Department).where(Department.organization_id == org_id)
     if active_only:
-        query = query.where(Department.is_active == True)
+        query = query.where(Department.is_active is True)
     query = query.order_by(Department.name).offset(skip).limit(limit)
     result = await db.execute(query)
     return list(result.scalars().all())

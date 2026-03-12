@@ -87,6 +87,7 @@ from app.api.v1.endpoints import (
     layers,
     lead_score_rules,
     leaderboard,
+    leads,
     locations,
     media,
     meeting_notes,
@@ -162,6 +163,7 @@ api_router.include_router(memory.router)
 api_router.include_router(briefing.router)
 api_router.include_router(email.router)
 api_router.include_router(empire_digital.router)
+api_router.include_router(leads.router)
 api_router.include_router(orgs.router)
 api_router.include_router(commands.router)
 api_router.include_router(tasks.router)

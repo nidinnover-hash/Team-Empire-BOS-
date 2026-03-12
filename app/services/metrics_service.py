@@ -39,7 +39,7 @@ async def compute_weekly_metrics(
 
     # Get all active employees
     emp_result = await db.execute(
-        select(Employee).where(Employee.organization_id == org_id, Employee.is_active == True)
+        select(Employee).where(Employee.organization_id == org_id, Employee.is_active is True)
     )
     employees = list(emp_result.scalars().all())
     if not employees:

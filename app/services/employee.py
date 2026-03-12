@@ -64,7 +64,7 @@ async def list_employees(
 ) -> list[Employee]:
     query = select(Employee).where(Employee.organization_id == org_id)
     if active_only:
-        query = query.where(Employee.is_active == True)
+        query = query.where(Employee.is_active is True)
     query = query.order_by(Employee.name).offset(skip).limit(limit)
     result = await db.execute(query)
     return list(result.scalars().all())
@@ -122,7 +122,7 @@ async def list_by_department(
         Employee.department_id == department_id,
     )
     if active_only:
-        query = query.where(Employee.is_active == True)
+        query = query.where(Employee.is_active is True)
     query = query.order_by(Employee.name).offset(offset).limit(limit)
     result = await db.execute(query)
     return list(result.scalars().all())

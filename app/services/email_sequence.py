@@ -103,7 +103,7 @@ async def get_stats(db: AsyncSession, organization_id: int) -> dict:
     active = (await db.execute(
         select(func.count(EmailSequence.id)).where(
             EmailSequence.organization_id == organization_id,
-            EmailSequence.is_active == True,
+            EmailSequence.is_active is True,
         )
     )).scalar() or 0
     enrolled = (await db.execute(
