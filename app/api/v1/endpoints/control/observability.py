@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.core.rbac import require_roles
 from app.models.event import Event
+from app.models.organization import Organization
 
 router = APIRouter(prefix="/observability", tags=["Control Observability"])
 
@@ -36,7 +37,7 @@ async def control_report(
     """
     Report on control lever usage: counts of placement_confirmed and
     money_approval_requested by event_type and by organization (last 7 days).
-    Use for observability and capacity planning.
+    Use for observability and capacity planning. by_organization includes org slug.
     """
     now = datetime.now(UTC)
     window_start = now - timedelta(days=7)
@@ -62,9 +63,23 @@ async def control_report(
         )
         .group_by(Event.organization_id, Event.event_type)
     )
+    rows = by_org_result.all()
+    org_ids = list({r.organization_id for r in rows})
+    org_slugs: dict[int, str] = {}
+    if org_ids:
+        org_result = await db.execute(
+            select(Organization.id, Organization.slug).where(Organization.id.in_(org_ids))
+        )
+        for o in org_result.all():
+            org_slugs[o.id] = o.slug or str(o.id)
     by_organization = [
-        {"organization_id": row.organization_id, "event_type": row.event_type, "count": row.count}
-        for row in by_org_result.all()
+        {
+            "organization_id": row.organization_id,
+            "organization_slug": org_slugs.get(row.organization_id, str(row.organization_id)),
+            "event_type": row.event_type,
+            "count": row.count,
+        }
+        for row in rows
     ]
 
     return ControlObservabilityReport(

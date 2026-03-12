@@ -1,6 +1,5 @@
 /**
- * PWA polish: theme-color sync with light/dark, install prompt (optional).
- * No service worker by default; add sw.js and register here if needed.
+ * PWA polish: theme-color sync with light/dark, install prompt, service worker registration.
  */
 (function () {
   'use strict';
@@ -39,4 +38,29 @@
       window.__bosInstallPrompt(e);
     }
   });
+
+  // Register service worker for offline support
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/static/js/service-worker.js', { scope: '/' })
+        .then(function (reg) {
+          reg.addEventListener('updatefound', function () {
+            var newWorker = reg.installing;
+            if (newWorker) {
+              newWorker.addEventListener('statechange', function () {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // New version available — notify app if handler registered
+                  if (typeof window.__bosSwUpdate === 'function') {
+                    window.__bosSwUpdate();
+                  }
+                }
+              });
+            }
+          });
+        })
+        .catch(function (err) {
+          console.warn('[BOS SW] Registration failed:', err);
+        });
+    });
+  }
 })();

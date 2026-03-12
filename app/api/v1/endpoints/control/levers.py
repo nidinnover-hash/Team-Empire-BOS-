@@ -190,17 +190,34 @@ class ApplicationMilestonesRequest(BaseModel):
     application_id: str = Field(..., min_length=1, max_length=255)
 
 
-@router.post("/study-abroad/application-milestones", response_model=dict)
+class MilestoneStep(BaseModel):
+    step_key: str
+    step_name: str
+    deadline: str | None = None
+
+
+class ApplicationMilestonesResponse(BaseModel):
+    application_id: str
+    steps: list[MilestoneStep]
+    deadline: str | None = None
+
+
+@router.post("/study-abroad/application-milestones", response_model=ApplicationMilestonesResponse)
 async def application_milestones(
     data: ApplicationMilestonesRequest,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
-):
+) -> ApplicationMilestonesResponse:
     """BOS returns next required steps for an application from milestone templates."""
     if data.organization_id != actor["org_id"]:
         raise HTTPException(status_code=403, detail="Cross-organization access denied")
-    return await study_abroad_service.next_required_steps(
+    result = await study_abroad_service.next_required_steps(
         db, data.organization_id, data.application_id
+    )
+    return ApplicationMilestonesResponse(
+        application_id=result["application_id"],
+        steps=[MilestoneStep(**s) for s in result["steps"]],
+        deadline=result.get("deadline"),
     )
 
 
@@ -209,15 +226,23 @@ class RiskStatusRequest(BaseModel):
     application_id: str = Field(..., min_length=1, max_length=255)
 
 
-@router.post("/study-abroad/risk-status", response_model=dict)
+class RiskStatusResponse(BaseModel):
+    application_id: str
+    status: str  # on_track | at_risk | critical
+    message: str | None = None
+    critical_deadlines: list[str] = []
+
+
+@router.post("/study-abroad/risk-status", response_model=RiskStatusResponse)
 async def risk_status(
     data: RiskStatusRequest,
     db: AsyncSession = Depends(get_db),
     actor: dict = Depends(require_roles("CEO", "ADMIN", "MANAGER", "STAFF")),
-):
+) -> RiskStatusResponse:
     """BOS returns risk status from pending deadlines (on_track / at_risk / critical)."""
     if data.organization_id != actor["org_id"]:
         raise HTTPException(status_code=403, detail="Cross-organization access denied")
-    return await study_abroad_service.risk_status(
+    result = await study_abroad_service.risk_status(
         db, data.organization_id, data.application_id
     )
+    return RiskStatusResponse(**result)

@@ -153,6 +153,36 @@ class TestMutatingRoutesProtected:
         )
 
 
+LAYERS_PKG_DIR = REPO_ROOT / "app" / "services" / "layers_pkg"
+
+
+class TestLayersPkgTenantAudit:
+    """Layers_pkg must filter Task and Contact by organization_id in every query."""
+
+    def test_layers_pkg_task_contact_selects_use_organization_id(self):
+        """Every select(Task) and select(Contact) in layers_pkg must include organization_id in .where()."""
+        if not LAYERS_PKG_DIR.exists():
+            pytest.skip("layers_pkg not found")
+        import re
+        failures = []
+        for py in LAYERS_PKG_DIR.glob("*.py"):
+            text = py.read_text(encoding="utf-8", errors="replace")
+            rel = str(py.relative_to(REPO_ROOT))
+            # Find select(Task) or select(Contact) that are not followed by .where(.*organization_id
+            for model in ("Task", "Contact"):
+                pattern = rf"select\({model}\)"
+                for m in re.finditer(pattern, text):
+                    start = m.start()
+                    # Look at next 400 chars for .where( and organization_id
+                    chunk = text[start : start + 400]
+                    if ".where(" not in chunk or "organization_id" not in chunk:
+                        failures.append(f"{rel}: select({model}) without .where( organization_id")
+        assert not failures, (
+            "layers_pkg must filter Task/Contact by organization_id. "
+            f"Failed: {failures}"
+        )
+
+
 class TestSensitiveRoutesGated:
     """Control-lever routes must be the documented ones (no new lever without updating guard)."""
 
@@ -180,4 +210,41 @@ class TestSensitiveRoutesGated:
         assert not disallowed, (
             "New control lever routes must be added to ALLOWED_LEVER_PATHS in this test. "
             f"Disallowed: {disallowed}"
+        )
+
+
+class TestMoneyAndCommunicationsFlowsGated:
+    """New money or communications flows must not bypass approvals (staging gate extension)."""
+
+    def test_sensitive_mutating_routes_are_allowlisted(self):
+        """POST routes that look like money/communications must be in the allowed set (levers, approvals, webhooks)."""
+        from app.main import app as fastapi_app
+
+        # Path substrings that indicate money or communications; if a POST route matches, it must be allowlisted
+        SENSITIVE_SUBSTRINGS = ("/money", "/payment", "/spend", "/request-money", "/send", "/email/send", "/approvals/")
+        # Paths that are the only allowed entry points for money/comm (control levers, approval API, webhooks)
+        SENSITIVE_ALLOWLIST_PREFIXES = (
+            "/api/v1/control/levers/",
+            "/api/v1/control/config/",  # config CRUD (money-matrices etc.); admin only
+            "/api/v1/approvals/",
+            "/api/v1/webhooks/",
+            "/api/v1/stripe",
+            "/api/v1/email/",  # email may have internal approval flow
+            "/api/v1/integrations/",  # slack/whatsapp send; auth + optional BOS policy
+        )
+        routes = _collect_routes(fastapi_app)
+        mutating = [
+            path
+            for path, methods in routes
+            if methods & {"POST", "PUT", "PATCH"}
+            and path.startswith("/api/v1/")
+        ]
+        sensitive = [p for p in mutating if any(sub in p.lower() for sub in SENSITIVE_SUBSTRINGS)]
+        disallowed = [
+            p for p in sensitive
+            if not any(p.startswith(prefix) for prefix in SENSITIVE_ALLOWLIST_PREFIXES)
+        ]
+        assert not disallowed, (
+            "New money/communications flows must go through control levers or approvals. "
+            f"Add to SENSITIVE_ALLOWLIST_PREFIXES or remove the flow. Disallowed: {disallowed}"
         )

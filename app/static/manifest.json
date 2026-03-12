@@ -2,7 +2,7 @@
   "name": "Nidin BOS",
   "short_name": "BOS",
   "description": "Business Operating System — Team Empire",
-  "start_url": "/",
+  "start_url": "/web/dashboard",
   "display": "standalone",
   "background_color": "#f5f5f7",
   "theme_color": "#007aff",
@@ -12,7 +12,24 @@
       "src": "/static/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any"
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Contacts",
+      "url": "/web/contacts",
+      "description": "Open contacts"
+    },
+    {
+      "name": "Deals",
+      "url": "/web/deals",
+      "description": "Open deals pipeline"
+    },
+    {
+      "name": "Tasks",
+      "url": "/web/tasks",
+      "description": "Open tasks"
     }
   ]
 }

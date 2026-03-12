@@ -46,7 +46,7 @@
       } else {
         pendingEl.innerHTML = "<ul class=\"item-list\">" + recent.map(function (a) {
         var created = a.created_at ? new Date(a.created_at).toLocaleString() : "";
-        return "<li><span class=\"badge\">" + esc(a.approval_type) + "</span> ID " + esc(a.id) + " — " + esc(created) + "</li>";
+        return "<li><span class=\"badge\">" + esc(a.approval_type) + "</span> <a href=\"/#ap-" + esc(a.id) + "\" class=\"link\" title=\"Open approval in Dashboard\">ID " + esc(a.id) + "</a> — " + esc(created) + "</li>";
       }).join("") + "</ul>";
       }
     }
@@ -58,7 +58,8 @@
       } else {
         placementsEl.innerHTML = "<ul class=\"item-list\">" + placements.map(function (p) {
         var created = p.created_at ? new Date(p.created_at).toLocaleString() : "";
-        return "<li>Candidate " + esc(p.candidate_id) + " → Job " + esc(p.job_id) + " — " + esc(created) + "</li>";
+        var contactHref = "/web/contacts" + (p.candidate_id ? "?contact_id=" + encodeURIComponent(p.candidate_id) : "");
+        return "<li><a href=\"" + contactHref + "\" class=\"link\" title=\"View candidate contact\">Candidate " + esc(p.candidate_id) + " → Job " + esc(p.job_id) + "</a> — " + esc(created) + "</li>";
       }).join("") + "</ul>";
       }
     }
@@ -70,7 +71,7 @@
       } else {
         moneyEl.innerHTML = "<ul class=\"item-list\">" + money.map(function (a) {
         var created = a.created_at ? new Date(a.created_at).toLocaleString() : "";
-        return "<li><span class=\"badge\">" + esc(a.approval_type) + "</span> " + esc(a.status) + " — ID " + esc(a.id) + " — " + esc(created) + "</li>";
+        return "<li><span class=\"badge\">" + esc(a.approval_type) + "</span> " + esc(a.status) + " — <a href=\"/#ap-" + esc(a.id) + "\" class=\"link\" title=\"Open approval in Dashboard\">ID " + esc(a.id) + "</a> — " + esc(created) + "</li>";
       }).join("") + "</ul>";
       }
     }
@@ -92,7 +93,25 @@
     }
   }
 
-  document.addEventListener("bos:company-changed", function () { loadControlSummary(); });
+  function loadControlReport() {
+    var el = document.getElementById("control-report-list");
+    if (!el) return;
+    fetch("/api/v1/control/observability/control-report", { headers: headers() })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
+      .then(function (d) {
+        var byOrg = d.by_organization || [];
+        if (byOrg.length === 0) {
+          el.innerHTML = "<div class=\"empty\">No control events in last 7 days</div>";
+          return;
+        }
+        el.innerHTML = "<ul class=\"item-list\">" + byOrg.map(function (r) {
+          return "<li><strong>" + esc(r.organization_slug || r.organization_id) + "</strong> — " + esc(r.event_type) + ": " + r.count + "</li>";
+        }).join("") + "</ul>";
+      })
+      .catch(function () { if (el) el.innerHTML = "<div class=\"empty\">Failed to load report</div>"; });
+  }
+
+  document.addEventListener("bos:company-changed", function () { loadControlSummary(); loadControlReport(); });
 
   try {
     var res = await fetch("/api/v1/control/dashboard/control-summary", { headers: headers() });
@@ -105,6 +124,8 @@
   } catch (e) {
     if (pendingEl) pendingEl.innerHTML = "<div class=\"empty\">Error loading control summary</div>";
   }
+
+  loadControlReport();
 
   if (typeof lucide !== "undefined") lucide.createIcons();
 })();
