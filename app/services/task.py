@@ -26,17 +26,15 @@ async def create_task(
 
 async def list_tasks(
     db: AsyncSession,
+    organization_id: int,
     limit: int = 50,
     offset: int = 0,
-    organization_id: int | None = None,
     workspace_id: int | None = None,
     project_id: int | None = None,
     category: str | None = None,
     is_done: bool | None = None,
 ) -> list[Task]:
-    query = select(Task)
-    if organization_id is not None:
-        query = query.where(Task.organization_id == organization_id)
+    query = select(Task).where(Task.organization_id == organization_id, Task.is_deleted.is_(False))
     if workspace_id is not None:
         query = query.where(Task.workspace_id == workspace_id)
     if project_id is not None:
@@ -55,12 +53,10 @@ async def update_task(
     db: AsyncSession,
     task_id: int,
     data: TaskUpdate,
-    organization_id: int | None = None,
+    organization_id: int,
     workspace_id: int | None = None,
 ) -> Task | None:
-    query = select(Task).where(Task.id == task_id)
-    if organization_id is not None:
-        query = query.where(Task.organization_id == organization_id)
+    query = select(Task).where(Task.id == task_id, Task.organization_id == organization_id, Task.is_deleted.is_(False))
     if workspace_id is not None:
         query = query.where(Task.workspace_id == workspace_id)
     result = await db.execute(query)
@@ -87,7 +83,7 @@ async def update_task(
     if data.due_date is not None:
         task.due_date = data.due_date
 
-    if task.is_done and not was_done and organization_id is not None:
+    if task.is_done and not was_done:
         await db.flush()
         await create_notification(
             db,
@@ -107,10 +103,10 @@ async def update_task(
     done_changed = (data.is_done is not None and task.is_done != was_done)
     project_changed = (data.project_id is not None and task.project_id != old_project_id)
     if done_changed or project_changed:
-        if task.project_id and organization_id:
+        if task.project_id:
             await recalculate_project_progress(db, task.project_id, organization_id)
         # Also update old project if task moved between projects
-        if project_changed and old_project_id and organization_id:
+        if project_changed and old_project_id:
             await recalculate_project_progress(db, old_project_id, organization_id)
 
     return task
@@ -122,8 +118,10 @@ async def delete_task(
     organization_id: int,
     workspace_id: int | None = None,
 ) -> bool:
-    """Delete a task. Returns True if deleted, False if not found."""
-    query = select(Task).where(Task.id == task_id, Task.organization_id == organization_id)
+    """Soft-delete a task. Returns True if deleted, False if not found."""
+    from datetime import UTC
+    from datetime import datetime as dt
+    query = select(Task).where(Task.id == task_id, Task.organization_id == organization_id, Task.is_deleted.is_(False))
     if workspace_id is not None:
         query = query.where(Task.workspace_id == workspace_id)
     result = await db.execute(query)
@@ -131,7 +129,8 @@ async def delete_task(
     if task is None:
         return False
     project_id = task.project_id
-    await db.delete(task)
+    task.is_deleted = True
+    task.deleted_at = dt.now(UTC)
     await db.commit()
     # Recalculate project progress after removing a task
     if project_id:
@@ -156,7 +155,7 @@ async def recalculate_project_progress(
         select(
             func.count(Task.id).label("total"),
             func.count(Task.id).filter(Task.is_done.is_(True)).label("done"),
-        ).where(Task.project_id == project_id, Task.organization_id == organization_id)
+        ).where(Task.project_id == project_id, Task.organization_id == organization_id, Task.is_deleted.is_(False))
     )
     row = result.one()
     total, done = row.total or 0, row.done or 0
@@ -169,7 +168,6 @@ async def recalculate_project_progress(
         return
 
     new_progress = round((done / total) * 100) if total > 0 else 0
-    old_status = project.status
     project.progress = new_progress
 
     # Auto-complete project when all tasks are done

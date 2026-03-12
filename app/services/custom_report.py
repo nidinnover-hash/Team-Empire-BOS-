@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -80,7 +80,7 @@ async def record_run(db: AsyncSession, report_id: int, organization_id: int) -> 
     if not row:
         return None
     row.run_count += 1
-    row.last_run_at = datetime.now(timezone.utc)
+    row.last_run_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(row)
     return row

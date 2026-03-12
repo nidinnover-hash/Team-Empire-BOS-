@@ -67,14 +67,48 @@ def upgrade() -> None:
     inspector = sa.inspect(bind)
     existing_tables = set(inspector.get_table_names())
 
-    # Only create tables that are NOT already handled by other migrations
-    tables_to_create = []
+    # Early bootstrap: some base ORM tables reference organizations via FK.
+    # Ensure organizations exists before bulk create_all in this compatibility migration.
+    if "organizations" not in existing_tables:
+        op.create_table(
+            "organizations",
+            sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+            sa.Column("name", sa.String(length=255), nullable=False),
+            sa.Column("slug", sa.String(length=120), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        )
+        op.create_index("ix_organizations_slug", "organizations", ["slug"], unique=True)
+        op.create_unique_constraint("uq_organizations_name", "organizations", ["name"])
+        existing_tables.add("organizations")
+
+    # Candidate set: tables not already present and not explicitly handled elsewhere.
+    candidate_tables = []
     for table in Base.metadata.sorted_tables:
         if table.name in SKIP_TABLES:
             continue
         if table.name in existing_tables:
             continue
-        tables_to_create.append(table)
+        candidate_tables.append(table)
+
+    # Create only tables whose FK dependencies are already available in this
+    # migration context. This avoids creating late-era tables before prerequisite
+    # migrations (for example, tables that depend on workspaces).
+    tables_to_create = []
+    available_table_names = set(existing_tables)
+    remaining = list(candidate_tables)
+    progressed = True
+    while remaining and progressed:
+        progressed = False
+        next_remaining = []
+        for table in remaining:
+            deps = {fk.column.table.name for fk in table.foreign_keys} - {table.name}
+            if deps.issubset(available_table_names):
+                tables_to_create.append(table)
+                available_table_names.add(table.name)
+                progressed = True
+            else:
+                next_remaining.append(table)
+        remaining = next_remaining
 
     if tables_to_create:
         Base.metadata.create_all(bind=bind, tables=tables_to_create, checkfirst=True)

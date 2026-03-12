@@ -61,6 +61,7 @@ async def create_org(
         parent_organization_id=data.parent_organization_id,
         country_code=data.country_code,
         branch_label=data.branch_label,
+        industry_type=data.industry_type,
     )
     await record_action(
         db,
@@ -109,6 +110,7 @@ async def update_org(
         parent_organization_id=payload.get("parent_organization_id"),
         country_code=payload.get("country_code"),
         branch_label=payload.get("branch_label"),
+        industry_type=payload.get("industry_type"),
         expected_config_version=payload.get("expected_config_version"),
     )
     if org is None:

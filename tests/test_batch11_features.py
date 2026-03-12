@@ -3,7 +3,6 @@ webhook deliveries, contact lifecycle, saved filters, bulk action logs."""
 
 import pytest
 
-
 # ── Duplicate Detection ──────────────────────────────────────────────────────
 
 
@@ -31,13 +30,21 @@ async def test_list_duplicate_matches(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_resolve_duplicate(client, monkeypatch):
+    from datetime import UTC, datetime
+
     from app.services import duplicate_detection as dup_svc
-    from datetime import datetime, UTC
 
     class FakeMatch:
-        id = 1; entity_type = "contact"; entity_a_id = 1; entity_b_id = 2
-        match_score = 90; match_fields = '["email"]'; status = "merged"
-        resolved_by_user_id = 1; created_at = datetime.now(UTC); resolved_at = datetime.now(UTC)
+        id = 1
+        entity_type = "contact"
+        entity_a_id = 1
+        entity_b_id = 2
+        match_score = 90
+        match_fields = '["email"]'
+        status = "merged"
+        resolved_by_user_id = 1
+        created_at = datetime.now(UTC)
+        resolved_at = datetime.now(UTC)
 
     async def fake_resolve(db, match_id, organization_id, status, user_id):
         return FakeMatch()
@@ -167,12 +174,18 @@ async def test_webhook_delivery_stats(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_transition_lifecycle_stage(client, monkeypatch):
+    from datetime import UTC, datetime
+
     from app.services import contact_lifecycle as lc_svc
-    from datetime import datetime, UTC
 
     class FakeEvent:
-        id = 1; contact_id = 1; from_stage = None; to_stage = "lead"
-        changed_by_user_id = 1; reason = None; created_at = datetime.now(UTC)
+        id = 1
+        contact_id = 1
+        from_stage = None
+        to_stage = "lead"
+        changed_by_user_id = 1
+        reason = None
+        created_at = datetime.now(UTC)
         organization_id = 1
 
     async def fake_transition(db, organization_id, contact_id, to_stage, from_stage=None, changed_by=None, reason=None):

@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.services import quote as quote_svc
-from app.services import product_bundle as bundle_svc
 from app.services import deal_split as split_svc
-
+from app.services import product_bundle as bundle_svc
+from app.services import quote as quote_svc
 
 # --- Quote service guards ---
 

@@ -4,6 +4,7 @@ from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, Integer, St
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.soft_delete import SoftDeleteMixin
 
 PIPELINE_STAGES = ("new", "contacted", "qualified", "proposal", "negotiation", "won", "lost")
 LEAD_SOURCES = ("manual", "social_media", "referral", "website", "email", "event", "other")
@@ -12,7 +13,7 @@ ROUTING_STATUSES = ("unrouted", "under_review", "routed", "accepted", "rejected"
 QUALIFICATION_STATUSES = ("unqualified", "qualified", "disqualified", "needs_review")
 
 
-class Contact(Base):
+class Contact(SoftDeleteMixin, Base):
     """A person in your network — personal contact or sales lead."""
 
     __tablename__ = "contacts"

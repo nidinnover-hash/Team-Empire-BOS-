@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.rbac import require_roles, require_sensitive_financial_roles
-from app.services import dashboard_layout as layout_service
 from app.models.approval import Approval
 from app.models.automation import AutomationTrigger, Workflow
 from app.models.event import Event
@@ -19,6 +18,7 @@ from app.models.finance import FinanceEntry
 from app.models.integration import Integration
 from app.models.task import Task
 from app.models.webhook import WebhookDelivery
+from app.services import dashboard_layout as layout_service
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -231,3 +231,15 @@ async def save_layout(
         db, organization_id=int(actor["org_id"]), user_id=int(actor["id"]),
         widgets=widgets, theme=data.theme,
     )
+
+
+@router.get("/anomalies")
+async def get_anomalies(
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_sensitive_financial_roles()),
+) -> dict:
+    """Run anomaly detection comparing today vs 7-day rolling averages."""
+    from app.services.anomaly_detection import detect_anomalies
+    org_id = int(user["org_id"])
+    anomalies = await detect_anomalies(db, organization_id=org_id)
+    return {"anomalies": anomalies, "count": len(anomalies)}

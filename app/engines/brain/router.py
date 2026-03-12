@@ -23,8 +23,6 @@ from collections import deque
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, cast
 
-from sqlalchemy.exc import SQLAlchemyError
-
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -311,15 +309,16 @@ async def _log_ai_call(
     }
     _recent_calls.append(entry)
 
-    # Best-effort DB persistence — failures must never break the AI call path
+    # Best-effort DB persistence via service — brain must not mutate DB directly
     try:
-        from app.models.ai_call_log import AiCallLog
-        log_entry = AiCallLog(
-            organization_id=organization_id,
+        from app.services import ai_call_log as ai_call_log_service
+        await ai_call_log_service.log_ai_call(
+            db,
+            organization_id=organization_id or 1,
             provider=provider,
             model_name=model_name,
-            request_id=request_id,
             latency_ms=latency_ms,
+            request_id=request_id,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             used_fallback=used_fallback,
@@ -327,23 +326,7 @@ async def _log_ai_call(
             error_type=error_type,
             prompt_type=prompt_type,
         )
-        if db is not None:
-            db.add(log_entry)
-            await db.flush()
-        else:
-            from app.db.session import AsyncSessionLocal
-            async with AsyncSessionLocal() as _db:
-                _db.add(log_entry)
-                await _db.commit()
-    except (
-        SQLAlchemyError,
-        RuntimeError,
-        TimeoutError,
-        OSError,
-        ValueError,
-        TypeError,
-        AttributeError,
-    ) as exc:
+    except Exception as exc:
         global _ai_call_log_failure_count
         _ai_call_log_failure_count += 1
         logger.warning(

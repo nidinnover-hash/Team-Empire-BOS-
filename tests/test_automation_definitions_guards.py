@@ -5,8 +5,6 @@ import ast
 import inspect
 from pathlib import Path
 
-import pytest
-
 from app.api.v1.endpoints import automation_definitions as endpoint_mod
 
 
@@ -55,5 +53,6 @@ def test_no_depends_get_db_in_function_body():
                         if isinstance(func, ast.Name) and func.id == "Depends":
                             for arg in body_node.args:
                                 if isinstance(arg, ast.Name) and arg.id == "get_db":
-                                    assert False, \
+                                    raise AssertionError(
                                         f"Found Depends(get_db) in body of {node.name} — must be in signature only"
+                                    )

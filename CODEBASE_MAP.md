@@ -52,7 +52,8 @@
 |----------|-------|---------|
 | Core | `user.py`, `organization.py`, `approval.py` | User/org management, approval workflows |
 | Execution | `execution_engine.py`, `orchestrator.py` | Action execution, multi-step orchestration |
-| Memory | `memory.py`, `clone_memory.py`, `embedding.py` | AI context building, semantic search |
+| Memory | `memory.py`, `clone_memory.py`, `embedding.py` | AI context building, semantic search; `memory.consolidate_profile_memory_duplicates` for engine-safe consolidation |
+| Observability | `ai_call_log.py` | AI call metrics (latency, tokens); brain router delegates here so engines do not mutate DB |
 | AI | `ai_router.py`, `clone_brain.py`, `confidence.py` | Provider dispatch, brain logic |
 | Integration | `gmail_service.py`, `slack_service.py`, etc. | Per-integration DB + sync logic |
 | Workflow | `automation.py`, `workflow_insights.py` | Trigger/workflow management, analytics |

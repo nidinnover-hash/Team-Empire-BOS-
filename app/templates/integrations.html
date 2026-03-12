@@ -1,30 +1,16 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="AI Agent Factory — Nidin BOS" />
-  <meta name="theme-color" content="#f5f5f7" />
-  <link rel="manifest" href="/static/manifest.json" />
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <title>Integrations — Nidin BOS</title>
-  <link rel="stylesheet" href="/static/css/theme.css" />
-  <link rel="stylesheet" href="/static/css/shared.css" />
-  <link rel="stylesheet" href="/static/css/integrations.css" />
+{% extends "base.html" %}
+{% block active_page %}integrations{% endblock %}
+{% block title %}Integrations — Nidin BOS{% endblock %}
+{% block meta_description %}<meta name="description" content="AI Agent Factory — Nidin BOS" />{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/css/integrations.css" />{% endblock %}
 
-  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
-</head>
-<body>
-{% set active_page = "integrations" %}
-{% include "partials/sidebar.html" %}
-
+{% block content %}
 <div class="main-wrap">
   <section class="hero">
     <h1>Integration Control Center</h1>
     <p>Connect and sync ClickUp, GitHub, Slack, DigitalOcean, Gmail, Google Calendar, and WhatsApp. All tokens are encrypted at rest.</p>
   </section>
 
-  <!-- Row 1: Connected integrations + Gmail/Manual -->
   <section class="layout">
     <div class="card">
       <div class="card-head">
@@ -60,30 +46,28 @@
         <button class="btn subtle" type="button" id="add-integration-btn">+ Add New</button>
       </div>
       <div class="card-body">
-        <div class="row" style="gap:0.4rem">
+        <div class="row row-gap">
           <button class="btn" id="gmail-auth-btn" type="button">Connect Gmail OAuth</button>
           <button class="btn" id="gcal-auth-btn" type="button">Connect Google Calendar</button>
         </div>
         <div class="help">Starts Google sign-in and stores tokens in your integration vault.</div>
-        <div id="gmail-health-alert" class="health-alert" style="display:none"></div>
-        <hr style="border:0;border-top:1px solid #eeeeee;margin:0.8rem 0">
-        <div class="small" style="color:var(--text-faint);margin-bottom:0.55rem">Sync connected integrations:</div>
-        <div class="row" style="gap:0.4rem">
+        <div id="gmail-health-alert" class="health-alert u-hidden"></div>
+        <hr class="hr-soft">
+        <div class="small u-text-faint u-mb-sm">Sync connected integrations:</div>
+        <div class="row row-gap">
           <button class="btn sync" type="button" data-sync="clickup">Sync ClickUp</button>
           <button class="btn sync" type="button" data-sync="github">Sync GitHub</button>
           <button class="btn sync" type="button" data-sync="slack">Sync Slack</button>
           <button class="btn sync" type="button" data-sync="digitalocean">Sync DigitalOcean</button>
           <button class="btn sync" type="button" data-sync="calendar">Sync Calendar</button>
         </div>
-        <div class="status" id="sync-status" style="margin-top:0.4rem"></div>
-        <div class="status" id="connect-status" style="margin-top:0.4rem"></div>
+        <div class="status u-mt-sm" id="sync-status"></div>
+        <div class="status u-mt-sm" id="connect-status"></div>
       </div>
     </div>
   </section>
 
-  <!-- Row 2: Quick Connect cards (ClickUp, GitHub, Slack) -->
   <section class="qc-grid" id="qc-section">
-    <!-- ClickUp -->
     <div class="qc-card">
       <div class="qc-head">
         <span class="qc-icon">CU</span>
@@ -97,13 +81,12 @@
         </div>
         <div class="qc-actions">
           <button class="btn success" type="button" id="clickup-connect-btn">Connect</button>
-          <button class="btn sync" type="button" id="clickup-sync-btn" style="display:none">Sync Now</button>
+          <button class="btn sync u-hidden" type="button" id="clickup-sync-btn">Sync Now</button>
         </div>
         <div class="qc-status" id="clickup-status"></div>
       </div>
     </div>
 
-    <!-- GitHub -->
     <div class="qc-card">
       <div class="qc-head">
         <span class="qc-icon">GH</span>
@@ -117,13 +100,12 @@
         </div>
         <div class="qc-actions">
           <button class="btn success" type="button" id="github-connect-btn">Connect</button>
-          <button class="btn sync" type="button" id="github-sync-btn" style="display:none">Sync Now</button>
+          <button class="btn sync u-hidden" type="button" id="github-sync-btn">Sync Now</button>
         </div>
         <div class="qc-status" id="github-status"></div>
       </div>
     </div>
 
-    <!-- Slack -->
     <div class="qc-card">
       <div class="qc-head">
         <span class="qc-icon">SL</span>
@@ -137,13 +119,12 @@
         </div>
         <div class="qc-actions">
           <button class="btn success" type="button" id="slack-connect-btn">Connect</button>
-          <button class="btn sync" type="button" id="slack-sync-btn" style="display:none">Sync Now</button>
+          <button class="btn sync u-hidden" type="button" id="slack-sync-btn">Sync Now</button>
         </div>
         <div class="qc-status" id="slack-status"></div>
       </div>
     </div>
 
-    <!-- DigitalOcean -->
     <div class="qc-card">
       <div class="qc-head">
         <span class="qc-icon">DO</span>
@@ -157,13 +138,12 @@
         </div>
         <div class="qc-actions">
           <button class="btn success" type="button" id="digitalocean-connect-btn">Connect</button>
-          <button class="btn sync" type="button" id="digitalocean-sync-btn" style="display:none">Sync Now</button>
+          <button class="btn sync u-hidden" type="button" id="digitalocean-sync-btn">Sync Now</button>
         </div>
         <div class="qc-status" id="digitalocean-status"></div>
       </div>
     </div>
 
-    <!-- LinkedIn -->
     <div class="qc-card">
       <div class="qc-head">
         <span class="qc-icon">LI</span>
@@ -182,7 +162,6 @@
       </div>
     </div>
 
-    <!-- Perplexity -->
     <div class="qc-card">
       <div class="qc-head">
         <span class="qc-icon">PP</span>
@@ -201,7 +180,6 @@
       </div>
     </div>
 
-    <!-- Google Analytics -->
     <div class="qc-card">
       <div class="qc-head">
         <span class="qc-icon">GA</span>
@@ -212,19 +190,18 @@
         <div class="qc-desc">Monitor website traffic (sessions, users, page views) over the last 30 days. Provide an OAuth token and GA4 property ID.</div>
         <div class="qc-token-row">
           <input class="input" type="password" id="ga-token" placeholder="OAuth access_token" autocomplete="off" aria-label="Google Analytics access token" />
-          <input class="input" type="text" id="ga-property-id" placeholder="GA4 property ID (e.g. 123456789)" autocomplete="off" aria-label="GA4 property ID" style="margin-top:0.3rem" />
+          <input class="input u-mt-sm" type="text" id="ga-property-id" placeholder="GA4 property ID (e.g. 123456789)" autocomplete="off" aria-label="GA4 property ID" />
         </div>
         <div class="qc-actions">
           <button class="btn success" type="button" id="ga-connect-btn">Connect</button>
-          <button class="btn sync" type="button" id="ga-sync-btn" style="display:none">Sync Now</button>
+          <button class="btn sync u-hidden" type="button" id="ga-sync-btn">Sync Now</button>
         </div>
         <div class="qc-status" id="ga-status"></div>
       </div>
     </div>
   </section>
 
-  <!-- Row 3: Integration Health Dashboard -->
-  <section style="margin-top:1rem">
+  <section class="section-mt-1">
     <div class="card">
       <div class="card-head">
         <div class="card-title">Health Dashboard</div>
@@ -232,11 +209,11 @@
       </div>
       <div class="card-body">
         <div id="health-dashboard-loading" class="small">Loading health dashboard...</div>
-        <div id="health-dashboard" style="display:none">
+        <div id="health-dashboard" class="u-hidden">
           <div class="health-kpi-row" id="health-kpis"></div>
           <div class="health-score-bar" id="health-score-bar"></div>
-          <div style="margin-top:0.8rem">
-            <div class="card-title" style="margin-bottom:0.5rem">Per-Integration Health</div>
+          <div class="u-mt-md">
+            <div class="card-title u-mb-sm">Per-Integration Health</div>
             <table class="table" id="health-detail-table">
               <thead><tr>
                 <th>Type</th>
@@ -254,8 +231,7 @@
     </div>
   </section>
 
-  <!-- Row 4: AI Provider Readiness -->
-  <section style="margin-top:1rem">
+  <section class="section-mt-1">
     <div class="card">
       <div class="card-head">
         <div class="card-title">AI Provider Readiness</div>
@@ -270,14 +246,14 @@
     </div>
   </section>
 
-  <section style="margin-top:1rem">
+  <section class="section-mt-1">
     <div class="card">
       <div class="card-head">
         <div class="card-title">Coding Project Discovery</div>
         <button class="btn subtle" type="button" id="coding-discovery-btn">Generate Questions</button>
       </div>
       <div class="card-body">
-        <div class="row" style="gap:0.4rem">
+        <div class="row row-gap">
           <input class="input" id="coding-project-name" type="text" placeholder="Project name" aria-label="Project name" />
           <input class="input" id="coding-language" type="text" placeholder="Language/stack (e.g. Python/FastAPI)" aria-label="Language or stack" />
           <input class="input" id="coding-stage" type="text" placeholder="Stage (planning/building/release)" aria-label="Project stage" />
@@ -286,9 +262,8 @@
       </div>
     </div>
   </section>
-</div><!-- /main-wrap -->
+</div>
 
-<!-- Add New Integration modal -->
 <div class="modal-overlay" id="add-modal">
   <div class="modal">
     <h2>Add Integration</h2>
@@ -311,25 +286,15 @@
   "refresh_token": "",
   "phone_number_id": ""
 }</textarea>
-    <div class="status" id="modal-status" style="margin-top:0.5rem"></div>
+    <div class="status u-mt-sm" id="modal-status"></div>
     <div class="modal-actions">
       <button class="btn subtle" type="button" id="modal-cancel-btn">Cancel</button>
       <button class="btn" type="button" id="modal-save-btn">Save Integration</button>
     </div>
   </div>
 </div>
+{% endblock %}
 
-<script nonce="{{ csp_nonce }}" src="/static/js/api-client.js"></script>
-<script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
-
-
-<!-- Toast + Lucide init -->
-<div id="toast-container"></div>
-
-<script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
-<script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
-<script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+{% block extra_js %}
 <script nonce="{{ csp_nonce }}" src="/static/js/integrations-page.js"></script>
-<script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
-</body>
-</html>
+{% endblock %}

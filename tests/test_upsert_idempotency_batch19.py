@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.services import forecast_rollup as fr_svc
 from app.services import conversion_funnel as cf_svc
-
+from app.services import forecast_rollup as fr_svc
 
 # ── Forecast Rollup ──────────────────────────────────────────────────────
 

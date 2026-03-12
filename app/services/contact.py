@@ -103,7 +103,7 @@ async def list_contacts(
     relationship: str | None = None,
     search: str | None = None,
 ) -> list[Contact]:
-    query = select(Contact)
+    query = select(Contact).where(Contact.is_deleted.is_(False))
     if actor_org_id is not None and actor_role is not None:
         query = apply_contact_visibility_scope(query, actor_org_id=actor_org_id, actor_role=actor_role)
     else:
@@ -129,6 +129,37 @@ async def list_contacts(
     return list(result.scalars().all())
 
 
+async def find_contact_by_email_or_phone(
+    db: AsyncSession,
+    organization_id: int,
+    *,
+    email: str | None = None,
+    phone: str | None = None,
+) -> Contact | None:
+    """Return first non-deleted contact in org matching email or phone (email preferred)."""
+    if email and email.strip():
+        r = await db.execute(
+            select(Contact).where(
+                Contact.organization_id == organization_id,
+                Contact.is_deleted.is_(False),
+                Contact.email.ilike(email.strip()),
+            ).limit(1)
+        )
+        c = r.scalar_one_or_none()
+        if c is not None:
+            return c
+    if phone and str(phone).strip():
+        r = await db.execute(
+            select(Contact).where(
+                Contact.organization_id == organization_id,
+                Contact.is_deleted.is_(False),
+                Contact.phone == str(phone).strip(),
+            ).limit(1)
+        )
+        return r.scalar_one_or_none()
+    return None
+
+
 async def get_contact(
     db: AsyncSession,
     contact_id: int,
@@ -137,7 +168,7 @@ async def get_contact(
     actor_org_id: int | None = None,
     actor_role: str | None = None,
 ) -> Contact | None:
-    query = select(Contact).where(Contact.id == contact_id)
+    query = select(Contact).where(Contact.id == contact_id, Contact.is_deleted.is_(False))
     if actor_org_id is not None and actor_role is not None:
         query = apply_contact_visibility_scope(query, actor_org_id=actor_org_id, actor_role=actor_role)
     else:
@@ -165,12 +196,16 @@ async def update_contact(
 async def delete_contact(
     db: AsyncSession, contact_id: int, organization_id: int,
 ) -> bool:
+    """Soft-delete a contact. Returns True if deleted, False if not found."""
+    from datetime import UTC
+    from datetime import datetime as dt
     contact = await get_contact(db, contact_id, organization_id)
-    if contact is None:
+    if contact is None or contact.is_deleted:
         return False
-    await db.delete(contact)
+    contact.is_deleted = True
+    contact.deleted_at = dt.now(UTC)
     await db.commit()
-    logger.info("contact deleted id=%d org=%d", contact_id, organization_id)
+    logger.info("contact soft-deleted id=%d org=%d", contact_id, organization_id)
     await _emit_contact_signal(db, CONTACT_DELETED, organization_id, contact)
     return True
 
@@ -311,7 +346,6 @@ async def find_duplicates(
     Returns groups of contacts that share the same email or phone number.
     Each group is a dict with 'match_field', 'match_value', and 'contacts' list.
     """
-    from sqlalchemy import and_, literal_column
 
     dupes: list[dict] = []
 

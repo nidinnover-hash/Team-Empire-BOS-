@@ -17,32 +17,48 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "organizations",
-        sa.Column("config_version", sa.Integer(), nullable=False, server_default="1"),
-    )
-    op.add_column(
-        "organizations",
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-    )
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
 
-    op.create_index(
-        "ix_approvals_org_status_created_at",
-        "approvals",
-        ["organization_id", "status", "created_at"],
-    )
-    op.create_index("ix_approvals_created_at", "approvals", ["created_at"])
-    op.create_index(
-        "ix_integrations_org_status_last_sync_at",
-        "integrations",
-        ["organization_id", "status", "last_sync_at"],
-    )
-    op.create_index("ix_integrations_last_sync_status", "integrations", ["last_sync_status"])
-    op.create_index(
-        "ix_events_org_event_type_created_at",
-        "events",
-        ["organization_id", "event_type", "created_at"],
-    )
+    existing_org = {c["name"] for c in inspector.get_columns("organizations")}
+    if "config_version" not in existing_org:
+        op.add_column(
+            "organizations",
+            sa.Column("config_version", sa.Integer(), nullable=False, server_default="1"),
+        )
+    if "updated_at" not in existing_org:
+        op.add_column(
+            "organizations",
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        )
+
+    existing_apr_idxs = {i["name"] for i in inspector.get_indexes("approvals")}
+    if "ix_approvals_org_status_created_at" not in existing_apr_idxs:
+        op.create_index(
+            "ix_approvals_org_status_created_at",
+            "approvals",
+            ["organization_id", "status", "created_at"],
+        )
+    if "ix_approvals_created_at" not in existing_apr_idxs:
+        op.create_index("ix_approvals_created_at", "approvals", ["created_at"])
+
+    existing_int_idxs = {i["name"] for i in inspector.get_indexes("integrations")}
+    if "ix_integrations_org_status_last_sync_at" not in existing_int_idxs:
+        op.create_index(
+            "ix_integrations_org_status_last_sync_at",
+            "integrations",
+            ["organization_id", "status", "last_sync_at"],
+        )
+    if "ix_integrations_last_sync_status" not in existing_int_idxs:
+        op.create_index("ix_integrations_last_sync_status", "integrations", ["last_sync_status"])
+
+    existing_evt_idxs = {i["name"] for i in inspector.get_indexes("events")}
+    if "ix_events_org_event_type_created_at" not in existing_evt_idxs:
+        op.create_index(
+            "ix_events_org_event_type_created_at",
+            "events",
+            ["organization_id", "event_type", "created_at"],
+        )
 
 
 def downgrade() -> None:

@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.subscription import SubscriptionPlan, Subscription
+from app.models.subscription import Subscription, SubscriptionPlan
 
 
 async def create_plan(

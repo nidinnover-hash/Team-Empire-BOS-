@@ -14,6 +14,7 @@ Failed jobs retry with exponential backoff up to max_retries, then move to 'dead
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import platform
@@ -35,6 +36,7 @@ _handlers: dict[str, Callable[..., Awaitable[None]]] = {}
 _worker_task: asyncio.Task[None] | None = None
 _worker_stop_event: asyncio.Event | None = None
 _worker_id: str = f"{platform.node()}-{id(object()):x}"
+_background_tasks: set[asyncio.Task[object]] = set()
 
 
 def register_handler(job_name: str, handler: Callable[..., Awaitable[None]]) -> None:
@@ -103,12 +105,14 @@ def enqueue_sync(
         return
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(enqueue(
+        task = loop.create_task(enqueue(
             job_name, payload,
             priority=priority,
             delay_seconds=delay_seconds,
             max_retries=max_retries,
         ))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
     except RuntimeError:
         logger.debug("No running event loop; skipping job enqueue for %s", job_name)
 
@@ -232,13 +236,11 @@ async def _worker_loop() -> None:
             logger.warning("Job queue worker error", exc_info=True)
 
         # No job found or error — wait before polling again
-        try:
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(
                 _worker_stop_event.wait(),
                 timeout=poll_interval,
             )
-        except asyncio.TimeoutError:
-            pass  # Normal — poll interval elapsed
 
     logger.info("Job queue worker stopped (id=%s)", _worker_id)
 
@@ -273,14 +275,14 @@ async def stop_worker() -> None:
     if _worker_task is not None and not _worker_task.done():
         try:
             await asyncio.wait_for(_worker_task, timeout=settings.SHUTDOWN_GRACE_SECONDS)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _worker_task.cancel()
         _worker_task = None
 
 
 # ── Stats ────────────────────────────────────────────────────────────────────
 
-async def get_queue_stats(db: AsyncSession) -> dict:
+async def get_queue_stats(db: AsyncSession, *, organization_id: int) -> dict:
     """Return job queue statistics."""
     from sqlalchemy import case, func
     result = await db.execute(

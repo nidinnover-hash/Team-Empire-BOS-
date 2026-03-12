@@ -187,6 +187,7 @@ async def _link_attendees_to_contacts(
         try:
             invitees = await calendly_tool.list_event_invitees(token, event_uri, count=10)
         except Exception:
+            logger.debug("Skipping event invitees due to error", exc_info=True)
             continue
 
         for inv in invitees:

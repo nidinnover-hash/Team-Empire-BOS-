@@ -47,3 +47,16 @@ class EscalateStaleLeadsResult(BaseModel):
     considered: int
     escalated: int
     decision_card_ids: list[int]
+
+
+class ScorecardTile(BaseModel):
+    key: str
+    label: str
+    value: int | float
+    band: str  # green | amber | red
+    target: int | float | None = None
+
+
+class ScorecardRead(BaseModel):
+    window_days: int
+    tiles: list[ScorecardTile]

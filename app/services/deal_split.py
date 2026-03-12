@@ -1,7 +1,7 @@
 """Deal revenue split service."""
 from __future__ import annotations
 
-from sqlalchemy import select, delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.deal_split import DealSplit

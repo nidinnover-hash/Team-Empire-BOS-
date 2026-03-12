@@ -2,11 +2,9 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
 
 # ── Knowledge Extraction: heuristic ──────────────────────────────────────────
 
@@ -157,8 +155,8 @@ def test_parse_extraction_clamps_confidence():
 
 @pytest.mark.asyncio
 async def test_consolidate_memories_merges_duplicates(db):
-    from app.services.memory import upsert_profile_memory
     from app.engines.intelligence.knowledge import consolidate_memories
+    from app.services.memory import upsert_profile_memory
 
     # Create two similar entries
     await upsert_profile_memory(db, organization_id=1, key="ceo_name", value="Nidin Nover")

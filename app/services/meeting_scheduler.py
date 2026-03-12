@@ -1,7 +1,7 @@
 """Meeting scheduler service."""
 from __future__ import annotations
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.meeting_scheduler import AvailabilitySlot, MeetingBooking
@@ -28,7 +28,7 @@ async def list_availability(
 ) -> list[AvailabilitySlot]:
     q = (
         select(AvailabilitySlot)
-        .where(AvailabilitySlot.organization_id == organization_id, AvailabilitySlot.user_id == user_id, AvailabilitySlot.is_active == True)  # noqa: E712
+        .where(AvailabilitySlot.organization_id == organization_id, AvailabilitySlot.user_id == user_id, AvailabilitySlot.is_active.is_(True))
         .order_by(AvailabilitySlot.day_of_week, AvailabilitySlot.start_time)
     )
     return list((await db.execute(q)).scalars().all())

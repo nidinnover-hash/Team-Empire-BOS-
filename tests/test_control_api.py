@@ -167,3 +167,50 @@ async def test_control_self_learning_train_endpoint(client):
     second_body = second.json()
     assert second_body["ok"] is True
     assert second_body.get("skipped") is True
+
+
+async def test_control_dashboard_control_summary(client):
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
+    resp = await client.get("/api/v1/control/dashboard/control-summary", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "pending_approvals_count" in body
+    assert "pending_approvals_recent" in body
+    assert "recent_placements" in body
+    assert "recent_money_approvals" in body
+    assert "study_abroad_at_risk_count" in body
+    assert "generated_at" in body
+
+
+async def test_control_config_contact_policies_crud(client):
+    headers = _make_auth_headers(1, "ceo@org1.com", "CEO", 1)
+    list_resp = await client.get("/api/v1/control/config/contact-policies", headers=headers)
+    assert list_resp.status_code == 200
+    initial = list_resp.json()
+    assert isinstance(initial, list)
+
+    create = await client.post(
+        "/api/v1/control/config/contact-policies",
+        json={"channel": "email", "max_per_contact_per_day": 3},
+        headers=headers,
+    )
+    assert create.status_code == 201
+    policy = create.json()
+    assert policy["channel"] == "email"
+    assert policy["max_per_contact_per_day"] == 3
+    policy_id = policy["id"]
+
+    list_after = await client.get("/api/v1/control/config/contact-policies", headers=headers)
+    assert list_after.status_code == 200
+    assert len(list_after.json()) >= len(initial) + 1
+
+    update = await client.put(
+        f"/api/v1/control/config/contact-policies/{policy_id}",
+        json={"max_per_contact_per_day": 5},
+        headers=headers,
+    )
+    assert update.status_code == 200
+    assert update.json()["max_per_contact_per_day"] == 5
+
+    delete = await client.delete(f"/api/v1/control/config/contact-policies/{policy_id}", headers=headers)
+    assert delete.status_code == 204

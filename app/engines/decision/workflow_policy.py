@@ -13,6 +13,13 @@ BLOCKED_ACTION_PREFIXES = ("admin.", "root.", "system.delete")
 
 def evaluate_workflow_step_policy(*, step: dict) -> tuple[WorkflowStepDecision, str]:
     action_type = str(step.get("action_type") or "").strip().lower()
+
+    # Hard block missing or obviously invalid action types
+    if not action_type:
+        return (WorkflowStepDecision.BLOCKED, "missing_action_type")
+    if len(action_type) > 128:
+        return (WorkflowStepDecision.BLOCKED, "action_type_too_long")
+
     if any(action_type.startswith(prefix) for prefix in BLOCKED_ACTION_PREFIXES):
         return (WorkflowStepDecision.BLOCKED, "action_type_blocked")
     if bool(step.get("requires_approval")):

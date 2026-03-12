@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/static/css/theme.css" />
   <link rel="stylesheet" href="/static/css/shared.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+  <link rel="stylesheet" href="/static/css/bos-design-system.css">
 </head>
 <body>
   {% set active_page = "empire_digital" %}
@@ -17,7 +18,14 @@
     <div class="page-header">
       <h1>Empire Digital Cockpit</h1>
     </div>
-    <div id="cockpit-warning" class="card" style="display:none;margin-bottom:1rem;border-left:4px solid #b45309;background:rgba(245,158,11,.08)"></div>
+    <div id="cockpit-warning" class="card card-warn u-hidden u-mb-1"></div>
+
+    <div class="card card-spaced u-mb-1" id="scorecard-section">
+      <h3 class="u-mt-0">Scorecard (Q1 targets)</h3>
+      <div class="kpi-row" id="scorecard-tiles">
+        <div class="empty">Loading scorecard...</div>
+      </div>
+    </div>
 
     <div class="kpi-row">
       <div class="kpi"><div class="label">Visible Leads</div><div class="val" id="k-total-leads">0</div></div>
@@ -27,45 +35,45 @@
       <div class="kpi"><div class="label">Pending Intelligence</div><div class="val" id="k-pending-intel">0</div></div>
     </div>
 
-    <div class="grid-2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin-top:1rem">
+    <div class="grid-2 section-mt-1">
       <div class="card">
-        <h3 style="margin-top:0">Aging Buckets</h3>
+        <h3 class="u-mt-0">Aging Buckets</h3>
         <div id="aging-buckets" class="empty">Loading...</div>
       </div>
       <div class="card">
-        <h3 style="margin-top:0">Lead Types</h3>
+        <h3 class="u-mt-0">Lead Types</h3>
         <div id="lead-types" class="empty">Loading...</div>
       </div>
       <div class="card">
-        <h3 style="margin-top:0">Routed Companies</h3>
+        <h3 class="u-mt-0">Routed Companies</h3>
         <div id="routed-companies" class="empty">Loading...</div>
       </div>
       <div class="card">
-        <h3 style="margin-top:0">Top Sources</h3>
+        <h3 class="u-mt-0">Top Sources</h3>
         <div id="top-sources" class="empty">Loading...</div>
       </div>
     </div>
 
-    <div class="card" style="margin-top:1rem">
-      <div style="display:flex;justify-content:space-between;gap:.7rem;align-items:center;flex-wrap:wrap">
-        <h3 style="margin:0">Marketing Intelligence</h3>
+    <div class="card card-spaced">
+      <div class="head-row">
+        <h3>Marketing Intelligence</h3>
         <button id="submit-intel-btn" class="btn-primary" type="button">Submit Insight</button>
       </div>
-      <div id="intel-list" class="empty" style="margin-top:.7rem">Loading...</div>
+      <div id="intel-list" class="empty u-mt-md">Loading...</div>
     </div>
 
-    <div class="card" style="margin-top:1rem">
-      <div style="display:flex;justify-content:space-between;gap:.7rem;align-items:center;flex-wrap:wrap">
-        <h3 style="margin:0">Routing Rules</h3>
+    <div class="card card-spaced">
+      <div class="head-row">
+        <h3>Routing Rules</h3>
         <button id="add-rule-btn" class="btn-primary" type="button">Add Rule</button>
       </div>
-      <div id="routing-rules-list" class="empty" style="margin-top:.7rem">Loading...</div>
+      <div id="routing-rules-list" class="empty u-mt-md">Loading...</div>
     </div>
 
-    <div class="card" style="margin-top:1rem">
-      <div style="display:flex;justify-content:space-between;gap:.7rem;align-items:center;flex-wrap:wrap">
-        <h3 style="margin:0">Lead Queue</h3>
-        <div style="display:flex;gap:.45rem;flex-wrap:wrap">
+    <div class="card card-spaced">
+      <div class="head-row">
+        <h3>Lead Queue</h3>
+        <div class="row-gap">
           <select id="lead-filter-status">
             <option value="">All statuses</option>
             <option value="unrouted">Unrouted</option>
@@ -81,25 +89,25 @@
           <button id="lead-refresh-btn" class="btn-primary" type="button">Refresh</button>
         </div>
       </div>
-      <div style="display:flex;gap:.45rem;flex-wrap:wrap;margin:.7rem 0">
+      <div class="row-gap u-mt-md">
         <button id="bulk-route-btn" class="btn-primary" type="button">Bulk Route</button>
         <button id="bulk-qualify-btn" class="btn-primary" type="button">Bulk Qualify</button>
         <button id="bulk-escalate-btn" class="btn-primary" type="button">Escalate Stale</button>
         <button id="export-json-btn" class="btn-primary" type="button">Export JSON</button>
         <button id="export-csv-btn" class="btn-primary" type="button">Export CSV</button>
       </div>
-      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,420px);gap:1rem;align-items:start">
+      <div class="grid-aside">
         <div id="lead-queue-list" class="empty">Loading...</div>
         <div id="lead-detail-panel" class="empty">Select a lead to view details and actions.</div>
       </div>
     </div>
 
-    <div class="card" style="margin-top:1rem">
-      <div style="display:flex;justify-content:space-between;gap:.7rem;align-items:center;flex-wrap:wrap">
-        <h3 style="margin:0">Founder Daily Flow</h3>
+    <div class="card card-spaced">
+      <div class="head-row">
+        <h3>Founder Daily Flow</h3>
         <button id="founder-report-refresh-btn" class="btn-primary" type="button">Refresh Report</button>
       </div>
-      <div id="founder-report-list" class="empty" style="margin-top:.7rem">Loading...</div>
+      <div id="founder-report-list" class="empty u-mt-md">Loading...</div>
     </div>
   </div>
 

@@ -91,6 +91,32 @@
     renderCounts("top-sources", data.top_sources, "No source data.");
   }
 
+  async function loadScorecard() {
+    var section = $("scorecard-section");
+    var container = $("scorecard-tiles");
+    if (!section || !container) return;
+    var resp = await fetch("/api/v1/empire-digital/scorecard?window_days=7", { headers: headers() });
+    if (resp.status === 403) {
+      section.style.display = "none";
+      return;
+    }
+    if (!resp.ok) {
+      container.innerHTML = '<div class="empty">Scorecard unavailable</div>';
+      return;
+    }
+    var data = await resp.json();
+    var tiles = data.tiles || [];
+    if (!tiles.length) {
+      container.innerHTML = '<div class="empty">No scorecard data</div>';
+      return;
+    }
+    container.innerHTML = tiles.map(function (t) {
+      var band = (t.band || "green").toLowerCase();
+      var targetStr = t.target != null ? " / " + t.target : "";
+      return '<div class="kpi scorecard-tile scorecard--' + band + '"><div class="label">' + esc(t.label) + '</div><div class="val">' + esc(t.value) + targetStr + '</div></div>';
+    }).join("");
+  }
+
   async function reviewIntelligence(itemId, status, withDecisionCard) {
     if (!canReviewIntelligence) return;
     var resp = await postJson("/api/v1/empire-digital/intelligence/" + itemId + "/review", {
@@ -461,6 +487,6 @@
   if ($("lead-filter-status")) $("lead-filter-status").addEventListener("change", loadLeadQueue);
   if ($("lead-filter-type")) $("lead-filter-type").addEventListener("change", loadLeadQueue);
 
-  await Promise.all([loadCockpit(), loadIntelligence(), loadRoutingRules(), loadLeadQueue(), loadFounderReport()]);
+  await Promise.all([loadCockpit(), loadScorecard(), loadIntelligence(), loadRoutingRules(), loadLeadQueue(), loadFounderReport()]);
   if (typeof lucide !== "undefined") lucide.createIcons();
 })();

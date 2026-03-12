@@ -135,7 +135,8 @@
           desc: 'Add your first contact to start building your network.'
         });
       } else {
-        body.innerHTML = '<tr><td colspan="7" style="text-align:center;opacity:.5">No contacts found</td></tr>';
+        body.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon"><i data-lucide="contact"></i></div><span class="empty-state-title">No contacts found</span><span class="text-caption">Add your first contact to start building your network.</span></div></td></tr>';
+        if (window.lucide && window.lucide.createIcons) window.lucide.createIcons({ nodes: body.querySelectorAll('i[data-lucide]') });
       }
       return;
     }

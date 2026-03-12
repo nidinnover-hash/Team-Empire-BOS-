@@ -15,6 +15,7 @@
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
         crossorigin="" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+  <link rel="stylesheet" href="/static/css/bos-design-system.css">
 </head>
 <body>
   {% set active_page = "team" %}
@@ -56,16 +57,16 @@
     </div>
 
     <!-- Mini-map: employee locations -->
-    <div class="card" id="team-map-card" style="display:none">
+    <div class="card u-hidden" id="team-map-card">
       <div class="card-head"><span>Team Locations</span><a href="/web/maps" class="card-link">Full Map</a></div>
-      <div class="card-body"><div id="team-mini-map" style="width:100%;height:200px;border-radius:8px"></div></div>
+      <div class="card-body"><div id="team-mini-map" class="mini-map-canvas"></div></div>
     </div>
 
     <div id="member-list" class="member-list"><div class="empty loading">Loading team members...</div></div>
   </div>
 
   <!-- Invite Modal -->
-  <div class="modal-overlay" id="invite-modal" style="display:none">
+  <div class="modal-overlay u-hidden" id="invite-modal">
     <div class="modal-card">
       <div class="modal-header">
         <h2>Add Team Member</h2>

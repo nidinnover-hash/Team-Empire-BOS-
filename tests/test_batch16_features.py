@@ -6,18 +6,31 @@ import pytest
 
 from app.core.config import settings
 from app.services import (
-    quote as quote_svc,
-    survey as survey_svc,
-    sales_playbook as pb_svc,
-    import_mapping as im_svc,
-    deal_rotation as dr_svc,
-    webhook_event as we_svc,
     custom_report as cr_svc,
+)
+from app.services import (
+    deal_rotation as dr_svc,
+)
+from app.services import (
+    import_mapping as im_svc,
+)
+from app.services import (
+    quote as quote_svc,
+)
+from app.services import (
+    sales_playbook as pb_svc,
+)
+from app.services import (
+    survey as survey_svc,
+)
+from app.services import (
+    webhook_event as we_svc,
 )
 
 
 def _obj(**kw):
-    class _O: pass
+    class _O:
+        pass
     o = _O()
     for k, v in kw.items():
         setattr(o, k, v)

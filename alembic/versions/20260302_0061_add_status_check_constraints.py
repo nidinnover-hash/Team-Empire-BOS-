@@ -5,6 +5,7 @@ Revises: 20260301_0060
 Create Date: 2026-03-02
 """
 
+import sqlalchemy as sa
 from alembic import op
 
 revision = "20260302_0061"
@@ -77,8 +78,29 @@ _CONSTRAINTS: list[tuple[str, str, str, list[str]]] = [
 ]
 
 
+def _table_exists(conn, table: str) -> bool:
+    rows = conn.execute(
+        sa.text("SELECT 1 FROM information_schema.tables WHERE table_name = :t AND table_schema = 'public'"),
+        {"t": table},
+    ).fetchall()
+    return len(rows) > 0
+
+
+def _constraint_exists(conn, name: str) -> bool:
+    rows = conn.execute(
+        sa.text("SELECT 1 FROM pg_constraint WHERE conname = :n"),
+        {"n": name},
+    ).fetchall()
+    return len(rows) > 0
+
+
 def upgrade() -> None:
+    conn = op.get_bind()
     for table, name, column, values in _CONSTRAINTS:
+        if not _table_exists(conn, table):
+            continue
+        if _constraint_exists(conn, name):
+            continue
         vals = ", ".join(f"'{v}'" for v in values)
         # nullable columns need IS NULL allowance
         nullable = column in ("last_sync_status",)

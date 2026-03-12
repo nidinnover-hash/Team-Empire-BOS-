@@ -8,13 +8,12 @@ REQUIRED_MINOR = 12
 
 def main() -> int:
     current = (sys.version_info.major, sys.version_info.minor)
-    required = (REQUIRED_MAJOR, REQUIRED_MINOR)
-    if current == required:
+    if current[0] == REQUIRED_MAJOR and current[1] >= REQUIRED_MINOR:
         print(f"Python preflight passed ({current[0]}.{current[1]}).")
         return 0
     print(
         "Python preflight failed: "
-        f"required {required[0]}.{required[1]}, detected {current[0]}.{current[1]}."
+        f"required {REQUIRED_MAJOR}.{REQUIRED_MINOR}+, detected {current[0]}.{current[1]}."
     )
     return 1
 

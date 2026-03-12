@@ -1,12 +1,9 @@
 """Tests for Workflow Execution Insights — analytics service + API endpoint."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 import pytest
 
 from tests.conftest import _make_auth_headers
-
 
 # ── Service: get_execution_summary ──────────────────────────────────────────
 

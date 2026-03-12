@@ -1,19 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <title>Finance - Nidin BOS</title>
-  <link rel="stylesheet" href="/static/css/theme.css" />
-  <link rel="stylesheet" href="/static/css/shared.css" />
-  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
-</head>
-<body>
-  {% set active_page = "finance" %}
-  {% include "partials/sidebar.html" %}
+{% extends "base.html" %}
+{% block active_page %}finance{% endblock %}
+{% block title %}Finance — Nidin BOS{% endblock %}
 
-  <div class="main-wrap">
+{% block content %}
+  <div class="main-wrap" id="main-content">
     <div class="page-header"><h1>Finance Overview</h1></div>
     <div class="kpi-row stagger-enter">
       <div class="kpi"><div class="label">Revenue (30d)</div><div class="val" id="k-revenue" data-count-to="0" data-count-prefix="$">0</div></div>
@@ -21,11 +11,11 @@
       <div class="kpi"><div class="label">Refunded</div><div class="val" id="k-refund" data-count-to="0" data-count-prefix="$">0</div></div>
       <div class="kpi"><div class="label">Disputes</div><div class="val" id="k-disputes" data-count-to="0">0</div></div>
     </div>
-    <div class="card" style="margin-top:1.5rem">
+    <div class="card card-spaced">
       <h3>Revenue Trend</h3>
-      <div id="finance-revenue-chart" style="padding:.4rem 0 .9rem 0"><div class="empty">Loading chart...</div></div>
+      <div id="finance-revenue-chart" class="chart-placeholder"><div class="empty">Loading chart...</div></div>
     </div>
-    <div class="card" style="margin-top:1.5rem">
+    <div class="card card-spaced">
       <h3>Recent Transactions</h3>
       <table class="data-table">
         <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th></tr></thead>
@@ -33,9 +23,10 @@
       </table>
     </div>
   </div>
-  <script nonce="{{ csp_nonce }}" src="/static/js/micro.js"></script>
-  <script nonce="{{ csp_nonce }}" src="/static/js/charts-lite.js"></script>
-  <script nonce="{{ csp_nonce }}" src="/static/js/finance-page.js"></script>
-  <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
-</body>
-</html>
+{% endblock %}
+
+{% block extra_js %}
+<script nonce="{{ csp_nonce }}" src="/static/js/micro.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/charts-lite.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/finance-page.js"></script>
+{% endblock %}

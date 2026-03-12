@@ -3,7 +3,6 @@ campaign analytics, report schedules, notification rules, workspace permissions.
 
 import pytest
 
-
 # ── Smart task prioritization ────────────────────────────────────────────────
 
 
@@ -37,6 +36,7 @@ async def test_prioritized_tasks_scoring(client):
 async def test_compute_priority_score_logic():
     """Unit test for _compute_priority_score."""
     from datetime import date
+
     from app.services.task_priority import _compute_priority_score
 
     class FakeTask:

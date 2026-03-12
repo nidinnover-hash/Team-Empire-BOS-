@@ -1,15 +1,12 @@
 """Tests for centralized mutation audit coverage contract."""
 from __future__ import annotations
 
-import pytest
-
 from app.core.audit_middleware import (
+    _SKIP_PREFIXES,
     MutationAuditMiddleware,
     _derive_event_type,
     _extract_entity_id,
-    _SKIP_PREFIXES,
 )
-from fastapi.routing import APIRoute
 from app.main import app as fastapi_app
 
 
@@ -27,7 +24,7 @@ def test_derive_event_type_delete():
 
 def test_derive_event_type_nested_action():
     result = _derive_event_type("PUT", "/api/v1/deal-dependencies/1/resolve")
-    assert result == "deal_dependencie_resolve"
+    assert result == "deal_dependency_resolve"
 
 
 def test_derive_event_type_hyphenated_resource():

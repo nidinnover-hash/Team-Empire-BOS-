@@ -1,7 +1,7 @@
 """Contact relationship mapping service."""
 from __future__ import annotations
 
-from sqlalchemy import select, or_
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact_relationship import ContactRelationship

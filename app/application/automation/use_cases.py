@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.automation import service as automation_domain
@@ -211,7 +213,7 @@ async def run_workflow_definition(
         payload_json={
             "workflow_definition_id": definition.id,
             "trigger_source": trigger_source,
-            "step_count": len(plan.get("step_plans", [])),
+            "step_count": len(cast(list, plan.get("step_plans", []))),
         },
     )
     result = await run_workflow_plan(
@@ -223,7 +225,7 @@ async def run_workflow_definition(
     )
     await db.commit()
     await db.refresh(result)
-    return result
+    return cast(WorkflowRun | None, result)
 
 
 async def list_workflow_runs(
@@ -301,7 +303,7 @@ async def resume_workflow_run(
     )
     await db.commit()
     await db.refresh(result)
-    return result
+    return cast(WorkflowRun | None, result)
 
 
 async def retry_workflow_run(

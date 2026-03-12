@@ -5,18 +5,31 @@ from __future__ import annotations
 import pytest
 
 from app.services import (
-    customer_health as ch_svc,
-    meeting_scheduler as ms_svc,
-    document_signing as ds_svc,
-    sales_leaderboard as lb_svc,
-    dedup_rule as dd_svc,
-    stage_gate as sg_svc,
     activity_goal as ag_svc,
+)
+from app.services import (
+    customer_health as ch_svc,
+)
+from app.services import (
+    dedup_rule as dd_svc,
+)
+from app.services import (
+    document_signing as ds_svc,
+)
+from app.services import (
+    meeting_scheduler as ms_svc,
+)
+from app.services import (
+    sales_leaderboard as lb_svc,
+)
+from app.services import (
+    stage_gate as sg_svc,
 )
 
 
 def _obj(**kw):
-    class _O: pass
+    class _O:
+        pass
     o = _O()
     for k, v in kw.items():
         setattr(o, k, v)

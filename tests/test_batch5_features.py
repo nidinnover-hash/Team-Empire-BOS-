@@ -4,7 +4,6 @@ notification preferences, deal stage triggers, project timeline page."""
 import pytest
 from httpx import AsyncClient
 
-
 # ── Email Thread Summarization ──────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -186,7 +185,9 @@ async def test_deal_stage_trigger_failure_non_fatal(client: AsyncClient, monkeyp
 @pytest.mark.asyncio
 async def test_project_timeline_page_redirect(client: AsyncClient):
     """Project timeline page redirects to login without session cookie."""
-    from httpx import ASGITransport, AsyncClient as AC
+    from httpx import ASGITransport
+    from httpx import AsyncClient as AC
+
     from app.main import app
 
     async with AC(transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False) as anon:
@@ -207,7 +208,7 @@ async def test_should_notify_default(db):
 @pytest.mark.asyncio
 async def test_should_notify_muted(db):
     """should_notify returns all False when muted."""
-    from app.services.notification_preference import upsert_preference, should_notify
+    from app.services.notification_preference import should_notify, upsert_preference
 
     await upsert_preference(db, user_id=1, organization_id=1, event_category="alert", muted=True)
     result = await should_notify(db, user_id=1, organization_id=1, event_category="alert")
@@ -217,7 +218,7 @@ async def test_should_notify_muted(db):
 @pytest.mark.asyncio
 async def test_should_notify_severity_filter(db):
     """should_notify filters by min_severity."""
-    from app.services.notification_preference import upsert_preference, should_notify
+    from app.services.notification_preference import should_notify, upsert_preference
 
     await upsert_preference(db, user_id=1, organization_id=1, event_category="finance", min_severity="warning")
     # "info" is below "warning" threshold

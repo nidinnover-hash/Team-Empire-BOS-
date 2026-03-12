@@ -27,6 +27,7 @@ from app.core.resilience import IntegrationSyncError, RetryPolicy, error_details
 from app.db.session import AsyncSessionLocal
 from app.jobs._helpers import record_job_run, scheduler_error_category
 from app.jobs.approval_jobs import auto_reject_expired_approvals
+from app.jobs.control_alerts import run_control_alerts
 from app.jobs.infra import maybe_run_daily_backup, retry_webhook_deliveries
 from app.jobs.intelligence import (
     _collect_stale_integrations as _jobs_collect_stale_integrations,
@@ -115,6 +116,13 @@ async def _run_alert_engine(db: AsyncSession, org_id: int) -> dict:
     """Run proactive alert checks for an organization."""
     from app.services.alert_engine import run_alert_checks
     return await run_alert_checks(db, org_id)
+
+
+async def _run_anomaly_detection(db: AsyncSession, org_id: int) -> dict:
+    """Run anomaly detection comparing today vs 7-day rolling average."""
+    from app.services.anomaly_detection import detect_anomalies
+    anomalies = await detect_anomalies(db, organization_id=org_id)
+    return {"anomalies_detected": len(anomalies)}
 _scheduler_error_category = scheduler_error_category
 _collect_stale_integrations = _jobs_collect_stale_integrations
 _extract_top_risks = _jobs_extract_top_risks
@@ -888,6 +896,7 @@ async def _run_automation_jobs_for_org(db: AsyncSession, org_id: int) -> None:
         ("cleanup_logs", _cleanup_old_logs),
         ("cleanup_snapshots", _cleanup_old_job_runs_and_snapshots),
         ("approval_auto_reject", _auto_reject_expired_approvals),
+        ("control_alerts", run_control_alerts),
         ("trend_snapshot", _snapshot_org_trends_job),
         ("cleanup_trend_events", _cleanup_old_trend_events),
         ("layer_snapshot", _snapshot_layer_scores_job),
@@ -895,6 +904,7 @@ async def _run_automation_jobs_for_org(db: AsyncSession, org_id: int) -> None:
         ("weekly_coaching", _maybe_run_weekly_coaching),
         ("monitor_scheduler_slo", _monitor_scheduler_slos),
         ("alert_engine", _run_alert_engine),
+        ("anomaly_detection", _run_anomaly_detection),
     ]
     if getattr(settings, "FEATURE_WORKFLOW_RELIABILITY", False):
         from app.engines.execution.workflow_recovery import recover_workflow_runs_for_org

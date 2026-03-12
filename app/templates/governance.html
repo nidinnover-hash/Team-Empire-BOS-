@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/governance.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+  <link rel="stylesheet" href="/static/css/bos-design-system.css">
 </head>
 <body>
   {% set active_page = "governance" %}
@@ -48,17 +49,17 @@
     </div>
 
     <!-- Violations Panel -->
-    <div id="panel-violations" class="panel" style="display:none">
+    <div id="panel-violations" class="panel u-hidden">
       <div id="violation-list" class="item-list"><div class="empty loading">Loading violations...</div></div>
     </div>
 
     <!-- Automation Panel -->
-    <div id="panel-automation" class="panel" style="display:none">
+    <div id="panel-automation" class="panel u-hidden">
       <div id="automation-content"><div class="empty loading">Loading...</div></div>
     </div>
 
     <!-- New Policy Modal -->
-    <div id="modal-policy" class="modal-overlay" style="display:none">
+    <div id="modal-policy" class="modal-overlay u-hidden">
       <div class="modal">
         <div class="modal-header">
           <h2>New Governance Policy</h2>

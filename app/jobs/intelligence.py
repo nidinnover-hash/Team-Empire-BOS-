@@ -171,12 +171,12 @@ async def _maybe_send_daily_ceo_slack_summary(
 
 
 async def check_morning_briefing(db: AsyncSession, org_id: int) -> None:
-    """Generate daily briefing at 8-9am IST if not already created today."""
+    """Generate daily briefing at 7-9am IST if not already created today."""
     from app.models.memory import DailyContext
 
     tz = ZoneInfo("Asia/Kolkata")
     local_now = datetime.now(UTC).astimezone(tz)
-    if local_now.hour < 8 or local_now.hour >= 9:
+    if local_now.hour < 7 or local_now.hour >= 9:
         return
 
     today_ist = local_now.date()
@@ -208,6 +208,18 @@ async def check_morning_briefing(db: AsyncSession, org_id: int) -> None:
                 content=f"Morning auto-briefing:\n{summary_text}",
                 related_to="scheduler",
             ),
+        )
+        # Emit notification so it appears in the dashboard signal feed
+        from app.services.notification import create_notification
+        await create_notification(
+            db,
+            organization_id=org_id,
+            type="daily_briefing",
+            severity="info",
+            title="Daily Briefing Ready",
+            message=summary_text[:300],
+            source="scheduler",
+            entity_type="briefing",
         )
         logger.info("Morning briefing generated for org=%d", org_id)
     except asyncio.CancelledError:
@@ -605,7 +617,6 @@ _last_briefing_email_date_by_org: dict[int, str] = {}
 
 async def maybe_send_daily_briefing_email(db: AsyncSession, org_id: int) -> None:
     """Send a morning briefing email via Gmail at 8-9am IST (once per day per org)."""
-    from app.core.config import settings
     from app.models.user import User
     from app.services.integration import get_integration_by_type
 

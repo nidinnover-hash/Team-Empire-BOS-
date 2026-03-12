@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from app.domains.automation.models import WorkflowStepDecision
 from app.engines.decision.workflow_policy import evaluate_workflow_step_policy
 from app.platform.signals import SignalCategory, SignalEnvelope, publish_signal
-from app.platform.signals.topics import WORKFLOW_PLAN_GENERATED
+from app.platform.signals.topics import WORKFLOW_PLAN_GENERATED, WORKFLOW_STEP_BLOCKED
 
 
 async def build_workflow_execution_plan(
@@ -47,4 +48,26 @@ async def build_workflow_execution_plan(
         ),
         db=db,
     )
+    for sp in step_plans:
+        if sp.get("decision") == WorkflowStepDecision.BLOCKED.value:
+            await publish_signal(
+                SignalEnvelope(
+                    topic=WORKFLOW_STEP_BLOCKED,
+                    category=SignalCategory.DECISION,
+                    organization_id=organization_id,
+                    workspace_id=workspace_id,
+                    actor_user_id=actor_user_id,
+                    source="engines.decision.workflow_plans",
+                    entity_type="workflow_run",
+                    entity_id=str(run.id),
+                    payload={
+                        "workflow_run_id": run.id,
+                        "step_index": sp.get("step_index"),
+                        "step_key": sp.get("step_key"),
+                        "action_type": sp.get("action_type"),
+                        "reason": sp.get("reason"),
+                    },
+                ),
+                db=db,
+            )
     return payload

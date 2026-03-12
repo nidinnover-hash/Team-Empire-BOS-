@@ -5,18 +5,31 @@ from __future__ import annotations
 import pytest
 
 from app.services import (
-    revenue_goal as rg_svc,
-    deal_dependency as dd_svc,
     contact_timeline_events as ct_svc,
+)
+from app.services import (
+    deal_dependency as dd_svc,
+)
+from app.services import (
     email_warmup as ew_svc,
-    territory_assignment as ta_svc,
+)
+from app.services import (
     quote_approval as qa_svc,
+)
+from app.services import (
+    revenue_goal as rg_svc,
+)
+from app.services import (
+    territory_assignment as ta_svc,
+)
+from app.services import (
     win_loss_analysis as wl_svc,
 )
 
 
 def _obj(**kw):
-    class _O: pass
+    class _O:
+        pass
     o = _O()
     for k, v in kw.items():
         setattr(o, k, v)

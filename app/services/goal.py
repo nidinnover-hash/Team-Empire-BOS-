@@ -26,7 +26,7 @@ async def list_goals(
 ) -> list[Goal]:
     result = await db.execute(
         select(Goal)
-        .where(Goal.organization_id == organization_id)
+        .where(Goal.organization_id == organization_id, Goal.is_deleted.is_(False))
         .order_by(Goal.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -90,7 +90,7 @@ async def get_goal(
     db: AsyncSession, goal_id: int, organization_id: int,
 ) -> Goal | None:
     result = await db.execute(
-        select(Goal).where(Goal.id == goal_id, Goal.organization_id == organization_id)
+        select(Goal).where(Goal.id == goal_id, Goal.organization_id == organization_id, Goal.is_deleted.is_(False))
     )
     return result.scalar_one_or_none()
 
@@ -99,11 +99,14 @@ async def delete_goal(
     db: AsyncSession, goal_id: int, organization_id: int,
 ) -> bool:
     goal = await get_goal(db, goal_id, organization_id)
-    if goal is None:
+    if goal is None or goal.is_deleted:
         return False
-    await db.delete(goal)
+    from datetime import UTC
+    from datetime import datetime as dt
+    goal.is_deleted = True
+    goal.deleted_at = dt.now(UTC)
     await db.commit()
-    logger.info("goal deleted id=%d org=%d", goal_id, organization_id)
+    logger.info("goal soft-deleted id=%d org=%d", goal_id, organization_id)
     return True
 
 

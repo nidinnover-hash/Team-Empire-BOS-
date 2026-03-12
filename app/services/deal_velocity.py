@@ -1,7 +1,7 @@
 """Deal velocity service — stage transition tracking and bottleneck analysis."""
 from __future__ import annotations
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.deal_velocity import DealStageTransition

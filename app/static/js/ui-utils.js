@@ -34,17 +34,17 @@
     if (existing) return existing;
     var root = document.createElement("div");
     root.id = "pcui-dialog-root";
-    root.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.46);z-index:12000;display:none;align-items:center;justify-content:center;padding:16px;";
+    root.className = "pcui-dialog-root";
     root.innerHTML =
-      '<div role="dialog" aria-modal="true" style="width:100%;max-width:420px;background:#fff;color:#1f2937;border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.35);padding:16px;">' +
-      '<h3 id="pcui-dialog-title" style="margin:0 0 8px;font-size:16px;font-weight:700;"></h3>' +
-      '<p id="pcui-dialog-message" style="margin:0 0 12px;font-size:13px;line-height:1.45;color:#4b5563;white-space:pre-wrap;"></p>' +
-      '<div id="pcui-dialog-input-wrap" style="display:none;margin-bottom:12px;">' +
-      '<input id="pcui-dialog-input" type="text" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;" />' +
+      '<div class="pcui-dialog" role="dialog" aria-modal="true">' +
+      '<h3 id="pcui-dialog-title" class="pcui-dialog-title"></h3>' +
+      '<p id="pcui-dialog-message" class="pcui-dialog-message"></p>' +
+      '<div id="pcui-dialog-input-wrap" class="pcui-dialog-input-wrap u-hidden">' +
+      '<input id="pcui-dialog-input" type="text" class="pcui-dialog-input" />' +
       "</div>" +
-      '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
-      '<button id="pcui-dialog-cancel" type="button" style="border:1px solid #d1d5db;background:#fff;color:#374151;border-radius:8px;padding:8px 12px;cursor:pointer;">Cancel</button>' +
-      '<button id="pcui-dialog-ok" type="button" style="border:none;background:#2563eb;color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer;">OK</button>' +
+      '<div class="pcui-dialog-actions">' +
+      '<button id="pcui-dialog-cancel" type="button" class="pcui-dialog-cancel">Cancel</button>' +
+      '<button id="pcui-dialog-ok" type="button" class="pcui-dialog-ok">OK</button>' +
       "</div>" +
       "</div>";
     document.body.appendChild(root);
@@ -54,28 +54,59 @@
   function _runDialog(options) {
     return new Promise(function (resolve) {
       var root = _ensureDialogRoot();
+      var dialog = root.querySelector(".pcui-dialog");
       var titleEl = document.getElementById("pcui-dialog-title");
       var msgEl = document.getElementById("pcui-dialog-message");
       var inputWrap = document.getElementById("pcui-dialog-input-wrap");
       var inputEl = document.getElementById("pcui-dialog-input");
       var okBtn = document.getElementById("pcui-dialog-ok");
       var cancelBtn = document.getElementById("pcui-dialog-cancel");
+      var previousActive = document.activeElement;
 
       titleEl.textContent = options.title || "Confirm";
       msgEl.textContent = options.message || "";
       okBtn.textContent = options.okLabel || "OK";
       cancelBtn.textContent = options.cancelLabel || "Cancel";
-      cancelBtn.style.display = options.cancelLabel === "" ? "none" : "";
+      cancelBtn.classList.toggle("u-hidden", options.cancelLabel === "");
 
       var expectInput = options.mode === "prompt";
-      inputWrap.style.display = expectInput ? "" : "none";
+      inputWrap.classList.toggle("u-hidden", !expectInput);
       inputEl.value = expectInput ? (options.defaultValue || "") : "";
 
+      function getFocusables() {
+        var sel = "button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])";
+        return [].slice.call(dialog.querySelectorAll(sel)).filter(function (el) {
+          return !el.disabled && (el.offsetWidth || el.offsetHeight);
+        });
+      }
+      function onKeydown(evt) {
+        if (evt.key !== "Tab") return;
+        var focusables = getFocusables();
+        if (focusables.length === 0) return;
+        var first = focusables[0];
+        var last = focusables[focusables.length - 1];
+        if (evt.shiftKey) {
+          if (document.activeElement === first) {
+            evt.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            evt.preventDefault();
+            first.focus();
+          }
+        }
+      }
+
       function cleanup() {
-        root.style.display = "none";
+        root.classList.remove("is-open");
         root.removeEventListener("click", onBackdropClick);
+        dialog.removeEventListener("keydown", onKeydown);
         okBtn.removeEventListener("click", onOk);
         cancelBtn.removeEventListener("click", onCancel);
+        if (previousActive && typeof previousActive.focus === "function") {
+          try { previousActive.focus(); } catch (e) {}
+        }
       }
       function onBackdropClick(evt) {
         if (evt.target === root) {
@@ -93,9 +124,10 @@
       }
 
       root.addEventListener("click", onBackdropClick);
+      dialog.addEventListener("keydown", onKeydown);
       okBtn.addEventListener("click", onOk);
       cancelBtn.addEventListener("click", onCancel);
-      root.style.display = "flex";
+      root.classList.add("is-open");
       if (expectInput) inputEl.focus();
       else okBtn.focus();
     });

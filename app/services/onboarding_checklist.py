@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.onboarding_checklist import OnboardingTemplate, OnboardingChecklist
+from app.models.onboarding_checklist import OnboardingChecklist, OnboardingTemplate
 
 
 async def create_template(

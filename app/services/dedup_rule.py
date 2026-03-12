@@ -73,7 +73,7 @@ async def check_duplicates(db: AsyncSession, organization_id: int, contact_data:
     matches = []
     for rule in rules:
         fields = json.loads(rule.match_fields)
-        matched_fields = [f for f in fields if f in contact_data and contact_data[f]]
+        matched_fields = [f for f in fields if contact_data.get(f)]
         if matched_fields:
             confidence = len(matched_fields) / len(fields) if fields else 0
             if confidence >= float(rule.confidence_threshold):

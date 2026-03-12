@@ -40,23 +40,17 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    try:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if "self_learning_runs" not in set(inspector.get_table_names()):
+        return
+    existing_idxs = {i["name"] for i in inspector.get_indexes("self_learning_runs")}
+    if "ix_self_learning_runs_status" in existing_idxs:
         op.drop_index("ix_self_learning_runs_status", table_name="self_learning_runs")
-    except Exception:
-        pass
-    try:
+    if "ix_self_learning_runs_requested_by" in existing_idxs:
         op.drop_index("ix_self_learning_runs_requested_by", table_name="self_learning_runs")
-    except Exception:
-        pass
-    try:
+    if "ix_self_learning_runs_week_start_date" in existing_idxs:
         op.drop_index("ix_self_learning_runs_week_start_date", table_name="self_learning_runs")
-    except Exception:
-        pass
-    try:
+    if "ix_self_learning_runs_organization_id" in existing_idxs:
         op.drop_index("ix_self_learning_runs_organization_id", table_name="self_learning_runs")
-    except Exception:
-        pass
-    try:
-        op.drop_table("self_learning_runs")
-    except Exception:
-        pass
+    op.drop_table("self_learning_runs")

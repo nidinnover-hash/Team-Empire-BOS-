@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 
-from app.core.config import settings
 from app.engines.brain.workflow_prompts import WORKFLOW_COPILOT_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -121,7 +120,7 @@ def _parse_ai_response(raw: str) -> dict:
     text = raw.strip()
     if text.startswith("```"):
         lines = text.split("\n")
-        lines = [l for l in lines if not l.strip().startswith("```")]
+        lines = [line for line in lines if not line.strip().startswith("```")]
         text = "\n".join(lines)
     plan = json.loads(text)
     if not isinstance(plan, dict) or "steps" not in plan:

@@ -7,7 +7,6 @@ import pytest
 
 from tests.conftest import _make_auth_headers
 
-
 # ── score_contact ───────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

@@ -2,19 +2,32 @@
 import pytest
 
 from app.services import (
-    email_sequence as es_svc,
-    deal_risk as dr_svc,
     contact_relationship as cr_svc,
-    pipeline_snapshot as ps_svc,
-    user_activity_heatmap as ua_svc,
+)
+from app.services import (
+    deal_risk as dr_svc,
+)
+from app.services import (
     document_template as dt_svc,
+)
+from app.services import (
+    email_sequence as es_svc,
+)
+from app.services import (
     goal_cascade as gc_svc,
+)
+from app.services import (
+    pipeline_snapshot as ps_svc,
+)
+from app.services import (
+    user_activity_heatmap as ua_svc,
 )
 
 
 def _obj(**kw):
     """Create a simple namespace object from keyword args."""
-    class _O: pass
+    class _O:
+        pass
     o = _O()
     for k, v in kw.items():
         setattr(o, k, v)

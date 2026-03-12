@@ -5,13 +5,13 @@ import pytest
 
 from tests.conftest import _make_auth_headers
 
-
 # ── Coaching service ────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_generate_org_improvement_plan(db, monkeypatch):
     """Org improvement plan creates a coaching report with status=pending."""
     import json
+
     from app.services import ai_coaching
 
     async def _fake_call_ai(system_prompt, user_message, **kwargs):
@@ -23,8 +23,9 @@ async def test_generate_org_improvement_plan(db, monkeypatch):
     monkeypatch.setattr(ai_coaching, "_call_ai_safe", _fake_call_ai)
 
     # We need performance data — mock it
-    from app.services import performance as perf_service
     from types import SimpleNamespace
+
+    from app.services import performance as perf_service
 
     async def _fake_org_perf(db, org_id, days=30):
         return SimpleNamespace(

@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from difflib import SequenceMatcher
 from typing import Any, TypedDict
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.memory import ProfileMemory
@@ -237,6 +237,7 @@ async def save_extracted_knowledge(
     from app.services.memory import upsert_profile_memory
 
     saved = 0
+    errors = 0
     for entry in entries:
         try:
             await upsert_profile_memory(
@@ -247,7 +248,39 @@ async def save_extracted_knowledge(
             )
             saved += 1
         except Exception:
-            logger.debug("Failed to save knowledge entry %s", entry["key"], exc_info=True)
+            errors += 1
+            logger.warning(
+                "Failed to save knowledge entry %s for org %s workspace %s",
+                entry.get("key"),
+                organization_id,
+                workspace_id,
+                exc_info=True,
+            )
+    if errors and not saved:
+        try:
+            from app.platform.signals import (
+                KNOWLEDGE_SAVE_FAILED,
+                SignalCategory,
+                SignalEnvelope,
+                publish_signal,
+            )
+            await publish_signal(
+                SignalEnvelope(
+                    topic=KNOWLEDGE_SAVE_FAILED,
+                    category=SignalCategory.DOMAIN,
+                    organization_id=organization_id,
+                    workspace_id=workspace_id,
+                    actor_user_id=None,
+                    source="engines.intelligence.knowledge",
+                    entity_type="knowledge_save",
+                    entity_id="",
+                    payload={"organization_id": organization_id, "entry_count": len(entries), "errors": errors},
+                ),
+                db=db,
+            )
+        except Exception:
+            logger.debug("Failed to publish KNOWLEDGE_SAVE_FAILED signal", exc_info=True)
+        raise RuntimeError(f"Failed to persist any knowledge entries for org {organization_id}")
     return saved
 
 
@@ -296,12 +329,10 @@ async def consolidate_memories(
         by_category[entry.category].append(entry)
 
     merged = 0
-    deleted = 0
-    errors = 0
+    value_updates: list[tuple[int, str]] = []
     to_delete: list[int] = []
 
     for _cat, entries in by_category.items():
-        # Compare all pairs within category
         consumed: set[int] = set()
         for i, entry_a in enumerate(entries):
             if entry_a.id in consumed:
@@ -310,19 +341,16 @@ async def consolidate_memories(
                 if entry_b.id in consumed:
                     continue
 
-                # Check key similarity
                 key_sim = _similarity(entry_a.key, entry_b.key)
-                # Check value similarity
                 val_sim = _similarity(entry_a.value or "", entry_b.value or "")
 
                 if key_sim >= MERGE_SIMILARITY_THRESHOLD or val_sim >= MERGE_SIMILARITY_THRESHOLD:
-                    # Keep the newer entry (entry_a is newer due to ordering)
-                    # If values differ significantly, append the old value
                     if val_sim < 0.9 and entry_b.value and entry_a.value:
                         combined = f"{entry_a.value}\n(Previously: {entry_b.value[:100]})"
                         if len(combined) <= 2000:
                             entry_a.value = combined
                             entry_a.updated_at = datetime.now(UTC)
+                            value_updates.append((entry_a.id, entry_a.value))
 
                     to_delete.append(entry_b.id)
                     consumed.add(entry_b.id)
@@ -333,28 +361,21 @@ async def consolidate_memories(
             scanned=len(all_entries), merged=merged, deleted=0, errors=0,
         )
 
-    # Delete duplicates
-    for entry_id in to_delete:
-        try:
-            entry = await db.get(ProfileMemory, entry_id)
-            if entry and entry.organization_id == organization_id:
-                await db.delete(entry)
-                deleted += 1
-        except Exception:
-            logger.debug("Failed to delete merged entry %d", entry_id, exc_info=True)
-            errors += 1
+    # Persist via service so engine does not perform DB writes directly
+    from app.services.memory import consolidate_profile_memory_duplicates
 
-    if deleted > 0:
-        try:
-            await db.commit()
-        except Exception:
-            await db.rollback()
-            logger.warning("Consolidation commit failed", exc_info=True)
-            errors += deleted
-            deleted = 0
+    try:
+        updated_count, deleted_count = await consolidate_profile_memory_duplicates(
+            db, organization_id, value_updates, to_delete,
+        )
+    except Exception:
+        logger.warning("Consolidation commit failed", exc_info=True)
+        return ConsolidationResult(
+            scanned=len(all_entries), merged=merged, deleted=0, errors=merged,
+        )
 
     return ConsolidationResult(
-        scanned=len(all_entries), merged=merged, deleted=deleted, errors=errors,
+        scanned=len(all_entries), merged=merged, deleted=deleted_count, errors=0,
     )
 
 

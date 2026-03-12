@@ -93,7 +93,7 @@
   --text:         #f5f5f7;
   --text-secondary:#a1a1a6;
   --text-muted:   #8e8e93;
-  --text-faint:   #636366;
+  --text-faint:   #7a7a7f;
   --brand:        #0a84ff;
   --brand-hover:  #409cff;
   --brand-soft:   rgba(10, 132, 255, 0.12);
@@ -261,6 +261,56 @@ html {
   letter-spacing: -.01em;
 }
 .sb-pulse { display: none; }
+
+/* ── Company Switcher ────────────────────────────────────────────────── */
+.sb-company-switcher {
+  padding: .35rem .7rem;
+  border-bottom: 1px solid var(--sb-line);
+  position: relative;
+}
+.sb-company-btn {
+  display: flex; align-items: center; gap: .35rem;
+  width: 100%; padding: .35rem .5rem;
+  background: var(--sb-hover, rgba(0,0,0,.04));
+  border: 1px solid transparent; border-radius: 8px;
+  color: var(--sb-text, var(--text-secondary));
+  font-size: var(--text-xs); font-weight: 600;
+  cursor: pointer; font-family: var(--font);
+  transition: background .15s, border-color .15s;
+}
+.sb-company-btn:hover { border-color: var(--sb-line, var(--line-soft)); }
+.sb-company-btn[aria-expanded="true"] {
+  border-color: var(--brand); background: var(--brand-soft);
+}
+.sb-company-btn i { width: 14px; height: 14px; flex-shrink: 0; }
+.sb-company-chevron {
+  width: 12px; height: 12px; margin-left: auto;
+  transition: transform .2s;
+}
+.sb-company-btn[aria-expanded="true"] .sb-company-chevron { transform: rotate(180deg); }
+.sb-company-name { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-company-dropdown {
+  display: none;
+  position: absolute; left: .7rem; right: .7rem;
+  top: calc(100% + 2px);
+  background: var(--surface); border: 1px solid var(--line-soft);
+  border-radius: 8px; box-shadow: var(--shadow-lg);
+  z-index: 100; padding: .25rem 0;
+  animation: card-enter .15s ease;
+}
+.sb-company-dropdown.open { display: block; }
+.sb-company-option {
+  display: block; width: 100%; padding: .4rem .6rem;
+  background: none; border: none;
+  font-size: var(--text-xs); font-weight: 500;
+  color: var(--text-secondary); text-align: left;
+  cursor: pointer; font-family: var(--font);
+  transition: background .12s, color .12s;
+}
+.sb-company-option:hover { background: var(--surface-alt); }
+.sb-company-option.active {
+  background: var(--brand-soft); color: var(--brand); font-weight: 700;
+}
 
 /* ── Nav ──────────────────────────────────────────────────────────────── */
 .sb-nav {
@@ -1028,3 +1078,6 @@ textarea.input-error {
     outline-offset: 2px;
   }
 }
+
+/* Apple Premium layer — typography, spacing, soft elevation (load last) */
+@import url('apple-premium.css');

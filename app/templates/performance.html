@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/performance.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+  <link rel="stylesheet" href="/static/css/bos-design-system.css">
 </head>
 <body>
   {% set active_page = "performance" %}
@@ -47,7 +48,7 @@
 
     <!-- Org Panel -->
     <div id="panel-org" class="panel">
-      <div class="card" style="margin-bottom:.9rem">
+      <div class="card card-mb">
         <div class="card-head">Performance Trend</div>
         <div class="card-body">
           <div id="perf-trend-chart"><div class="empty">Loading trend chart...</div></div>
@@ -57,22 +58,22 @@
     </div>
 
     <!-- Departments Panel -->
-    <div id="panel-departments" class="panel" style="display:none">
+    <div id="panel-departments" class="panel u-hidden">
       <div id="dept-detail" class="item-list"><div class="empty">Select a department...</div></div>
     </div>
 
     <!-- Top Performers Panel -->
-    <div id="panel-top" class="panel" style="display:none">
+    <div id="panel-top" class="panel u-hidden">
       <div id="top-list" class="item-list"><div class="empty loading">Loading...</div></div>
     </div>
 
     <!-- Alerts Panel -->
-    <div id="panel-alerts" class="panel" style="display:none">
+    <div id="panel-alerts" class="panel u-hidden">
       <div id="alert-list" class="item-list"><div class="empty loading">Loading...</div></div>
     </div>
 
     <!-- Learning Panel -->
-    <div id="panel-learning" class="panel" style="display:none">
+    <div id="panel-learning" class="panel u-hidden">
       <div id="learning-content"><div class="empty loading">Loading...</div></div>
     </div>
   </div>

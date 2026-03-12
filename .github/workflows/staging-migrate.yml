@@ -1,0 +1,53 @@
+name: Staging Migrate And Seed
+
+on:
+  push:
+    branches:
+      - staging
+
+jobs:
+  migrate-and-seed:
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      PYTHONPATH: .
+      STAGING_PGCONN: ${{ secrets.STAGING_PGCONN }}
+      DATABASE_URL: ${{ secrets.STAGING_PGCONN }}
+      STAGING_ORG1_EMAIL: staging-admin@empireoe.com
+      STAGING_ORG1_PASSWORD: ${{ secrets.STAGING_ORG1_PASSWORD }}
+      STAGING_ORG1_ID: team-empire-org
+      STAGING_ORG2_EMAIL: staging-india@empireoe.com
+      STAGING_ORG2_PASSWORD: ${{ secrets.STAGING_ORG2_PASSWORD }}
+      STAGING_ORG2_ID: team-empire-india
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Run Alembic migrations on staging
+        env:
+          PGOPTIONS: "-c statement_timeout=0"
+        run: alembic upgrade head
+
+      - name: Seed staging users
+        env:
+          PGOPTIONS: "-c statement_timeout=0"
+        run: python scripts/seed_staging_users.py
+
+      - name: Report success
+        if: success()
+        run: echo "Staging migration and seeding succeeded (port 5432 direct)."
+
+      - name: Report failure
+        if: failure()
+        run: echo "Staging migration and seeding failed." && exit 1

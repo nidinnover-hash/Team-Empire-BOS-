@@ -218,9 +218,9 @@ def test_parse_ai_response_strips_markdown():
 
 
 def test_parse_ai_response_rejects_no_steps():
-    from app.engines.brain.workflow_planner import _parse_ai_response
-
     import pytest
+
+    from app.engines.brain.workflow_planner import _parse_ai_response
     with pytest.raises(ValueError, match="missing 'steps'"):
         _parse_ai_response('{"name": "Bad"}')
 
@@ -337,7 +337,7 @@ async def test_api_copilot_plan(client, monkeypatch):
             "confidence": 0.9,
         }
 
-    monkeypatch.setattr("app.api.v1.endpoints.automation.build_workflow_copilot_plan", fake_copilot)
+    monkeypatch.setattr("app.api.v1.endpoints.automation_definitions.build_workflow_copilot_plan", fake_copilot)
     from app.core.config import settings
     monkeypatch.setattr(settings, "FEATURE_WORKFLOW_COPILOT", True)
 
@@ -392,7 +392,7 @@ async def test_api_copilot_plan_and_save(client, monkeypatch):
             "confidence": 0.88,
         }
 
-    monkeypatch.setattr("app.api.v1.endpoints.automation.build_workflow_copilot_plan", fake_copilot)
+    monkeypatch.setattr("app.api.v1.endpoints.automation_definitions.build_workflow_copilot_plan", fake_copilot)
     from app.core.config import settings
     monkeypatch.setattr(settings, "FEATURE_WORKFLOW_COPILOT", True)
     monkeypatch.setattr(settings, "FEATURE_WORKFLOW_V2", True)

@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-
 MIGRATION_PATH = Path("alembic/versions/20260310_0087_add_batch_17_18_19_20_tables.py")
 
 

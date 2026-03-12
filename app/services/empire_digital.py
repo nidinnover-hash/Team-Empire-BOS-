@@ -12,7 +12,7 @@ from app.models.decision_card import DecisionCard
 from app.models.marketing_intelligence import MarketingIntelligence
 from app.models.organization import Organization
 from app.schemas.decision_card import DecisionCardCreate, DecisionOption
-from app.schemas.empire_digital import EmpireSlaConfigRead
+from app.schemas.empire_digital import EmpireSlaConfigRead, ScorecardRead, ScorecardTile
 from app.schemas.marketing_intelligence import (
     CockpitCount,
     EmpireDigitalCockpitRead,
@@ -51,6 +51,18 @@ def _normalize_dt(dt: datetime | None) -> datetime | None:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=UTC)
     return dt
+
+
+def _lead_sla_hours_from_policy(policy: dict) -> int:
+    try:
+        ed = policy.get("empire_digital") or {}
+        sla = ed.get("sla") or {}
+        h = sla.get("lead_sla_hours")
+        if h is not None:
+            return max(1, int(h))
+    except (TypeError, ValueError):
+        pass
+    return 24
 
 
 async def get_empire_sla_config(db: AsyncSession, *, organization_id: int) -> EmpireSlaConfigRead:
@@ -304,6 +316,120 @@ async def build_empire_cockpit(
         warning_unrouted_threshold_count=int(sla_cfg.warning_unrouted_count),
         visibility_scope=_visibility_scope_label(actor_org_id=actor_org_id, actor_role=actor_role),  # type: ignore[arg-type]
     )
+
+
+# Q1 targets: new_leads 400/wk, sla 90%, unrouted 0-5 green, stale 0 green
+SCORECARD_EMPIRE_DIGITAL = {
+    "new_leads": {"target": 400, "green_min": 400, "amber_min": 280, "red_min": 0},
+    "sla_compliance": {"target": 90.0, "green_min": 90.0, "amber_min": 80.0, "red_min": 0.0},
+    "unrouted": {"target": 0, "green_max": 5, "amber_max": 20, "red_max": 9999},
+    "stale_unrouted": {"target": 0, "green_max": 0, "amber_max": 10, "red_max": 9999},
+}
+
+
+def _band_for_value(key: str, value: int | float, *, is_lower_better: bool = False) -> str:
+    cfg = SCORECARD_EMPIRE_DIGITAL.get(key, {})
+    if is_lower_better:
+        if value <= cfg.get("green_max", 0):
+            return "green"
+        if value <= cfg.get("amber_max", 20):
+            return "amber"
+        return "red"
+    if key == "unrouted" or key == "stale_unrouted":
+        if value <= cfg.get("green_max", 5):
+            return "green"
+        if value <= cfg.get("amber_max", 20):
+            return "amber"
+        return "red"
+    if value >= cfg.get("green_min", 0):
+        return "green"
+    if value >= cfg.get("amber_min", 0):
+        return "amber"
+    return "red"
+
+
+async def get_scorecard_empire_digital(
+    db: AsyncSession,
+    *,
+    actor_org_id: int,
+    actor_role: str,
+    window_days: int = 7,
+) -> ScorecardRead:
+    """Scorecard for Empire Digital: new leads, SLA compliance, unrouted, stale. Bands from Q1 targets."""
+    window_days = max(1, min(31, int(window_days)))
+    sla_cfg = await get_empire_sla_config(db, organization_id=actor_org_id)
+    policy = await organization_service.get_policy_config(db, actor_org_id)
+    lead_sla_hours = _lead_sla_hours_from_policy(policy)
+    stale_days = int(sla_cfg.stale_unrouted_days)
+    now = datetime.now(UTC)
+    window_start = now - timedelta(days=window_days)
+
+    query = apply_contact_visibility_scope(
+        select(Contact),
+        actor_org_id=actor_org_id,
+        actor_role=actor_role,
+    )
+    result = await db.execute(query)
+    contacts = list(result.scalars().all())
+
+    new_leads = 0
+    in_window_routed_within_sla = 0
+    in_window_total = 0
+    unrouted = 0
+    stale_unrouted = 0
+
+    for c in contacts:
+        created = _normalize_dt(getattr(c, "created_at", None))
+        if created and created >= window_start:
+            in_window_total += 1
+            new_leads += 1
+            routed_at = _normalize_dt(getattr(c, "routed_at", None))
+            if c.routed_company_id is not None:
+                if routed_at and created:
+                    hours = (routed_at - created).total_seconds() / 3600.0
+                    if hours <= lead_sla_hours:
+                        in_window_routed_within_sla += 1
+                else:
+                    in_window_routed_within_sla += 1
+        if c.routed_company_id is None:
+            unrouted += 1
+            if created and created <= (now - timedelta(days=stale_days)):
+                stale_unrouted += 1
+
+    sla_pct = (in_window_routed_within_sla / in_window_total * 100.0) if in_window_total else 100.0
+    target_new = SCORECARD_EMPIRE_DIGITAL["new_leads"]["target"] if window_days == 7 else (400 * window_days // 7)
+
+    tiles = [
+        ScorecardTile(
+            key="new_leads",
+            label=f"New Leads ({window_days}d)",
+            value=new_leads,
+            band=_band_for_value("new_leads", new_leads),
+            target=target_new,
+        ),
+        ScorecardTile(
+            key="sla_compliance",
+            label="SLA Compliance %",
+            value=round(sla_pct, 1),
+            band=_band_for_value("sla_compliance", sla_pct),
+            target=90.0,
+        ),
+        ScorecardTile(
+            key="unrouted",
+            label="Unrouted Leads",
+            value=unrouted,
+            band=_band_for_value("unrouted", unrouted, is_lower_better=True),
+            target=0,
+        ),
+        ScorecardTile(
+            key="stale_unrouted",
+            label="Stale Unrouted",
+            value=stale_unrouted,
+            band=_band_for_value("stale_unrouted", stale_unrouted, is_lower_better=True),
+            target=0,
+        ),
+    ]
+    return ScorecardRead(window_days=window_days, tiles=tiles)
 
 
 async def list_scoped_leads(

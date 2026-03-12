@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import func, select
@@ -33,7 +32,7 @@ async def list_deals(
     *, contact_id: int | None = None, stage: str | None = None,
     limit: int = 100, offset: int = 0,
 ) -> list[Deal]:
-    q = select(Deal).where(Deal.organization_id == organization_id)
+    q = select(Deal).where(Deal.organization_id == organization_id, Deal.is_deleted.is_(False))
     if contact_id is not None:
         q = q.where(Deal.contact_id == contact_id)
     if stage:
@@ -45,7 +44,7 @@ async def list_deals(
 
 async def get_deal(db: AsyncSession, deal_id: int, organization_id: int) -> Deal | None:
     result = await db.execute(
-        select(Deal).where(Deal.id == deal_id, Deal.organization_id == organization_id)
+        select(Deal).where(Deal.id == deal_id, Deal.organization_id == organization_id, Deal.is_deleted.is_(False))
     )
     return result.scalar_one_or_none()
 
@@ -130,9 +129,12 @@ async def _fire_deal_stage_triggers(db: AsyncSession, deal: Deal, new_stage: str
 
 async def delete_deal(db: AsyncSession, deal_id: int, organization_id: int) -> bool:
     deal = await get_deal(db, deal_id, organization_id)
-    if deal is None:
+    if deal is None or deal.is_deleted:
         return False
-    await db.delete(deal)
+    from datetime import UTC
+    from datetime import datetime as dt
+    deal.is_deleted = True
+    deal.deleted_at = dt.now(UTC)
     await db.commit()
     return True
 
@@ -143,7 +145,7 @@ async def get_deal_summary(db: AsyncSession, organization_id: int) -> dict:
         select(
             func.count(Deal.id),
             func.coalesce(func.sum(Deal.value), 0.0),
-        ).where(Deal.organization_id == organization_id)
+        ).where(Deal.organization_id == organization_id, Deal.is_deleted.is_(False))
     )
     row = total_q.one()
     total_deals = row[0] or 0
@@ -153,14 +155,14 @@ async def get_deal_summary(db: AsyncSession, organization_id: int) -> dict:
         select(
             func.count(Deal.id),
             func.coalesce(func.sum(Deal.value), 0.0),
-        ).where(Deal.organization_id == organization_id, Deal.stage == "won")
+        ).where(Deal.organization_id == organization_id, Deal.stage == "won", Deal.is_deleted.is_(False))
     )
     won_row = won_q.one()
     won_value = float(won_row[1] or 0.0)
 
     lost_q = await db.execute(
         select(func.count(Deal.id))
-        .where(Deal.organization_id == organization_id, Deal.stage == "lost")
+        .where(Deal.organization_id == organization_id, Deal.stage == "lost", Deal.is_deleted.is_(False))
     )
     lost_count = lost_q.scalar() or 0
 
@@ -175,7 +177,7 @@ async def get_deal_summary(db: AsyncSession, organization_id: int) -> dict:
             func.coalesce(func.sum(Deal.value), 0.0),
             func.coalesce(func.avg(Deal.value), 0.0),
             func.coalesce(func.avg(Deal.probability), 0.0),
-        ).where(Deal.organization_id == organization_id)
+        ).where(Deal.organization_id == organization_id, Deal.is_deleted.is_(False))
         .group_by(Deal.stage)
     )
     pipeline = []
@@ -206,6 +208,7 @@ async def get_deal_forecast(
     result = await db.execute(
         select(Deal).where(
             Deal.organization_id == organization_id,
+            Deal.is_deleted.is_(False),
             Deal.stage.notin_(["won", "lost"]),
         )
     )

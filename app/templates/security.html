@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/security.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+  <link rel="stylesheet" href="/static/css/bos-design-system.css">
 </head>
 <body>
   {% set active_page = "security" %}
@@ -34,7 +35,7 @@
   </div>
 
   <!-- MFA Setup Modal -->
-  <div class="modal-overlay" id="mfa-setup-modal" style="display:none">
+  <div class="modal-overlay u-hidden" id="mfa-setup-modal">
     <div class="modal-card">
       <div class="modal-header">
         <h2>Set Up Two-Factor Authentication</h2>
@@ -58,7 +59,7 @@
   </div>
 
   <!-- MFA Disable Modal -->
-  <div class="modal-overlay" id="mfa-disable-modal" style="display:none">
+  <div class="modal-overlay u-hidden" id="mfa-disable-modal">
     <div class="modal-card modal-narrow">
       <div class="modal-header">
         <h2>Disable Two-Factor Authentication</h2>

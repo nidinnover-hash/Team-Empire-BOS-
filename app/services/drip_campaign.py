@@ -1,10 +1,10 @@
 """Email drip campaign service."""
 from __future__ import annotations
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.drip_campaign import DripCampaign, DripStep, DripEnrollment
+from app.models.drip_campaign import DripCampaign, DripEnrollment, DripStep
 
 
 async def create_campaign(

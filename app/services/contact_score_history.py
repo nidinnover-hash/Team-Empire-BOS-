@@ -1,7 +1,7 @@
 """Contact scoring history service."""
 from __future__ import annotations
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact_score_history import ContactScoreSnapshot

@@ -17,119 +17,153 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "organizations",
-        sa.Column("parent_organization_id", sa.Integer(), nullable=True),
-    )
-    op.add_column(
-        "organizations",
-        sa.Column("country_code", sa.String(length=2), nullable=True),
-    )
-    op.add_column(
-        "organizations",
-        sa.Column("branch_label", sa.String(length=120), nullable=True),
-    )
-    op.create_foreign_key(
-        "fk_organizations_parent_organization_id",
-        "organizations",
-        "organizations",
-        ["parent_organization_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-    op.create_index("ix_organizations_parent_organization_id", "organizations", ["parent_organization_id"])
-    op.create_index("ix_organizations_country_code", "organizations", ["country_code"])
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    tables = set(inspector.get_table_names())
 
-    op.create_table(
-        "departments",
-        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("organization_id", sa.Integer(), nullable=False),
-        sa.Column("parent_department_id", sa.Integer(), nullable=True),
-        sa.Column("name", sa.String(length=120), nullable=False),
-        sa.Column("code", sa.String(length=40), nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["parent_department_id"], ["departments.id"], ondelete="SET NULL"),
-        sa.UniqueConstraint("organization_id", "name", name="uq_departments_org_name"),
-        sa.UniqueConstraint("organization_id", "code", name="uq_departments_org_code"),
-    )
-    op.create_index("ix_departments_organization_id", "departments", ["organization_id"])
-    op.create_index("ix_departments_parent_department_id", "departments", ["parent_department_id"])
-    op.create_index("ix_departments_code", "departments", ["code"])
-    op.create_index("ix_departments_is_active", "departments", ["is_active"])
+    existing_org = {c["name"] for c in inspector.get_columns("organizations")}
+    if "parent_organization_id" not in existing_org:
+        op.add_column(
+            "organizations",
+            sa.Column("parent_organization_id", sa.Integer(), nullable=True),
+        )
+    if "country_code" not in existing_org:
+        op.add_column(
+            "organizations",
+            sa.Column("country_code", sa.String(length=2), nullable=True),
+        )
+    if "branch_label" not in existing_org:
+        op.add_column(
+            "organizations",
+            sa.Column("branch_label", sa.String(length=120), nullable=True),
+        )
 
-    op.add_column("employees", sa.Column("department_id", sa.Integer(), nullable=True))
-    op.add_column(
-        "employees",
-        sa.Column("employment_status", sa.String(length=20), nullable=False, server_default="active"),
-    )
-    op.add_column("employees", sa.Column("hired_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("employees", sa.Column("offboarded_at", sa.DateTime(timezone=True), nullable=True))
-    op.create_foreign_key(
-        "fk_employees_department_id",
-        "employees",
-        "departments",
-        ["department_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-    op.create_index("ix_employees_department_id", "employees", ["department_id"])
-    op.create_index("ix_employees_employment_status", "employees", ["employment_status"])
+    existing_con = {
+        row[0]
+        for row in bind.execute(
+            sa.text("SELECT conname FROM pg_constraint WHERE contype IN ('f', 'c')")
+        ).fetchall()
+    }
+    if "fk_organizations_parent_organization_id" not in existing_con:
+        op.create_foreign_key(
+            "fk_organizations_parent_organization_id",
+            "organizations",
+            "organizations",
+            ["parent_organization_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
 
-    op.create_table(
-        "employee_lifecycle_events",
-        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("organization_id", sa.Integer(), nullable=False),
-        sa.Column("employee_id", sa.Integer(), nullable=False),
-        sa.Column("event_type", sa.String(length=40), nullable=False),
-        sa.Column("effective_date", sa.Date(), nullable=False),
-        sa.Column("checklist_json", sa.Text(), nullable=False, server_default="[]"),
-        sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column("actor_user_id", sa.Integer(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["employee_id"], ["employees.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["actor_user_id"], ["users.id"], ondelete="SET NULL"),
-    )
-    op.create_index("ix_employee_lifecycle_events_organization_id", "employee_lifecycle_events", ["organization_id"])
-    op.create_index("ix_employee_lifecycle_events_employee_id", "employee_lifecycle_events", ["employee_id"])
-    op.create_index("ix_employee_lifecycle_events_event_type", "employee_lifecycle_events", ["event_type"])
-    op.create_index("ix_employee_lifecycle_events_actor_user_id", "employee_lifecycle_events", ["actor_user_id"])
-    op.create_index("ix_employee_lifecycle_events_created_at", "employee_lifecycle_events", ["created_at"])
+    existing_org_idxs = {i["name"] for i in inspector.get_indexes("organizations")}
+    if "ix_organizations_parent_organization_id" not in existing_org_idxs:
+        op.create_index("ix_organizations_parent_organization_id", "organizations", ["parent_organization_id"])
+    if "ix_organizations_country_code" not in existing_org_idxs:
+        op.create_index("ix_organizations_country_code", "organizations", ["country_code"])
 
-    op.create_table(
-        "employee_work_patterns",
-        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("organization_id", sa.Integer(), nullable=False),
-        sa.Column("employee_id", sa.Integer(), nullable=False),
-        sa.Column("work_date", sa.Date(), nullable=False),
-        sa.Column("hours_logged", sa.Float(), nullable=False, server_default="0"),
-        sa.Column("active_minutes", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("focus_minutes", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("meetings_minutes", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("tasks_completed", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("source", sa.String(length=50), nullable=False, server_default="manual"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["employee_id"], ["employees.id"], ondelete="CASCADE"),
-        sa.UniqueConstraint("organization_id", "employee_id", "work_date", name="uq_work_patterns_org_employee_date"),
-    )
-    op.create_index("ix_employee_work_patterns_organization_id", "employee_work_patterns", ["organization_id"])
-    op.create_index("ix_employee_work_patterns_employee_id", "employee_work_patterns", ["employee_id"])
-    op.create_index("ix_employee_work_patterns_work_date", "employee_work_patterns", ["work_date"])
-    op.create_index(
-        "ix_employee_work_patterns_org_employee_work_date",
-        "employee_work_patterns",
-        ["organization_id", "employee_id", "work_date"],
-    )
-    op.create_index(
-        "ix_employee_work_patterns_org_work_date",
-        "employee_work_patterns",
-        ["organization_id", "work_date"],
-    )
+    if "departments" not in tables:
+        op.create_table(
+            "departments",
+            sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+            sa.Column("organization_id", sa.Integer(), nullable=False),
+            sa.Column("parent_department_id", sa.Integer(), nullable=True),
+            sa.Column("name", sa.String(length=120), nullable=False),
+            sa.Column("code", sa.String(length=40), nullable=False),
+            sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+            sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="RESTRICT"),
+            sa.ForeignKeyConstraint(["parent_department_id"], ["departments.id"], ondelete="SET NULL"),
+            sa.UniqueConstraint("organization_id", "name", name="uq_departments_org_name"),
+            sa.UniqueConstraint("organization_id", "code", name="uq_departments_org_code"),
+        )
+        op.create_index("ix_departments_organization_id", "departments", ["organization_id"])
+        op.create_index("ix_departments_parent_department_id", "departments", ["parent_department_id"])
+        op.create_index("ix_departments_code", "departments", ["code"])
+        op.create_index("ix_departments_is_active", "departments", ["is_active"])
+
+    existing_emp = {c["name"] for c in inspector.get_columns("employees")}
+    if "department_id" not in existing_emp:
+        op.add_column("employees", sa.Column("department_id", sa.Integer(), nullable=True))
+    if "employment_status" not in existing_emp:
+        op.add_column(
+            "employees",
+            sa.Column("employment_status", sa.String(length=20), nullable=False, server_default="active"),
+        )
+    if "hired_at" not in existing_emp:
+        op.add_column("employees", sa.Column("hired_at", sa.DateTime(timezone=True), nullable=True))
+    if "offboarded_at" not in existing_emp:
+        op.add_column("employees", sa.Column("offboarded_at", sa.DateTime(timezone=True), nullable=True))
+
+    if "fk_employees_department_id" not in existing_con:
+        op.create_foreign_key(
+            "fk_employees_department_id",
+            "employees",
+            "departments",
+            ["department_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
+
+    existing_emp_idxs = {i["name"] for i in inspector.get_indexes("employees")}
+    if "ix_employees_department_id" not in existing_emp_idxs:
+        op.create_index("ix_employees_department_id", "employees", ["department_id"])
+    if "ix_employees_employment_status" not in existing_emp_idxs:
+        op.create_index("ix_employees_employment_status", "employees", ["employment_status"])
+
+    if "employee_lifecycle_events" not in tables:
+        op.create_table(
+            "employee_lifecycle_events",
+            sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+            sa.Column("organization_id", sa.Integer(), nullable=False),
+            sa.Column("employee_id", sa.Integer(), nullable=False),
+            sa.Column("event_type", sa.String(length=40), nullable=False),
+            sa.Column("effective_date", sa.Date(), nullable=False),
+            sa.Column("checklist_json", sa.Text(), nullable=False, server_default="[]"),
+            sa.Column("notes", sa.Text(), nullable=True),
+            sa.Column("actor_user_id", sa.Integer(), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+            sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="RESTRICT"),
+            sa.ForeignKeyConstraint(["employee_id"], ["employees.id"], ondelete="CASCADE"),
+            sa.ForeignKeyConstraint(["actor_user_id"], ["users.id"], ondelete="SET NULL"),
+        )
+        op.create_index("ix_employee_lifecycle_events_organization_id", "employee_lifecycle_events", ["organization_id"])
+        op.create_index("ix_employee_lifecycle_events_employee_id", "employee_lifecycle_events", ["employee_id"])
+        op.create_index("ix_employee_lifecycle_events_event_type", "employee_lifecycle_events", ["event_type"])
+        op.create_index("ix_employee_lifecycle_events_actor_user_id", "employee_lifecycle_events", ["actor_user_id"])
+        op.create_index("ix_employee_lifecycle_events_created_at", "employee_lifecycle_events", ["created_at"])
+
+    if "employee_work_patterns" not in tables:
+        op.create_table(
+            "employee_work_patterns",
+            sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+            sa.Column("organization_id", sa.Integer(), nullable=False),
+            sa.Column("employee_id", sa.Integer(), nullable=False),
+            sa.Column("work_date", sa.Date(), nullable=False),
+            sa.Column("hours_logged", sa.Float(), nullable=False, server_default="0"),
+            sa.Column("active_minutes", sa.Integer(), nullable=False, server_default="0"),
+            sa.Column("focus_minutes", sa.Integer(), nullable=False, server_default="0"),
+            sa.Column("meetings_minutes", sa.Integer(), nullable=False, server_default="0"),
+            sa.Column("tasks_completed", sa.Integer(), nullable=False, server_default="0"),
+            sa.Column("source", sa.String(length=50), nullable=False, server_default="manual"),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+            sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="RESTRICT"),
+            sa.ForeignKeyConstraint(["employee_id"], ["employees.id"], ondelete="CASCADE"),
+            sa.UniqueConstraint("organization_id", "employee_id", "work_date", name="uq_work_patterns_org_employee_date"),
+        )
+        op.create_index("ix_employee_work_patterns_organization_id", "employee_work_patterns", ["organization_id"])
+        op.create_index("ix_employee_work_patterns_employee_id", "employee_work_patterns", ["employee_id"])
+        op.create_index("ix_employee_work_patterns_work_date", "employee_work_patterns", ["work_date"])
+        op.create_index(
+            "ix_employee_work_patterns_org_employee_work_date",
+            "employee_work_patterns",
+            ["organization_id", "employee_id", "work_date"],
+        )
+        op.create_index(
+            "ix_employee_work_patterns_org_work_date",
+            "employee_work_patterns",
+            ["organization_id", "work_date"],
+        )
 
 
 def downgrade() -> None:

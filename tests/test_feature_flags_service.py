@@ -1,6 +1,6 @@
+from app.core.config import settings
 from app.services import feature_flags
 from app.services import organization as organization_service
-from app.core.config import settings
 
 
 async def test_feature_flag_disabled_when_not_set(db):

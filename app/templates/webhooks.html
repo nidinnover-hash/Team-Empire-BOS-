@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/webhooks.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+  <link rel="stylesheet" href="/static/css/bos-design-system.css">
 </head>
 <body>
   {% set active_page = "webhooks" %}
@@ -29,7 +30,7 @@
       <div class="kpi"><div class="label">Inactive</div><div class="val" id="k-inactive">0</div></div>
     </div>
 
-    <div class="kpi-row" id="wh-reliability" style="display:none">
+    <div class="kpi-row u-hidden" id="wh-reliability">
       <div class="kpi"><div class="label">Success Rate (24h)</div><div class="val" id="wh-success-rate">100%</div></div>
       <div class="kpi"><div class="label">Dead Letter (24h)</div><div class="val" id="wh-dead-count">0</div></div>
       <div class="kpi"><div class="label">Replay Success</div><div class="val" id="wh-replay-success">0</div></div>
@@ -46,7 +47,7 @@
   </div>
 
   <!-- Create / Edit Modal -->
-  <div class="modal-overlay" id="wh-modal" style="display:none">
+  <div class="modal-overlay u-hidden" id="wh-modal">
     <div class="modal-card">
       <div class="modal-header">
         <h2 id="wh-modal-title">Add Webhook Endpoint</h2>
@@ -79,7 +80,7 @@
   </div>
 
   <!-- Secret reveal modal -->
-  <div class="modal-overlay" id="secret-modal" style="display:none">
+  <div class="modal-overlay u-hidden" id="secret-modal">
     <div class="modal-card modal-narrow">
       <div class="modal-header">
         <h2>Signing Secret</h2>
@@ -94,7 +95,7 @@
   </div>
 
   <!-- Deliveries modal -->
-  <div class="modal-overlay" id="deliveries-modal" style="display:none">
+  <div class="modal-overlay u-hidden" id="deliveries-modal">
     <div class="modal-card modal-wide">
       <div class="modal-header">
         <h2>Recent Deliveries</h2>

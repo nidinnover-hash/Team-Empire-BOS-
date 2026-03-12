@@ -56,7 +56,7 @@ async def update_article(db: AsyncSession, article_id: int, organization_id: int
         return None
     if "tags" in kwargs:
         kwargs["tags_json"] = json.dumps(kwargs.pop("tags") or [])
-    if "title" in kwargs and kwargs["title"]:
+    if kwargs.get("title"):
         kwargs["slug"] = _slugify(kwargs["title"])
     for k, v in kwargs.items():
         if v is not None:
@@ -100,7 +100,7 @@ async def search_articles(db: AsyncSession, organization_id: int, query: str) ->
         select(KBArticle)
         .where(
             KBArticle.organization_id == organization_id,
-            KBArticle.is_published == True,  # noqa: E712
+            KBArticle.is_published.is_(True),
             KBArticle.title.ilike(f"%{query}%") | KBArticle.content.ilike(f"%{query}%"),
         )
         .order_by(KBArticle.view_count.desc())

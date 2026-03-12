@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/static/css/shared.css" />
   <link rel="stylesheet" href="/static/css/api-keys.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+  <link rel="stylesheet" href="/static/css/bos-design-system.css">
 </head>
 <body>
   {% set active_page = "api-keys" %}
@@ -32,7 +33,7 @@
     <div id="key-list" class="key-list"><div class="empty loading">Loading API keys...</div></div>
   </div>
 
-  <div class="modal-overlay" id="create-modal" style="display:none">
+  <div class="modal-overlay u-hidden" id="create-modal">
     <div class="modal-card">
       <div class="modal-header">
         <h2>Create API Key</h2>
@@ -54,7 +55,7 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="secret-modal" style="display:none">
+  <div class="modal-overlay u-hidden" id="secret-modal">
     <div class="modal-card modal-narrow">
       <div class="modal-header">
         <h2>Your API Key</h2>

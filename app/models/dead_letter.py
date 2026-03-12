@@ -11,7 +11,7 @@ from app.db.base import Base
 try:
     from sqlalchemy import JSON
 except ImportError:  # pragma: no cover
-    from sqlalchemy.types import JSON  # type: ignore[assignment]
+    from sqlalchemy.types import JSON
 
 
 class DeadLetterEntry(Base):

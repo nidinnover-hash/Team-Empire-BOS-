@@ -15,6 +15,7 @@
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
         crossorigin="" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
+  <link rel="stylesheet" href="/static/css/bos-design-system.css">
 </head>
 <body>
 {% set active_page = "maps" %}
@@ -51,7 +52,7 @@
       </div>
       <div class="card-body">
         <div id="map-container"></div>
-        <div id="map-loading" class="loading" style="display:none">Loading map data...</div>
+        <div id="map-loading" class="loading u-hidden">Loading map data...</div>
       </div>
     </div>
   </div>
@@ -94,7 +95,7 @@
 
     <div class="card">
       <div class="card-head"><span>Recent Check-ins</span></div>
-      <div class="card-body" style="overflow-x:auto">
+      <div class="card-body u-overflow-x-auto">
         <table>
           <thead>
             <tr>
@@ -142,11 +143,11 @@
             <label class="label" for="hist-to">To</label>
             <input id="hist-to" class="input" type="date" />
           </div>
-          <div style="align-self:end">
+          <div class="u-align-end">
             <button class="btn" id="hist-search-btn" type="button">Search</button>
           </div>
         </div>
-        <div style="overflow-x:auto;margin-top:.75rem">
+        <div class="u-overflow-x-auto u-mt-sm">
           <table>
             <thead>
               <tr>
@@ -191,7 +192,7 @@
 
     <div class="card">
       <div class="card-head"><span>All Employee Consent Status</span></div>
-      <div class="card-body" style="overflow-x:auto">
+      <div class="card-body u-overflow-x-auto">
         <table>
           <thead>
             <tr>

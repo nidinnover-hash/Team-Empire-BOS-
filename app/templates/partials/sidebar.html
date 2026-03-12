@@ -1,9 +1,26 @@
+{% include "partials/skip-link.html" %}
 <nav class="sidebar" aria-label="Main navigation">
   {% set role = (session_user.get('role', '') if session_user is defined and session_user else '') %}
   <div class="sb-brand">
     <div class="sb-brand-icon">N</div>
     <span class="sb-label sb-brand-text">Nidin BOS</span>
   </div>
+  {% if role in ['CEO', 'ADMIN', 'MANAGER'] %}
+  <div class="sb-company-switcher">
+    <button class="sb-company-btn" id="company-switcher-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
+      <i data-lucide="building-2"></i>
+      <span class="sb-label sb-company-name" id="company-current">All Companies</span>
+      <i data-lucide="chevron-down" class="sb-company-chevron"></i>
+    </button>
+    <div class="sb-company-dropdown" id="company-dropdown" role="listbox" aria-label="Switch company">
+      <button class="sb-company-option active" data-company="all" role="option" type="button">All Companies</button>
+      <button class="sb-company-option" data-company="empireo" role="option" type="button">EmpireO.ai</button>
+      <button class="sb-company-option" data-company="esa" role="option" type="button">ESA</button>
+      <button class="sb-company-option" data-company="empire-digital" role="option" type="button">Empire Digital</button>
+      <button class="sb-company-option" data-company="codnov" role="option" type="button">Codnov.ai</button>
+    </div>
+  </div>
+  {% endif %}
   <div class="sb-nav">
     <a href="/" class="sb-item{{ ' active' if active_page == 'dashboard' }}" aria-label="Dashboard"><i data-lucide="layout-dashboard"></i><span class="sb-label">Dashboard</span></a>
     {% if role in ['CEO', 'ADMIN', 'MANAGER', 'STAFF'] %}
@@ -23,6 +40,7 @@
     {% endif %}
     {% if role in ['CEO', 'ADMIN', 'MANAGER'] %}
     <a href="/web/finance" class="sb-item{{ ' active' if active_page == 'finance' }}" aria-label="Finance"><i data-lucide="wallet"></i><span class="sb-label">Finance</span></a>
+    <a href="/web/control-dashboard" class="sb-item{{ ' active' if active_page == 'control_dashboard' }}" aria-label="Control Dashboard"><i data-lucide="shield-check"></i><span class="sb-label">Control</span></a>
     {% endif %}
     {% if role in ['CEO', 'ADMIN', 'MANAGER'] %}
     <a href="/web/workspaces" class="sb-item{{ ' active' if active_page == 'workspaces' }}" aria-label="Workspaces"><i data-lucide="brain"></i><span class="sb-label">Workspaces</span></a>
@@ -56,3 +74,5 @@
     {% endif %}
   </div>
 </nav>
+<script nonce="{{ csp_nonce|default('') }}" src="/static/js/bos-toast.js"></script>
+<script nonce="{{ csp_nonce|default('') }}" src="/static/js/company-switcher.js"></script>

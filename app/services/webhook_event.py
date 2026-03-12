@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.webhook_event import WebhookEvent
@@ -52,7 +52,7 @@ async def mark_processed(db: AsyncSession, event_id: int, organization_id: int, 
         return None
     row.status = "failed" if error else "processed"
     row.error_message = error
-    row.processed_at = datetime.now(timezone.utc)
+    row.processed_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(row)
     return row

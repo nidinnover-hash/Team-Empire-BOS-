@@ -68,6 +68,42 @@ _SKIP_PREFIXES = (
 )
 
 
+_IRREGULAR_PLURALS: dict[str, str] = {
+    "dependencies": "dependency",
+    "companies": "company",
+    "activities": "activity",
+    "opportunities": "opportunity",
+    "categories": "category",
+    "strategies": "strategy",
+    "histories": "history",
+    "entries": "entry",
+    "policies": "policy",
+    "frequencies": "frequency",
+    "currencies": "currency",
+    "territories": "territory",
+    "priorities": "priority",
+    "inventories": "inventory",
+    "analyses": "analysis",
+    "statuses": "status",
+}
+
+
+def _singularize(word: str) -> str:
+    """Best-effort singularize with irregular plural handling."""
+    if word in _IRREGULAR_PLURALS:
+        return _IRREGULAR_PLURALS[word]
+    # -ies → -y  (e.g. "funnels" won't match, "deliveries" → "delivery")
+    if word.endswith("ies") and len(word) > 4:
+        return word[:-3] + "y"
+    # -ses / -xes / -shes / -ches → drop "es"
+    if word.endswith(("ses", "xes", "shes", "ches")):
+        return word[:-2]
+    # generic trailing "s" (but not "ss")
+    if word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
+
+
 def _derive_event_type(method: str, path: str) -> str:
     """Derive a human-readable event_type from HTTP method + path.
 
@@ -84,8 +120,7 @@ def _derive_event_type(method: str, path: str) -> str:
     resource = segments[0] if segments else "resource"
     # Normalize: "product-bundles" -> "product_bundle"
     resource = resource.replace("-", "_")
-    if resource.endswith("s") and not resource.endswith("ss"):
-        resource = resource[:-1]  # naive singularize
+    resource = _singularize(resource)
 
     # Determine action suffix from trailing segments
     # e.g. /quotes/5/items -> "quote_item_created"

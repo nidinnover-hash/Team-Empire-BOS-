@@ -28,6 +28,10 @@ def _has_index(inspector: sa.Inspector, table: str, index_name: str) -> bool:
     return any(idx["name"] == index_name for idx in inspector.get_indexes(table))
 
 
+def _has_check_constraint(inspector: sa.Inspector, table: str, constraint_name: str) -> bool:
+    return any(c.get("name") == constraint_name for c in inspector.get_check_constraints(table))
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
@@ -38,35 +42,41 @@ def upgrade() -> None:
     #    but they are enforced via CREATE TABLE in model metadata) ──
     if dialect != "sqlite":
         if "finance_entries" in tables:
-            op.create_check_constraint(
-                "ck_finance_positive_amount", "finance_entries", "amount > 0"
-            )
-            op.create_check_constraint(
-                "ck_finance_type", "finance_entries",
-                "type IN ('income', 'expense')"
-            )
+            if not _has_check_constraint(inspector, "finance_entries", "ck_finance_positive_amount"):
+                op.create_check_constraint(
+                    "ck_finance_positive_amount", "finance_entries", "amount > 0"
+                )
+            if not _has_check_constraint(inspector, "finance_entries", "ck_finance_type"):
+                op.create_check_constraint(
+                    "ck_finance_type", "finance_entries",
+                    "type IN ('income', 'expense')"
+                )
 
         if "tasks" in tables:
-            op.create_check_constraint(
-                "ck_task_category", "tasks",
-                "category IN ('personal', 'business', 'health', 'finance', 'other')"
-            )
+            if not _has_check_constraint(inspector, "tasks", "ck_task_category"):
+                op.create_check_constraint(
+                    "ck_task_category", "tasks",
+                    "category IN ('personal', 'business', 'health', 'finance', 'other')"
+                )
 
         if "projects" in tables:
-            op.create_check_constraint(
-                "ck_project_status", "projects",
-                "status IN ('active', 'completed', 'paused', 'archived')"
-            )
+            if not _has_check_constraint(inspector, "projects", "ck_project_status"):
+                op.create_check_constraint(
+                    "ck_project_status", "projects",
+                    "status IN ('active', 'completed', 'paused', 'archived')"
+                )
 
         if "goals" in tables:
-            op.create_check_constraint(
-                "ck_goal_status", "goals",
-                "status IN ('active', 'completed', 'paused', 'abandoned')"
-            )
-            op.create_check_constraint(
-                "ck_goal_progress", "goals",
-                "progress >= 0 AND progress <= 100"
-            )
+            if not _has_check_constraint(inspector, "goals", "ck_goal_status"):
+                op.create_check_constraint(
+                    "ck_goal_status", "goals",
+                    "status IN ('active', 'completed', 'paused', 'abandoned')"
+                )
+            if not _has_check_constraint(inspector, "goals", "ck_goal_progress"):
+                op.create_check_constraint(
+                    "ck_goal_progress", "goals",
+                    "progress >= 0 AND progress <= 100"
+                )
 
     # ── Index on tasks.external_source ──
     if "tasks" in tables and not _has_index(inspector, "tasks", "ix_tasks_external_source"):
@@ -109,12 +119,18 @@ def downgrade() -> None:
     # ── Drop check constraints ──
     if dialect != "sqlite":
         if "goals" in tables:
-            op.drop_constraint("ck_goal_progress", "goals", type_="check")
-            op.drop_constraint("ck_goal_status", "goals", type_="check")
+            if _has_check_constraint(inspector, "goals", "ck_goal_progress"):
+                op.drop_constraint("ck_goal_progress", "goals", type_="check")
+            if _has_check_constraint(inspector, "goals", "ck_goal_status"):
+                op.drop_constraint("ck_goal_status", "goals", type_="check")
         if "projects" in tables:
-            op.drop_constraint("ck_project_status", "projects", type_="check")
+            if _has_check_constraint(inspector, "projects", "ck_project_status"):
+                op.drop_constraint("ck_project_status", "projects", type_="check")
         if "tasks" in tables:
-            op.drop_constraint("ck_task_category", "tasks", type_="check")
+            if _has_check_constraint(inspector, "tasks", "ck_task_category"):
+                op.drop_constraint("ck_task_category", "tasks", type_="check")
         if "finance_entries" in tables:
-            op.drop_constraint("ck_finance_type", "finance_entries", type_="check")
-            op.drop_constraint("ck_finance_positive_amount", "finance_entries", type_="check")
+            if _has_check_constraint(inspector, "finance_entries", "ck_finance_type"):
+                op.drop_constraint("ck_finance_type", "finance_entries", type_="check")
+            if _has_check_constraint(inspector, "finance_entries", "ck_finance_positive_amount"):
+                op.drop_constraint("ck_finance_positive_amount", "finance_entries", type_="check")

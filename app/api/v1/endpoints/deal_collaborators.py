@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rbac import require_roles
 from app.core.deps import get_db
+from app.core.rbac import require_roles
 from app.services import deal_collaborator as svc
 
 router = APIRouter(prefix="/deal-collaborators", tags=["deal-collaborators"])
@@ -14,18 +14,26 @@ router = APIRouter(prefix="/deal-collaborators", tags=["deal-collaborators"])
 
 class CollabOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int; organization_id: int; deal_id: int
-    user_id: int; role: str; notes: str | None = None
-    added_by_user_id: int | None = None; created_at: datetime
+    id: int
+    organization_id: int
+    deal_id: int
+    user_id: int
+    role: str
+    notes: str | None = None
+    added_by_user_id: int | None = None
+    created_at: datetime
 
 
 class CollabCreate(BaseModel):
-    deal_id: int; user_id: int
-    role: str = "support"; notes: str | None = None
+    deal_id: int
+    user_id: int
+    role: str = "support"
+    notes: str | None = None
 
 
 class CollabUpdate(BaseModel):
-    role: str | None = None; notes: str | None = None
+    role: str | None = None
+    notes: str | None = None
 
 
 @router.post("", response_model=CollabOut, status_code=201)

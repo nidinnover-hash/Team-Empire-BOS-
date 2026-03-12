@@ -2,16 +2,24 @@
 from datetime import UTC, date, datetime
 
 from sqlalchemy import (
-    CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, Text,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.soft_delete import SoftDeleteMixin
 
 DEAL_STAGES = ("discovery", "proposal", "negotiation", "contract", "won", "lost")
 
 
-class Deal(Base):
+class Deal(SoftDeleteMixin, Base):
     __tablename__ = "deals"
     __table_args__ = (
         CheckConstraint(

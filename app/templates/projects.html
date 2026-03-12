@@ -1,19 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <title>Projects - Nidin BOS</title>
-  <link rel="stylesheet" href="/static/css/theme.css" />
-  <link rel="stylesheet" href="/static/css/shared.css" />
-  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
-</head>
-<body>
-  {% set active_page = "projects" %}
-  {% include "partials/sidebar.html" %}
+{% extends "base.html" %}
+{% block active_page %}projects{% endblock %}
+{% block title %}Projects — Nidin BOS{% endblock %}
 
-  <div class="main-wrap">
+{% block content %}
+  <div class="main-wrap" id="main-content">
     <div class="page-header">
       <h1>Projects</h1>
       <button class="btn-primary" id="add-btn" type="button">+ New Project</button>
@@ -23,16 +13,16 @@
       <div class="kpi"><div class="label">Active</div><div class="val" id="k-active" data-count-to="0">0</div></div>
       <div class="kpi"><div class="label">Completed</div><div class="val" id="k-done" data-count-to="0">0</div></div>
     </div>
-    <div class="card" style="margin-top:1.5rem">
+    <div class="card card-spaced">
       <table class="data-table">
         <thead><tr><th>Title</th><th>Category</th><th>Status</th><th>Due Date</th><th>Actions</th></tr></thead>
         <tbody id="tbody"></tbody>
       </table>
     </div>
   </div>
-  <script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
-  <script nonce="{{ csp_nonce }}" src="/static/js/micro.js"></script>
-  <script nonce="{{ csp_nonce }}" src="/static/js/projects-page.js"></script>
-  <script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
-</body>
-</html>
+{% endblock %}
+
+{% block extra_js %}
+<script nonce="{{ csp_nonce }}" src="/static/js/micro.js"></script>
+<script nonce="{{ csp_nonce }}" src="/static/js/projects-page.js"></script>
+{% endblock %}

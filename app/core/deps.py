@@ -15,6 +15,7 @@ from app.models.org_membership import OrganizationMembership
 from app.models.user import User
 from app.services import api_key as api_key_service
 from app.services import api_quota as api_quota_service
+from app.services import organization as organization_service
 from app.services import workspace as workspace_service
 
 logger = logging.getLogger(__name__)
@@ -408,3 +409,36 @@ async def get_current_workspace_id(
             detail="Workspace access denied",
         )
     return int(workspace_id)
+
+
+# Company switcher: allowed slugs for X-BOS-Company header (sidebar alignment).
+BOS_COMPANY_SLUGS = frozenset({"all", "empireo", "esa", "empire-digital", "codnov"})
+
+
+async def get_control_scope_org_ids(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actor: ActorDict = Depends(get_current_api_user),
+    company: str | None = Header(default=None, alias="X-BOS-Company"),
+) -> list[int]:
+    """
+    Resolve org ids for control/dashboard scope from X-BOS-Company header.
+
+    - None or empty: [actor's org_id]
+    - "all" + CEO: all organization ids (cross-org control summary)
+    - "all" + non-CEO: [actor's org_id]
+    - "empireo" | "esa" | "empire-digital" | "codnov": org by slug if found, else [actor's org_id]
+    """
+    actor_org_id = int(actor["org_id"])
+    raw = (company or "").strip().lower()
+    if not raw or raw not in BOS_COMPANY_SLUGS:
+        return [actor_org_id]
+    if raw == "all":
+        if str(actor.get("role", "")).upper() != "CEO":
+            return [actor_org_id]
+        orgs = await organization_service.list_organizations(db)
+        return [int(o.id) for o in orgs]
+    org = await organization_service.get_organization_by_slug(db, raw)
+    if org is None:
+        return [actor_org_id]
+    return [int(org.id)]

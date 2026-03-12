@@ -14,28 +14,51 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("contacts", sa.Column("pipeline_stage", sa.String(30), nullable=False, server_default="new"))
-    op.add_column("contacts", sa.Column("lead_score", sa.Integer(), nullable=False, server_default="0"))
-    op.add_column("contacts", sa.Column("lead_source", sa.String(50), nullable=True))
-    op.add_column("contacts", sa.Column("deal_value", sa.Float(), nullable=True))
-    op.add_column("contacts", sa.Column("expected_close_date", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("contacts", sa.Column("last_contacted_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("contacts", sa.Column("next_follow_up_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("contacts", sa.Column("tags", sa.String(500), nullable=True))
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing = {c["name"] for c in inspector.get_columns("contacts")}
 
-    op.create_index("ix_contacts_pipeline_stage", "contacts", ["pipeline_stage"])
-    op.create_index("ix_contacts_next_follow_up_at", "contacts", ["next_follow_up_at"])
+    if "pipeline_stage" not in existing:
+        op.add_column("contacts", sa.Column("pipeline_stage", sa.String(30), nullable=False, server_default="new"))
+    if "lead_score" not in existing:
+        op.add_column("contacts", sa.Column("lead_score", sa.Integer(), nullable=False, server_default="0"))
+    if "lead_source" not in existing:
+        op.add_column("contacts", sa.Column("lead_source", sa.String(50), nullable=True))
+    if "deal_value" not in existing:
+        op.add_column("contacts", sa.Column("deal_value", sa.Float(), nullable=True))
+    if "expected_close_date" not in existing:
+        op.add_column("contacts", sa.Column("expected_close_date", sa.DateTime(timezone=True), nullable=True))
+    if "last_contacted_at" not in existing:
+        op.add_column("contacts", sa.Column("last_contacted_at", sa.DateTime(timezone=True), nullable=True))
+    if "next_follow_up_at" not in existing:
+        op.add_column("contacts", sa.Column("next_follow_up_at", sa.DateTime(timezone=True), nullable=True))
+    if "tags" not in existing:
+        op.add_column("contacts", sa.Column("tags", sa.String(500), nullable=True))
 
-    op.create_check_constraint(
-        "ck_contact_pipeline_stage",
-        "contacts",
-        "pipeline_stage IN ('new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost')",
-    )
-    op.create_check_constraint(
-        "ck_contact_lead_score",
-        "contacts",
-        "lead_score >= 0 AND lead_score <= 100",
-    )
+    existing_idxs = {i["name"] for i in inspector.get_indexes("contacts")}
+    if "ix_contacts_pipeline_stage" not in existing_idxs:
+        op.create_index("ix_contacts_pipeline_stage", "contacts", ["pipeline_stage"])
+    if "ix_contacts_next_follow_up_at" not in existing_idxs:
+        op.create_index("ix_contacts_next_follow_up_at", "contacts", ["next_follow_up_at"])
+
+    existing_ck = {
+        row[0]
+        for row in bind.execute(
+            sa.text("SELECT conname FROM pg_constraint WHERE conrelid = 'contacts'::regclass AND contype = 'c'")
+        ).fetchall()
+    }
+    if "ck_contact_pipeline_stage" not in existing_ck:
+        op.create_check_constraint(
+            "ck_contact_pipeline_stage",
+            "contacts",
+            "pipeline_stage IN ('new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost')",
+        )
+    if "ck_contact_lead_score" not in existing_ck:
+        op.create_check_constraint(
+            "ck_contact_lead_score",
+            "contacts",
+            "lead_score >= 0 AND lead_score <= 100",
+        )
 
 
 def downgrade() -> None:

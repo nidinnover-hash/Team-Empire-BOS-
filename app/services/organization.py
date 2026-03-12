@@ -32,6 +32,7 @@ async def create_organization(
     parent_organization_id: int | None = None,
     country_code: str | None = None,
     branch_label: str | None = None,
+    industry_type: str | None = None,
 ) -> Organization:
     org = Organization(
         name=name,
@@ -39,6 +40,7 @@ async def create_organization(
         parent_organization_id=parent_organization_id,
         country_code=(country_code or "").upper() or None,
         branch_label=branch_label,
+        industry_type=(industry_type or "").strip().lower() or None,
         policy_json=json.dumps(default_policy_config()),
     )
     db.add(org)
@@ -55,6 +57,7 @@ async def update_organization(
     parent_organization_id: int | None = None,
     country_code: str | None = None,
     branch_label: str | None = None,
+    industry_type: str | None = None,
     expected_config_version: int | None = None,
 ) -> Organization | None:
     org = await get_organization_by_id(db, organization_id)
@@ -72,6 +75,8 @@ async def update_organization(
         org.country_code = country_code.upper()
     if branch_label is not None:
         org.branch_label = branch_label
+    if industry_type is not None:
+        org.industry_type = (industry_type or "").strip().lower() or None
     org.config_version = int(org.config_version) + 1
     await db.commit()
     await db.refresh(org)
@@ -153,6 +158,7 @@ def default_policy_config() -> dict[str, Any]:
                 "stale_unrouted_days": 3,
                 "warning_stale_count": 3,
                 "warning_unrouted_count": 8,
+                "lead_sla_hours": 24,
             },
         },
     }

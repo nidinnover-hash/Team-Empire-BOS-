@@ -89,7 +89,7 @@ async def list_policies(
 ) -> list[PolicyRule]:
     query = select(PolicyRule).where(PolicyRule.organization_id == org_id)
     if active_only:
-        query = query.where(PolicyRule.is_active == True)  # noqa: E712
+        query = query.where(PolicyRule.is_active.is_(True))
     query = query.order_by(PolicyRule.created_at.desc()).limit(500)
     result = await db.execute(query)
     return list(result.scalars().all())

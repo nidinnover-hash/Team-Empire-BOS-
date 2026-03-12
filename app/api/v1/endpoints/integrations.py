@@ -432,7 +432,7 @@ async def force_sync_integration(
         from app.services.sync_scheduler import sync_integration_for_org
         await sync_integration_for_org(db, int(actor["org_id"]), sync_type)
         return {"status": "syncing", "type": sync_type}
-    except Exception as exc:
+    except Exception:
         return {"status": "enqueued", "type": sync_type, "note": "Sync will run on next scheduler tick"}
 
 

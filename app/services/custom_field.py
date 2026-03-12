@@ -13,7 +13,7 @@ from app.models.custom_field import CustomFieldDefinition, CustomFieldValue
 async def create_definition(
     db: AsyncSession, organization_id: int, **kwargs,
 ) -> CustomFieldDefinition:
-    if "options" in kwargs and kwargs["options"]:
+    if kwargs.get("options"):
         kwargs["options_json"] = json.dumps(kwargs.pop("options"))
     else:
         kwargs.pop("options", None)

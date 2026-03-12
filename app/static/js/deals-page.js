@@ -49,10 +49,14 @@
   async function loadDeals() {
     const stage = $("#filter-stage").value;
     const q = stage ? "?stage=" + stage : "";
-    const deals = await api("/deals" + q);
     const tbody = $("#deals-body");
+    const emptyMsg = $("#empty-msg");
+    tbody.innerHTML = '<tr id="deals-loading-row"><td colspan="6" class="loading-cell"><div class="loading-inline loading-placeholder"><span class="spinner" aria-hidden="true"></span>Loading deals…</div></td></tr>';
+    if (emptyMsg) emptyMsg.classList.add("u-hidden");
+
+    const deals = await api("/deals" + q);
     tbody.innerHTML = "";
-    $("#empty-msg").style.display = deals.length ? "none" : "block";
+    if (emptyMsg) emptyMsg.classList.toggle("u-hidden", deals.length > 0);
 
     deals.forEach((d) => {
       const tr = document.createElement("tr");
@@ -70,6 +74,17 @@
 
   async function createDeal(e) {
     e.preventDefault();
+    const titleInput = e.target.querySelector('input[name="title"]');
+    const title = (titleInput && titleInput.value || '').trim();
+    const fv = window.BOS && window.BOS.formValidation;
+    if (fv && titleInput) {
+      fv.clear(titleInput);
+      if (!title) {
+        fv.showError(titleInput, 'Title is required');
+        titleInput.focus();
+        return;
+      }
+    } else if (!title) return;
     const fd = new FormData(e.target);
     const body = {
       title: fd.get("title"),
@@ -100,3 +115,4 @@
 
   init();
 })();
+if (typeof lucide !== "undefined") lucide.createIcons();

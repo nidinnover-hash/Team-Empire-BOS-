@@ -52,7 +52,7 @@ _ALLOWLIST_NO_RESPONSE_MODEL: set[str] = {
     "/api/v1/recurring-invoices/due",  # due invoices list dict
     "/api/v1/role-dashboards",  # all role layouts list dict
     "/api/v1/role-dashboards/{role}",  # role layout dict
-    "/api/v1/role-dashboards",  # save role layout dict
+    # save role layout dict
     "/api/v1/webhook-deliveries/stats",  # delivery stats dict
     "/api/v1/contact-lifecycle/current/{contact_id}",  # current stage dict
     "/api/v1/contact-lifecycle/counts",  # stage counts dict

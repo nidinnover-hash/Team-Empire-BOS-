@@ -1,13 +1,10 @@
 """Tests for batch 6 features: briefing email, merge history, kanban, API usage, team activity."""
 
-import asyncio
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
-import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-
 
 # ── Briefing email job ────────────────────────────────────────────────────────
 

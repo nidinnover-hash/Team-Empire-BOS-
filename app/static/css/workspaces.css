@@ -46,6 +46,9 @@
 .ws-card-badge.default { background: var(--brand-soft); color: var(--brand); }
 .ws-card-badge.inactive { background: var(--danger-soft, #fee); color: var(--danger); }
 .ws-card-actions { display: flex; gap: .4rem; margin-top: auto; padding-top: .4rem; border-top: 1px solid var(--line-soft); }
+.ws-plus-icon { width: 14px; height: 14px; margin-right: 4px; }
+.ws-input-num { width: 100px; }
+.ws-select-role { width: 120px; }
 .ws-card-btn {
   display: flex; align-items: center; gap: .3rem;
   padding: .3rem .6rem; border-radius: var(--radius-sm);

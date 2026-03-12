@@ -8,7 +8,6 @@ Runs as a background task after contact creation. Enriches:
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

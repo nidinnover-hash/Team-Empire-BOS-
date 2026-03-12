@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.forecast_rollup import ForecastRollup
+from app.services._guardrails import apply_safe_updates, get_tenant_row, tenant_select
 
 _PROTECTED_FIELDS = {"id", "organization_id", "created_at"}
 
@@ -24,9 +25,7 @@ async def upsert_rollup(db: AsyncSession, *, organization_id: int, **kw) -> Fore
             )
         )).scalar_one_or_none()
         if existing:
-            for k, v in kw.items():
-                if k not in _PROTECTED_FIELDS:
-                    setattr(existing, k, v)
+            apply_safe_updates(existing, kw, protected_fields=_PROTECTED_FIELDS)
             await db.commit()
             await db.refresh(existing)
             return existing
@@ -38,11 +37,11 @@ async def upsert_rollup(db: AsyncSession, *, organization_id: int, **kw) -> Fore
 
 
 async def get_rollup(db: AsyncSession, rollup_id: int, org_id: int) -> ForecastRollup | None:
-    return (await db.execute(select(ForecastRollup).where(ForecastRollup.id == rollup_id, ForecastRollup.organization_id == org_id))).scalar_one_or_none()
+    return await get_tenant_row(db, ForecastRollup, rollup_id, org_id)
 
 
 async def list_rollups(db: AsyncSession, org_id: int, *, period: str | None = None, group_by: str | None = None) -> list[ForecastRollup]:
-    q = select(ForecastRollup).where(ForecastRollup.organization_id == org_id)
+    q = tenant_select(ForecastRollup, org_id)
     if period:
         q = q.where(ForecastRollup.period == period)
     if group_by:

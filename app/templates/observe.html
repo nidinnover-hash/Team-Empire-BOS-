@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/static/css/observe.css" />
   <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
 
+  <link rel="stylesheet" href="/static/css/bos-design-system.css">
 </head>
 <body>
   {% set active_page = "observe" %}
@@ -21,7 +22,7 @@
   <div class="main-wrap">
     <h1>Observability</h1>
     <div id="loading">Loading metrics...</div>
-    <div id="content" style="display:none">
+    <div id="content" class="u-hidden">
       <div class="kpi-row">
         <div class="kpi"><div class="label">AI Calls</div><div class="val" id="k-calls">0</div><div class="sub" id="k-calls-sub">last 7 days</div></div>
         <div class="kpi"><div class="label">Fallback Rate</div><div class="val" id="k-fb">0%</div><div class="sub">provider switches</div></div>
@@ -105,7 +106,7 @@
 
       <div class="card">
         <div class="card-head">Recent AI Calls</div>
-        <div class="card-body" style="overflow-x:auto">
+        <div class="card-body u-overflow-x-auto">
           <table>
             <thead><tr><th>Provider</th><th>Model</th><th>Latency</th><th>Status</th><th>Time</th></tr></thead>
             <tbody id="ai-calls-body"><tr><td colspan="5" class="empty">No calls recorded</td></tr></tbody>
@@ -115,7 +116,7 @@
 
       <div class="card">
         <div class="card-head">Decision Ledger</div>
-        <div class="card-body" style="overflow-x:auto">
+        <div class="card-body u-overflow-x-auto">
           <table>
             <thead><tr><th>Type</th><th>Title</th><th>Confidence</th><th>Time</th></tr></thead>
             <tbody id="decisions-body"><tr><td colspan="4" class="empty">No decisions yet</td></tr></tbody>
@@ -152,7 +153,7 @@
 
       <div class="card">
         <div class="card-head">Decision Timeline</div>
-        <div class="card-body" style="overflow-x:auto">
+        <div class="card-body u-overflow-x-auto">
           <table>
             <thead><tr><th>Approval</th><th>Status</th><th>Execution</th><th>Lead Time</th><th>Timeline</th></tr></thead>
             <tbody id="decision-timeline-body"><tr><td colspan="5" class="empty">No approval timeline yet</td></tr></tbody>
@@ -187,7 +188,7 @@
           </form>
           <div class="filter-hint">Tip: click a timeline row or signal row to inspect the underlying payload.</div>
         </div>
-        <div class="card-body" style="overflow-x:auto">
+        <div class="card-body u-overflow-x-auto">
           <table>
             <thead><tr><th>Topic</th><th>Entity</th><th>Source</th><th>Summary</th><th>Time</th></tr></thead>
             <tbody id="signals-body"><tr><td colspan="5" class="empty">No signals yet</td></tr></tbody>

@@ -53,7 +53,7 @@ async def list_bulk_action_logs(
         db, organization_id=actor["org_id"], action_type=action_type,
         entity_type=entity_type, limit=limit,
     )
-    return [BulkActionLogRead.model_validate(l, from_attributes=True) for l in items]
+    return [BulkActionLogRead.model_validate(log, from_attributes=True) for log in items]
 
 
 @router.post("", response_model=BulkActionLogRead, status_code=201)

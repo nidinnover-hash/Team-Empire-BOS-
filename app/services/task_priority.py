@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, date, datetime
+from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,7 +58,7 @@ def _compute_priority_score(task: Task, today: date | None = None) -> dict:
     if task.created_at:
         created = task.created_at
         if hasattr(created, 'date'):
-            created_date = created.date() if callable(getattr(created, 'date')) else created
+            created_date = created.date() if callable(created.date) else created
         else:
             created_date = today
         age_days = (today - created_date).days if isinstance(created_date, date) else 0

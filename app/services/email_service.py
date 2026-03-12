@@ -11,6 +11,7 @@ Flow:
 import asyncio
 import logging
 from datetime import UTC, datetime
+from typing import cast
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,7 @@ from app.schemas.approval import ApprovalRequestCreate
 from app.schemas.brain_context import BrainContext
 from app.services.ai_router import call_ai
 from app.services.approval import request_approval
+from app.services.contact_policy import record_send as record_send_control
 from app.services.context_builder import build_brain_context
 from app.services.integration import connect_integration, get_integration_by_type, mark_sync_time
 from app.tools import gmail as gmail_tool
@@ -420,7 +422,7 @@ async def summarize_email(
         payload_json={"subject": email.subject},
         organization_id=org_id,
     )
-    return summary
+    return cast(str | None, summary)
 
 
 # -- Thread Summarization -----------------------------------------------------
@@ -630,7 +632,7 @@ async def draft_reply(
         },
         organization_id=org_id,
     )
-    return draft
+    return cast(str | None, draft)
 
 
 # -- AI Strategize ------------------------------------------------------------
@@ -689,7 +691,7 @@ async def strategize_email(
         payload_json={"subject": email.subject},
         organization_id=org_id,
     )
-    return analysis
+    return cast(str | None, analysis)
 
 
 # -- AI Compose New Email -----------------------------------------------------
@@ -780,7 +782,7 @@ async def compose_email(
         payload_json={"to": to, "subject": subject, "approval_id": approval.id},
         organization_id=org_id,
     )
-    return draft
+    return cast(str | None, draft)
 
 
 # -- Send Approved Reply ------------------------------------------------------
@@ -891,6 +893,15 @@ async def send_approved_compose(
         },
         organization_id=org_id,
     )
+    try:
+        await record_send_control(
+            db,
+            org_id,
+            contact_id=str(to).strip().lower()[:255],
+            channel="email",
+        )
+    except Exception:
+        logger.warning("record_send (control) failed after compose send", exc_info=True)
     return True
 
 
@@ -1024,6 +1035,15 @@ async def send_approved_reply(
             payload_json={"to": email.from_address, "subject": email.subject},
             organization_id=org_id,
         )
+        try:
+            await record_send_control(
+                db,
+                org_id,
+                contact_id=(email.from_address or "").strip().lower()[:255],
+                channel="email",
+            )
+        except Exception:
+            logger.warning("record_send (control) failed after reply send", exc_info=True)
     else:
         # Gmail send failed — atomic rollback so only our claim is released
         logger.warning("Gmail send failed for email %d — rolled back approval %d", email_id, approval.id)

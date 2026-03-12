@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.customer_health import CustomerHealthScore

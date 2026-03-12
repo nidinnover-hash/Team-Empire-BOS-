@@ -1,10 +1,10 @@
 """Contact lifecycle service — stage progression tracking."""
 from __future__ import annotations
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.contact_lifecycle import ContactLifecycleEvent, LIFECYCLE_STAGES
+from app.models.contact_lifecycle import LIFECYCLE_STAGES, ContactLifecycleEvent
 
 
 async def transition_stage(

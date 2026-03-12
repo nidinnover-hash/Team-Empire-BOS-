@@ -1522,6 +1522,47 @@ window.showToast = function(msg, type) {
     });
   })();
 
+  // ── Org Scorecard (Q1) on Dashboard ─────────────────────────────────
+  (async function () {
+    var section = document.getElementById("dash-scorecard-section");
+    var container = document.getElementById("dash-scorecard-tiles");
+    if (!section || !container) return;
+    try {
+      var token = await window.__bootPromise;
+      if (!token) {
+        container.innerHTML = "<div class=\"empty\">Sign in to see scorecard</div>";
+        return;
+      }
+      var r = await fetch("/api/v1/scorecard?window_days=30", {
+        headers: { "Authorization": "Bearer " + token },
+      });
+      if (!r.ok) {
+        container.innerHTML = "<div class=\"empty\">Scorecard unavailable</div>";
+        return;
+      }
+      var data = await r.json();
+      var tiles = data.tiles || [];
+      function esc(s) {
+        if (s == null) return "";
+        return String(s).replace(/[&<>"']/g, function (c) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+        });
+      }
+      if (tiles.length === 0) {
+        container.innerHTML = "<div class=\"empty\">Set <strong>industry_type</strong> on your org (marketing, study_abroad, recruitment, tech) to see your scorecard.</div>";
+        return;
+      }
+      container.innerHTML = tiles.map(function (t) {
+        var band = (t.band || "green").toLowerCase();
+        var targetStr = t.target != null ? " / " + t.target : "";
+        return "<div class=\"kpi scorecard-tile scorecard--" + band + "\"><div class=\"label\">" + esc(t.label) + "</div><div class=\"val\">" + esc(t.value) + targetStr + "</div></div>";
+      }).join("");
+      if (typeof lucide !== "undefined") lucide.createIcons();
+    } catch (_e) {
+      container.innerHTML = "<div class=\"empty\">Could not load scorecard</div>";
+    }
+  })();
+
   // ── CRM Pipeline Funnel on Dashboard ──────────────────────────────
   (async function () {
     try {

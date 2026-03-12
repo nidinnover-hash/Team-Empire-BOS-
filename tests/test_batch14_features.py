@@ -3,17 +3,30 @@ import pytest
 
 from app.services import (
     commission as comm_svc,
+)
+from app.services import (
     contact_score_history as csh_svc,
+)
+from app.services import (
     deal_collaborator as dc_svc,
+)
+from app.services import (
     email_suppression as es_svc,
+)
+from app.services import (
     form_builder as fb_svc,
+)
+from app.services import (
     meeting_note as mn_svc,
+)
+from app.services import (
     revenue_recognition as rr_svc,
 )
 
 
 def _obj(**kw):
-    class _O: pass
+    class _O:
+        pass
     o = _O()
     for k, v in kw.items():
         setattr(o, k, v)

@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.deal_rotation import RotationQueue, RotationAssignment
+from app.models.deal_rotation import RotationAssignment, RotationQueue
 
 
 async def create_queue(

@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rbac import require_roles
 from app.core.deps import get_db
+from app.core.rbac import require_roles
 from app.services import revenue_recognition as svc
 
 router = APIRouter(prefix="/revenue", tags=["revenue"])
@@ -14,18 +14,27 @@ router = APIRouter(prefix="/revenue", tags=["revenue"])
 
 class EntryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int; organization_id: int; deal_id: int | None = None
-    period: str; total_amount: float
-    recognized_amount: float; deferred_amount: float
-    recognition_stage: str; notes: str | None = None
-    created_at: datetime; updated_at: datetime
+    id: int
+    organization_id: int
+    deal_id: int | None = None
+    period: str
+    total_amount: float
+    recognized_amount: float
+    deferred_amount: float
+    recognition_stage: str
+    notes: str | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class EntryCreate(BaseModel):
-    period: str; total_amount: float
-    recognized_amount: float = 0.0; deferred_amount: float = 0.0
+    period: str
+    total_amount: float
+    recognized_amount: float = 0.0
+    deferred_amount: float = 0.0
     recognition_stage: str = "contract"
-    deal_id: int | None = None; notes: str | None = None
+    deal_id: int | None = None
+    notes: str | None = None
 
 
 class EntryUpdate(BaseModel):

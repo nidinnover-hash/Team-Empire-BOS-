@@ -1,7 +1,7 @@
 """Email sequence automation service."""
 from __future__ import annotations
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.email_sequence import EmailSequence, EmailSequenceStep
@@ -103,7 +103,7 @@ async def get_stats(db: AsyncSession, organization_id: int) -> dict:
     active = (await db.execute(
         select(func.count(EmailSequence.id)).where(
             EmailSequence.organization_id == organization_id,
-            EmailSequence.is_active == True,  # noqa: E712
+            EmailSequence.is_active.is_(True),
         )
     )).scalar() or 0
     enrolled = (await db.execute(

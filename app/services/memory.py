@@ -263,6 +263,39 @@ async def delete_profile_memory(
     return True
 
 
+async def consolidate_profile_memory_duplicates(
+    db: AsyncSession,
+    organization_id: int,
+    value_updates: list[tuple[int, str]],
+    ids_to_delete: list[int],
+) -> tuple[int, int]:
+    """Apply merge updates and delete duplicate profile memory entries in one transaction.
+
+    Returns (updated_count, deleted_count). All operations are scoped by organization_id.
+    """
+    updated = 0
+    deleted = 0
+    now = datetime.now(UTC)
+    for entry_id, new_value in value_updates:
+        entry = await db.get(ProfileMemory, entry_id)
+        if entry and entry.organization_id == organization_id:
+            entry.value = new_value
+            entry.updated_at = now
+            updated += 1
+    for entry_id in ids_to_delete:
+        entry = await db.get(ProfileMemory, entry_id)
+        if entry and entry.organization_id == organization_id:
+            await db.delete(entry)
+            deleted += 1
+    if updated or deleted:
+        try:
+            await db.commit()
+        except SQLAlchemyError:
+            await db.rollback()
+            raise
+    return (updated, deleted)
+
+
 # ── Team Members ──────────────────────────────────────────────────────────────
 
 async def get_team_members(
@@ -839,7 +872,10 @@ async def build_memory_context_semantic(
 
     # Optionally boost results using knowledge graph connectivity
     try:
-        from app.engines.intelligence.knowledge import build_knowledge_graph, rank_memories_by_relevance
+        from app.engines.intelligence.knowledge import (
+            build_knowledge_graph,
+            rank_memories_by_relevance,
+        )
 
         graph = await build_knowledge_graph(db, organization_id, workspace_id=workspace_id)
         # Get profile memories referenced by semantic results for re-ranking

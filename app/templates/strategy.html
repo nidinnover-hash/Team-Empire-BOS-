@@ -1,24 +1,11 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Strategy Workspace — Nidin BOS" />
-  <meta name="theme-color" content="#f5f5f7" />
-  <link rel="manifest" href="/static/manifest.json" />
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <title>Strategy — Nidin BOS</title>
-  <link rel="stylesheet" href="/static/css/theme.css" />
-  <link rel="stylesheet" href="/static/css/shared.css" />
-  <link rel="stylesheet" href="/static/css/strategy.css" />
-  <script nonce="{{ csp_nonce }}" src="/static/js/lucide.min.js"></script>
-</head>
-<body>
-{% set active_page = "strategy" %}
-{% include "partials/sidebar.html" %}
+{% extends "base.html" %}
+{% block active_page %}strategy{% endblock %}
+{% block title %}Strategy — Nidin BOS{% endblock %}
+{% block meta_description %}<meta name="description" content="Strategy Workspace — Nidin BOS" />{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/css/strategy.css" />{% endblock %}
 
+{% block content %}
 <main class="strategy-main">
-  <!-- Header -->
   <header class="strategy-header">
     <div class="strategy-header-left">
       <h1 class="strategy-title">Strategy Workspace</h1>
@@ -28,7 +15,6 @@
   </header>
 
   <div class="strategy-grid">
-    <!-- LEFT: Chat Panel -->
     <section class="panel strategy-chat-panel">
       <div class="panel-head">
         <i data-lucide="brain"></i>
@@ -41,9 +27,7 @@
       </div>
     </section>
 
-    <!-- RIGHT: Side Panel -->
     <aside class="strategy-side">
-      <!-- Push Decision -->
       <section class="panel strategy-section">
         <div class="panel-head"><i data-lucide="arrow-right-circle"></i> Push Decision to Agent</div>
         <div class="strategy-section-body">
@@ -52,20 +36,26 @@
         </div>
       </section>
 
-      <!-- Strategy Rules -->
       <section class="panel strategy-section">
         <div class="panel-head"><i data-lucide="shield"></i> Strategy Rules</div>
         <div class="strategy-section-body">
           <div id="rules-list" class="strategy-list"></div>
           <div class="strategy-rule-form">
-            <input id="rule-key" type="text" placeholder="Rule name (e.g. pricing)" aria-label="Rule name" />
-            <textarea id="rule-value" rows="2" placeholder="Rule content..." aria-label="Rule content"></textarea>
+            <div class="form-group">
+              <label for="rule-key" class="sr-only">Rule name</label>
+              <input id="rule-key" type="text" placeholder="Rule name (e.g. pricing)" aria-label="Rule name" />
+              <span class="error-message" role="alert"></span>
+            </div>
+            <div class="form-group">
+              <label for="rule-value" class="sr-only">Rule content</label>
+              <textarea id="rule-value" rows="2" placeholder="Rule content..." aria-label="Rule content"></textarea>
+              <span class="error-message" role="alert"></span>
+            </div>
             <button id="save-rule-btn" class="btn-strategy btn-sm" type="button">Save Rule</button>
           </div>
         </div>
       </section>
 
-      <!-- Strategy Memory -->
       <section class="panel strategy-section">
         <div class="panel-head"><i data-lucide="database"></i> What I Remember</div>
         <div class="strategy-section-body">
@@ -73,7 +63,6 @@
         </div>
       </section>
 
-      <!-- Suggested Prompts -->
       <section class="panel strategy-section">
         <div class="panel-head"><i data-lucide="zap"></i> Strategy Prompts</div>
         <div class="strategy-section-body">
@@ -83,14 +72,8 @@
     </aside>
   </div>
 </main>
+{% endblock %}
 
-<div id="toast-container"></div>
-
-<script nonce="{{ csp_nonce }}" src="/static/js/ui-utils.js"></script>
-<script nonce="{{ csp_nonce }}" src="/static/js/mobile-nav.js"></script>
-<script nonce="{{ csp_nonce }}" src="/static/js/theme-toggle.js"></script>
-<script nonce="{{ csp_nonce }}" src="/static/js/search-palette.js"></script>
+{% block extra_js %}
 <script nonce="{{ csp_nonce }}" src="/static/js/strategy-page.js"></script>
-<script nonce="{{ csp_nonce }}" src="/static/js/pwa.js"></script>
-</body>
-</html>
+{% endblock %}

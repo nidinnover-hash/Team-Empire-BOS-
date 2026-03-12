@@ -31,6 +31,7 @@ CHECKS: list[list[str]] = [
         "tests/test_sdk_generation_coverage.py",
         "tests/test_pr_checklist_guard.py",
         "tests/test_sdk_release_notes_check.py",
+        "tests/test_architecture_guards.py",
     ],
 ]
 

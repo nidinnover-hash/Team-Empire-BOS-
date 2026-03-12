@@ -1,9 +1,9 @@
 """Deal dependency service."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import select, func, delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.deal_dependency import DealDependency
@@ -30,7 +30,7 @@ async def resolve_dependency(db: AsyncSession, dep_id: int, org_id: int) -> Deal
     if not row:
         return None
     row.is_resolved = True
-    row.resolved_at = datetime.now(timezone.utc)
+    row.resolved_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(row)
     return row
@@ -47,6 +47,6 @@ async def get_blockers(db: AsyncSession, org_id: int, deal_id: int) -> list[Deal
         DealDependency.organization_id == org_id,
         DealDependency.deal_id == deal_id,
         DealDependency.dependency_type == "blocks",
-        DealDependency.is_resolved == False,
+        DealDependency.is_resolved.is_(False),
     )
     return list((await db.execute(q)).scalars().all())
